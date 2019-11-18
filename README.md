@@ -7,7 +7,7 @@ Moa is an open source programming language that makes programming fun.
 - Function: definition, call, closure
 - Types: struct, enum, interface, generics
 - Statement: sequence, branch, loop, coroutine
-- Error handling: nullable, failable, result
+- Error handling: nullable, failable
 - Namespace
 
 ## Easy to use
