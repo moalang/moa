@@ -2,19 +2,18 @@
 Moa is an open source programming language that makes programming fun.
 
 ## Simple language
-- Values: number, string, bool, function
-- Containers: array, struct, dictionary
-- Function: definition, call, closure
+- Values: bool, int, float, string, closure, coroutine
+- Containers: array, dictionary
 - Types: struct, enum, interface, generics
-- Statement: sequence, branch, loop, coroutine
-- Error handling: nullable, failable
+- Statement: sequence, branch
+- Permissions: mutable, imutable
+- Error handling: error(T)
 - Namespace
 
 ## Easy to use
 - REPL
 - Hot code reloading
 - Cross compilation to Linux, Windows and Mac
-- Dependency is only some Posix APIs
 
 ## Performance
 - As fast as C based on LLVM
@@ -28,3 +27,9 @@ Moa is an open source programming language that makes programming fun.
 - No implicit type casting
 - No undefined specification
 - Array bounds checking
+- Any mutability and IO are only inside monad
+
+## Features of the future
+- Ownership
+- Worker and transactional shared database
+- Preconditions and Postconditions

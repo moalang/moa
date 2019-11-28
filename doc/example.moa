@@ -1,0 +1,56 @@
+main :: io(int)
+main io =
+  src <- io.stdin.string
+  ret <- run(src)
+  io.stdout.write(ret)
+  0
+
+run :: string error(string)
+run src =
+  node <- parser.top(src)
+  runner.run(node)
+
+enum ast:
+  int i64
+  op2 op string, left ast, right ast
+
+flow parser:
+  src string
+  pos mutable(i64)
+  satisfy f =
+    c = src(pos)
+    f(c)
+    | false = miss("char: $c, func: $f.name, post: $pos")
+    pos += 1
+    c
+  many1 f = f() ++ many(f)
+  many f = _rec([])
+  with:
+    _rec acc = (v = f()
+    | error = acc
+    | rec(acc + v)
+  parse_top = parse_int ||| parse_exp
+  parse_int =
+    x <- many1(p.satisfy(range("0" "9").contains))
+    ast.int(x.to_int)
+  parse_exp =
+    l <- parse_int
+    op <- read_op
+    r <- parse_exp
+    ast.op2(op l r)
+  read_op = one(["+" "-" "*" "/"].contains)
+
+flow runner:
+  run node = eval(node).to_string
+  to_string node = node
+  | ast.int = node
+  | ast.op2 = operate(node.op node.left node.rigth)
+  operate op left right = op
+  | "+" = l + r
+  | "-" = l - r
+  | "*" = l * r
+  | "/" = l / r
+  | error("unknown operator $op")
+  with:
+    l = eval(left)
+    r = eval(right)
