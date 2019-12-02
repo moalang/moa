@@ -1,56 +1,88 @@
-main :: io(int)
-main io =
+# Entry point
+main : io(int)
+main =
   src <- io.stdin.string
   ret <- run(src)
-  io.stdout.write(ret)
+  io.write(ret)
   0
 
-run :: string error(string)
+run : string try(string)
 run src =
-  node <- parser.top(src)
-  runner.run(node)
+  defs <- parse_top(src)
+  eval(defs)
 
-enum ast:
+# data types
+ast enum:
   int i64
+  ref string
   op2 op string, left ast, right ast
 
-flow parser:
+def struct:
+  name string
+  body ast
+
+# parser
+parser flow:
   src string
   pos mutable(i64)
-  satisfy f =
-    c = src(pos)
-    f(c)
-    | false = miss("char: $c, func: $f.name, post: $pos")
-    pos += 1
-    c
-  many1 f = f() ++ many(f)
-  many f = _rec([])
-  with:
-    _rec acc = (v = f()
-    | error = acc
-    | rec(acc + v)
-  parse_top = parse_int ||| parse_exp
-  parse_int =
-    x <- many1(p.satisfy(range("0" "9").contains))
-    ast.int(x.to_int)
-  parse_exp =
-    l <- parse_int
-    op <- read_op
-    r <- parse_exp
-    ast.op2(op l r)
-  read_op = one(["+" "-" "*" "/"].contains)
 
-flow runner:
-  run node = eval(node).to_string
-  to_string node = node
+satisfy : (string bool) parser(string)
+satisfy f =
+  p = parser
+  c <- p.src(p.pos)
+  f(c)
+  | false = miss("char: $c, func: $f.name, pos: $p.pos")
+  p.pos += 1
+  c
+manny1 a : parser(a) parser[a]
+many1 f = f() ++ many(f)
+manny a : parser(a) parser[a]
+many f = rec([])
+with:
+  rec acc = v <- f()
+  | error = acc
+  | rec(acc ++ v)
+parse_top : parser[def]
+parse_top = many1(parse_def)
+parse_def : parser(def)
+parse_def =
+  id <- read_id
+  string "="
+  body <- parse_exp
+  def(id body)
+parse_exp : parser(ast)
+parse_exp =
+  l <- parse_unit
+  op <- read_op
+  r <- parse_exp
+  ast.op2(op l r)
+parse_unit : parser(ast)
+parse_unit = parse_int ||| parse_ref
+parse_int : parser(ast)
+parse_int =
+  x <- many1(p.satisfy(range("0" "9").contains))
+  ast.int(x.to_int)
+read_id : parser(string)
+read_op = one(["+" "-" "*" "/"].contains)
+
+# evaluator
+eval : [def] try(ast)
+eval env =
+  main <- env.find("main")
+  apply(main).to_string
+with:
+  apply node = node
   | ast.int = node
   | ast.op2 = operate(node.op node.left node.rigth)
-  operate op left right = op
-  | "+" = l + r
-  | "-" = l - r
-  | "*" = l * r
-  | "/" = l / r
-  | error("unknown operator $op")
-  with:
-    l = eval(left)
-    r = eval(right)
+  | ast.ref =
+    v <- env.find(node)
+    apply(v)
+operate op left right = op
+| "+" = l + r
+| "-" = l - r
+| "*" = l * r
+| "/" = l / r
+| error("unknown operator $op")
+with:
+  l = apply(left)
+  r = apply(right)

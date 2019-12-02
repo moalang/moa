@@ -191,4 +191,5 @@ dict
 struct
 enum
 error
+try(a)
 ```
