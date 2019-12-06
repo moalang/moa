@@ -49,6 +49,7 @@ test = go
       read "func(1 true)"
       read "f = 1; f"
       read "vector1: x int; vector1(1)"
+      read "a.b"
       stmt "5" "2 + 3"
       stmt "-1" "2 - 3"
       stmt "6" "2 * 3"
@@ -56,30 +57,33 @@ test = go
       stmt "1" "a = 1; a"
       stmt "1" "a = 1; b = a; b"
       stmt "3" "add a b = a + b; add(1 2)"
+      stmt "[1 2 3]" "[1 1+1 3]"
+      stmt "3" "vector2: x int, y int; v = vector2(1 2); v.x + v.y"
       putStrLn "done"
-    read expr = putStr $ eq expr (to_string $ parse expr)
-    stmt expect expr = putStr $ eq expect (run expr)
-    eq a b = if a == b then "." else (b)
+    read expr = putStrLn $ eq expr (to_string $ parse expr)
+    stmt expect expr = putStrLn $ eq expect (run expr)
+    eq a b = if a == b then ("ok: " ++ a) else ("ERROR: " ++ b)
 
 run :: String -> String
 run = to_string . eval . parse
 
 -- Parser and Evaluator
-type ENV = [(String, AST)]
-type ATTRS = [(String, String)]
+type Env = [(String, AST)]
+type Attrs = [(String, String)]
 data AST = Void
   | Int Int
   | String String
   | Bool Bool
   | Func [String] AST -- captures, arguments, body
-  | Closure ENV AST -- captures, body
+  | Closure Env AST -- captures, body
   | Array [AST]
   | Def String AST
-  | Struct ATTRS
-  | Enum [(String, ATTRS)]
+  | Class String Attrs -- type name, members
+  | Instance String Env -- type name, members
+  | Enum [(String, Attrs)]
   | Op2 String AST AST
-  | Ref String
-  | Call AST [AST]
+  | Ref [String]
+  | Apply AST [AST]
   | Seq [AST]
   deriving (Show)
 
@@ -93,14 +97,14 @@ to_string (Bool False) = "false"
 to_string (Func args body) = (string_join "," args) ++ " -> " ++ (to_string body)
 to_string (Closure env body) = (string_join "," (map fst env)) ++ " -> " ++ (to_string body)
 to_string (Array xs) = "[" ++ string_join " " (map to_string xs) ++ "]"
-to_string (Def name x@(Struct _)) = name ++ ": " ++ to_string x
+to_string (Def name x@(Class _ _)) = name ++ ": " ++ to_string x
 to_string (Def name x@(Enum _)) = name ++ ": " ++ to_string x
 to_string (Def name x) = name ++ " = " ++ to_string x
-to_string (Struct kts) = kts_string kts
+to_string (Class _ kts) = kts_string kts
 to_string (Enum xs) = string_join " | " (map (\(k, kts) -> squash_strings [k, kts_string kts]) xs)
 to_string (Op2 op l r) = squash_strings [to_string l, op, to_string r]
-to_string (Ref name) = name
-to_string (Call self args) = to_string self ++ "(" ++ (squash_strings $ map to_string args) ++ ")"
+to_string (Ref ids) = string_join "." ids
+to_string (Apply self args) = to_string self ++ "(" ++ (squash_strings $ map to_string args) ++ ")"
 to_string (Seq xs) = string_join "; " $ map to_string xs
 to_string e = error $ show e
 kts_string kts = string_join ", " $ map (\(k, t) -> squash_strings [k, t]) kts
@@ -133,10 +137,10 @@ parse input = go
       args <- read_args
       mark <- read_any ":="
       body <- case mark of
-        ':' -> parse_struct `or` parse_enum `or` (die "body in parse_def")
+        ':' -> (parse_class id) `or` parse_enum `or` (die "body in parse_def")
         '=' -> parse_exp
       return $ Def id (make_func args body)
-    parse_struct = Struct <$> read_kvs1
+    parse_class name = Class name <$> read_kvs1
     parse_enum = Enum <$> read_enums1
     parse_exp = do
       l <- parse_unit
@@ -150,15 +154,24 @@ parse input = go
                  parse_string `or`
                  parse_array `or`
                  parse_closure `or`
-                 parse_ref_or_call
-    parse_ref_or_call = do
-      id <- read_id
-      args <- (between '(' ')' (many parse_unit)) `or` (return [])
-      return $ make_call id args
+                 parse_ref_or_apply
+    parse_ref_or_apply = (fmap Ref read_ids1) >>= go
+      where
+        go node = (_go node) `or` (return node)
+        _go node = do
+          mark <- satisfy $ \x -> elem x ".("
+          case mark of
+            '.' -> do
+              ids <- read_ids1
+              go $ Apply node [Ref ids]
+            '(' -> do
+              args <- many parse_exp
+              read_char ')'
+              go $ make_apply node args
     parse_bool = Bool <$> fmap (== "true") (read_strings ["true", "false"])
     parse_int = Int <$> fmap read read_int
     parse_string = String <$> between '"' '"' (many $ satisfy (/= '"'))
-    parse_array = Array <$> between '[' ']' (many $ parse_unit)
+    parse_array = Array <$> between '[' ']' (many parse_exp)
     parse_closure = do
       args <- read_args
       read_string "->"
@@ -167,8 +180,8 @@ parse input = go
 
     make_func [] body = body
     make_func args body = Func args body
-    make_call id [] = Ref id
-    make_call id args = Call (Ref id) args
+    make_apply node [] = node
+    make_apply node args = Apply node args
     make_seq [x] = x
     make_seq xs = Seq xs
 
@@ -186,6 +199,7 @@ parse input = go
     read_args = many read_id
     read_type = read_id
     read_id = lex $ many1 $ get_any "abcdefghijklmnopqrstuvwxyz0123456789_"
+    read_ids1 = sepBy1 (satisfy (== '.')) read_id
     read_int = lex $ many1 $ get_any "0123456789"
     read_strings (x:xs) = foldr or (read_string x) (map read_string xs)
     read_string s = lex $ mapM_ (\x -> satisfy (== x)) s >> return s
@@ -198,11 +212,6 @@ parse input = go
     or l r = do
       s <- get
       l <|> (put s >> r)
-
-    dump :: Parser ()
-    dump = do
-      s <- get
-      trace (show s ++ " @ " ++ (show $ drop (pos s) (src s))) (return ())
 
     lex f = (many $ satisfy (== ' ')) >> f
     indent f = do
@@ -221,15 +230,19 @@ parse input = go
       return $ x : xs
     between l r m = do
       satisfy (== l)
-      v <- m `or` (die $ "missing body in " ++ show l ++ show r)
+      v <- m -- `or` (die $ "missing body in " ++ show l ++ show r)
       satisfy (== r) `or` (die $ "Does not close " ++ show r)
       return v
-    many f = many_acc f []
     many1 f = do
       x <- f
       xs <- many f
       return $ x : xs
-    many_acc f acc = (f >>= \x -> many_acc f (x : acc)) `or` (return $ reverse acc)
+    many f = go []
+      where
+        go acc = (next acc) `or` (return $ reverse acc)
+        next acc = do
+          x <- f
+          go (x : acc)
     satisfy :: (Char -> Bool) -> Parser Char
     satisfy f = do
       s <- get
@@ -238,48 +251,46 @@ parse input = go
       guard $ f c
       put (s { pos = (pos s) + 1 })
       return c
-    die message = dump >> error message
+    die message = trace message (return ()) >> dump >> error message
+    dump :: Parser ()
+    dump = do
+      s <- get
+      trace ("die: " ++ show s ++ " @ " ++ (show $ drop (pos s) (src s))) (return ())
+
 
 -- Evaluator
 eval :: AST -> AST
 eval x = top [] x
   where
-    top :: ENV -> AST -> AST
+    top :: Env -> AST -> AST
     top env (Seq xs) = go env xs
       where
-        go :: ENV -> [AST] -> AST
+        go :: Env -> [AST] -> AST
         go env [] = snd $ head env
         go env ((Def name body):ys) = go ((name, top env body) : env) ys
         go env (y:ys) = go (("_", top env y) : env) ys
     top env x = go x
       where
-        go (Ref name) = case lookup name env of
-          Just x -> x
-          Nothing -> error $ "not found " ++ name ++ " in " ++ string_join ", " (map fst env)
-        go (Call target argv) = case go target of
+        go (Ref names) = find names env
+          where
+            find :: [String] -> [(String, AST)] -> AST
+            find [] _ = error ""
+            find (x:xs) kvs = case lookup x kvs of
+              Nothing -> error $ "not found " ++ (show names) ++ " in " ++ string_join ", " (map fst env)
+              Just y -> find_next y xs
+            find_next :: AST -> [String] -> AST
+            find_next x [] = x
+            find_next (Instance _ kvs) xs = find xs kvs
+        go (Apply target argv) = case go target of
           (Func args body) -> top (zip args $ map go argv) body
+          (Class name members) -> go $ Instance name (zip (map fst members) argv)
+        go (Array xs) = Array $ map go xs
         go (Op2 op left right) = case (op, go left, go right) of
           ("+", (Int l), (Int r)) -> Int $ l + r
           ("-", (Int l), (Int r)) -> Int $ l - r
           ("*", (Int l), (Int r)) -> Int $ l * r
           ("//", (Int l), (Int r)) -> Int $ l `div` r
         go x = x
-
---eval (Op2 op l r) =
---eval (Ref name) =
---eval (Call AST args) =
---eval call@(Call _ _) = error $ "Invalid call " ++ show a
---  | Int Int
---  | String String
---  | Bool Bool
---  | Func [String] AST -- captures, arguments, body
---  | Closure ENV AST -- captures, body
---  | Array [AST]
---  | Def String AST
---  | Struct ATTRS
---  | Enum [(String, ATTRS)]
---  | Op2 String AST AST
---  | Ref String
 
 -- TODO
 --   x REPL
@@ -299,14 +310,14 @@ eval x = top [] x
 --     x binary operators
 --     - embedded functions
 --   - for evaluator
---     - bool
---     - int
+--     x bool
+--     x int
 --     (skip) float
---     - string
---     - closure
---     - array
---     - dictionary
---     - struct
+--     x string
+--     (skip) closure
+--     x array
+--     (skip) dictionary
+--     x struct
 --     - enum
 --     - flow
 --     - sequence
