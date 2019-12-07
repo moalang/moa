@@ -51,7 +51,7 @@ test = go
       read "vector1: x int; vector1(1)"
       read "a.b"
       read "a.b"
-      read $ string_join "\n| " ["num", "1 = a", "2 = b"]
+      read $ string_join "\n| " ["num", "1 = a", "2 = b", "_ = c"]
       stmt "5" "2 + 3"
       stmt "-1" "2 - 3"
       stmt "6" "2 * 3"
@@ -63,6 +63,8 @@ test = go
       stmt "3" "vector2: x int, y int; v = vector2(1 2); v.x + v.y"
       stmt "a" "ab: a | b; ab.a"
       stmt "b" "ab: a | b; ab.b"
+      stmt "10" "a = 1; a\n| 1 = 10\n| _ = 20"
+      stmt "20" "a = 2; a\n| 1 = 10\n| _ = 20"
       putStrLn "done"
     read expr = putStrLn $ eq expr (to_string $ parse expr)
     stmt expect expr = putStrLn $ eq expect (run expr)
@@ -91,7 +93,7 @@ data AST = Void
   | Apply AST [AST]
   | Seq [AST]
   | Fork AST Branches -- target, branches
-  deriving (Show)
+  deriving (Show, Eq)
 
 string_join glue [] = ""
 string_join glue xs = drop (length glue) $ foldr (\l r -> r ++ glue ++ l) "" (reverse xs)
@@ -320,6 +322,12 @@ eval x = top [] x
           ("-", (Int l), (Int r)) -> Int $ l - r
           ("*", (Int l), (Int r)) -> Int $ l * r
           ("//", (Int l), (Int r)) -> Int $ l `div` r
+        go (Fork raw_target branches) = match branches
+          where
+            target = go raw_target
+            match [] = error $ "Does not match target=" ++ show target ++ " branches=" ++ show branches
+            match (((Ref ["_"]), body):_) = body
+            match ((cond, body):xs) = if target == cond then body else match xs
         go x = x
 
 -- TODO
@@ -336,7 +344,7 @@ eval x = top [] x
 --     x enum
 --     (skip) flow
 --     x sequence
---     - branch
+--     x branch
 --     x binary operators
 --     - embedded functions
 --   - for evaluator
@@ -351,6 +359,6 @@ eval x = top [] x
 --     x enum
 --     (skip) flow
 --     x sequence
---     - branch
---     - binary operators
+--     x branch
+--     x binary operators
 --     - embedded functions
