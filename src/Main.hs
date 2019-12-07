@@ -50,7 +50,7 @@ test = go
       read "f = 1; f"
       read "vector1: x int; vector1(1)"
       read "a.b"
-      read "a.b"
+      read "a.b.c(1).d(2 e.f(3))"
       read $ string_join "\n| " ["num", "1 = a", "2 = b", "_ = c"]
       stmt "5" "2 + 3"
       stmt "-1" "2 - 3"
@@ -61,8 +61,8 @@ test = go
       stmt "3" "add a b = a + b; add(1 2)"
       stmt "[1 2 3]" "[1 1+1 3]"
       stmt "3" "vector2: x int, y int; v = vector2(1 2); v.x + v.y"
-      stmt "a" "ab: a | b; ab.a"
-      stmt "b" "ab: a | b; ab.b"
+      stmt "a" "ab: a | b; a"
+      stmt "b" "ab: a | b; b"
       stmt "10" "a = 1; a\n| 1 = 10\n| _ = 20"
       stmt "20" "a = 2; a\n| 1 = 10\n| _ = 20"
       putStrLn "done"
@@ -89,7 +89,8 @@ data AST = Void
   | Instance String Env -- type name, members
   | Enum String Env -- type name, members
   | Op2 String AST AST
-  | Ref [String]
+  | Ref String
+  | Member AST String
   | Apply AST [AST]
   | Seq [AST]
   | Fork AST Branches -- target, branches
@@ -111,7 +112,8 @@ to_string (Def name x) = name ++ " = " ++ to_string x
 to_string (Class name _) = name
 to_string (Enum name _) = name
 to_string (Op2 op l r) = squash_strings [to_string l, op, to_string r]
-to_string (Ref ids) = string_join "." ids
+to_string (Ref id) = id
+to_string (Member ast member) = to_string ast ++ "." ++ member
 to_string (Apply self args) = to_string self ++ "(" ++ (squash_strings $ map to_string args) ++ ")"
 to_string (Seq xs) = string_join "; " $ map to_string xs
 to_string (Instance name []) = name
@@ -182,21 +184,23 @@ parse input = go
                  parse_string `or`
                  parse_array `or`
                  parse_closure `or`
-                 parse_ref_or_apply
+                 parse_apply
       where
-        parse_ref_or_apply = (fmap Ref read_ids1) >>= go
+        parse_apply :: Parser AST
+        parse_apply = parse_ref >>= go
           where
-            go node = (_go node) `or` (return node)
+            go :: AST -> Parser AST
+            go node = option node $ _go node
+            _go :: AST -> Parser AST
             _go node = do
               mark <- satisfy $ \x -> elem x ".("
               case mark of
-                '.' -> do
-                  ids <- read_ids1
-                  go $ Apply node [Ref ids]
+                '.' -> (Member node <$> get_id) >>= go
                 '(' -> do
                   args <- many parse_exp
                   read_char ')'
                   go $ make_apply node args
+        parse_ref = Ref <$> read_id
         parse_bool = Bool <$> fmap (== "true") (read_strings ["true", "false"])
         parse_int = Int <$> fmap read read_int
         parse_string = String <$> between (char '"') (char '"') (many $ satisfy (/= '"'))
@@ -227,7 +231,7 @@ parse input = go
       return (k, v)
     read_args = many read_id
     read_type = read_id
-    read_id = lex $ many1 $ get_any "abcdefghijklmnopqrstuvwxyz0123456789_"
+    read_id = lex get_id
     read_ids1 = sepBy1 (satisfy (== '.')) read_id
     read_int = lex $ many1 $ get_any "0123456789"
     read_strings (x:xs) = foldr or (read_string x) (map read_string xs)
@@ -237,7 +241,9 @@ parse input = go
     read_br = read_strings [";", ",", "\n"]
     read_any s = lex $ get_any s
     get_any s = satisfy (\x -> elem x s)
+    get_id = many1 $ get_any "abcdefghijklmnopqrstuvwxyz0123456789_"
 
+    option alt main = main `or` (return alt)
     or l r = do
       s <- get
       l <|> (put s >> r)
@@ -298,21 +304,15 @@ eval x = top [] x
       where
         go :: Env -> [AST] -> AST
         go env [] = snd $ head env
+        go env ((Def name (Enum _ env2)):ys) = go (env2 ++ env) ys
         go env ((Def name body):ys) = go ((name, top env body) : env) ys
         go env (y:ys) = go (("_", top env y) : env) ys
     top env x = go x
       where
-        go (Ref names) = find names env
-          where
-            find :: [String] -> [(String, AST)] -> AST
-            find [] _ = error ""
-            find (x:xs) kvs = case lookup x kvs of
-              Nothing -> error $ "not found " ++ (show names) ++ " in " ++ string_join ", " (map fst env)
-              Just y -> find_next y xs
-            find_next :: AST -> [String] -> AST
-            find_next x [] = go x
-            find_next (Instance _ kvs) xs = find xs kvs
-            find_next (Enum _ kvs) xs = find xs kvs
+        go (Ref name) = find name env
+        go (Member target name) = case go target of
+          (Instance _ env2) -> find name env2
+          (Enum _ env2) -> find name env2
         go (Apply target argv) = case go target of
           (Func args body) -> top (zip args $ map go argv) body
           (Class name members) -> go $ Instance name (zip (map fst members) argv)
@@ -322,13 +322,18 @@ eval x = top [] x
           ("-", (Int l), (Int r)) -> Int $ l - r
           ("*", (Int l), (Int r)) -> Int $ l * r
           ("//", (Int l), (Int r)) -> Int $ l `div` r
+          x -> error $ "op2: " ++ show x
         go (Fork raw_target branches) = match branches
           where
             target = go raw_target
             match [] = error $ "Does not match target=" ++ show target ++ " branches=" ++ show branches
-            match (((Ref ["_"]), body):_) = body
+            match (((Ref "_"), body):_) = body
             match ((cond, body):xs) = if target == cond then body else match xs
         go x = x
+        find :: String -> [(String, AST)] -> AST
+        find k kvs = case lookup k kvs of
+          Nothing -> error $ "not found " ++ k ++ " in " ++ string_join ", " (map fst kvs)
+          Just y -> go y
 
 -- TODO
 --   x REPL
