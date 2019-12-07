@@ -50,6 +50,8 @@ test = go
       read "f = 1; f"
       read "vector1: x int; vector1(1)"
       read "a.b"
+      read "a.b"
+      read $ string_join "\n| " ["num", "1 = a", "2 = b"]
       stmt "5" "2 + 3"
       stmt "-1" "2 - 3"
       stmt "6" "2 * 3"
@@ -59,6 +61,8 @@ test = go
       stmt "3" "add a b = a + b; add(1 2)"
       stmt "[1 2 3]" "[1 1+1 3]"
       stmt "3" "vector2: x int, y int; v = vector2(1 2); v.x + v.y"
+      stmt "a" "ab: a | b; ab.a"
+      stmt "b" "ab: a | b; ab.b"
       putStrLn "done"
     read expr = putStrLn $ eq expr (to_string $ parse expr)
     stmt expect expr = putStrLn $ eq expect (run expr)
@@ -70,6 +74,7 @@ run = to_string . eval . parse
 -- Parser and Evaluator
 type Env = [(String, AST)]
 type Attrs = [(String, String)]
+type Branches = [(AST, AST)]
 data AST = Void
   | Int Int
   | String String
@@ -80,11 +85,12 @@ data AST = Void
   | Def String AST
   | Class String Attrs -- type name, members
   | Instance String Env -- type name, members
-  | Enum [(String, Attrs)]
+  | Enum String Env -- type name, members
   | Op2 String AST AST
   | Ref [String]
   | Apply AST [AST]
   | Seq [AST]
+  | Fork AST Branches -- target, branches
   deriving (Show)
 
 string_join glue [] = ""
@@ -97,17 +103,24 @@ to_string (Bool False) = "false"
 to_string (Func args body) = (string_join "," args) ++ " -> " ++ (to_string body)
 to_string (Closure env body) = (string_join "," (map fst env)) ++ " -> " ++ (to_string body)
 to_string (Array xs) = "[" ++ string_join " " (map to_string xs) ++ "]"
-to_string (Def name x@(Class _ _)) = name ++ ": " ++ to_string x
-to_string (Def name x@(Enum _)) = name ++ ": " ++ to_string x
+to_string (Def name x@(Class _ attrs)) = name ++ ": " ++ attrs_string attrs
+to_string (Def name x@(Enum _ attrs)) = name ++ ": " ++ enum_string name attrs
 to_string (Def name x) = name ++ " = " ++ to_string x
-to_string (Class _ kts) = kts_string kts
-to_string (Enum xs) = string_join " | " (map (\(k, kts) -> squash_strings [k, kts_string kts]) xs)
+to_string (Class name _) = name
+to_string (Enum name _) = name
 to_string (Op2 op l r) = squash_strings [to_string l, op, to_string r]
 to_string (Ref ids) = string_join "." ids
 to_string (Apply self args) = to_string self ++ "(" ++ (squash_strings $ map to_string args) ++ ")"
 to_string (Seq xs) = string_join "; " $ map to_string xs
+to_string (Instance name []) = name
+to_string (Instance name xs) = name ++ "(" ++ (env_string xs) ++ ")"
+to_string (Fork target branches) = (to_string target) ++ foldr show_branch "" branches
+  where
+    show_branch (cond, body) acc = "\n| " ++ to_string cond ++ " = " ++ to_string body ++ acc
 to_string e = error $ show e
-kts_string kts = string_join ", " $ map (\(k, t) -> squash_strings [k, t]) kts
+attrs_string attrs = string_join ", " $ map (\(k, a) -> squash_strings [k, a]) attrs
+enum_string prefix xs = string_join " | " (map (\(k, v) -> squash_strings [drop (1 + length prefix) k, to_string v]) xs)
+env_string env = string_join ", " $ map (\(k, v) -> squash_strings [k, to_string v]) env
 squash_strings :: [String] -> String
 squash_strings [] = ""
 squash_strings ("":zs) = squash_strings zs
@@ -130,18 +143,31 @@ parse input = go
         True -> ast
         False -> error $ "Remaining: " ++ drop (pos s) (src s)
     parse_top :: Parser AST
-    parse_top = make_seq <$> sepBy (read_br) parse_line
-    parse_line = parse_def `or` parse_exp
-    parse_def = do
-      id <- read_id
-      args <- read_args
-      mark <- read_any ":="
-      body <- case mark of
-        ':' -> (parse_class id) `or` parse_enum `or` (die "body in parse_def")
-        '=' -> parse_exp
-      return $ Def id (make_func args body)
-    parse_class name = Class name <$> read_kvs1
-    parse_enum = Enum <$> read_enums1
+    parse_top = between spaces spaces parse_lines
+      where
+        parse_lines = make_seq <$> sepBy (read_br) parse_line
+        parse_line = parse_def `or` parse_exp_or_fork
+        parse_def = do
+          id <- read_id
+          args <- read_args
+          mark <- read_any ":="
+          body <- case mark of
+            ':' -> (parse_class id) `or` (parse_enum id) `or` (die "body in parse_def")
+            '=' -> parse_exp
+          return $ Def id (make_func args body)
+        parse_class name = Class name <$> read_kvs1
+        parse_enum name = Enum name <$> read_enums1
+        parse_exp_or_fork = do
+          exp <- parse_exp
+          (parse_fork exp) `or` (return exp)
+        parse_fork exp = Fork exp <$> many1 parse_branch
+        parse_branch = do
+          satisfy (== '\n')
+          satisfy (== '|')
+          cond <- parse_unit
+          read_char '='
+          body <- parse_exp
+          return (cond, body)
     parse_exp = do
       l <- parse_unit
       parse_op2 l `or` (return l)
@@ -155,28 +181,29 @@ parse input = go
                  parse_array `or`
                  parse_closure `or`
                  parse_ref_or_apply
-    parse_ref_or_apply = (fmap Ref read_ids1) >>= go
       where
-        go node = (_go node) `or` (return node)
-        _go node = do
-          mark <- satisfy $ \x -> elem x ".("
-          case mark of
-            '.' -> do
-              ids <- read_ids1
-              go $ Apply node [Ref ids]
-            '(' -> do
-              args <- many parse_exp
-              read_char ')'
-              go $ make_apply node args
-    parse_bool = Bool <$> fmap (== "true") (read_strings ["true", "false"])
-    parse_int = Int <$> fmap read read_int
-    parse_string = String <$> between '"' '"' (many $ satisfy (/= '"'))
-    parse_array = Array <$> between '[' ']' (many parse_exp)
-    parse_closure = do
-      args <- read_args
-      read_string "->"
-      body <- parse_exp
-      return $ Func args body
+        parse_ref_or_apply = (fmap Ref read_ids1) >>= go
+          where
+            go node = (_go node) `or` (return node)
+            _go node = do
+              mark <- satisfy $ \x -> elem x ".("
+              case mark of
+                '.' -> do
+                  ids <- read_ids1
+                  go $ Apply node [Ref ids]
+                '(' -> do
+                  args <- many parse_exp
+                  read_char ')'
+                  go $ make_apply node args
+        parse_bool = Bool <$> fmap (== "true") (read_strings ["true", "false"])
+        parse_int = Int <$> fmap read read_int
+        parse_string = String <$> between (char '"') (char '"') (many $ satisfy (/= '"'))
+        parse_array = Array <$> between (char '[') (char ']') (many parse_exp)
+        parse_closure = do
+          args <- read_args
+          read_string "->"
+          body <- parse_exp
+          return $ Func args body
 
     make_func [] body = body
     make_func args body = Func args body
@@ -189,7 +216,7 @@ parse input = go
     read_enum = do
       k <- read_id
       v <- read_kvs
-      return (k, v)
+      return (k, Class k v)
     read_kvs = sepBy (read_char ',') read_kv
     read_kvs1 = sepBy1 (read_char ',') read_kv
     read_kv = do
@@ -219,6 +246,7 @@ parse input = go
       v <- f
       read_string "\n"
       return v
+    spaces = many $ read_any "\n\t "
     sepBy sep f = (sepBy1 sep f) `or` (return [])
     sepBy1 sep f = do
       x <- f
@@ -228,10 +256,11 @@ parse input = go
       x <- f
       xs <- many1 (sep >> f)
       return $ x : xs
+    char c = satisfy (== c)
     between l r m = do
-      satisfy (== l)
+      l
       v <- m -- `or` (die $ "missing body in " ++ show l ++ show r)
-      satisfy (== r) `or` (die $ "Does not close " ++ show r)
+      r `or` (die $ "Does not close in between")
       return v
     many1 f = do
       x <- f
@@ -279,8 +308,9 @@ eval x = top [] x
               Nothing -> error $ "not found " ++ (show names) ++ " in " ++ string_join ", " (map fst env)
               Just y -> find_next y xs
             find_next :: AST -> [String] -> AST
-            find_next x [] = x
+            find_next x [] = go x
             find_next (Instance _ kvs) xs = find xs kvs
+            find_next (Enum _ kvs) xs = find xs kvs
         go (Apply target argv) = case go target of
           (Func args body) -> top (zip args $ map go argv) body
           (Class name members) -> go $ Instance name (zip (map fst members) argv)
@@ -318,9 +348,9 @@ eval x = top [] x
 --     x array
 --     (skip) dictionary
 --     x struct
---     - enum
---     - flow
---     - sequence
+--     x enum
+--     (skip) flow
+--     x sequence
 --     - branch
 --     - binary operators
 --     - embedded functions
