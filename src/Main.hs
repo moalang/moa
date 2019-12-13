@@ -49,6 +49,7 @@ test = go
       read "func(1 true)"
       read "f = 1; f"
       read "vector1: x int; vector1(1)"
+      read "counter: count int, incr = count += 1"
       read "a.b"
       read "a.b.c(1).d(2 e.f(3))"
       read $ string_join "\n| " ["num", "1 = a", "2 = b", "_ = c"]
@@ -61,14 +62,15 @@ test = go
       stmt "3" "add a b = a + b; add(1 2)"
       stmt "[1 2 3]" "[1 1+1 3]"
       stmt "3" "vector2: x int, y int; v = vector2(1 2); v.x + v.y"
-      stmt "a" "ab: a | b; a"
-      stmt "b" "ab: a | b; b"
+      stmt "ab.a" "ab: a |  b; ab.a"
+      stmt "ab.b" "ab: a |  b; ab.b"
       stmt "10" "a = 1; a\n| 1 = 10\n| _ = 20"
       stmt "20" "a = 2; a\n| 1 = 10\n| _ = 20"
+      stmt "2" "counter: count 0, incr = count += 1, twice = incr; incr\ncounter(0).twice"
       putStrLn "done"
     read expr = putStrLn $ eq expr (to_string $ parse expr)
     stmt expect expr = putStrLn $ eq expect (run expr)
-    eq a b = if a == b then ("ok: " ++ a) else ("ERROR: " ++ b)
+    eq a b = if a == b then "ok: " ++ a else "EXPECT: " ++ a ++ "\nFACT  : " ++ b
 
 run :: String -> String
 run = to_string . eval . parse
@@ -85,8 +87,8 @@ data AST = Void
   | Closure Env AST -- captures, body
   | Array [AST]
   | Def String AST
-  | Class String Attrs -- type name, members
-  | Instance String Env -- type name, members
+  | Class String Attrs Env -- type name, attributes, methods
+  | Instance String Env -- type name, attributes + methods
   | Enum String Env -- type name, members
   | Op2 String AST AST
   | Ref String
@@ -106,12 +108,12 @@ to_string (Bool False) = "false"
 to_string (Func args body) = (string_join "," args) ++ " -> " ++ (to_string body)
 to_string (Closure env body) = (string_join "," (map fst env)) ++ " -> " ++ (to_string body)
 to_string (Array xs) = "[" ++ string_join " " (map to_string xs) ++ "]"
-to_string (Def name x@(Class _ attrs)) = name ++ ": " ++ attrs_string attrs
-to_string (Def name x@(Enum _ attrs)) = name ++ ": " ++ enum_string name attrs
+to_string (Def name x@(Class _ _ _)) = name ++ ": " ++ def_string x
+to_string (Def name x@(Enum _ attrs)) = name ++ ": " ++ enum_string attrs
 to_string (Def name x) = name ++ " = " ++ to_string x
-to_string (Class name _) = name
+to_string (Class name _ _) = name
 to_string (Enum name _) = name
-to_string (Op2 op l r) = squash_strings [to_string l, op, to_string r]
+to_string (Op2 op l r) = to_string l ++ " " ++ op ++ " " ++ to_string r
 to_string (Ref id) = id
 to_string (Member ast member) = to_string ast ++ "." ++ member
 to_string (Apply self args) = to_string self ++ "(" ++ (squash_strings $ map to_string args) ++ ")"
@@ -122,8 +124,10 @@ to_string (Fork target branches) = (to_string target) ++ foldr show_branch "" br
   where
     show_branch (cond, body) acc = "\n| " ++ to_string cond ++ " = " ++ to_string body ++ acc
 to_string e = error $ show e
-attrs_string attrs = string_join ", " $ map (\(k, a) -> squash_strings [k, a]) attrs
-enum_string prefix xs = string_join " | " (map (\(k, v) -> squash_strings [drop (1 + length prefix) k, to_string v]) xs)
+attrs_string attrs = string_join ", " $ (map (\(k, a) -> squash_strings [k, a]) attrs)
+attrs_methods methods = squash_strings $ (map (\(k, m) -> squash_strings [", " ++ k, "= ", to_string m]) methods)
+def_string (Class _ attrs methods) = attrs_string attrs ++ attrs_methods methods
+enum_string xs = string_join " | " (map (\(k, x) -> squash_strings [k, def_string x]) xs)
 env_string env = string_join ", " $ map (\(k, v) -> squash_strings [k, to_string v]) env
 squash_strings :: [String] -> String
 squash_strings [] = ""
@@ -156,11 +160,14 @@ parse input = go
           args <- read_args
           mark <- read_any ":="
           body <- case mark of
-            ':' -> (parse_class id) `or` (parse_enum id) `or` (die "body in parse_def")
             '=' -> parse_exp
+            ':' -> (parse_enum id) `or` (parse_class id) `or` (die $ "invalid definition in parse_def for " ++ id)
           return $ Def id (make_func args body)
-        parse_class name = Class name <$> read_kvs1
-        parse_enum name = Enum name <$> read_enums1
+        parse_class name = do
+          attrs <- read_attrs1
+          methods <- read_methods
+          return $ Class name attrs methods
+        parse_enum name = Enum name <$> read_enums1 (name ++ ".")
         parse_exp_or_fork = do
           exp <- parse_exp
           (parse_fork exp) `or` (return exp)
@@ -218,17 +225,24 @@ parse input = go
     make_seq [x] = x
     make_seq xs = Seq xs
 
-    read_enums1 = sepBy2 (read_char '|') read_enum
-    read_enum = do
+    read_enums1 prefix = sepBy2 (read_char '|') $ read_enum prefix
+    read_enum prefix = do
       k <- read_id
-      v <- read_kvs
-      return (k, Class k v)
-    read_kvs = sepBy (read_char ',') read_kv
-    read_kvs1 = sepBy1 (read_char ',') read_kv
+      v <- read_attrs
+      return (k, Class (prefix ++ k) v [])
+    read_attrs = sepBy (read_char ',') read_kv
+    read_attrs1 = sepBy1 (read_char ',') read_kv
     read_kv = do
       k <- read_id
       v <- read_type
       return (k, v)
+    read_methods = many $ do
+      read_char ','
+      id <- read_id
+      args <- read_args
+      read_char '='
+      body <- parse_exp
+      return (id, make_func args body)
     read_args = many read_id
     read_type = read_id
     read_id = lex get_id
@@ -237,7 +251,10 @@ parse input = go
     read_strings (x:xs) = foldr or (read_string x) (map read_string xs)
     read_string s = lex $ mapM_ (\x -> satisfy (== x)) s >> return s
     read_char c = lex $ satisfy (== c)
-    read_op = read_strings ["+", "-", "*", "//"]
+    read_op = read_strings [
+              "==", "!=", ">=", "<=", ">", "<",
+              "+=", "-=", "*=", "//=",
+              "+", "-", "*", "//"]
     read_br = read_strings [";", ",", "\n"]
     read_any s = lex $ get_any s
     get_any s = satisfy (\x -> elem x s)
@@ -304,7 +321,6 @@ eval x = top [] x
       where
         go :: Env -> [AST] -> AST
         go env [] = snd $ head env
-        go env ((Def name (Enum _ env2)):ys) = go (env2 ++ env) ys
         go env ((Def name body):ys) = go ((name, top env body) : env) ys
         go env (y:ys) = go (("_", top env y) : env) ys
     top env x = go x
@@ -314,10 +330,14 @@ eval x = top [] x
           (Instance _ env2) -> find name env2
           (Enum _ env2) -> find name env2
         go (Apply target argv) = case go target of
-          (Func args body) -> top (zip args $ map go argv) body
-          (Class name members) -> go $ Instance name (zip (map fst members) argv)
+          (Func args body) -> top ((zip args $ map go argv) ++ env) body
+          (Class name attrs methods) -> go $ Instance name ((zip (map fst attrs) argv) ++ methods)
         go (Array xs) = Array $ map go xs
         go (Op2 op left right) = case (op, go left, go right) of
+          ("+=", (Int l), (Int r)) -> Int $ l + r
+          ("-=", (Int l), (Int r)) -> Int $ l - r
+          ("*=", (Int l), (Int r)) -> Int $ l * r
+          ("//=", (Int l), (Int r)) -> Int $ l `div` r
           ("+", (Int l), (Int r)) -> Int $ l + r
           ("-", (Int l), (Int r)) -> Int $ l - r
           ("*", (Int l), (Int r)) -> Int $ l * r
@@ -333,7 +353,9 @@ eval x = top [] x
         find :: String -> [(String, AST)] -> AST
         find k kvs = case lookup k kvs of
           Nothing -> error $ "not found " ++ k ++ " in " ++ string_join ", " (map fst kvs)
-          Just y -> go y
+          Just y -> case top (kvs ++ env) y of
+            (Func args body) -> Func args $ Apply (Func (map fst kvs) body) (map snd kvs)
+            z -> z
 
 -- TODO
 --   x REPL
