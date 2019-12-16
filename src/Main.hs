@@ -314,78 +314,44 @@ parse input = go
 
 -- Evaluator
 eval :: AST -> AST
-eval x = top [] x
+eval root = go [] root
   where
-    top :: Env -> AST -> AST
-    top env (Seq xs) = go env xs
+    go :: Env -> AST -> AST
+    go env (Seq xs) = run_seq env xs
       where
-        go :: Env -> [AST] -> AST
-        go env [] = snd $ head env
-        go env ((Def name body):ys) = go ((name, top env body) : env) ys
-        go env (y:ys) = go (("_", top env y) : env) ys
-    top env x = go x
+        run_seq :: Env -> [AST] -> AST
+        run_seq env [] = snd $ head env
+        run_seq env ((Def name body):ys) = run_seq ((name, go env body) : env) ys
+        run_seq env (y:ys) = run_seq (("_", go env y) : env) ys
+    go env (Ref name) = go env $ find name env
+    go env (Member target name) = case go env target of
+      (Instance _ env2) -> bind (env2 ++ env) name env2
+      (Enum _ env2) -> bind (env2 ++ env) name env2
+    go env (Apply target argv) = case go env target of
+      (Func args body) -> go ((zip args $ map (go env) argv) ++ env) body
+      (Class name attrs methods) -> Instance name ((zip (map fst attrs) argv) ++ methods)
+    go env (Array xs) = Array $ map (go env) xs
+    go env (Op2 op left right) = case (op, go env left, go env right) of
+      ("+=", (Int l), (Int r)) -> Int $ l + r
+      ("-=", (Int l), (Int r)) -> Int $ l - r
+      ("*=", (Int l), (Int r)) -> Int $ l * r
+      ("//=", (Int l), (Int r)) -> Int $ l `div` r
+      ("+", (Int l), (Int r)) -> Int $ l + r
+      ("-", (Int l), (Int r)) -> Int $ l - r
+      ("*", (Int l), (Int r)) -> Int $ l * r
+      ("//", (Int l), (Int r)) -> Int $ l `div` r
+      x -> error $ "op2: " ++ show x
+    go env (Fork raw_target branches) = match branches
       where
-        go (Ref name) = find name env
-        go (Member target name) = case go target of
-          (Instance _ env2) -> find name env2
-          (Enum _ env2) -> find name env2
-        go (Apply target argv) = case go target of
-          (Func args body) -> top ((zip args $ map go argv) ++ env) body
-          (Class name attrs methods) -> go $ Instance name ((zip (map fst attrs) argv) ++ methods)
-        go (Array xs) = Array $ map go xs
-        go (Op2 op left right) = case (op, go left, go right) of
-          ("+=", (Int l), (Int r)) -> Int $ l + r
-          ("-=", (Int l), (Int r)) -> Int $ l - r
-          ("*=", (Int l), (Int r)) -> Int $ l * r
-          ("//=", (Int l), (Int r)) -> Int $ l `div` r
-          ("+", (Int l), (Int r)) -> Int $ l + r
-          ("-", (Int l), (Int r)) -> Int $ l - r
-          ("*", (Int l), (Int r)) -> Int $ l * r
-          ("//", (Int l), (Int r)) -> Int $ l `div` r
-          x -> error $ "op2: " ++ show x
-        go (Fork raw_target branches) = match branches
-          where
-            target = go raw_target
-            match [] = error $ "Does not match target=" ++ show target ++ " branches=" ++ show branches
-            match (((Ref "_"), body):_) = body
-            match ((cond, body):xs) = if target == cond then body else match xs
-        go x = x
-        find :: String -> [(String, AST)] -> AST
-        find k kvs = case lookup k kvs of
-          Nothing -> error $ "not found " ++ k ++ " in " ++ string_join ", " (map fst kvs)
-          Just y -> case top (kvs ++ env) y of
-            (Func args body) -> Func args $ Apply (Func (map fst kvs) body) (map snd kvs)
-            z -> z
-
--- TODO
---   x REPL
---   - for parser
---     x bool
---     x int
---     (skip) float
---     x string
---     x closure (func)
---     x array
---     (skip) dictionary
---     x struct
---     x enum
---     (skip) flow
---     x sequence
---     x branch
---     x binary operators
---     - embedded functions
---   - for evaluator
---     x bool
---     x int
---     (skip) float
---     x string
---     (skip) closure
---     x array
---     (skip) dictionary
---     x struct
---     x enum
---     (skip) flow
---     x sequence
---     x branch
---     x binary operators
---     - embedded functions
+        target = go env raw_target
+        match [] = error $ "Does not match target=" ++ show target ++ " branches=" ++ show branches
+        match (((Ref "_"), body):_) = body
+        match ((cond, body):xs) = if target == cond then body else match xs
+    go _ x = x
+    find :: String -> Env -> AST
+    find k kvs = case lookup k kvs of
+      Nothing -> error $ "not found " ++ k ++ " in " ++ string_join ", " (map fst kvs)
+      Just x -> x
+    bind env k kvs = case go env $ find k kvs of
+      (Func args body) -> Func args $ Apply (Func (map fst env) body) (map snd env)
+      x -> x
