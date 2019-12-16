@@ -65,6 +65,7 @@ test = go
       stmt "3" "vector2: x int, y int\nv = vector2(1 2)\nv.x + v.y"
       stmt "ab.a" "ab: a | b\nab.a"
       stmt "ab.b" "ab: a | b\nab.b"
+      stmt "ab.b" "ab:\n| a\n| b\nab.b"
       stmt "10" "a = 1\na\n| 1 = 10\n| _ = 20"
       stmt "20" "a = 2\na\n| 1 = 10\n| _ = 20"
       stmt "3" "counter: count 0, incr = count += 1, twice = incr; incr\ncounter(1).twice"
@@ -236,11 +237,15 @@ parse input = go
     make_seq [x] = x
     make_seq xs = Seq xs
 
-    read_enums1 prefix = sepBy2 (read_char '|') $ read_enum prefix
-    read_enum prefix = do
-      k <- read_id
-      v <- read_attrs
-      return (k, Class (prefix ++ k) v [])
+    read_enums1 prefix = go
+      where
+        go = enum_lines `or` enum_line
+        enum_lines = many1 (read_string "\n|" >> read_enum prefix)
+        enum_line = sepBy2 (read_char '|') $ read_enum prefix
+        read_enum prefix = do
+          k <- read_id
+          v <- read_attrs
+          return (k, Class (prefix ++ k) v [])
     read_attrs = sepBy (read_char ',') read_kv
     read_attrs1 = sepBy1 (read_char ',') read_kv
     read_kv = do
