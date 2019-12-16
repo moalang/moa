@@ -252,7 +252,7 @@ parse input = go
       id <- read_id
       args <- read_args
       read_char '='
-      body <- parse_exp
+      body <- parse_seq
       return (id, make_func args body)
     read_args = many read_id
     read_type = read_id
@@ -333,7 +333,10 @@ eval root = go [] root
         run_seq :: Env -> [AST] -> AST
         run_seq env [] = snd $ head env
         run_seq env ((Def name body):ys) = run_seq ((name, go env body) : env) ys
-        run_seq env (y:ys) = run_seq (("_", go env y) : env) ys
+        --run_seq env (y:ys) = run_seq (("_", go env y) : env) ys
+        run_seq env (y:ys) = case go env y of
+          (Def name body) -> run_seq ((name, body) : env) ys
+          body -> run_seq (("_", body): env) ys
     go env (Def _ body) = go env body
     go env (Ref name) = go env $ find name env
     go env (Member target name) = case go env target of
@@ -344,10 +347,10 @@ eval root = go [] root
       (Class name attrs methods) -> Instance name ((zip (map fst attrs) argv) ++ methods)
     go env (Array xs) = Array $ map (go env) xs
     go env (Op2 op left right) = case (op, go env left, go env right) of
-      ("+=", (Int l), (Int r)) -> Int $ l + r
-      ("-=", (Int l), (Int r)) -> Int $ l - r
-      ("*=", (Int l), (Int r)) -> Int $ l * r
-      ("//=", (Int l), (Int r)) -> Int $ l `div` r
+      ("+=", (Int l), (Int r)) -> update left (Int $ l + r)
+      ("-=", (Int l), (Int r)) -> update left (Int $ l - r)
+      ("*=", (Int l), (Int r)) -> update left (Int $ l * r)
+      ("//=", (Int l), (Int r)) -> update left (Int $ l `div` r)
       ("+", (Int l), (Int r)) -> Int $ l + r
       ("-", (Int l), (Int r)) -> Int $ l - r
       ("*", (Int l), (Int r)) -> Int $ l * r
@@ -360,6 +363,7 @@ eval root = go [] root
         match (((Ref "_"), body):_) = body
         match ((cond, body):xs) = if target == cond then body else match xs
     go _ x = x
+    update (Ref name) ast = Def name ast
     find :: String -> Env -> AST
     find k kvs = case lookup k kvs of
       Nothing -> error $ "not found " ++ k ++ " in " ++ string_join ", " (map fst kvs)
