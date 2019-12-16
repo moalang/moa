@@ -47,8 +47,10 @@ test = go
       read "bool: true | false"
       read "name"
       read "func(1 true)"
-      read "f = 1; f"
-      read "vector1: x int; vector1(1)"
+      read "f = 1; 2"
+      read "f = 1\ng = f\ng"
+      read "f = 1\ng = f; f\ng"
+      read "vector1: x int\nvector1(1)"
       read "counter: count int, incr = count += 1"
       read "a.b"
       read "a.b.c(1).d(2 e.f(3))"
@@ -57,20 +59,22 @@ test = go
       stmt "-1" "2 - 3"
       stmt "6" "2 * 3"
       stmt "2" "7 // 3"
-      stmt "1" "a = 1; a"
-      stmt "1" "a = 1; b = a; b"
-      stmt "3" "add a b = a + b; add(1 2)"
+      stmt "2" "a = 1; 2"
+      stmt "3" "add a b = a + b\nadd(1 2)"
       stmt "[1 2 3]" "[1 1+1 3]"
-      stmt "3" "vector2: x int, y int; v = vector2(1 2); v.x + v.y"
-      stmt "ab.a" "ab: a |  b; ab.a"
-      stmt "ab.b" "ab: a |  b; ab.b"
-      stmt "10" "a = 1; a\n| 1 = 10\n| _ = 20"
-      stmt "20" "a = 2; a\n| 1 = 10\n| _ = 20"
-      stmt "2" "counter: count 0, incr = count += 1, twice = incr; incr\ncounter(0).twice"
+      stmt "3" "vector2: x int, y int\nv = vector2(1 2)\nv.x + v.y"
+      stmt "ab.a" "ab: a | b\nab.a"
+      stmt "ab.b" "ab: a | b\nab.b"
+      stmt "10" "a = 1\na\n| 1 = 10\n| _ = 20"
+      stmt "20" "a = 2\na\n| 1 = 10\n| _ = 20"
+      stmt "3" "counter: count 0, incr = count += 1, twice = incr; incr\ncounter(1).twice"
       putStrLn "done"
-    read expr = putStrLn $ eq expr (to_string $ parse expr)
-    stmt expect expr = putStrLn $ eq expect (run expr)
-    eq a b = if a == b then "ok: " ++ a else "EXPECT: " ++ a ++ "\nFACT  : " ++ b
+    read expr = eq expr (parse expr) expr
+    stmt expect expr = eq expect (eval $ parse expr) expr
+    eq a b src = putStrLn $ if a == to_string b then "ok: " ++ oneline a "" else "EXPECT: " ++ a ++ "\nFACT  : " ++ to_string b ++ "\nAST   : " ++ (show b) ++ "\nSRC   : " ++ (src)
+    oneline "" acc = reverse acc
+    oneline ('\n':xs) acc = oneline xs ('n' : '\\' : acc)
+    oneline (x:xs) acc = oneline xs (x : acc)
 
 run :: String -> String
 run = to_string . eval . parse
@@ -101,42 +105,48 @@ data AST = Void
 string_join glue [] = ""
 string_join glue xs = drop (length glue) $ foldr (\l r -> r ++ glue ++ l) "" (reverse xs)
 
-to_string (Int n) = show n
-to_string (String s) = show s
-to_string (Bool True) = "true"
-to_string (Bool False) = "false"
-to_string (Func args body) = (string_join "," args) ++ " -> " ++ (to_string body)
-to_string (Closure env body) = (string_join "," (map fst env)) ++ " -> " ++ (to_string body)
-to_string (Array xs) = "[" ++ string_join " " (map to_string xs) ++ "]"
-to_string (Def name x@(Class _ _ _)) = name ++ ": " ++ def_string x
-to_string (Def name x@(Enum _ attrs)) = name ++ ": " ++ enum_string attrs
-to_string (Def name x) = name ++ " = " ++ to_string x
-to_string (Class name _ _) = name
-to_string (Enum name _) = name
-to_string (Op2 op l r) = to_string l ++ " " ++ op ++ " " ++ to_string r
-to_string (Ref id) = id
-to_string (Member ast member) = to_string ast ++ "." ++ member
-to_string (Apply self args) = to_string self ++ "(" ++ (squash_strings $ map to_string args) ++ ")"
-to_string (Seq xs) = string_join "; " $ map to_string xs
-to_string (Instance name []) = name
-to_string (Instance name xs) = name ++ "(" ++ (env_string xs) ++ ")"
-to_string (Fork target branches) = (to_string target) ++ foldr show_branch "" branches
+to_string x = go x
   where
-    show_branch (cond, body) acc = "\n| " ++ to_string cond ++ " = " ++ to_string body ++ acc
-to_string e = error $ show e
-attrs_string attrs = string_join ", " $ (map (\(k, a) -> squash_strings [k, a]) attrs)
-attrs_methods methods = squash_strings $ (map (\(k, m) -> squash_strings [", " ++ k, "= ", to_string m]) methods)
-def_string (Class _ attrs methods) = attrs_string attrs ++ attrs_methods methods
-enum_string xs = string_join " | " (map (\(k, x) -> squash_strings [k, def_string x]) xs)
-env_string env = string_join ", " $ map (\(k, v) -> squash_strings [k, to_string v]) env
-squash_strings :: [String] -> String
-squash_strings [] = ""
-squash_strings ("":zs) = squash_strings zs
-squash_strings (" ":zs) = squash_strings zs
-squash_strings (x:"":zs) = squash_strings (x : zs)
-squash_strings (x:" ":zs) = squash_strings (x : zs)
-squash_strings (x:y:zs) = x ++ " " ++ y ++ (squash_strings zs)
-squash_strings [x] = x
+    go (Int n) = show n
+    go (String s) = show s
+    go (Bool True) = "true"
+    go (Bool False) = "false"
+    go (Func args body) = (string_join "," args) ++ " -> " ++ (go body)
+    go (Closure env body) = (string_join "," (map fst env)) ++ " -> " ++ (go body)
+    go (Array xs) = "[" ++ string_join " " (map go xs) ++ "]"
+    go (Def name x@(Class _ _ _)) = name ++ ": " ++ def_string x
+    go (Def name x@(Enum _ attrs)) = name ++ ": " ++ enum_string attrs
+    go (Def name x) = name ++ " = " ++ go x
+    go (Class name _ _) = name
+    go (Enum name _) = name
+    go (Op2 op l r) = go l ++ " " ++ op ++ " " ++ go r
+    go (Ref id) = id
+    go (Member ast member) = go ast ++ "." ++ member
+    go (Apply self args) = go self ++ "(" ++ (squash_strings $ map go args) ++ ")"
+    go (Seq xs) = seq_join xs "" ""
+      where
+        seq_join [] _ acc = acc
+        seq_join (x@(Def name ast):xs) glue acc = seq_join xs "\n" (acc ++ glue ++ to_string x)
+        seq_join (x:xs) glue acc = seq_join xs "; " (acc ++ glue ++ to_string x)
+    go (Instance name []) = name
+    go (Instance name xs) = name ++ "(" ++ (env_string xs) ++ ")"
+    go (Fork target branches) = (go target) ++ foldr show_branch "" branches
+      where
+        show_branch (cond, body) acc = "\n| " ++ go cond ++ " = " ++ go body ++ acc
+    go e = error $ show e
+    attrs_string attrs = string_join ", " $ (map (\(k, a) -> squash_strings [k, a]) attrs)
+    attrs_methods methods = squash_strings $ (map (\(k, m) -> squash_strings [", " ++ k, "= ", go m]) methods)
+    def_string (Class _ attrs methods) = attrs_string attrs ++ attrs_methods methods
+    enum_string xs = string_join " | " (map (\(k, x) -> squash_strings [k, def_string x]) xs)
+    env_string env = string_join ", " $ map (\(k, v) -> squash_strings [k, go v]) env
+    squash_strings :: [String] -> String
+    squash_strings [] = ""
+    squash_strings ("":zs) = squash_strings zs
+    squash_strings (" ":zs) = squash_strings zs
+    squash_strings (x:"":zs) = squash_strings (x : zs)
+    squash_strings (x:" ":zs) = squash_strings (x : zs)
+    squash_strings (x:y:zs) = x ++ " " ++ y ++ (squash_strings zs)
+    squash_strings [x] = x
 
 -- Parser
 data Source = Source { src :: String, pos :: Int } deriving Show
@@ -160,7 +170,7 @@ parse input = go
           args <- read_args
           mark <- read_any ":="
           body <- case mark of
-            '=' -> parse_exp
+            '=' -> parse_seq
             ':' -> (parse_enum id) `or` (parse_class id) `or` (die $ "invalid definition in parse_def for " ++ id)
           return $ Def id (make_func args body)
         parse_class name = do
@@ -177,8 +187,9 @@ parse input = go
           satisfy (== '|')
           cond <- parse_unit
           read_char '='
-          body <- parse_exp
+          body <- parse_seq
           return (cond, body)
+    parse_seq = make_seq <$> sepBy1 (read_char ';') parse_exp
     parse_exp = do
       l <- parse_unit
       parse_op2 l `or` (return l)
@@ -323,6 +334,7 @@ eval root = go [] root
         run_seq env [] = snd $ head env
         run_seq env ((Def name body):ys) = run_seq ((name, go env body) : env) ys
         run_seq env (y:ys) = run_seq (("_", go env y) : env) ys
+    go env (Def _ body) = go env body
     go env (Ref name) = go env $ find name env
     go env (Member target name) = case go env target of
       (Instance _ env2) -> bind (env2 ++ env) name env2
