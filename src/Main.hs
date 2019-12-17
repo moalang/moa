@@ -87,7 +87,7 @@ test = go
       stmt "[1 2 3]" "[1 1+1 3]"
       stmt "3" "vector2: x int, y int\nv = vector2(1 2)\nv.x + v.y"
       stmt "3" "vector2: x int, y int, sum = x + y\nvector2(1 2).sum"
-      stmt "3" "vector2: x int\n  y int\n  sum = x + y\nvector2(1 2).sum"
+      stmt "3" "vector2:\n  x int\n  y int\n  sum = x + y\nvector2(1 2).sum"
       stmt "ab.a" "ab: a | b\nab.a"
       stmt "ab.b" "ab: a | b\nab.b"
       stmt "ab.b" "ab:\n| a\n| b\nab.b"
@@ -275,8 +275,8 @@ parse input = go
           k <- read_id
           v <- read_attrs
           return (k, Class (prefix ++ k) v [])
-    read_attrs = sepBy read_sep_member read_kv
-    read_attrs1 = sepBy1 read_sep_member read_kv
+    read_attrs = (read_string "\n  " >> sepBy (read_string "\n  ") read_kv) `or` sepBy (read_char ',') read_kv
+    read_attrs1 = many1 (read_string "\n  " >> read_kv) `or` sepBy1 (read_char ',') read_kv
     read_kv = do
       k <- read_id
       v <- read_type

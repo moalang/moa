@@ -1,8 +1,10 @@
 compile x = build(parse(x))
 parse x = ast.string(x)
 build x = x.value
-table: values tuple(string int).array
-branches: values tuple(ast ast).array
+table:
+  values tuple(string int).array
+branches:
+  values tuple(ast ast).array
 ast:
 | int value int
 | string value string
