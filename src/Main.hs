@@ -63,6 +63,8 @@ test = go
       stmt "3" "add a b = a + b\nadd(1 2)"
       stmt "[1 2 3]" "[1 1+1 3]"
       stmt "3" "vector2: x int, y int\nv = vector2(1 2)\nv.x + v.y"
+      stmt "3" "vector2: x int, y int, sum = x + y\nvector2(1 2).sum"
+      stmt "3" "vector2: x int\n  y int\n  sum = x + y\nvector2(1 2).sum"
       stmt "ab.a" "ab: a | b\nab.a"
       stmt "ab.b" "ab: a | b\nab.b"
       stmt "ab.b" "ab:\n| a\n| b\nab.b"
@@ -246,14 +248,14 @@ parse input = go
           k <- read_id
           v <- read_attrs
           return (k, Class (prefix ++ k) v [])
-    read_attrs = sepBy (read_char ',') read_kv
-    read_attrs1 = sepBy1 (read_char ',') read_kv
+    read_attrs = sepBy read_sep_member read_kv
+    read_attrs1 = sepBy1 read_sep_member read_kv
     read_kv = do
       k <- read_id
       v <- read_type
       return (k, v)
     read_methods = many $ do
-      read_char ','
+      read_sep_member
       id <- read_id
       args <- read_args
       read_char '='
@@ -271,6 +273,7 @@ parse input = go
               "==", "!=", ">=", "<=", ">", "<",
               "+=", "-=", "*=", "//=",
               "+", "-", "*", "//"]
+    read_sep_member = read_strings [",", "\n  "]
     read_br = read_strings [";", ",", "\n"]
     read_any s = lex $ get_any s
     get_any s = satisfy (\x -> elem x s)
