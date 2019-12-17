@@ -30,8 +30,9 @@ compile = do
   let code = src ++ "compile(" ++ show src ++ ")"
   let (Seq list1) = parse code
   let list2 = list1 ++ [Apply (Ref "compile") [String src]]
-  let (String dst) = eval (Seq list2)
-  putStrLn dst
+  case eval (Seq list2) of
+    (String s) -> putStrLn s
+    x -> print x
 
 repl :: IO ()
 repl = do
@@ -69,6 +70,7 @@ test = go
       read "f = 1\ng = f\ng"
       read "f = 1\ng = f; f\ng"
       read "f = \"hello\""
+      read "add a b = a + b"
       read "vector1: x int\nvector1(1)"
       read "counter: count int, incr = count += 1"
       read "a.b"
@@ -80,6 +82,7 @@ test = go
       stmt "2" "7 // 3"
       stmt "2" "a = 1; 2"
       stmt "3" "add a b = a + b\nadd(1 2)"
+      stmt "1" "v = 1\nf x = x\nf(v)"
       stmt "[1 2 3]" "[1 1+1 3]"
       stmt "3" "vector2: x int, y int\nv = vector2(1 2)\nv.x + v.y"
       stmt "3" "vector2: x int, y int, sum = x + y\nvector2(1 2).sum"
@@ -138,6 +141,7 @@ to_string x = go x
     go (Array xs) = "[" ++ string_join " " (map go xs) ++ "]"
     go (Def name x@(Class _ _ _)) = name ++ ": " ++ def_string x
     go (Def name x@(Enum _ attrs)) = name ++ ": " ++ enum_string attrs
+    go (Def name x@(Func args body)) = name ++ " " ++ (string_join " " args) ++ " = " ++ to_string body
     go (Def name x) = name ++ " = " ++ go x
     go (Class name _ _) = name
     go (Enum name _) = name
@@ -360,7 +364,6 @@ eval root = go [] root
         run_seq :: Env -> [AST] -> AST
         run_seq env [] = snd $ head env
         run_seq env ((Def name body):ys) = run_seq ((name, go env body) : env) ys
-        --run_seq env (y:ys) = run_seq (("_", go env y) : env) ys
         run_seq env (y:ys) = case go env y of
           (Def name body) -> run_seq ((name, body) : env) ys
           body -> run_seq (("_", body): env) ys
@@ -369,9 +372,12 @@ eval root = go [] root
     go env (Member target name) = case go env target of
       (Instance _ env2) -> bind (env2 ++ env) name env2
       (Enum _ env2) -> bind (env2 ++ env) name env2
-    go env (Apply target argv) = case go env target of
-      (Func args body) -> go ((zip args $ map (go env) argv) ++ env) body
-      (Class name attrs methods) -> Instance name ((zip (map fst attrs) argv) ++ methods)
+    go env (Apply target raw_argv) = go_apply
+      where
+        argv = map (go env) raw_argv
+        go_apply = case go env target of
+          (Func args body) -> go ((zip args $ map (go env) argv) ++ env) body
+          (Class name attrs methods) -> Instance name ((zip (map fst attrs) argv) ++ methods)
     go env (Array xs) = Array $ map (go env) xs
     go env (Op2 op left right) = case (op, go env left, go env right) of
       ("+=", (Int l), (Int r)) -> update left (Int $ l + r)
