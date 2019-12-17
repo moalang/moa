@@ -1,1 +1,1 @@
-compile_to_go = "Compile to go"
+compile x = x

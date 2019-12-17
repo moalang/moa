@@ -11,9 +11,25 @@ import System.IO (isEOF)
 main = do
   args <- getArgs
   case args of
-    ["test"] -> test
     ["repl"] -> repl
-    [] -> fmap (\x -> read (run x) :: String) getContents >>= putStrLn
+    ["test"] -> test
+    ["compile"] -> compile
+    _ -> help
+
+help :: IO ()
+help = do
+  putStrLn "Usage: runghc Main.hs [command]"
+  putStrLn "The commands are:"
+  putStrLn "\trepl\tstart repl"
+  putStrLn "\ttest\ttest itself"
+  putStrLn "\tgo\tcompile to go"
+
+compile :: IO ()
+compile = do
+  src <- getContents
+  let code = src ++ "compile(" ++ show src ++ ")"
+  let dst = read (run code) :: String
+  putStrLn dst
 
 repl :: IO ()
 repl = do

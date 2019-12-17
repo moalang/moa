@@ -1,4 +1,8 @@
-TARGET=test
+command=test
+
+help:
+	clear
+	runghc Main.hs help
 
 test:
 	clear
@@ -6,11 +10,11 @@ test:
 
 go:
 	clear
-	runghc Main.hs < go.moa
+	runghc Main.hs compile < go.moa
 
 repl:
 	runghc Main.hs repl
 
 watch:
-	-make ${TARGET}
+	-make ${command}
 	fswatch -0 -o . | xargs -I {} -n1 -0 make test
