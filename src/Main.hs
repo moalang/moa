@@ -28,7 +28,9 @@ compile :: IO ()
 compile = do
   src <- getContents
   let code = src ++ "compile(" ++ show src ++ ")"
-  let dst = read (run code) :: String
+  let (Seq list1) = parse code
+  let list2 = list1 ++ [Apply (Ref "compile") [String src]]
+  let (String dst) = eval (Seq list2)
   putStrLn dst
 
 repl :: IO ()

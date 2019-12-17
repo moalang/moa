@@ -17,4 +17,4 @@ repl:
 
 watch:
 	-make ${command}
-	fswatch -0 -o . | xargs -I {} -n1 -0 make test
+	fswatch -0 -o . | xargs -I {} -n1 -0 make ${command}
