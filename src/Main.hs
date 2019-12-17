@@ -72,6 +72,7 @@ test = go
       read "f = \"hello\""
       read "add a b = a + b"
       read "vector1: x int\nvector1(1)"
+      read "table: values tuple(string int).array"
       read "counter: count int, incr = count += 1"
       read "a.b"
       read "a.b.c(1).d(2 e.f(3))"
@@ -105,15 +106,15 @@ run :: String -> String
 run = to_string . eval . parse
 
 -- Parser and Evaluator
+data Type = Type { tname :: String, args :: [Type] } deriving (Show, Eq)
 type Env = [(String, AST)]
-type Attrs = [(String, String)]
+type Attrs = [(String, Type)]
 type Branches = [(AST, AST)]
 data AST = Void
   | Int Int
   | String String
   | Bool Bool
   | Func [String] AST -- captures, arguments, body
-  | Closure Env AST -- captures, body
   | Array [AST]
   | Def String AST
   | Class String Attrs Env -- type name, attributes, methods
@@ -137,7 +138,6 @@ to_string x = go x
     go (Bool True) = "true"
     go (Bool False) = "false"
     go (Func args body) = (string_join "," args) ++ " -> " ++ (go body)
-    go (Closure env body) = (string_join "," (map fst env)) ++ " -> " ++ (go body)
     go (Array xs) = "[" ++ string_join " " (map go xs) ++ "]"
     go (Def name x@(Class _ _ _)) = name ++ ": " ++ def_string x
     go (Def name x@(Enum _ attrs)) = name ++ ": " ++ enum_string attrs
@@ -160,11 +160,15 @@ to_string x = go x
       where
         show_branch (cond, body) acc = "\n| " ++ go cond ++ " = " ++ go body ++ acc
     go e = error $ show e
-    attrs_string attrs = string_join ", " $ (map (\(k, a) -> squash_strings [k, a]) attrs)
+    attrs_string attrs = string_join ", " $ (map (\(k, t) -> squash_strings [k, type_string t]) attrs)
     attrs_methods methods = squash_strings $ (map (\(k, m) -> squash_strings [", " ++ k, "= ", go m]) methods)
     def_string (Class _ attrs methods) = attrs_string attrs ++ attrs_methods methods
     enum_string xs = string_join " | " (map (\(k, x) -> squash_strings [k, def_string x]) xs)
     env_string env = string_join ", " $ map (\(k, v) -> squash_strings [k, go v]) env
+    type_string t = case args t of
+      [] -> tname t
+      [x] -> type_string x ++ "." ++ tname t
+      types -> tname t ++ "(" ++ string_join " " (map type_string types) ++ ")"
     squash_strings :: [String] -> String
     squash_strings [] = ""
     squash_strings ("":zs) = squash_strings zs
@@ -285,7 +289,14 @@ parse input = go
       body <- parse_seq
       return (id, make_func args body)
     read_args = many read_id
-    read_type = read_id
+    read_type = read_type_nest []
+    read_type_nest vargs = do
+      id <- read_id
+      args <- option [] $ between (char '(') (read_char ')') $ sepBy (many1 $ char ' ') read_type
+      let t = Type id (vargs ++ args)
+      option t $ do
+          char '.'
+          read_type_nest [t]
     read_id = lex get_id
     read_ids1 = sepBy1 (satisfy (== '.')) read_id
     read_int = lex $ many1 $ get_any "0123456789"
@@ -347,6 +358,12 @@ parse input = go
       guard $ f c
       put (s { pos = (pos s) + 1 })
       return c
+    see :: Parser String
+    see = do
+      s <- get
+      return $ if (pos s) < (length $ src s)
+        then [(src s) !! (pos s)]
+        else ""
     die message = trace message (return ()) >> dump >> error message
     dump :: Parser ()
     dump = do

@@ -1,1 +1,21 @@
-compile x = x
+compile x = build(parse(x))
+parse x = ast.string(x)
+build x = x.value
+table: values tuple(string int).array
+branches: values tuple(ast ast).array
+ast:
+| int value int
+| string value string
+| bool value bool
+| func args string.array, body ast
+| array values ast.array
+| def name string, value ast
+| class name string, attrs string.array, methods table
+| instance name string, methods table
+| enum name string, methods table
+| op2 operator string, left ast, right ast
+| ref name string
+| member target ast, name string
+| apply target ast, args ast.array
+| seq lines ast.array
+| fork target branches
