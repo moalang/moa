@@ -12,8 +12,8 @@ main = do
   args <- getArgs
   case args of
     ["test"] -> test
-    (expr:_) -> putStrLn $ run expr
-    _ -> repl
+    ["repl"] -> repl
+    [] -> fmap (\x -> read (run x) :: String) getContents >>= putStrLn
 
 repl :: IO ()
 repl = do
@@ -50,6 +50,7 @@ test = go
       read "f = 1; 2"
       read "f = 1\ng = f\ng"
       read "f = 1\ng = f; f\ng"
+      read "f = \"hello\""
       read "vector1: x int\nvector1(1)"
       read "counter: count int, incr = count += 1"
       read "a.b"
@@ -224,8 +225,8 @@ parse input = go
         parse_ref = Ref <$> read_id
         parse_bool = Bool <$> fmap (== "true") (read_strings ["true", "false"])
         parse_int = Int <$> fmap read read_int
-        parse_string = String <$> between (char '"') (char '"') (many $ satisfy (/= '"'))
-        parse_array = Array <$> between (char '[') (char ']') (many parse_exp)
+        parse_string = String <$> between (read_char '"') (char '"') (many $ satisfy (/= '"'))
+        parse_array = Array <$> between (read_char '[') (char ']') (many parse_exp)
         parse_closure = do
           args <- read_args
           read_string "->"
