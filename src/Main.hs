@@ -27,8 +27,7 @@ help = do
 compile :: IO ()
 compile = do
   src <- getContents
-  let code = src ++ "compile(" ++ show src ++ ")"
-  let (Seq list1) = parse code
+  let (Seq list1) = parse src
   let list2 = list1 ++ [Apply (Ref "compile") [String src]]
   case eval (Seq list2) of
     (String s) -> putStrLn s
@@ -78,11 +77,13 @@ test = go
       read "a.b.c(1).d(2 e.f(3))"
       read "mix: a int, add b = a + b\nmix(1).add(2)"
       read $ string_join "\n| " ["num", "1 = a", "2 = b", "_ = c"]
+      stmt "()" "()"
       stmt "5" "2 + 3"
       stmt "-1" "2 - 3"
       stmt "6" "2 * 3"
       stmt "2" "7 // 3"
       stmt "2" "a = 1; 2"
+      --stmt "2" "3 - (2 - 1)"
       stmt "3" "add a b = a + b\nadd(1 2)"
       stmt "3" "add a b =\n  c = a + b\n  c\nadd(1 2)"
       stmt "1" "v = 1\nf x = x\nf(v)"
@@ -102,6 +103,14 @@ test = go
       stmt "3" "\"1\".to_int + 2"
       stmt "\"0\"" "0.to_string"
       stmt "[1 2]" "[1] ++ [2]"
+      -- build-in functions
+      stmt "1" "if(true 1 2)"
+      stmt "2" "if(false 1 2)"
+      stmt "()" "guard(true)"
+      stmt "Error: guard is failed" "guard(false)"
+      stmt "true" "[1].include(1)"
+      stmt "false" "[1].include(2)"
+      --stmt "[1 2]" "f x = if(x < 2 1 guard(false))\nloop x acc = y <- f(x)\n| loop((x -1) acc ++ [y])\n| acc\nloop(3)"
       putStrLn "done"
     read expr = eq expr (parse expr) expr
     stmt expect expr = eq expect (eval $ parse expr) expr
@@ -128,12 +137,13 @@ data AST = Void
   | Enum String Env -- type name, members
   | Op2 String AST AST
   | Ref String
-  | Member AST String
+  | Member AST String [AST] -- target, name, arguments
   | Apply AST [AST]
   | Seq [AST]
   | Fork AST Branches -- target, branches
   | Update Env AST
   | Type AST
+  | Error String
   deriving (Show, Eq)
 
 string_join glue [] = ""
@@ -156,19 +166,20 @@ to_string x = go x
     go (Enum name _) = name
     go (Op2 op l r) = go l ++ " " ++ op ++ " " ++ go r
     go (Ref id) = id
-    go (Member ast member) = go ast ++ "." ++ member
+    go (Member ast member []) = go ast ++ "." ++ member
+    go (Member ast member args) = go ast ++ "." ++ member ++ "(" ++ (squash_strings $ map go args) ++ ")"
     go (Apply self args) = go self ++ "(" ++ (squash_strings $ map go args) ++ ")"
     go (Seq xs) = seq_join xs "" ""
-      where
-        seq_join [] _ acc = acc
-        seq_join (x@(Def name ast):xs) glue acc = seq_join xs "\n" (acc ++ glue ++ to_string x)
-        seq_join (x:xs) glue acc = seq_join xs "; " (acc ++ glue ++ to_string x)
     go (Instance name []) = name
     go (Instance name xs) = name ++ "(" ++ (env_string xs) ++ ")"
+    go (Void) = "()"
+    go (Error message) = "Error: " ++ message
     go (Fork target branches) = (go target) ++ foldr show_branch "" branches
-      where
-        show_branch (cond, body) acc = "\n| " ++ go cond ++ " = " ++ go body ++ acc
     go e = error $ show e
+    seq_join [] _ acc = acc
+    seq_join (x@(Def name ast):xs) glue acc = seq_join xs "\n" (acc ++ glue ++ to_string x)
+    seq_join (x:xs) glue acc = seq_join xs "; " (acc ++ glue ++ to_string x)
+    show_branch (cond, body) acc = "\n| " ++ go cond ++ " = " ++ go body ++ acc
     def_string (Class _ attrs methods) = env_string $ attrs ++ methods
     enum_string xs = string_join " | " (map (\(k, x) -> squash_strings [k, def_string x]) xs)
     env_string env = string_join ", " $ map (\(k, v) -> go $ Def k v) env
@@ -239,17 +250,22 @@ parse input = go
       return $ Op2 op left right
     parse_unit = parse_value >>= parse_apply
       where
-        parse_value = parse_bool `or`
-          parse_int `or`
-          parse_string `or`
-          parse_array `or`
-          parse_closure `or`
-          parse_ref
+        parse_value = parse_void `or`
+                      parse_bool `or`
+                      parse_int `or`
+                      parse_string `or`
+                      parse_array `or`
+                      parse_closure `or`
+                      parse_ref
+        parse_void = read_string "()" >> return Void
         parse_apply node = option node $ parse_follow node
         parse_follow node = do
           mark <- satisfy $ \x -> elem x ".("
           case mark of
-            '.' -> (Member node <$> get_id) >>= parse_apply
+            '.' -> do
+              id <- get_id
+              argv <- option [] $ between (char '(') (read_char ')') $ many parse_exp
+              parse_apply $ Member node id argv
             '(' -> do
               args <- many parse_exp
               read_char ')'
@@ -404,12 +420,9 @@ eval root = unwrap $ go [] root
           body -> run_seq (("_", body): env) eff ys
     go env (Def _ body) = go env body
     go env (Ref name) = go env $ find name env
-    go env (Member (String s) "to_array") = Array $ map (\x -> String [x]) s
-    go env (Member (String s) "to_int") = Int (read s :: Int)
-    go env (Member (Int s) "to_string") = String (show s)
-    go env (Member target name) = case go env target of
-      (Instance _ env2) -> bind (env2 ++ env) name env2
-      (Enum _ env2) -> bind (env2 ++ env) name env2
+    go env (Member target name argv) = exec_member env (go env target) name argv
+    go env (Apply (Ref "guard") [x]) = buildin_guard (go env x)
+    go env (Apply (Ref "if") [a, b, c]) = buildin_if env (go env a) b c
     go env (Apply target raw_argv) = apply env (go env target) $ map (go env) raw_argv
     go env (Array xs) = Array $ map (go env) xs
     go env (Op2 "+=" l@(Ref name) r) = update name $ operate env "+" l r
@@ -424,6 +437,14 @@ eval root = unwrap $ go [] root
         match (((Ref "_"), body):_) = body
         match ((cond, body):xs) = if target == cond then body else match xs
     go _ x = x
+    exec_member env (String s) "to_array" [] = Array $ map (\x -> String [x]) s
+    exec_member env (String s) "to_int" [] = Int (read s :: Int)
+    exec_member env (Int s) "to_string" [] = String (show s)
+    exec_member env (Array xs) "include" [x] = Bool (elem x $ map (go env) xs)
+    exec_member env (Instance _ env2) name [] = bind (env2 ++ env) name env2
+    exec_member env (Enum _ env2) name [] = bind (env2 ++ env) name env2
+    exec_member env (Func args body) _ argv = go ((zip args argv) ++ env) body
+    exec_member env x name argv = error $ "Unexpect member " ++ name ++ " of " ++ show x ++ " with " ++ show argv
     apply env target argv = case (target, argv) of
       ((Func args body), _) -> go ((zip args $ map (go env) argv) ++ env) body
       ((Class name attrs methods), _) -> Instance name ((zip (map fst attrs) argv) ++ methods)
@@ -445,3 +466,8 @@ eval root = unwrap $ go [] root
     bind env k kvs = case go env $ find k kvs of
       (Func args body) -> Func args $ Apply (Func (map fst env) body) (map snd env)
       x -> x
+    buildin_if env (Bool True) x _ = go env x
+    buildin_if env (Bool False) _ x = go env x
+    buildin_if env x _ _ = error $ "Invalid argument " ++ show x ++ " in build-in `if`"
+    buildin_guard (Bool True) = Void
+    buildin_guard (Bool False) = Error "guard is failed"

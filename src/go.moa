@@ -1,4 +1,4 @@
-compile x = parser(123.to_string 0).parse_int
+compile x = parser("123" 0).parse_int
 compiler x = build(parse(x))
 parse x = ast.string(x)
 build x = x.value
@@ -33,9 +33,13 @@ parser:
   parse_int =
     n <- read_int
     ast.int(n.to_int)
-  read_int = many1(read_any([0123456789.to_array]))
-  read_any xs = satisfy(xs.include)
+  read_int = many1(read_any("0123456789".to_array))
+  read_any xs = satisfy(x -> xs.include(x))
   many1 f =
     x <- f
     xs <- many(f)
     [x] ++ xs
+  many f = many_acc(f [])
+  many_acc f acc = x <- f
+  | acc ++ [x]
+  | acc
