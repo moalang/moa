@@ -128,6 +128,7 @@ data AST = Void
   | Apply AST [AST]
   | Seq [AST]
   | Fork AST Branches -- target, branches
+  | Update Env AST
   deriving (Show, Eq)
 
 string_join glue [] = ""
@@ -378,8 +379,12 @@ parse input = go
 
 -- Evaluator
 eval :: AST -> AST
-eval root = go [] root
+eval root = unwrap $ go [] root
   where
+    unwrap x = case x of
+      (Update _ body) -> body
+      (Def _ body) -> body
+      _ -> x
     go :: Env -> AST -> AST
     go env (Seq xs) = run_seq env xs
       where
@@ -387,31 +392,25 @@ eval root = go [] root
         run_seq env [] = snd $ head env
         run_seq env ((Def name body):ys) = run_seq ((name, go env body) : env) ys
         run_seq env (y:ys) = case go env y of
-          (Def name body) -> run_seq ((name, body) : env) ys
+          (Update diff body) -> run_seq (diff ++ env) ys
           body -> run_seq (("_", body): env) ys
     go env (Def _ body) = go env body
     go env (Ref name) = go env $ find name env
     go env (Member target name) = case go env target of
       (Instance _ env2) -> bind (env2 ++ env) name env2
       (Enum _ env2) -> bind (env2 ++ env) name env2
-    go env (Apply target raw_argv) = go_apply
-      where
-        argv = map (go env) raw_argv
-        go_apply = case go env target of
-          (Func args body) -> go ((zip args $ map (go env) argv) ++ env) body
-          (Class name attrs methods) -> Instance name ((zip (map fst attrs) argv) ++ methods)
+    go env (Apply target raw_argv) = let argv = map (go env) raw_argv in case go env target of
+      (Func args body) -> go ((zip args $ map (go env) argv) ++ env) body
+      (Class name attrs methods) -> Instance name ((zip (map fst attrs) argv) ++ methods)
     go env (Array xs) = Array $ map (go env) xs
-    go env (Op2 op left right) = case (op, go env left, go env right) of
-      ("<-", _, x) -> update left x
-      ("+=", (Int l), (Int r)) -> update left (Int $ l + r)
-      ("-=", (Int l), (Int r)) -> update left (Int $ l - r)
-      ("*=", (Int l), (Int r)) -> update left (Int $ l * r)
-      ("//=", (Int l), (Int r)) -> update left (Int $ l `div` r)
-      ("+", (Int l), (Int r)) -> Int $ l + r
-      ("-", (Int l), (Int r)) -> Int $ l - r
-      ("*", (Int l), (Int r)) -> Int $ l * r
-      ("//", (Int l), (Int r)) -> Int $ l `div` r
-      x -> error $ "op2: " ++ show x
+    go env (Op2 "<-" (Ref name) right) = case go env right of
+      (Update diff body) -> Update ((name, body) : diff) body
+      body -> Update [(name, body)] body
+    go env (Op2 "+=" l@(Ref name) r) = update name $ operate env "+" l r
+    go env (Op2 "-=" l@(Ref name) r) = update name $ operate env "-" l r
+    go env (Op2 "*=" l@(Ref name) r) = update name $ operate env "*" l r
+    go env (Op2 "//=" l@(Ref name) r) = update name $ operate env "//" l r
+    go env (Op2 op l r) = operate env op l r
     go env (Fork raw_target branches) = match branches
       where
         target = go env raw_target
@@ -419,7 +418,14 @@ eval root = go [] root
         match (((Ref "_"), body):_) = body
         match ((cond, body):xs) = if target == cond then body else match xs
     go _ x = x
-    update (Ref name) ast = Def name ast
+    operate :: Env -> String -> AST -> AST -> AST
+    operate env op left right = case (op, go env left, go env right) of
+      ("+", (Int l), (Int r)) -> Int $ l + r
+      ("-", (Int l), (Int r)) -> Int $ l - r
+      ("*", (Int l), (Int r)) -> Int $ l * r
+      ("//", (Int l), (Int r)) -> Int $ l `div` r
+      x -> error $ "op2: " ++ show x
+    update name body = Update [(name, body)] body
     find :: String -> Env -> AST
     find k kvs = case lookup k kvs of
       Nothing -> error $ "not found " ++ k ++ " in " ++ string_join ", " (map fst kvs)
