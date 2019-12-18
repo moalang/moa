@@ -83,6 +83,7 @@ test = go
       stmt "2" "7 // 3"
       stmt "2" "a = 1; 2"
       stmt "3" "add a b = a + b\nadd(1 2)"
+      stmt "3" "add a b =\n  c = a + b\n  c\nadd(1 2)"
       stmt "1" "v = 1\nf x = x\nf(v)"
       stmt "[1 2 3]" "[1 1+1 3]"
       stmt "3" "vector2: x int, y int\nv = vector2(1 2)\nv.x + v.y"
@@ -93,7 +94,8 @@ test = go
       stmt "ab.b" "ab:\n| a\n| b\nab.b"
       stmt "10" "a = 1\na\n| 1 = 10\n| _ = 20"
       stmt "20" "a = 2\na\n| 1 = 10\n| _ = 20"
-      stmt "3" "counter: count 0, incr = count += 1, twice = incr; incr\ncounter(1).twice"
+      stmt "3" "counter: count int, incr = count += 1, twice = incr; incr\ncounter(1).twice"
+      stmt "5" "counter: count int, incr = count += 1, twice = a <- incr; b <- incr; a + b\ncounter(1).twice"
       putStrLn "done"
     read expr = eq expr (parse expr) expr
     stmt expect expr = eq expect (eval $ parse expr) expr
@@ -189,37 +191,39 @@ parse input = go
       Nothing -> error $ "parse error: " ++ input
       Just (ast, s) -> case length (src s) == pos s of
         True -> ast
-        False -> error $ "Remaining: " ++ drop (pos s) (src s)
+        False -> error $ "Remaining: " ++ show (drop (pos s) (src s))
     parse_top :: Parser AST
     parse_top = between spaces spaces parse_lines
-      where
-        parse_lines = make_seq <$> sepBy (read_br) parse_line
-        parse_line = parse_def `or` parse_exp_or_fork
-        parse_def = do
-          id <- read_id
-          args <- read_args
-          mark <- read_any ":="
-          body <- case mark of
-            '=' -> parse_seq
-            ':' -> (parse_enum id) `or` (parse_class id) `or` (die $ "invalid definition in parse_def for " ++ id)
-          return $ Def id (make_func args body)
-        parse_class name = do
-          attrs <- read_attrs1
-          methods <- read_methods
-          return $ Class name attrs methods
-        parse_enum name = Enum name <$> read_enums1 (name ++ ".")
-        parse_exp_or_fork = do
-          exp <- parse_exp
-          (parse_fork exp) `or` (return exp)
-        parse_fork exp = Fork exp <$> many1 parse_branch
-        parse_branch = do
-          satisfy (== '\n')
-          satisfy (== '|')
-          cond <- parse_unit
-          read_char '='
-          body <- parse_seq
-          return (cond, body)
-    parse_seq = make_seq <$> sepBy1 (read_char ';') parse_exp
+    parse_lines = make_seq <$> sepBy (read_br) parse_line
+    parse_line = parse_def `or` parse_exp_or_fork
+    parse_def = do
+      id <- read_id
+      args <- read_args
+      mark <- read_any ":="
+      body <- case mark of
+        '=' -> parse_seq
+        ':' -> (parse_enum id) `or` (parse_class id) `or` (die $ "invalid definition in parse_def for " ++ id)
+      return $ Def id (make_func args body)
+    parse_class name = do
+      attrs <- read_attrs1
+      methods <- read_methods
+      return $ Class name attrs methods
+    parse_enum name = Enum name <$> read_enums1 (name ++ ".")
+    parse_exp_or_fork = do
+      exp <- parse_exp
+      (parse_fork exp) `or` (return exp)
+    parse_fork exp = Fork exp <$> many1 parse_branch
+    parse_branch = do
+      satisfy (== '\n')
+      satisfy (== '|')
+      cond <- parse_unit
+      read_char '='
+      body <- parse_seq
+      return (cond, body)
+    parse_seq = make_seq <$> (
+                  (sepBy1 (read_char ';') parse_exp) `or`
+                  (many1 (read_string "\n  " >> parse_line))
+                  )
     parse_exp = do
       l <- parse_unit
       parse_op2 l `or` (return l)
@@ -300,10 +304,11 @@ parse input = go
     read_id = lex get_id
     read_ids1 = sepBy1 (satisfy (== '.')) read_id
     read_int = lex $ many1 $ get_any "0123456789"
-    read_strings (x:xs) = foldr or (read_string x) (map read_string xs)
+    read_strings (x:xs) = foldl or (read_string x) (map read_string xs)
     read_string s = lex $ mapM_ (\x -> satisfy (== x)) s >> return s
     read_char c = lex $ satisfy (== c)
     read_op = read_strings [
+              "<-",
               "==", "!=", ">=", "<=", ">", "<",
               "+=", "-=", "*=", "//=",
               "+", "-", "*", "//"]
@@ -397,6 +402,7 @@ eval root = go [] root
           (Class name attrs methods) -> Instance name ((zip (map fst attrs) argv) ++ methods)
     go env (Array xs) = Array $ map (go env) xs
     go env (Op2 op left right) = case (op, go env left, go env right) of
+      ("<-", _, x) -> update left x
       ("+=", (Int l), (Int r)) -> update left (Int $ l + r)
       ("-=", (Int l), (Int r)) -> update left (Int $ l - r)
       ("*=", (Int l), (Int r)) -> update left (Int $ l * r)

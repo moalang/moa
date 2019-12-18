@@ -21,3 +21,11 @@ ast:
 | apply target ast, args ast.array
 | seq lines ast.array
 | fork target branches
+parser:
+  src string
+  pos int
+  satisfy f =
+    c <- src(pos)
+    guard(f(c))
+    pos += 1
+    f(c)
