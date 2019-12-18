@@ -3,7 +3,7 @@ module Main where
 import Debug.Trace (trace)
 import Control.Applicative ((<|>), (<$>))
 import Control.Monad (unless, guard)
-import Control.Monad.State (StateT, runStateT, lift, get, put)
+import Control.Monad.State (StateT, runStateT, lift, get, put, modify)
 import System.Environment (getArgs)
 import System.IO (isEOF)
 
@@ -96,6 +96,8 @@ test = go
       stmt "20" "a = 2\na\n| 1 = 10\n| _ = 20"
       stmt "3" "counter: count int, incr = count += 1, twice = incr; incr\ncounter(1).twice"
       stmt "5" "counter: count int, incr = count += 1, twice = a <- incr; b <- incr; a + b\ncounter(1).twice"
+      stmt "5" "counter: count int, incr = count += 1, twice =\n    a <- incr\n    b <- incr\n    a + b\ncounter(1).twice"
+      read "mix: a int, add b = a + b\nmix(1).add(2)"
       putStrLn "done"
     read expr = eq expr (parse expr) expr
     stmt expect expr = eq expect (eval $ parse expr) expr
@@ -108,9 +110,7 @@ run :: String -> String
 run = to_string . eval . parse
 
 -- Parser and Evaluator
-data Type = Type { tname :: String, args :: [Type] } deriving (Show, Eq)
 type Env = [(String, AST)]
-type Attrs = [(String, Type)]
 type Branches = [(AST, AST)]
 data AST = Void
   | Int Int
@@ -119,7 +119,7 @@ data AST = Void
   | Func [String] AST -- captures, arguments, body
   | Array [AST]
   | Def String AST
-  | Class String Attrs Env -- type name, attributes, methods
+  | Class String Env Env -- type name, attributes, methods
   | Instance String Env -- type name, attributes + methods
   | Enum String Env -- type name, members
   | Op2 String AST AST
@@ -129,6 +129,7 @@ data AST = Void
   | Seq [AST]
   | Fork AST Branches -- target, branches
   | Update Env AST
+  | Type AST
   deriving (Show, Eq)
 
 string_join glue [] = ""
@@ -145,6 +146,7 @@ to_string x = go x
     go (Def name x@(Class _ _ _)) = name ++ ": " ++ def_string x
     go (Def name x@(Enum _ attrs)) = name ++ ": " ++ enum_string attrs
     go (Def name x@(Func args body)) = name ++ " " ++ (string_join " " args) ++ " = " ++ to_string body
+    go (Def name (Type x)) = name ++ " " ++ go x
     go (Def name x) = name ++ " = " ++ go x
     go (Class name _ _) = name
     go (Enum name _) = name
@@ -163,15 +165,11 @@ to_string x = go x
       where
         show_branch (cond, body) acc = "\n| " ++ go cond ++ " = " ++ go body ++ acc
     go e = error $ show e
-    attrs_string attrs = string_join ", " $ (map (\(k, t) -> squash_strings [k, type_string t]) attrs)
-    attrs_methods methods = squash_strings $ (map (\(k, m) -> squash_strings [", " ++ k, "= ", go m]) methods)
-    def_string (Class _ attrs methods) = attrs_string attrs ++ attrs_methods methods
+    def_string (Class _ attrs methods) = env_string $ attrs ++ methods
     enum_string xs = string_join " | " (map (\(k, x) -> squash_strings [k, def_string x]) xs)
-    env_string env = string_join ", " $ map (\(k, v) -> squash_strings [k, go v]) env
-    type_string t = case args t of
-      [] -> tname t
-      [x] -> type_string x ++ "." ++ tname t
-      types -> tname t ++ "(" ++ string_join " " (map type_string types) ++ ")"
+    env_string env = string_join ", " $ map (\(k, v) -> go $ Def k v) env
+    type_string (Type x) = to_string x
+    type_string x = to_string x
     squash_strings :: [String] -> String
     squash_strings [] = ""
     squash_strings ("":zs) = squash_strings zs
@@ -182,13 +180,13 @@ to_string x = go x
     squash_strings [x] = x
 
 -- Parser
-data Source = Source { src :: String, pos :: Int } deriving Show
+data Source = Source { src :: String, pos :: Int, depth :: Int } deriving Show
 type Parser a = StateT Source Maybe a
 
 parse :: String -> AST
 parse input = go
   where
-    go = case runStateT parse_top (Source input 0) of
+    go = case runStateT parse_top (Source input 0 0) of
       Nothing -> error $ "parse error: " ++ input
       Just (ast, s) -> case length (src s) == pos s of
         True -> ast
@@ -201,13 +199,12 @@ parse input = go
       id <- read_id
       args <- read_args
       mark <- read_any ":="
-      body <- case mark of
+      body <- indent $ case mark of
         '=' -> parse_seq
         ':' -> (parse_enum id) `or` (parse_class id) `or` (die $ "invalid definition in parse_def for " ++ id)
       return $ Def id (make_func args body)
     parse_class name = do
-      attrs <- read_attrs1
-      methods <- read_methods
+      (attrs, methods) <- read_attrs_and_methods
       return $ Class name attrs methods
     parse_enum name = Enum name <$> read_enums1 (name ++ ".")
     parse_exp_or_fork = do
@@ -219,11 +216,11 @@ parse input = go
       satisfy (== '|')
       cond <- parse_unit
       read_char '='
-      body <- parse_seq
+      body <- indent parse_seq
       return (cond, body)
     parse_seq = make_seq <$> (
                   (sepBy1 (read_char ';') parse_exp) `or`
-                  (many1 (read_string "\n  " >> parse_line))
+                  (many1 (read_indent >> parse_line))
                   )
     parse_exp = do
       l <- parse_unit
@@ -277,31 +274,28 @@ parse input = go
         enum_lines = many1 (read_string "\n|" >> read_enum prefix)
         enum_line = sepBy2 (read_char '|') $ read_enum prefix
         read_enum prefix = do
-          k <- read_id
-          v <- read_attrs
-          return (k, Class (prefix ++ k) v [])
-    read_attrs = (read_string "\n  " >> sepBy (read_string "\n  ") read_kv) `or` sepBy (read_char ',') read_kv
-    read_attrs1 = many1 (read_string "\n  " >> read_kv) `or` sepBy1 (read_char ',') read_kv
-    read_kv = do
-      k <- read_id
-      v <- read_type
-      return (k, v)
-    read_methods = many $ do
-      read_sep_member
-      id <- read_id
-      args <- read_args
-      read_char '='
-      body <- parse_seq
-      return (id, make_func args body)
+          id <- read_id
+          (attrs, method) <- read_attrs_and_methods
+          return (id, Class (prefix ++ id) attrs method)
+    read_attrs_and_methods = go
+      where
+        go = fmap (split [] []) read_members
+        split acc1 acc2 [] = (reverse acc1, reverse acc2)
+        split acc1 acc2 (x@(_, Type _):xs) = split (x : acc1) acc2 xs
+        split acc1 acc2 (x:xs) = split acc1 (x : acc2) xs
+        read_members = (read_indent >> sepBy read_indent read_member) `or` sepBy (read_char ',') read_member
+        read_member = read_member_method `or` read_member_attr
+        read_member_method = do
+          id <- read_id
+          args <- read_args
+          read_char '='
+          body <- parse_seq
+          return (id, make_func args body)
+        read_member_attr = do
+          id <- read_id
+          t <- Type <$> parse_exp
+          return (id, t)
     read_args = many read_id
-    read_type = read_type_nest []
-    read_type_nest vargs = do
-      id <- read_id
-      args <- option [] $ between (char '(') (read_char ')') $ sepBy (many1 $ char ' ') read_type
-      let t = Type id (vargs ++ args)
-      option t $ do
-          char '.'
-          read_type_nest [t]
     read_id = lex get_id
     read_ids1 = sepBy1 (satisfy (== '.')) read_id
     read_int = lex $ many1 $ get_any "0123456789"
@@ -313,9 +307,13 @@ parse input = go
               "==", "!=", ">=", "<=", ">", "<",
               "+=", "-=", "*=", "//=",
               "+", "-", "*", "//"]
-    read_sep_member = read_strings [",", "\n  "]
     read_br = read_strings [";", ",", "\n"]
     read_any s = lex $ get_any s
+    read_indent = do
+      s <- get
+      let sp = take (2 * depth s) $ repeat ' '
+      read_string $ "\n" ++ sp
+
     get_any s = satisfy (\x -> elem x s)
     get_id = many1 $ get_any "abcdefghijklmnopqrstuvwxyz0123456789_"
 
@@ -323,13 +321,13 @@ parse input = go
     or l r = do
       s <- get
       l <|> (put s >> r)
-
     lex f = (many $ satisfy (== ' ')) >> f
+    indent :: Parser a -> Parser a
     indent f = do
-      read_string "  "
-      v <- f
-      read_string "\n"
-      return v
+      modify $ \s -> s { depth = depth s + 1 }
+      ret <- f
+      modify $ \s -> s { depth = depth s - 1 }
+      return ret
     spaces = many $ read_any "\n\t "
     sepBy sep f = (sepBy1 sep f) `or` (return [])
     sepBy1 sep f = do
