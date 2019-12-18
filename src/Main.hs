@@ -83,7 +83,7 @@ test = go
       stmt "6" "2 * 3"
       stmt "2" "7 // 3"
       stmt "2" "a = 1; 2"
-      --stmt "2" "3 - (2 - 1)"
+      stmt "2" "3 - (2 - 1)"
       stmt "3" "add a b = a + b\nadd(1 2)"
       stmt "3" "add a b =\n  c = a + b\n  c\nadd(1 2)"
       stmt "1" "v = 1\nf x = x\nf(v)"
@@ -251,6 +251,7 @@ parse input = go
     parse_unit = parse_value >>= parse_apply
       where
         parse_value = parse_void `or`
+                      parse_parentheses `or`
                       parse_bool `or`
                       parse_int `or`
                       parse_string `or`
@@ -258,6 +259,7 @@ parse input = go
                       parse_closure `or`
                       parse_ref
         parse_void = read_string "()" >> return Void
+        parse_parentheses = guard_prev (\x -> elem x " =") >> between (read_char '(') (read_char ')') parse_exp
         parse_apply node = option node $ parse_follow node
         parse_follow node = do
           mark <- satisfy $ \x -> elem x ".("
@@ -313,7 +315,7 @@ parse input = go
           return (id, make_func args body)
         read_member_attr = do
           id <- read_id
-          t <- Type <$> parse_exp
+          t <- Type <$> parse_unit
           return (id, t)
     read_args = many read_id
     read_id = lex get_id
@@ -383,12 +385,23 @@ parse input = go
       guard $ f c
       put (s { pos = (pos s) + 1 })
       return c
+    guard_prev :: (Char -> Bool) -> Parser ()
+    guard_prev f = do
+      s <- get
+      let c = (src s) !! (max 0 (pos s - 2))
+      let b = f c
+      guard b
     see :: Parser String
     see = do
       s <- get
       return $ if (pos s) < (length $ src s)
         then [(src s) !! (pos s)]
         else ""
+    tracer :: String -> Parser ()
+    tracer mark = do
+      s <- get
+      trace ("TRACER: " ++ mark ++ " " ++ drop (pos s) (src s)) (return ())
+      return ()
     die message = trace message (return ()) >> dump >> error message
     dump :: Parser ()
     dump = do
