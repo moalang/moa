@@ -1,4 +1,5 @@
-compile x = build(parse(x))
+compile x = parser(123.to_string 0).parse_int
+compiler x = build(parse(x))
 parse x = ast.string(x)
 build x = x.value
 table:
@@ -29,3 +30,12 @@ parser:
     guard(f(c))
     pos += 1
     f(c)
+  parse_int =
+    n <- read_int
+    ast.int(n.to_int)
+  read_int = many1(read_any([0123456789.to_array]))
+  read_any xs = satisfy(xs.include)
+  many1 f =
+    x <- f
+    xs <- many(f)
+    [x] ++ xs

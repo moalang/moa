@@ -76,6 +76,7 @@ test = go
       read "counter: count int, incr = count += 1"
       read "a.b"
       read "a.b.c(1).d(2 e.f(3))"
+      read "mix: a int, add b = a + b\nmix(1).add(2)"
       read $ string_join "\n| " ["num", "1 = a", "2 = b", "_ = c"]
       stmt "5" "2 + 3"
       stmt "-1" "2 - 3"
@@ -96,8 +97,11 @@ test = go
       stmt "20" "a = 2\na\n| 1 = 10\n| _ = 20"
       stmt "3" "counter: count int, incr = count += 1, twice = incr; incr\ncounter(1).twice"
       stmt "5" "counter: count int, incr = count += 1, twice = a <- incr; b <- incr; a + b\ncounter(1).twice"
-      stmt "5" "counter: count int, incr = count += 1, twice =\n    a <- incr\n    b <- incr\n    a + b\ncounter(1).twice"
-      read "mix: a int, add b = a + b\nmix(1).add(2)"
+      stmt "14" "counter:\n  count int\n  incr a = count += a\n  twice =\n    b <- incr(1)\n    c <- incr(1)\n    b + c\n  quad =\n    d <- twice\n    e <- twice\n    d + e\ncounter(1).quad"
+      stmt "[\"1\" \"2\"]" "\"12\".to_array"
+      stmt "3" "\"1\".to_int + 2"
+      stmt "\"0\"" "0.to_string"
+      stmt "[1 2]" "[1] ++ [2]"
       putStrLn "done"
     read expr = eq expr (parse expr) expr
     stmt expect expr = eq expect (eval $ parse expr) expr
@@ -190,7 +194,11 @@ parse input = go
       Nothing -> error $ "parse error: " ++ input
       Just (ast, s) -> case length (src s) == pos s of
         True -> ast
-        False -> error $ "Remaining: " ++ show (drop (pos s) (src s))
+        False -> error $ unlines [
+            "Expect   : " ++ (show $ length (src s))
+          , "Fact     : " ++ (show $ pos s)
+          , "Remaining: " ++ drop (pos s) (src s)
+          ]
     parse_top :: Parser AST
     parse_top = between spaces spaces parse_lines
     parse_lines = make_seq <$> sepBy (read_br) parse_line
@@ -229,27 +237,23 @@ parse input = go
       op <- read_op
       right <- parse_exp
       return $ Op2 op left right
-    parse_unit = parse_bool `or`
-                 parse_int `or`
-                 parse_string `or`
-                 parse_array `or`
-                 parse_closure `or`
-                 parse_apply
+    parse_unit = parse_value >>= parse_apply
       where
-        parse_apply :: Parser AST
-        parse_apply = parse_ref >>= go
-          where
-            go :: AST -> Parser AST
-            go node = option node $ _go node
-            _go :: AST -> Parser AST
-            _go node = do
-              mark <- satisfy $ \x -> elem x ".("
-              case mark of
-                '.' -> (Member node <$> get_id) >>= go
-                '(' -> do
-                  args <- many parse_exp
-                  read_char ')'
-                  go $ make_apply node args
+        parse_value = parse_bool `or`
+          parse_int `or`
+          parse_string `or`
+          parse_array `or`
+          parse_closure `or`
+          parse_ref
+        parse_apply node = option node $ parse_follow node
+        parse_follow node = do
+          mark <- satisfy $ \x -> elem x ".("
+          case mark of
+            '.' -> (Member node <$> get_id) >>= parse_apply
+            '(' -> do
+              args <- many parse_exp
+              read_char ')'
+              parse_apply $ make_apply node args
         parse_ref = Ref <$> read_id
         parse_bool = Bool <$> fmap (== "true") (read_strings ["true", "false"])
         parse_int = Int <$> fmap read read_int
@@ -289,7 +293,7 @@ parse input = go
           id <- read_id
           args <- read_args
           read_char '='
-          body <- parse_seq
+          body <- indent parse_seq
           return (id, make_func args body)
         read_member_attr = do
           id <- read_id
@@ -306,6 +310,7 @@ parse input = go
               "<-",
               "==", "!=", ">=", "<=", ">", "<",
               "+=", "-=", "*=", "//=",
+              "++",
               "+", "-", "*", "//"]
     read_br = read_strings [";", ",", "\n"]
     read_any s = lex $ get_any s
@@ -384,26 +389,29 @@ eval root = unwrap $ go [] root
       (Def _ body) -> body
       _ -> x
     go :: Env -> AST -> AST
-    go env (Seq xs) = run_seq env xs
+    go env (Seq xs) = run_seq env [] xs
       where
-        run_seq :: Env -> [AST] -> AST
-        run_seq env [] = snd $ head env
-        run_seq env ((Def name body):ys) = run_seq ((name, go env body) : env) ys
-        run_seq env (y:ys) = case go env y of
-          (Update diff body) -> run_seq (diff ++ env) ys
-          body -> run_seq (("_", body): env) ys
+        run_seq :: Env -> Env -> [AST] -> AST
+        run_seq env [] [] = snd $ head env
+        run_seq env eff [] = Update eff (snd $ head env)
+        run_seq env eff ((Def name body):ys) = run_seq ((name, go env body) : env) eff ys
+        run_seq env eff ((Op2 "<-" (Ref name) right):ys) = case go env right of
+          (Update diff body) -> run_seq ((name, body) : diff ++ env) (diff ++ eff) ys
+          body               -> run_seq ((name, body) : env) eff ys
+        run_seq env eff ((Op2 "<-" l r):ys) = error "Invalid operation"
+        run_seq env eff (y:ys) = case go env y of
+          (Update diff body) -> run_seq (("_", body) : diff ++ env) (diff ++ eff) ys
+          body -> run_seq (("_", body): env) eff ys
     go env (Def _ body) = go env body
     go env (Ref name) = go env $ find name env
+    go env (Member (String s) "to_array") = Array $ map (\x -> String [x]) s
+    go env (Member (String s) "to_int") = Int (read s :: Int)
+    go env (Member (Int s) "to_string") = String (show s)
     go env (Member target name) = case go env target of
       (Instance _ env2) -> bind (env2 ++ env) name env2
       (Enum _ env2) -> bind (env2 ++ env) name env2
-    go env (Apply target raw_argv) = let argv = map (go env) raw_argv in case go env target of
-      (Func args body) -> go ((zip args $ map (go env) argv) ++ env) body
-      (Class name attrs methods) -> Instance name ((zip (map fst attrs) argv) ++ methods)
+    go env (Apply target raw_argv) = apply env (go env target) $ map (go env) raw_argv
     go env (Array xs) = Array $ map (go env) xs
-    go env (Op2 "<-" (Ref name) right) = case go env right of
-      (Update diff body) -> Update ((name, body) : diff) body
-      body -> Update [(name, body)] body
     go env (Op2 "+=" l@(Ref name) r) = update name $ operate env "+" l r
     go env (Op2 "-=" l@(Ref name) r) = update name $ operate env "-" l r
     go env (Op2 "*=" l@(Ref name) r) = update name $ operate env "*" l r
@@ -416,8 +424,14 @@ eval root = unwrap $ go [] root
         match (((Ref "_"), body):_) = body
         match ((cond, body):xs) = if target == cond then body else match xs
     go _ x = x
+    apply env target argv = case (target, argv) of
+      ((Func args body), _) -> go ((zip args $ map (go env) argv) ++ env) body
+      ((Class name attrs methods), _) -> Instance name ((zip (map fst attrs) argv) ++ methods)
+      ((String s), [Int x]) -> String $ [s !! x]
+      x -> error $ "Unexpect target " ++ show x ++ " with " ++ show argv
     operate :: Env -> String -> AST -> AST -> AST
     operate env op left right = case (op, go env left, go env right) of
+      ("++", (Array l), (Array r)) -> Array $ l ++ r
       ("+", (Int l), (Int r)) -> Int $ l + r
       ("-", (Int l), (Int r)) -> Int $ l - r
       ("*", (Int l), (Int r)) -> Int $ l * r
