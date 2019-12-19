@@ -106,6 +106,7 @@ test = go
       stmt "[1 2]" "[1] ++ [2]"
       stmt "[1 2]" "f x = x < 2\n| x + 1\n| false.guard(0)\nloop x acc = y <- f(x)\n| acc\n| loop(y acc ++ [y])\nloop(0 [])"
       stmt "3" "s: n 0, inc = n += 1, b1 = b2; b2, b2 = v <- inc\n| 9\n| n\ns(1).b1"
+      stmt "3" "s: n 0, inc = n += 1, calc = twice(inc)\ntwice f = log.debug(f); f; f\ns(1).calc"
       -- build-in functions
       stmt "1" "if(true 1 2)"
       stmt "2" "if(false 1 2)"
@@ -427,29 +428,17 @@ eval root = unwrap $ go [] root
     unwrap x = case x of
       (Update _ body) -> body
       (Def _ body) -> body
+      (Eff body) -> error $ show body
       _ -> x
     go :: Env -> AST -> AST
-    go env (Eff xs) = run_eff env [] xs
-      where
-        run_eff :: Env -> Env -> [AST] -> AST
-        run_eff env [] [] = snd $ head env
-        run_eff env eff [] = Update eff (snd $ head env)
-        run_eff env eff ((Def name body):ys) = run_eff ((name, go env body) : env) eff ys
-        run_eff env eff ((Op2 "<-" (Ref name) right):ys) = case go env right of
-          (Update diff body) -> run_eff ((name, body) : diff ++ env) (diff ++ eff) ys
-          body               -> run_eff ((name, body) : env) eff ys
-        run_eff env eff ((Op2 "<-" l r):ys) = error "Invalid operation"
-        run_eff env eff (y:ys) = case go env y of
-          (Update diff body) -> run_eff (("_", body) : diff ++ env) (diff ++ eff) ys
-          body -> run_eff (("_", body): env) eff ys
     go env (Op2 "<-" (Ref name) right) = case go env right of
       x@(Error _) -> Update [(name, x)] x
       (Update diff x) -> Update ((name, x) : diff) x
       x -> Update [(name, x)] x
     go env (Def _ body) = go env body
     go env (Ref name) = go env $ find name env
-    go env (Member (Ref "log") name argv) = trace ("- " ++ name ++ ": " ++ (show $ map (go env) argv)) Void
-    go env (Member target name argv) = run_member env (go env target) name (map (go env) argv)
+    go env (Member (Ref "log") name argv) = trace ("- " ++ name ++ ": " ++ (show $ go_argv env argv)) Void
+    go env (Member target name argv) = run_member env (go env target) name (go_argv env argv)
     go env (Apply (Ref "if") [a, b, c]) = buildin_if env (go env a) b c
     go env (Apply target argv) = run_apply env (go env target) argv
     go env (Array xs) = Array $ map (go env) xs
@@ -459,7 +448,22 @@ eval root = unwrap $ go [] root
     go env (Op2 "//=" l@(Ref name) r) = update name $ run_op2 env "//" l r
     go env (Op2 op l r) = run_op2 env op l r
     go env (Fork raw_target branches) = run_fork env (go env raw_target) branches
+    go env (Eff xs) = run_eff env [] xs
     go _ x = x
+    go_argv env xs = map (go_pure env) xs
+    go_pure env x@(Eff _) = x
+    go_pure env x = go env x
+    run_eff :: Env -> Env -> [AST] -> AST
+    run_eff env [] [] = snd $ head env
+    run_eff env eff [] = Update eff (snd $ head env)
+    run_eff env eff ((Def name body):ys) = run_eff ((name, go env body) : env) eff ys
+    run_eff env eff ((Op2 "<-" (Ref name) right):ys) = case go env right of
+      (Update diff body) -> run_eff ((name, body) : diff ++ env) (diff ++ eff) ys
+      body               -> run_eff ((name, body) : env) eff ys
+    run_eff env eff ((Op2 "<-" l r):ys) = error "Invalid operation"
+    run_eff env eff (y:ys) = case go env y of
+      (Update diff body) -> run_eff (("_", body) : diff ++ env) (diff ++ eff) ys
+      body -> run_eff (("_", body): env) eff ys
     run_fork env (Update diff1 body) branches = case run_fork (diff1 ++ env) body branches of
       (Update diff2 body) -> Update (diff1 ++ diff2) body
       body -> Update diff1 body
@@ -476,12 +480,12 @@ eval root = unwrap $ go [] root
     run_member env (Array xs) "join" [(String x)] = String (buildin_join x xs)
     run_member env (Instance _ env2) name argv = run_apply (env2 ++ env) (find name env2) argv
     run_member env (Enum _ env2) name argv = run_apply (env2 ++ env) (find name env2) argv
-    run_member env (Func args body) _ argv = go ((zip args argv) ++ env) body
+    run_member env (Func args body) _ argv = go ((zip args $ go_argv env argv) ++ env) body
     run_member env (Bool True) "guard" [_] = Void
     run_member env (Bool False) "guard" [x] = Error $ to_string x
     run_member env x name argv = error $ "Unexpected member " ++ name ++ " of " ++ show x ++ " with " ++ show argv
-    run_apply env target raw_argv = let argv = map (go env) raw_argv in case (target, argv) of
-      ((Func args body), _) -> go ((zip args $ map (go env) argv) ++ env) body
+    run_apply env target raw_argv = let argv = go_argv env raw_argv in case (target, argv) of
+      ((Func args body), _) -> go ((zip args argv) ++ env) body
       ((Class name attrs methods), _) -> Instance name ((zip (map fst attrs) argv) ++ methods)
       ((String s), [Int x]) -> if x < length s then String $ [s !! x] else Error "out of index"
       (x, []) -> go env x
