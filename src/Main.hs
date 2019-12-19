@@ -105,6 +105,7 @@ test = go
       stmt "\"0\"" "0.to_string"
       stmt "[1 2]" "[1] ++ [2]"
       stmt "[1 2]" "f x = x < 2\n| x + 1\n| false.guard(0)\nloop x acc = y <- f(x)\n| acc\n| loop(y acc ++ [y])\nloop(0 [])"
+      stmt "3" "s: n 0, inc = n += 1, b1 = b2; b2, b2 = v <- inc\n| 9\n| n\ns(1).b1"
       -- build-in functions
       stmt "1" "if(true 1 2)"
       stmt "2" "if(false 1 2)"
@@ -459,7 +460,9 @@ eval root = unwrap $ go [] root
     go env (Op2 op l r) = run_op2 env op l r
     go env (Fork raw_target branches) = run_fork env (go env raw_target) branches
     go _ x = x
-    run_fork env (Update diff body) branches = run_fork (diff ++ env) body branches
+    run_fork env (Update diff1 body) branches = case run_fork (diff1 ++ env) body branches of
+      (Update diff2 body) -> Update (diff1 ++ diff2) body
+      body -> Update diff1 body
     run_fork env target branches = match target branches
       where
         match _ [] = error $ "Does not match target=" ++ show target ++ " branches=" ++ show branches
