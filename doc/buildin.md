@@ -11,6 +11,7 @@
 - class
 - array
 - map
+- set
 - enum
 
 # Build in interface
