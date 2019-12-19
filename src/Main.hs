@@ -116,6 +116,7 @@ test = go
       stmt "true" "[1].include(1)"
       stmt "false" "[1].include(2)"
       stmt "\"a,b\"" "[\"a\" \"b\"].join(\",\")"
+      stmt "()" "log.debug(1 true)"
       putStrLn "done"
     read expr = eq expr (parse expr) expr
     stmt expect expr = eq expect (eval $ parse expr) expr
@@ -446,7 +447,8 @@ eval root = unwrap $ go [] root
       x -> Update [(name, x)] x
     go env (Def _ body) = go env body
     go env (Ref name) = go env $ find name env
-    go env (Member target name argv) = exec_member env (go env target) name (map (go env) argv)
+    go env (Member (Ref "log") name argv) = trace ("- " ++ name ++ ": " ++ (show $ map (go env) argv)) Void
+    go env (Member target name argv) = run_member env (go env target) name (map (go env) argv)
     go env (Apply (Ref "if") [a, b, c]) = buildin_if env (go env a) b c
     go env (Apply target argv) = apply env (go env target) argv
     go env (Array xs) = Array $ map (go env) xs
@@ -464,17 +466,17 @@ eval root = unwrap $ go [] root
         match _ (((Ref "_"), body):_) = go env body
         match (Error _) (((Error _), body):_) = go env body
         match _ ((cond, body):xs) = if target == cond then go env body else match target xs
-    exec_member env (String s) "to_array" [] = Array $ map (\x -> String [x]) s
-    exec_member env (String s) "to_int" [] = Int (read s :: Int)
-    exec_member env (Int s) "to_string" [] = String (show s)
-    exec_member env (Array xs) "include" [x] = Bool (elem x $ map (go env) xs)
-    exec_member env (Array xs) "join" [(String x)] = String (buildin_join x xs)
-    exec_member env (Instance _ env2) name argv = apply (env2 ++ env) (find name env2) argv
-    exec_member env (Enum _ env2) name argv = apply (env2 ++ env) (find name env2) argv
-    exec_member env (Func args body) _ argv = go ((zip args argv) ++ env) body
-    exec_member env (Bool True) "guard" [_] = Void
-    exec_member env (Bool False) "guard" [x] = Error $ to_string x
-    exec_member env x name argv = error $ "Unexpected member " ++ name ++ " of " ++ show x ++ " with " ++ show argv
+    run_member env (String s) "to_array" [] = Array $ map (\x -> String [x]) s
+    run_member env (String s) "to_int" [] = Int (read s :: Int)
+    run_member env (Int s) "to_string" [] = String (show s)
+    run_member env (Array xs) "include" [x] = Bool (elem x $ map (go env) xs)
+    run_member env (Array xs) "join" [(String x)] = String (buildin_join x xs)
+    run_member env (Instance _ env2) name argv = apply (env2 ++ env) (find name env2) argv
+    run_member env (Enum _ env2) name argv = apply (env2 ++ env) (find name env2) argv
+    run_member env (Func args body) _ argv = go ((zip args argv) ++ env) body
+    run_member env (Bool True) "guard" [_] = Void
+    run_member env (Bool False) "guard" [x] = Error $ to_string x
+    run_member env x name argv = error $ "Unexpected member " ++ name ++ " of " ++ show x ++ " with " ++ show argv
     apply env target raw_argv = let argv = map (go env) raw_argv in case (target, argv) of
       ((Func args body), _) -> go ((zip args $ map (go env) argv) ++ env) body
       ((Class name attrs methods), _) -> Instance name ((zip (map fst attrs) argv) ++ methods)

@@ -34,7 +34,7 @@ Binary operators
 
 
 
-# Standard library
+# Core library
 bool:
   guard : string try(void)
 int:

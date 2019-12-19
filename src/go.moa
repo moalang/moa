@@ -42,6 +42,8 @@ many1 f =
   xs <- many(f)
   [x] ++ xs
 many f = many_acc(f [])
-many_acc f acc = x <- f
+many_acc f acc =
+  log.debug(acc)
+  x <- f
 | acc
 | many_acc(f acc ++ [x])
