@@ -27,9 +27,9 @@ help = do
 compile :: IO ()
 compile = do
   src <- getContents
-  let (Seq list1) = parse src
+  let (Eff list1) = parse src
   let list2 = list1 ++ [Apply (Ref "compile") [String src]]
-  case eval (Seq list2) of
+  case eval (Eff list2) of
     (String s) -> putStrLn s
     x -> print x
   putStrLn "// done"
@@ -77,7 +77,7 @@ test = go
       read "a.b"
       read "a.b.c(1).d(2 e.f(3))"
       read "mix: a int, add b = a + b\nmix(1).add(2)"
-      read $ string_join "\n| " ["num", "1 = a", "2 = b", "_ = c"]
+      read $ join_string "\n| " ["num", "1 = a", "2 = b", "_ = c"]
       stmt "()" "()"
       stmt "5" "2 + 3"
       stmt "-1" "2 - 3"
@@ -144,15 +144,15 @@ data AST = Void
   | Ref String
   | Member AST String [AST] -- target, name, arguments
   | Apply AST [AST]
-  | Seq [AST]
+  | Eff [AST]
   | Fork AST Branches -- target, branches
   | Update Env AST
   | Type AST
   | Error String
   deriving (Show, Eq)
 
-string_join glue [] = ""
-string_join glue xs = drop (length glue) $ foldr (\l r -> r ++ glue ++ l) "" (reverse xs)
+join_string glue [] = ""
+join_string glue xs = drop (length glue) $ foldr (\l r -> r ++ glue ++ l) "" (reverse xs)
 
 to_string x = go x
   where
@@ -160,11 +160,11 @@ to_string x = go x
     go (String s) = show s
     go (Bool True) = "true"
     go (Bool False) = "false"
-    go (Func args body) = (string_join "," args) ++ " -> " ++ (go body)
-    go (Array xs) = "[" ++ string_join " " (map go xs) ++ "]"
+    go (Func args body) = (join_string "," args) ++ " -> " ++ (go body)
+    go (Array xs) = "[" ++ join_string " " (map go xs) ++ "]"
     go (Def name x@(Class _ _ _)) = name ++ ": " ++ def_string x
     go (Def name x@(Enum _ attrs)) = name ++ ": " ++ enum_string attrs
-    go (Def name x@(Func args body)) = name ++ " " ++ (string_join " " args) ++ " = " ++ to_string body
+    go (Def name x@(Func args body)) = name ++ " " ++ (join_string " " args) ++ " = " ++ to_string body
     go (Def name (Type x)) = name ++ " " ++ go x
     go (Def name x) = name ++ " = " ++ go x
     go (Class name _ _) = name
@@ -172,32 +172,24 @@ to_string x = go x
     go (Op2 op l r) = go l ++ " " ++ op ++ " " ++ go r
     go (Ref id) = id
     go (Member ast member []) = go ast ++ "." ++ member
-    go (Member ast member args) = go ast ++ "." ++ member ++ "(" ++ (squash_strings $ map go args) ++ ")"
-    go (Apply self args) = go self ++ "(" ++ (squash_strings $ map go args) ++ ")"
-    go (Seq xs) = seq_join xs "" ""
+    go (Member ast member args) = go ast ++ "." ++ member ++ "(" ++ (join_string " " $ map go args) ++ ")"
+    go (Apply self args) = go self ++ "(" ++ (join_string " " $ map go args) ++ ")"
+    go (Eff xs) = join_eff xs "" ""
     go (Instance name []) = name
     go (Instance name xs) = name ++ "(" ++ (env_string xs) ++ ")"
     go (Void) = "()"
     go (Error message) = "Error: " ++ message
     go (Fork target branches) = (go target) ++ foldr show_branch "" branches
     go e = error $ show e
-    seq_join [] _ acc = acc
-    seq_join (x@(Def name ast):xs) glue acc = seq_join xs "\n" (acc ++ glue ++ to_string x)
-    seq_join (x:xs) glue acc = seq_join xs "; " (acc ++ glue ++ to_string x)
+    join_eff [] _ acc = acc
+    join_eff (x@(Def name ast):xs) glue acc = join_eff xs "\n" (acc ++ glue ++ to_string x)
+    join_eff (x:xs) glue acc = join_eff xs "; " (acc ++ glue ++ to_string x)
     show_branch (cond, body) acc = "\n| " ++ go cond ++ " = " ++ go body ++ acc
     def_string (Class _ attrs methods) = env_string $ attrs ++ methods
-    enum_string xs = string_join " | " (map (\(k, x) -> squash_strings [k, def_string x]) xs)
-    env_string env = string_join ", " $ map (\(k, v) -> go $ Def k v) env
+    enum_string xs = join_string " | " (map (\(k, x) -> k ++ def_string x) xs)
+    env_string env = join_string ", " $ map (\(k, v) -> go $ Def k v) env
     type_string (Type x) = to_string x
     type_string x = to_string x
-    squash_strings :: [String] -> String
-    squash_strings [] = ""
-    squash_strings ("":zs) = squash_strings zs
-    squash_strings (" ":zs) = squash_strings zs
-    squash_strings (x:"":zs) = squash_strings (x : zs)
-    squash_strings (x:" ":zs) = squash_strings (x : zs)
-    squash_strings (x:y:zs) = x ++ " " ++ y ++ (squash_strings zs)
-    squash_strings [x] = x
 
 -- Parser
 data Source = Source { src :: String, pos :: Int, depth :: Int } deriving Show
@@ -219,7 +211,7 @@ parse input = go
           ]
     parse_top :: Parser AST
     parse_top = between spaces spaces parse_lines
-    parse_lines = make_seq <$> sepBy (read_br) parse_line
+    parse_lines = make_eff <$> sepBy (read_br) parse_line
     parse_line = parse_def `or` parse_exp_or_fork
     parse_def = do
       id <- read_id
@@ -251,10 +243,10 @@ parse input = go
       read_string "\n| "
       cond <- parse_unit
       read_char '='
-      body <- indent parse_seq
+      body <- indent parse_eff
       return (cond, body)
-    parse_body = (parse_exp >>= parse_fork) `or` parse_seq
-    parse_seq = make_seq <$> (
+    parse_body = (parse_exp >>= parse_fork) `or` parse_eff
+    parse_eff = make_eff <$> (
                   (sepBy1 (read_char ';') parse_exp) `or`
                   (many1 (read_indent >> parse_line))
                   )
@@ -304,8 +296,8 @@ parse input = go
     make_func args body = Func args body
     make_apply node [] = node
     make_apply node args = Apply node args
-    make_seq [x] = x
-    make_seq xs = Seq xs
+    make_eff [x] = x
+    make_eff xs = Eff xs
 
     read_enums1 prefix = go
       where
@@ -435,19 +427,19 @@ eval root = unwrap $ go [] root
       (Def _ body) -> body
       _ -> x
     go :: Env -> AST -> AST
-    go env (Seq xs) = run_seq env [] xs
+    go env (Eff xs) = run_eff env [] xs
       where
-        run_seq :: Env -> Env -> [AST] -> AST
-        run_seq env [] [] = snd $ head env
-        run_seq env eff [] = Update eff (snd $ head env)
-        run_seq env eff ((Def name body):ys) = run_seq ((name, go env body) : env) eff ys
-        run_seq env eff ((Op2 "<-" (Ref name) right):ys) = case go env right of
-          (Update diff body) -> run_seq ((name, body) : diff ++ env) (diff ++ eff) ys
-          body               -> run_seq ((name, body) : env) eff ys
-        run_seq env eff ((Op2 "<-" l r):ys) = error "Invalid operation"
-        run_seq env eff (y:ys) = case go env y of
-          (Update diff body) -> run_seq (("_", body) : diff ++ env) (diff ++ eff) ys
-          body -> run_seq (("_", body): env) eff ys
+        run_eff :: Env -> Env -> [AST] -> AST
+        run_eff env [] [] = snd $ head env
+        run_eff env eff [] = Update eff (snd $ head env)
+        run_eff env eff ((Def name body):ys) = run_eff ((name, go env body) : env) eff ys
+        run_eff env eff ((Op2 "<-" (Ref name) right):ys) = case go env right of
+          (Update diff body) -> run_eff ((name, body) : diff ++ env) (diff ++ eff) ys
+          body               -> run_eff ((name, body) : env) eff ys
+        run_eff env eff ((Op2 "<-" l r):ys) = error "Invalid operation"
+        run_eff env eff (y:ys) = case go env y of
+          (Update diff body) -> run_eff (("_", body) : diff ++ env) (diff ++ eff) ys
+          body -> run_eff (("_", body): env) eff ys
     go env (Op2 "<-" (Ref name) right) = case go env right of
       x@(Error _) -> Update [(name, x)] x
       (Update diff x) -> Update ((name, x) : diff) x
@@ -505,12 +497,12 @@ eval root = unwrap $ go [] root
     update name body = Update [(name, body)] body
     find :: String -> Env -> AST
     find k kvs = case lookup k kvs of
-      Nothing -> error $ "not found " ++ k ++ " in " ++ string_join ", " (map fst kvs)
+      Nothing -> error $ "not found " ++ k ++ " in " ++ join_string ", " (map fst kvs)
       Just x -> x
     buildin_if env (Bool True) x _ = go env x
     buildin_if env (Bool False) _ x = go env x
     buildin_if env x _ _ = error $ "Invalid argument " ++ show x ++ " in build-in `if`"
-    buildin_join glue params = string_join glue $ filter_string params
+    buildin_join glue params = join_string glue $ filter_string params
     filter_string [] = []
     filter_string ((String x):xs) = x : filter_string xs
     filter_string ((x:_)) = error $ "Not string type " ++ show x
