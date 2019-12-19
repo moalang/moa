@@ -23,12 +23,12 @@ ast:
 parser:
   src string
   pos 0
-  satisfy : func(string bool) string
+  satisfy : function(string bool) string
   satisfy f =
     p = parser
     c <- p.src(p.pos)
     f(c)
-    | false = miss("char: $c, func: $f.name, pos: $p.pos")
+    | false = miss("char: $c, checker: $f.name, pos: $p.pos")
     p.pos += 1
     c
   parse_top : ast
