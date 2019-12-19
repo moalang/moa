@@ -27,19 +27,21 @@ parser:
   pos int
   satisfy f =
     c <- src(pos)
-    guard(f(c))
+    f(c).guard("miss")
     pos += 1
-    f(c)
+    c
   parse_int =
     n <- read_int
-    ast.int(n.to_int)
-  read_int = many1(read_any("0123456789".to_array))
+    ast.int(n)
+  read_int =
+    x <- many1(read_any("0123456789".to_array))
+    x.join("").to_int
   read_any xs = satisfy(x -> xs.include(x))
-  many1 f =
-    x <- f
-    xs <- many(f)
-    [x] ++ xs
-  many f = many_acc(f [])
-  many_acc f acc = x <- f
-  | acc ++ [x]
-  | acc
+many1 f =
+  x <- f
+  xs <- many(f)
+  [x] ++ xs
+many f = many_acc(f [])
+many_acc f acc = x <- f
+| acc
+| many_acc(f acc ++ [x])

@@ -32,6 +32,7 @@ compile = do
   case eval (Seq list2) of
     (String s) -> putStrLn s
     x -> print x
+  putStrLn "// done"
 
 repl :: IO ()
 repl = do
@@ -103,14 +104,18 @@ test = go
       stmt "3" "\"1\".to_int + 2"
       stmt "\"0\"" "0.to_string"
       stmt "[1 2]" "[1] ++ [2]"
+      stmt "[1 2]" "f x = x < 2\n| x + 1\n| false.guard(0)\nloop x acc = y <- f(x)\n| acc\n| loop(y acc ++ [y])\nloop(0 [])"
       -- build-in functions
       stmt "1" "if(true 1 2)"
       stmt "2" "if(false 1 2)"
-      stmt "()" "guard(true)"
-      stmt "Error: guard is failed" "guard(false)"
+      stmt "()" "true.guard(1)"
+      stmt "\"b\"" "\"ab\"(1)"
+      stmt "\"b\"" "\"ab\"(1)"
+      stmt "Error: 0" "false.guard(0)"
+      stmt "Error: out of index" "\"\"(0)"
       stmt "true" "[1].include(1)"
       stmt "false" "[1].include(2)"
-      --stmt "[1 2]" "f x = if(x < 2 1 guard(false))\nloop x acc = y <- f(x)\n| loop((x -1) acc ++ [y])\n| acc\nloop(3)"
+      stmt "\"a,b\"" "[\"a\" \"b\"].join(\",\")"
       putStrLn "done"
     read expr = eq expr (parse expr) expr
     stmt expect expr = eq expect (eval $ parse expr) expr
@@ -206,9 +211,11 @@ parse input = go
       Just (ast, s) -> case length (src s) == pos s of
         True -> ast
         False -> error $ unlines [
-            "Expect   : " ++ (show $ length (src s))
+            "\n--(parse failed)----------------------------"
+          , "Expect   : " ++ (show $ length (src s))
           , "Fact     : " ++ (show $ pos s)
           , "Remaining: " ++ drop (pos s) (src s)
+          , "--------------------------------------------"
           ]
     parse_top :: Parser AST
     parse_top = between spaces spaces parse_lines
@@ -219,7 +226,7 @@ parse input = go
       args <- read_args
       mark <- read_any ":="
       body <- indent $ case mark of
-        '=' -> parse_seq
+        '=' -> parse_body
         ':' -> (parse_enum id) `or` (parse_class id) `or` (die $ "invalid definition in parse_def for " ++ id)
       return $ Def id (make_func args body)
     parse_class name = do
@@ -229,14 +236,24 @@ parse input = go
     parse_exp_or_fork = do
       exp <- parse_exp
       (parse_fork exp) `or` (return exp)
-    parse_fork exp = Fork exp <$> many1 parse_branch
-    parse_branch = do
-      satisfy (== '\n')
-      satisfy (== '|')
+    parse_fork exp = Fork exp <$> (many1 parse_switch) `or` (parse_branch exp)
+    parse_branch (Op2 "<-" _ _) = parse_branch_errors
+    parse_branch _ = parse_branch_bools
+    parse_branch_bools = do
+      a <- read_string "\n| " >> parse_exp
+      b <- read_string "\n| " >> parse_exp
+      return [(Bool True, a), (Bool False, b)]
+    parse_branch_errors = do
+      a <- read_string "\n| " >> parse_exp
+      b <- read_string "\n| " >> parse_exp
+      return [(Error "_", a), (Ref "_", b)]
+    parse_switch = do
+      read_string "\n| "
       cond <- parse_unit
       read_char '='
       body <- indent parse_seq
       return (cond, body)
+    parse_body = (parse_exp >>= parse_fork) `or` parse_seq
     parse_seq = make_seq <$> (
                   (sepBy1 (read_char ';') parse_exp) `or`
                   (many1 (read_indent >> parse_line))
@@ -311,7 +328,7 @@ parse input = go
           id <- read_id
           args <- read_args
           read_char '='
-          body <- indent parse_seq
+          body <- indent parse_body
           return (id, make_func args body)
         read_member_attr = do
           id <- read_id
@@ -397,10 +414,10 @@ parse input = go
       return $ if (pos s) < (length $ src s)
         then [(src s) !! (pos s)]
         else ""
-    tracer :: String -> Parser ()
+    tracer :: Show a => a -> Parser ()
     tracer mark = do
       s <- get
-      trace ("TRACER: " ++ mark ++ " " ++ drop (pos s) (src s)) (return ())
+      trace ("TRACER: " ++ (show mark) ++ " " ++ drop (pos s) (src s)) (return ())
       return ()
     die message = trace message (return ()) >> dump >> error message
     dump :: Parser ()
@@ -431,38 +448,47 @@ eval root = unwrap $ go [] root
         run_seq env eff (y:ys) = case go env y of
           (Update diff body) -> run_seq (("_", body) : diff ++ env) (diff ++ eff) ys
           body -> run_seq (("_", body): env) eff ys
+    go env (Op2 "<-" (Ref name) right) = case go env right of
+      x@(Error _) -> Update [(name, x)] x
+      (Update diff x) -> Update ((name, x) : diff) x
+      x -> Update [(name, x)] x
     go env (Def _ body) = go env body
     go env (Ref name) = go env $ find name env
-    go env (Member target name argv) = exec_member env (go env target) name argv
-    go env (Apply (Ref "guard") [x]) = buildin_guard (go env x)
+    go env (Member target name argv) = exec_member env (go env target) name (map (go env) argv)
     go env (Apply (Ref "if") [a, b, c]) = buildin_if env (go env a) b c
-    go env (Apply target raw_argv) = apply env (go env target) $ map (go env) raw_argv
+    go env (Apply target argv) = apply env (go env target) argv
     go env (Array xs) = Array $ map (go env) xs
     go env (Op2 "+=" l@(Ref name) r) = update name $ operate env "+" l r
     go env (Op2 "-=" l@(Ref name) r) = update name $ operate env "-" l r
     go env (Op2 "*=" l@(Ref name) r) = update name $ operate env "*" l r
     go env (Op2 "//=" l@(Ref name) r) = update name $ operate env "//" l r
     go env (Op2 op l r) = operate env op l r
-    go env (Fork raw_target branches) = match branches
-      where
-        target = go env raw_target
-        match [] = error $ "Does not match target=" ++ show target ++ " branches=" ++ show branches
-        match (((Ref "_"), body):_) = body
-        match ((cond, body):xs) = if target == cond then body else match xs
+    go env (Fork raw_target branches) = fork env (go env raw_target) branches
     go _ x = x
+    fork env (Update diff body) branches = fork (diff ++ env) body branches
+    fork env target branches = match target branches
+      where
+        match _ [] = error $ "Does not match target=" ++ show target ++ " branches=" ++ show branches
+        match _ (((Ref "_"), body):_) = go env body
+        match (Error _) (((Error _), body):_) = go env body
+        match _ ((cond, body):xs) = if target == cond then go env body else match target xs
     exec_member env (String s) "to_array" [] = Array $ map (\x -> String [x]) s
     exec_member env (String s) "to_int" [] = Int (read s :: Int)
     exec_member env (Int s) "to_string" [] = String (show s)
     exec_member env (Array xs) "include" [x] = Bool (elem x $ map (go env) xs)
-    exec_member env (Instance _ env2) name [] = bind (env2 ++ env) name env2
-    exec_member env (Enum _ env2) name [] = bind (env2 ++ env) name env2
+    exec_member env (Array xs) "join" [(String x)] = String (buildin_join x xs)
+    exec_member env (Instance _ env2) name argv = apply (env2 ++ env) (find name env2) argv
+    exec_member env (Enum _ env2) name argv = apply (env2 ++ env) (find name env2) argv
     exec_member env (Func args body) _ argv = go ((zip args argv) ++ env) body
-    exec_member env x name argv = error $ "Unexpect member " ++ name ++ " of " ++ show x ++ " with " ++ show argv
-    apply env target argv = case (target, argv) of
+    exec_member env (Bool True) "guard" [_] = Void
+    exec_member env (Bool False) "guard" [x] = Error $ to_string x
+    exec_member env x name argv = error $ "Unexpected member " ++ name ++ " of " ++ show x ++ " with " ++ show argv
+    apply env target raw_argv = let argv = map (go env) raw_argv in case (target, argv) of
       ((Func args body), _) -> go ((zip args $ map (go env) argv) ++ env) body
       ((Class name attrs methods), _) -> Instance name ((zip (map fst attrs) argv) ++ methods)
-      ((String s), [Int x]) -> String $ [s !! x]
-      x -> error $ "Unexpect target " ++ show x ++ " with " ++ show argv
+      ((String s), [Int x]) -> if x < length s then String $ [s !! x] else Error "out of index"
+      (x, []) -> go env x
+      x -> error $ "Unexpected applying " ++ show x
     operate :: Env -> String -> AST -> AST -> AST
     operate env op left right = case (op, go env left, go env right) of
       ("++", (Array l), (Array r)) -> Array $ l ++ r
@@ -470,17 +496,21 @@ eval root = unwrap $ go [] root
       ("-", (Int l), (Int r)) -> Int $ l - r
       ("*", (Int l), (Int r)) -> Int $ l * r
       ("//", (Int l), (Int r)) -> Int $ l `div` r
+      (">", (Int l), (Int r)) -> Bool $ l > r
+      (">=", (Int l), (Int r)) -> Bool $ l >= r
+      ("<", (Int l), (Int r)) -> Bool $ l < r
+      ("<=", (Int l), (Int r)) -> Bool $ l <= r
+      ("==", (Int l), (Int r)) -> Bool $ l == r
       x -> error $ "op2: " ++ show x
     update name body = Update [(name, body)] body
     find :: String -> Env -> AST
     find k kvs = case lookup k kvs of
       Nothing -> error $ "not found " ++ k ++ " in " ++ string_join ", " (map fst kvs)
       Just x -> x
-    bind env k kvs = case go env $ find k kvs of
-      (Func args body) -> Func args $ Apply (Func (map fst env) body) (map snd env)
-      x -> x
     buildin_if env (Bool True) x _ = go env x
     buildin_if env (Bool False) _ x = go env x
     buildin_if env x _ _ = error $ "Invalid argument " ++ show x ++ " in build-in `if`"
-    buildin_guard (Bool True) = Void
-    buildin_guard (Bool False) = Error "guard is failed"
+    buildin_join glue params = string_join glue $ filter_string params
+    filter_string [] = []
+    filter_string ((String x):xs) = x : filter_string xs
+    filter_string ((x:_)) = error $ "Not string type " ++ show x
