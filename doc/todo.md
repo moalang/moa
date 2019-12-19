@@ -2,21 +2,23 @@
 [x] Design error handling type and sequence syntax
 [x] Tidy up documents
 [] Make Interpriter
-  - REPL
-  - bool
-  - int
-  - float
-  - string
-  - closure
-  - array
+  x REPL
+  x bool
+  x int
+  x float
+  x string
+  x func
+  x closure
+  x array
   - dictionary
-  - struct
-  - enum
-  - flow
-  - sequence
-  - branch
-  - binary operators
-  - embedded functions
+  x struct
+  x enum
+  x flow
+  x sequence
+  x branch
+  x binary operators
+  x embedded functions
+  - generics
 [] Compile Moa to C
 [] Self booting
 [] Make remaining core features
