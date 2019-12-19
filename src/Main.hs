@@ -450,17 +450,17 @@ eval root = unwrap $ go [] root
     go env (Member (Ref "log") name argv) = trace ("- " ++ name ++ ": " ++ (show $ map (go env) argv)) Void
     go env (Member target name argv) = run_member env (go env target) name (map (go env) argv)
     go env (Apply (Ref "if") [a, b, c]) = buildin_if env (go env a) b c
-    go env (Apply target argv) = apply env (go env target) argv
+    go env (Apply target argv) = run_apply env (go env target) argv
     go env (Array xs) = Array $ map (go env) xs
-    go env (Op2 "+=" l@(Ref name) r) = update name $ operate env "+" l r
-    go env (Op2 "-=" l@(Ref name) r) = update name $ operate env "-" l r
-    go env (Op2 "*=" l@(Ref name) r) = update name $ operate env "*" l r
-    go env (Op2 "//=" l@(Ref name) r) = update name $ operate env "//" l r
-    go env (Op2 op l r) = operate env op l r
-    go env (Fork raw_target branches) = fork env (go env raw_target) branches
+    go env (Op2 "+=" l@(Ref name) r) = update name $ run_op2 env "+" l r
+    go env (Op2 "-=" l@(Ref name) r) = update name $ run_op2 env "-" l r
+    go env (Op2 "*=" l@(Ref name) r) = update name $ run_op2 env "*" l r
+    go env (Op2 "//=" l@(Ref name) r) = update name $ run_op2 env "//" l r
+    go env (Op2 op l r) = run_op2 env op l r
+    go env (Fork raw_target branches) = run_fork env (go env raw_target) branches
     go _ x = x
-    fork env (Update diff body) branches = fork (diff ++ env) body branches
-    fork env target branches = match target branches
+    run_fork env (Update diff body) branches = run_fork (diff ++ env) body branches
+    run_fork env target branches = match target branches
       where
         match _ [] = error $ "Does not match target=" ++ show target ++ " branches=" ++ show branches
         match _ (((Ref "_"), body):_) = go env body
@@ -471,20 +471,20 @@ eval root = unwrap $ go [] root
     run_member env (Int s) "to_string" [] = String (show s)
     run_member env (Array xs) "include" [x] = Bool (elem x $ map (go env) xs)
     run_member env (Array xs) "join" [(String x)] = String (buildin_join x xs)
-    run_member env (Instance _ env2) name argv = apply (env2 ++ env) (find name env2) argv
-    run_member env (Enum _ env2) name argv = apply (env2 ++ env) (find name env2) argv
+    run_member env (Instance _ env2) name argv = run_apply (env2 ++ env) (find name env2) argv
+    run_member env (Enum _ env2) name argv = run_apply (env2 ++ env) (find name env2) argv
     run_member env (Func args body) _ argv = go ((zip args argv) ++ env) body
     run_member env (Bool True) "guard" [_] = Void
     run_member env (Bool False) "guard" [x] = Error $ to_string x
     run_member env x name argv = error $ "Unexpected member " ++ name ++ " of " ++ show x ++ " with " ++ show argv
-    apply env target raw_argv = let argv = map (go env) raw_argv in case (target, argv) of
+    run_apply env target raw_argv = let argv = map (go env) raw_argv in case (target, argv) of
       ((Func args body), _) -> go ((zip args $ map (go env) argv) ++ env) body
       ((Class name attrs methods), _) -> Instance name ((zip (map fst attrs) argv) ++ methods)
       ((String s), [Int x]) -> if x < length s then String $ [s !! x] else Error "out of index"
       (x, []) -> go env x
       x -> error $ "Unexpected applying " ++ show x
-    operate :: Env -> String -> AST -> AST -> AST
-    operate env op left right = case (op, go env left, go env right) of
+    run_op2 :: Env -> String -> AST -> AST -> AST
+    run_op2 env op left right = case (op, go env left, go env right) of
       ("++", (Array l), (Array r)) -> Array $ l ++ r
       ("+", (Int l), (Int r)) -> Int $ l + r
       ("-", (Int l), (Int r)) -> Int $ l - r
