@@ -147,6 +147,8 @@ data AST = Void
   | Ref String
   | Member AST String [AST] -- target, name, arguments
   | Apply AST [AST]
+  | Assign String AST
+  | Pure [AST]
   | Eff [AST]
   | Fork AST Branches -- target, branches
   | Update Env AST
@@ -177,16 +179,17 @@ to_string x = go x
     go (Member ast member []) = go ast ++ "." ++ member
     go (Member ast member args) = go ast ++ "." ++ member ++ "(" ++ (join_string " " $ map go args) ++ ")"
     go (Apply self args) = go self ++ "(" ++ (join_string " " $ map go args) ++ ")"
-    go (Eff xs) = join_eff xs "" ""
+    go (Pure xs) = join_exps xs "" ""
+    go (Eff xs) = join_exps xs "" ""
     go (Instance name []) = name
     go (Instance name xs) = name ++ "(" ++ (env_string xs) ++ ")"
     go (Void) = "()"
     go (Error message) = "Error: " ++ message
     go (Fork target branches) = (go target) ++ foldr show_branch "" branches
     go e = error $ show e
-    join_eff [] _ acc = acc
-    join_eff (x@(Def name ast):xs) glue acc = join_eff xs "\n" (acc ++ glue ++ to_string x)
-    join_eff (x:xs) glue acc = join_eff xs "; " (acc ++ glue ++ to_string x)
+    join_exps [] _ acc = acc
+    join_exps (x@(Def name ast):xs) glue acc = join_exps xs "\n" (acc ++ glue ++ to_string x)
+    join_exps (x:xs) glue acc = join_exps xs "; " (acc ++ glue ++ to_string x)
     show_branch (cond, body) acc = "\n| " ++ go cond ++ " = " ++ go body ++ acc
     def_string (Class _ attrs methods) = env_string $ attrs ++ methods
     enum_string xs = join_string " | " (map (\(k, x) -> k ++ def_string x) xs)
@@ -214,7 +217,7 @@ parse input = go
           ]
     parse_top :: Parser AST
     parse_top = between spaces spaces parse_lines
-    parse_lines = make_eff <$> sepBy (read_br) parse_line
+    parse_lines = make_eff_or_pure <$> sepBy (read_br) parse_line
     parse_line = parse_def `or` parse_exp_or_fork
     parse_def = do
       id <- read_id
@@ -232,7 +235,7 @@ parse input = go
       exp <- parse_exp
       (parse_fork exp) `or` (return exp)
     parse_fork exp = Fork exp <$> (many1 parse_switch) `or` (parse_branch exp)
-    parse_branch (Op2 "<-" _ _) = parse_branch_errors
+    parse_branch (Assign _ _) = parse_branch_errors
     parse_branch _ = parse_branch_bools
     parse_branch_bools = do
       a <- read_string "\n| " >> parse_exp
@@ -249,11 +252,16 @@ parse input = go
       body <- indent parse_eff
       return (cond, body)
     parse_body = (parse_exp >>= parse_fork) `or` parse_eff
-    parse_eff = make_eff <$> (
+    parse_eff = make_eff_or_pure <$> (
                   (sepBy1 (read_char ';') parse_exp) `or`
                   (many1 (read_indent >> parse_line))
                   )
-    parse_exp = do
+    parse_exp = parse_assign `or` parse_op
+    parse_assign = do
+      id <- read_id
+      read_string "<-"
+      Assign id <$> parse_op
+    parse_op = do
       l <- parse_unit
       parse_op2 l `or` (return l)
     parse_op2 left = do
@@ -299,8 +307,10 @@ parse input = go
     make_func args body = Func args body
     make_apply node [] = node
     make_apply node args = Apply node args
-    make_eff [x] = x
-    make_eff xs = Eff xs
+    make_eff_or_pure [x] = x
+    make_eff_or_pure xs = if any is_eff xs then Eff xs else Pure xs
+    is_eff (Assign _ _) = True
+    is_eff _ = False
 
     read_enums1 prefix = go
       where
@@ -337,7 +347,6 @@ parse input = go
     read_string s = lex $ mapM_ (\x -> satisfy (== x)) s >> return s
     read_char c = lex $ satisfy (== c)
     read_op = read_strings [
-              "<-",
               "==", "!=", ">=", "<=", ">", "<",
               "+=", "-=", "*=", "//=",
               "++",
@@ -428,10 +437,12 @@ eval root = unwrap $ go [] root
     unwrap x = case x of
       (Update _ body) -> body
       (Def _ body) -> body
+      (Pure body) -> error $ show body
       (Eff body) -> error $ show body
       _ -> x
+
     go :: Env -> AST -> AST
-    go env (Op2 "<-" (Ref name) right) = case go env right of
+    go env (Assign name right) = case go env right of
       x@(Error _) -> Update [(name, x)] x
       (Update diff x) -> Update ((name, x) : diff) x
       x -> Update [(name, x)] x
@@ -448,8 +459,10 @@ eval root = unwrap $ go [] root
     go env (Op2 "//=" l@(Ref name) r) = update name $ run_op2 env "//" l r
     go env (Op2 op l r) = run_op2 env op l r
     go env (Fork raw_target branches) = run_fork env (go env raw_target) branches
+    go env (Pure xs) = run_eff env [] xs
     go env (Eff xs) = run_eff env [] xs
     go _ x = x
+
     go_argv env xs = map (go_pure env) xs
     go_pure env x@(Eff _) = x
     go_pure env x = go env x
@@ -457,10 +470,9 @@ eval root = unwrap $ go [] root
     run_eff env [] [] = snd $ head env
     run_eff env eff [] = Update eff (snd $ head env)
     run_eff env eff ((Def name body):ys) = run_eff ((name, go env body) : env) eff ys
-    run_eff env eff ((Op2 "<-" (Ref name) right):ys) = case go env right of
+    run_eff env eff ((Assign name right):ys) = case go env right of
       (Update diff body) -> run_eff ((name, body) : diff ++ env) (diff ++ eff) ys
       body               -> run_eff ((name, body) : env) eff ys
-    run_eff env eff ((Op2 "<-" l r):ys) = error "Invalid operation"
     run_eff env eff (y:ys) = case go env y of
       (Update diff body) -> run_eff (("_", body) : diff ++ env) (diff ++ eff) ys
       body -> run_eff (("_", body): env) eff ys
