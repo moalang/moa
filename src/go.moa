@@ -24,7 +24,7 @@ ast:
 | fork target branches
 parser:
   src string
-  pos int
+  pos var(int)
   satisfy f =
     c <- src(pos)
     f(c).guard("miss")
@@ -39,10 +39,15 @@ parser:
   read_any xs = satisfy(x -> xs.include(x))
 many1 f =
   x <- f
+  log.debug(x)
+  x <- f
+  log.debug(x)
+  x <- f
+  log.debug(x)
+  log.debug(x)
   xs <- many(f)
   [x] ++ xs
 many f = many_acc(f [])
-many_acc f acc = many_acc_(f acc)
-many_acc_ f acc = x <- f
+many_acc f acc = x <- f
 | acc
-| many_acc(f acc ++ [x])
+| log.debug(x)

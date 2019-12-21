@@ -107,6 +107,8 @@ test = go
       stmt "[1 2]" "f x = x < 2\n| x + 1\n| false.guard(0)\nloop x acc = y <- f(x)\n| acc\n| loop(y acc ++ [y])\nloop(0 [])"
       stmt "3" "s: n var(0), inc = n += 1, b1 = b2; b2, b2 = v <- inc\n| 9\n| n\ns(1).b1"
       stmt "3" "s: n var(0), inc = n += 1, calc = twice(inc)\ntwice f = f; f\ns(1).calc"
+      stmt "Error: 1" "f = false.guard(1)"
+      stmt "Error: 1" "f = false.guard(1); 1"
       -- build-in functions
       stmt "1" "if(true 1 2)"
       stmt "2" "if(false 1 2)"
@@ -462,7 +464,7 @@ unify env value = switch value
       (Apply target argv) -> run_apply [] (switch target) argv
       (Array xs) -> Array $ map switch xs
       (Fork raw_target branches) -> run_fork env (switch raw_target) branches
-      (Seq xs) -> run_eff [] [] xs
+      (Seq xs) -> run_seq [] [] xs
       (Op2 "+=" l@(Ref name) r) -> Modify name $ Op2 "+" l r
       (Op2 "-=" l@(Ref name) r) -> Modify name $ Op2 "-" l r
       (Op2 "*=" l@(Ref name) r) -> Modify name $ Op2 "*" l r
@@ -473,23 +475,24 @@ unify env value = switch value
         (Update diff x) -> Update ((name, x) : diff) x
         x -> Update [(name, x)] x
       x -> x
-    run_eff :: Env -> Env -> [AST] -> AST
-    run_eff local eff [] = Update eff (snd $ head local)
-    run_eff local eff (value:remain) = go value
+    run_seq :: Env -> Env -> [AST] -> AST
+    run_seq local eff [] = Update eff (snd $ head local)
+    run_seq local eff (value:remain) = go value
       where
-        go exp = case exp of
-          (Def name body)                 -> run_eff ((name, u body) : local) eff remain
-          (Fork (Assign name x) branches) -> next name $ run_fork scope (effect x) branches
-          (Assign name right)             -> next name $ effect right
-          x                               -> next "_" $ effect x
+        go (Def name body)                 = run_seq ((name, u body) : local) eff remain
+        go (Fork (Assign name x) branches) = next name $ run_fork scope (effect x) branches
+        go (Assign name right)             = next name $ effect right
+        go x                               = next "_" $ effect x
         effect x = case u x of
-          (Eff (Seq xs)) -> run_eff local eff xs
-          (Eff x) -> run_eff local eff [x]
+          (Eff (Seq xs)) -> run_seq local eff xs
+          (Eff x) -> run_seq local eff [x]
           x -> x
         next name value = case value of
-          (Update diff body)  -> run_eff ((name, u body) : local) (diff ++ eff) remain
-          (Modify field body) -> run_eff ((name, u body) : local) ((field, u body) : eff) remain
-          body                -> run_eff ((name, u body) : local) eff remain
+          x@(Update _ (Error _)) -> x
+          x@(Error _)            -> Update (eff ++ local) x
+          (Update diff body)     -> run_seq ((name, u body) : local) (diff ++ eff) remain
+          (Modify field body)    -> run_seq ((name, u body) : local) ((field, u body) : eff) remain
+          body                   -> run_seq ((name, u body) : local) eff remain
         scope = eff ++ local ++ env
         u x = unify scope x
     run_fork env (Update diff1 body) branches = case run_fork (diff1 ++ env) body branches of
