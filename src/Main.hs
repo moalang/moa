@@ -457,45 +457,41 @@ unify env value = switch value
       (Def _ body) -> switch body
       (Ref name) -> switch $ find name env
       (Member (Ref "log") name argv) -> trace ("- " ++ name ++ ": " ++ (show $ map switch argv)) Void
-      (Member target name argv) -> run_member env (switch target) name (map switch argv)
-      (Apply (Ref "if") [a, b, c]) -> buildin_if env (switch a) b c
-      (Apply target argv) -> run_apply env (switch target) argv
+      (Member target name argv) -> run_member (switch target) name (map switch argv)
+      (Apply (Ref "if") [a, b, c]) -> buildin_if (switch a) b c
+      (Apply target argv) -> run_apply [] (switch target) argv
       (Array xs) -> Array $ map switch xs
       (Fork raw_target branches) -> run_fork env (switch raw_target) branches
-      (Seq xs) -> run_eff env [] xs
+      (Seq xs) -> run_eff [] [] xs
       (Op2 "+=" l@(Ref name) r) -> Modify name $ Op2 "+" l r
       (Op2 "-=" l@(Ref name) r) -> Modify name $ Op2 "-" l r
       (Op2 "*=" l@(Ref name) r) -> Modify name $ Op2 "*" l r
       (Op2 "//=" l@(Ref name) r) -> Modify name $ Op2 "//" l r
-      (Op2 op l r) -> run_op2 env op l r
+      (Op2 op l r) -> run_op2 op l r
       (Assign name right) -> case switch right of
         x@(Error _) -> Update [(name, x)] x
         (Update diff x) -> Update ((name, x) : diff) x
         x -> Update [(name, x)] x
       x -> x
-
-    effect env eff x = case unify (eff ++ env) x of
-      (Eff (Seq xs)) -> run_eff env eff xs
-      (Eff x) -> run_eff env eff [x]
-      x -> x
-
     run_eff :: Env -> Env -> [AST] -> AST
-    run_eff env [] [] = snd $ head env
-    run_eff env eff [] = Update eff (snd $ head env)
-    run_eff env eff (exp:remain) = go
+    run_eff local eff [] = Update eff (snd $ head local)
+    run_eff local eff (value:remain) = go value
       where
-        scope = eff ++ env
-        u x = unify scope x
+        go exp = case exp of
+          (Def name body)                 -> run_eff ((name, u body) : local) eff remain
+          (Fork (Assign name x) branches) -> next name $ run_fork scope (effect x) branches
+          (Assign name right)             -> next name $ effect right
+          x                               -> next "_" $ effect x
+        effect x = case u x of
+          (Eff (Seq xs)) -> run_eff local eff xs
+          (Eff x) -> run_eff local eff [x]
+          x -> x
         next name value = case value of
-          (Update diff body)  -> run_eff ((name, u body) : env) (diff ++ eff) remain
-          (Modify field body) -> run_eff ((name, u body) : env) ((field, u body) : eff) remain
-          body                -> run_eff ((name, u body) : env) eff remain
-        go = case exp of
-          (Def name body)                 -> run_eff ((name, u body) : env) eff remain
-          (Fork (Assign name x) branches) -> next name $ run_fork scope (effect env eff x) branches
-          (Assign name right)             -> next name $ effect env eff right
-          x                               -> next "_" $ effect env eff x
-
+          (Update diff body)  -> run_eff ((name, u body) : local) (diff ++ eff) remain
+          (Modify field body) -> run_eff ((name, u body) : local) ((field, u body) : eff) remain
+          body                -> run_eff ((name, u body) : local) eff remain
+        scope = eff ++ local ++ env
+        u x = unify scope x
     run_fork env (Update diff1 body) branches = case run_fork (diff1 ++ env) body branches of
       (Update diff2 body) -> Update (diff1 ++ diff2) body
       body -> Update diff1 body
@@ -505,47 +501,51 @@ unify env value = switch value
         match _ (((Ref "_"), body):_) = unify env body
         match (Error _) (((Error _), body):_) = unify env body
         match _ ((cond, body):xs) = if target == cond then unify env body else match target xs
-    run_member env (String s) "to_array" [] = Array $ map (\x -> String [x]) s
-    run_member env (String s) "to_int" [] = Int (read s :: Int)
-    run_member env (Int s) "to_string" [] = String (show s)
-    run_member env (Array xs) "include" [x] = Bool (elem x $ map (unify env) xs)
-    run_member env (Array xs) "join" [(String x)] = String (buildin_join x xs)
-    run_member env (Instance _ env2) name argv = run_apply (env2 ++ env) (find name env2) argv
-    run_member env (Enum _ env2) name argv = run_apply (env2 ++ env) (find name env2) argv
-    run_member env (Func args body) _ argv = unify ((zip args $ map (unify env) argv) ++ env) body
-    run_member env (Bool True) "guard" [_] = Void
-    run_member env (Bool False) "guard" [x] = Error $ to_string x
-    run_member env x name argv = error $ "Unexpected member " ++ name ++ " of " ++ show x ++ " with " ++ show argv
-    run_apply env target raw_argv = let argv = map (unify env) raw_argv in case (target, argv) of
-      ((Func args body), _) -> unify ((zip args argv) ++ env) body
-      ((Class name attrs methods), _) -> Instance name ((zip (map fst attrs) argv) ++ methods)
-      ((String s), [Int x]) -> if x < length s then String $ [s !! x] else Error "out of index"
-      (Eff (Func args body), _) -> Eff (Seq $ (zipWith Def args argv) ++ [body])
-      (Eff (Seq s), []) -> Eff (Seq $ map (\(k, v) -> Def k v) env ++ s)
-      (Eff x, []) -> Eff (Seq $ map (\(k, v) -> Def k v) env ++ [x])
-      (Eff _, _) -> error "Invalid eff pattern"
-      (x, []) -> unify env x
-      x -> error $ "Unexpected applying " ++ show x
-    run_op2 :: Env -> String -> AST -> AST -> AST
-    run_op2 env op left right = case (op, unify env left, unify env right) of
-      ("++", (Array l), (Array r)) -> Array $ l ++ r
-      ("+", (Int l), (Int r)) -> Int $ l + r
-      ("-", (Int l), (Int r)) -> Int $ l - r
-      ("*", (Int l), (Int r)) -> Int $ l * r
-      ("//", (Int l), (Int r)) -> Int $ l `div` r
-      (">", (Int l), (Int r)) -> Bool $ l > r
-      (">=", (Int l), (Int r)) -> Bool $ l >= r
-      ("<", (Int l), (Int r)) -> Bool $ l < r
-      ("<=", (Int l), (Int r)) -> Bool $ l <= r
-      ("==", (Int l), (Int r)) -> Bool $ l == r
-      x -> error $ "op2: " ++ show x
+    run_member target name argv = go target name argv
+      where
+        go (String s) "to_array" [] = Array $ map (\x -> String [x]) s
+        go (String s) "to_int" [] = Int (read s :: Int)
+        go (Int s) "to_string" [] = String (show s)
+        go (Array xs) "include" [x] = Bool (elem x $ map switch xs)
+        go (Array xs) "join" [(String x)] = String (buildin_join x xs)
+        go (Instance _ env2) name argv = run_apply env2 (find name env2) argv
+        go (Enum _ env2) name argv = run_apply env2 (find name env2) argv
+        go (Func args body) _ argv = unify ((zip args $ map switch argv) ++ env) body
+        go (Bool True) "guard" [_] = Void
+        go (Bool False) "guard" [x] = Error $ to_string x
+        go x name argv = error $ "Unexpected member " ++ name ++ " of " ++ show x ++ " with " ++ show argv
+    run_apply extra target raw_argv = go target argv
+      where
+        argv = map switch raw_argv
+        go (Func args body) _ = unify ((zip args argv) ++ extra ++ env) body
+        go (Class name attrs methods) _ = Instance name ((zip (map fst attrs) argv) ++ methods)
+        go (String s) [Int x] = if x < length s then String $ [s !! x] else Error "out of index"
+        go (Eff (Func args body)) _ = Eff (Seq $ (zipWith Def args argv) ++ [body])
+        go (Eff (Seq s)) [] = Eff (Seq $ map (\(k, v) -> Def k v) extra ++ s)
+        go (Eff x) [] = Eff (Seq $ map (\(k, v) -> Def k v) extra ++ [x])
+        go (Eff _) _ = error "Invalid eff pattern"
+        go x [] = unify (extra ++ env) x
+        x = error $ "Unexpected applying " ++ show target
+    run_op2 op left right = go op (switch left) (switch right)
+      where
+        go "++" (Array l) (Array r) = Array $ l ++ r
+        go "+"  (Int l)   (Int r)   = Int $ l + r
+        go "-"  (Int l)   (Int r)   = Int $ l - r
+        go "*"  (Int l)   (Int r)   = Int $ l * r
+        go "//" (Int l)   (Int r)   = Int $ l `div` r
+        go ">"  (Int l)   (Int r)   = Bool $ l > r
+        go ">=" (Int l)   (Int r)   = Bool $ l >= r
+        go "<"  (Int l)   (Int r)   = Bool $ l < r
+        go "<=" (Int l)   (Int r)   = Bool $ l <= r
+        go "==" (Int l)   (Int r)   = Bool $ l == r
+        go _    _         _         = error $ "op2: " ++ show op
     find :: String -> Env -> AST
     find k kvs = case lookup k kvs of
       Nothing -> error $ "not found " ++ k ++ " in " ++ join_string ", " (map fst kvs)
       Just x -> x
-    buildin_if env (Bool True) x _ = unify env x
-    buildin_if env (Bool False) _ x = unify env x
-    buildin_if env x _ _ = error $ "Invalid argument " ++ show x ++ " in build-in `if`"
+    buildin_if (Bool True) x _ = switch x
+    buildin_if (Bool False) _ x = switch x
+    buildin_if x _ _ = error $ "Invalid argument " ++ show x ++ " in build-in `if`"
     buildin_join glue params = join_string glue $ filter_string params
     filter_string [] = []
     filter_string ((String x):xs) = x : filter_string xs
