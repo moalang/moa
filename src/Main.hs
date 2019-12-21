@@ -27,9 +27,9 @@ help = do
 compile :: IO ()
 compile = do
   src <- getContents
-  let (Eff list1) = parse src
+  let (Seq list1) = parse src
   let list2 = list1 ++ [Apply (Ref "compile") [String src]]
-  case eval (Eff list2) of
+  case eval (Seq list2) of
     (String s) -> putStrLn s
     x -> print x
   putStrLn "// done"
@@ -148,10 +148,10 @@ data AST = Void
   | Member AST String [AST] -- target, name, arguments
   | Apply AST [AST]
   | Assign String AST
-  | Pure [AST]
-  | Eff [AST]
-  | Fork AST Branches -- target, branches
   | Modify String AST
+  | Seq [AST]
+  | Eff AST
+  | Fork AST Branches -- target, branches
   | Update Env AST
   | Type AST
   | Error String
@@ -181,8 +181,8 @@ to_string x = go x
     go (Member ast member []) = go ast ++ "." ++ member
     go (Member ast member args) = go ast ++ "." ++ member ++ "(" ++ (join_string " " $ map go args) ++ ")"
     go (Apply self args) = go self ++ "(" ++ (join_string " " $ map go args) ++ ")"
-    go (Pure xs) = join_exps xs "" ""
-    go (Eff xs) = join_exps xs "" ""
+    go (Seq xs) = join_exps xs "" ""
+    go (Eff x) = to_string x
     go (Instance name []) = name
     go (Instance name xs) = name ++ "(" ++ (env_string xs) ++ ")"
     go (Void) = "()"
@@ -219,7 +219,7 @@ parse input = go
           ]
     parse_top :: Parser AST
     parse_top = between spaces spaces parse_lines
-    parse_lines = make_eff_or_pure <$> sepBy (read_br) parse_line
+    parse_lines = make_seq <$> sepBy (read_br) parse_line
     parse_line = parse_def `or` parse_exp_or_fork
     parse_def = do
       id <- read_id
@@ -254,7 +254,7 @@ parse input = go
       body <- indent parse_eff
       return (cond, body)
     parse_body = (parse_exp >>= parse_fork) `or` parse_eff
-    parse_eff = make_eff_or_pure <$> (
+    parse_eff = make_seq <$> (
                   (sepBy1 (read_char ';') parse_exp) `or`
                   (many1 (read_indent >> parse_line))
                   )
@@ -309,10 +309,8 @@ parse input = go
     make_func args body = Func args body
     make_apply node [] = node
     make_apply node args = Apply node args
-    make_eff_or_pure [x] = x
-    make_eff_or_pure xs = if any is_eff xs then Eff xs else Pure xs
-    is_eff (Assign _ _) = True
-    is_eff _ = False
+    make_seq [x] = x
+    make_seq xs = Seq xs
 
     read_enums1 prefix = go
       where
@@ -439,8 +437,8 @@ eval root = unwrap $ go [] root
     unwrap x = case x of
       (Update _ body) -> body
       (Def _ body) -> body
-      (Pure body) -> error $ show body
-      (Eff body) -> error $ show body
+      (Seq body) -> error $ show body
+      (Eff x) -> eval x
       _ -> x
 
     go :: Env -> AST -> AST
@@ -450,8 +448,8 @@ eval root = unwrap $ go [] root
       x -> Update [(name, x)] x
     go env (Def _ body) = go env body
     go env (Ref name) = go env $ find name env
-    go env (Member (Ref "log") name argv) = trace ("- " ++ name ++ ": " ++ (show $ go_argv env argv)) Void
-    go env (Member target name argv) = run_member env (go env target) name (go_argv env argv)
+    go env (Member (Ref "log") name argv) = trace ("- " ++ name ++ ": " ++ (show $ map (go env) argv)) Void
+    go env (Member target name argv) = run_member env (go env target) name (map (go env) argv)
     go env (Apply (Ref "if") [a, b, c]) = buildin_if env (go env a) b c
     go env (Apply target argv) = run_apply env (go env target) argv
     go env (Array xs) = Array $ map (go env) xs
@@ -461,13 +459,9 @@ eval root = unwrap $ go [] root
     go env (Op2 "//=" l@(Ref name) r) = Modify name $ Op2 "//" l r
     go env (Op2 op l r) = run_op2 env op l r
     go env (Fork raw_target branches) = run_fork env (go env raw_target) branches
-    go env (Pure xs) = run_eff env [] xs
-    go env (Eff xs) = run_eff env [] xs
+    go env (Seq xs) = run_eff env [] xs
     go _ x = x
 
-    go_argv env xs = map (go_pure env) xs
-    go_pure env x@(Eff _) = x
-    go_pure env x = go env x
     run_eff :: Env -> Env -> [AST] -> AST
     run_eff env [] [] = snd $ head env
     run_eff env eff [] = Update eff (snd $ head env)
@@ -497,11 +491,11 @@ eval root = unwrap $ go [] root
     run_member env (Array xs) "join" [(String x)] = String (buildin_join x xs)
     run_member env (Instance _ env2) name argv = run_apply (env2 ++ env) (find name env2) argv
     run_member env (Enum _ env2) name argv = run_apply (env2 ++ env) (find name env2) argv
-    run_member env (Func args body) _ argv = go ((zip args $ go_argv env argv) ++ env) body
+    run_member env (Func args body) _ argv = go ((zip args $ map (go env) argv) ++ env) body
     run_member env (Bool True) "guard" [_] = Void
     run_member env (Bool False) "guard" [x] = Error $ to_string x
     run_member env x name argv = error $ "Unexpected member " ++ name ++ " of " ++ show x ++ " with " ++ show argv
-    run_apply env target raw_argv = let argv = go_argv env raw_argv in case (target, argv) of
+    run_apply env target raw_argv = let argv = map (go env) raw_argv in case (target, argv) of
       ((Func args body), _) -> go ((zip args argv) ++ env) body
       ((Class name attrs methods), _) -> Instance name ((zip (map fst attrs) argv) ++ methods)
       ((String s), [Int x]) -> if x < length s then String $ [s !! x] else Error "out of index"
