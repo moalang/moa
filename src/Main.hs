@@ -482,19 +482,20 @@ unify env value = switch value
     run_eff :: Env -> Env -> [AST] -> AST
     run_eff env [] [] = snd $ head env
     run_eff env eff [] = Update eff (snd $ head env)
-    run_eff env eff ((Def name body):ys) = run_eff ((name, unify env body) : env) eff ys
-    run_eff env eff ((Fork (Assign name y) branches):ys) = case run_fork env (effect env eff y) branches of
-      (Update diff body) -> run_eff ((name, body) : env) (diff ++ eff) ys
-      (Modify field body) -> run_eff ((name, body) : env) ((field, unify (eff ++ env) body) : eff) ys
-      body               -> run_eff ((name, body) : env) eff ys
-    run_eff env eff ((Assign name right):ys) = case effect env eff right of
-      (Update diff body) -> run_eff ((name, body) : env) (diff ++ eff) ys
-      (Modify field body) -> run_eff ((name, body) : env) ((field, unify (eff ++ env) body) : eff) ys
-      body               -> run_eff ((name, body) : env) eff ys
-    run_eff env eff (y:ys) = case effect env eff y of
-      (Update diff body) -> run_eff (("_", body) : diff ++ env) (diff ++ eff) ys
-      (Modify name body) -> run_eff ((name, unify (eff ++ env) body) : env) ((name, unify (eff ++ env) body) : eff) ys
-      body -> run_eff (("_", body): env) eff ys
+    run_eff env eff (exp:remain) = case exp of
+      (Def name body) -> run_eff ((name, unify env body) : env) eff remain
+      (Fork (Assign name x) branches) -> case run_fork env (effect env eff x) branches of
+        (Update diff body) -> run_eff ((name, body) : env) (diff ++ eff) remain
+        (Modify field body) -> run_eff ((name, body) : env) ((field, unify (eff ++ env) body) : eff) remain
+        body               -> run_eff ((name, body) : env) eff remain
+      (Assign name right) -> case effect env eff right of
+        (Update diff body) -> run_eff ((name, body) : env) (diff ++ eff) remain
+        (Modify field body) -> run_eff ((name, body) : env) ((field, unify (eff ++ env) body) : eff) remain
+        body               -> run_eff ((name, body) : env) eff remain
+      x -> case effect env eff x of
+        (Update diff body) -> run_eff (("_", body) : diff ++ env) (diff ++ eff) remain
+        (Modify name body) -> run_eff ((name, unify (eff ++ env) body) : env) ((name, unify (eff ++ env) body) : eff) remain
+        body -> run_eff (("_", body): env) eff remain
 
     run_fork env (Update diff1 body) branches = case run_fork (diff1 ++ env) body branches of
       (Update diff2 body) -> Update (diff1 ++ diff2) body
