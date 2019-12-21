@@ -322,7 +322,6 @@ parse input = go
     is_variable (_, Type (Apply (Ref "var") _)) = True
     is_variable x = False
 
-
     read_enums1 prefix = go
       where
         go = enum_lines `or` enum_line
@@ -443,37 +442,39 @@ parse input = go
 
 -- Evaluator
 eval :: AST -> AST
-eval root = unwrap $ go [] root
+eval root = unwrap $ unify [] root
   where
     unwrap x = case x of
       (Update _ body) -> unwrap body
       (Def _ body) -> unwrap body
       (Seq body) -> error $ show body
-      (Eff body) -> unwrap $ go [] body
+      (Eff body) -> unwrap $ unify [] body
       _ -> x
 
-    go :: Env -> AST -> AST
-    go env (Assign name right) = case go env right of
-      x@(Error _) -> Update [(name, x)] x
-      (Update diff x) -> Update ((name, x) : diff) x
-      x -> Update [(name, x)] x
-    go env (Def _ body) = go env body
-    go env (Ref name) = go env $ find name env
-    go env (Member (Ref "log") name argv) = trace ("- " ++ name ++ ": " ++ (show $ map (go env) argv)) Void
-    go env (Member target name argv) = run_member env (go env target) name (map (go env) argv)
-    go env (Apply (Ref "if") [a, b, c]) = buildin_if env (go env a) b c
-    go env (Apply target argv) = run_apply env (go env target) argv
-    go env (Array xs) = Array $ map (go env) xs
-    go env (Op2 "+=" l@(Ref name) r) = Modify name $ Op2 "+" l r
-    go env (Op2 "-=" l@(Ref name) r) = Modify name $ Op2 "-" l r
-    go env (Op2 "*=" l@(Ref name) r) = Modify name $ Op2 "*" l r
-    go env (Op2 "//=" l@(Ref name) r) = Modify name $ Op2 "//" l r
-    go env (Op2 op l r) = run_op2 env op l r
-    go env (Fork raw_target branches) = run_fork env (go env raw_target) branches
-    go env (Seq xs) = run_eff env [] xs
-    go _ x = x
+unify env value = switch value
+  where
+    switch value = case value of
+      (Def _ body) -> switch body
+      (Ref name) -> switch $ find name env
+      (Member (Ref "log") name argv) -> trace ("- " ++ name ++ ": " ++ (show $ map switch argv)) Void
+      (Member target name argv) -> run_member env (switch target) name (map switch argv)
+      (Apply (Ref "if") [a, b, c]) -> buildin_if env (switch a) b c
+      (Apply target argv) -> run_apply env (switch target) argv
+      (Array xs) -> Array $ map switch xs
+      (Fork raw_target branches) -> run_fork env (switch raw_target) branches
+      (Seq xs) -> run_eff env [] xs
+      (Op2 "+=" l@(Ref name) r) -> Modify name $ Op2 "+" l r
+      (Op2 "-=" l@(Ref name) r) -> Modify name $ Op2 "-" l r
+      (Op2 "*=" l@(Ref name) r) -> Modify name $ Op2 "*" l r
+      (Op2 "//=" l@(Ref name) r) -> Modify name $ Op2 "//" l r
+      (Op2 op l r) -> run_op2 env op l r
+      (Assign name right) -> case switch right of
+        x@(Error _) -> Update [(name, x)] x
+        (Update diff x) -> Update ((name, x) : diff) x
+        x -> Update [(name, x)] x
+      x -> x
 
-    effect env eff x = case go (eff ++ env) x of
+    effect env eff x = case unify (eff ++ env) x of
       (Eff (Seq xs)) -> run_eff env eff xs
       (Eff x) -> run_eff env eff [x]
       x -> x
@@ -481,18 +482,18 @@ eval root = unwrap $ go [] root
     run_eff :: Env -> Env -> [AST] -> AST
     run_eff env [] [] = snd $ head env
     run_eff env eff [] = Update eff (snd $ head env)
-    run_eff env eff ((Def name body):ys) = run_eff ((name, go env body) : env) eff ys
+    run_eff env eff ((Def name body):ys) = run_eff ((name, unify env body) : env) eff ys
     run_eff env eff ((Fork (Assign name y) branches):ys) = case run_fork env (effect env eff y) branches of
       (Update diff body) -> run_eff ((name, body) : env) (diff ++ eff) ys
-      (Modify field body) -> run_eff ((name, body) : env) ((field, go (eff ++ env) body) : eff) ys
+      (Modify field body) -> run_eff ((name, body) : env) ((field, unify (eff ++ env) body) : eff) ys
       body               -> run_eff ((name, body) : env) eff ys
     run_eff env eff ((Assign name right):ys) = case effect env eff right of
       (Update diff body) -> run_eff ((name, body) : env) (diff ++ eff) ys
-      (Modify field body) -> run_eff ((name, body) : env) ((field, go (eff ++ env) body) : eff) ys
+      (Modify field body) -> run_eff ((name, body) : env) ((field, unify (eff ++ env) body) : eff) ys
       body               -> run_eff ((name, body) : env) eff ys
     run_eff env eff (y:ys) = case effect env eff y of
       (Update diff body) -> run_eff (("_", body) : diff ++ env) (diff ++ eff) ys
-      (Modify name body) -> run_eff ((name, go (eff ++ env) body) : env) ((name, go (eff ++ env) body) : eff) ys
+      (Modify name body) -> run_eff ((name, unify (eff ++ env) body) : env) ((name, unify (eff ++ env) body) : eff) ys
       body -> run_eff (("_", body): env) eff ys
 
     run_fork env (Update diff1 body) branches = case run_fork (diff1 ++ env) body branches of
@@ -501,32 +502,32 @@ eval root = unwrap $ go [] root
     run_fork env target branches = match target branches
       where
         match _ [] = error $ "Does not match target=" ++ show target ++ " branches=" ++ show branches
-        match _ (((Ref "_"), body):_) = go env body
-        match (Error _) (((Error _), body):_) = go env body
-        match _ ((cond, body):xs) = if target == cond then go env body else match target xs
+        match _ (((Ref "_"), body):_) = unify env body
+        match (Error _) (((Error _), body):_) = unify env body
+        match _ ((cond, body):xs) = if target == cond then unify env body else match target xs
     run_member env (String s) "to_array" [] = Array $ map (\x -> String [x]) s
     run_member env (String s) "to_int" [] = Int (read s :: Int)
     run_member env (Int s) "to_string" [] = String (show s)
-    run_member env (Array xs) "include" [x] = Bool (elem x $ map (go env) xs)
+    run_member env (Array xs) "include" [x] = Bool (elem x $ map (unify env) xs)
     run_member env (Array xs) "join" [(String x)] = String (buildin_join x xs)
     run_member env (Instance _ env2) name argv = run_apply (env2 ++ env) (find name env2) argv
     run_member env (Enum _ env2) name argv = run_apply (env2 ++ env) (find name env2) argv
-    run_member env (Func args body) _ argv = go ((zip args $ map (go env) argv) ++ env) body
+    run_member env (Func args body) _ argv = unify ((zip args $ map (unify env) argv) ++ env) body
     run_member env (Bool True) "guard" [_] = Void
     run_member env (Bool False) "guard" [x] = Error $ to_string x
     run_member env x name argv = error $ "Unexpected member " ++ name ++ " of " ++ show x ++ " with " ++ show argv
-    run_apply env target raw_argv = let argv = map (go env) raw_argv in case (target, argv) of
-      ((Func args body), _) -> go ((zip args argv) ++ env) body
+    run_apply env target raw_argv = let argv = map (unify env) raw_argv in case (target, argv) of
+      ((Func args body), _) -> unify ((zip args argv) ++ env) body
       ((Class name attrs methods), _) -> Instance name ((zip (map fst attrs) argv) ++ methods)
       ((String s), [Int x]) -> if x < length s then String $ [s !! x] else Error "out of index"
       (Eff (Func args body), _) -> Eff (Seq $ (zipWith Def args argv) ++ [body])
       (Eff (Seq s), []) -> Eff (Seq $ map (\(k, v) -> Def k v) env ++ s)
       (Eff x, []) -> Eff (Seq $ map (\(k, v) -> Def k v) env ++ [x])
       (Eff _, _) -> error "Invalid eff pattern"
-      (x, []) -> go env x
+      (x, []) -> unify env x
       x -> error $ "Unexpected applying " ++ show x
     run_op2 :: Env -> String -> AST -> AST -> AST
-    run_op2 env op left right = case (op, go env left, go env right) of
+    run_op2 env op left right = case (op, unify env left, unify env right) of
       ("++", (Array l), (Array r)) -> Array $ l ++ r
       ("+", (Int l), (Int r)) -> Int $ l + r
       ("-", (Int l), (Int r)) -> Int $ l - r
@@ -542,8 +543,8 @@ eval root = unwrap $ go [] root
     find k kvs = case lookup k kvs of
       Nothing -> error $ "not found " ++ k ++ " in " ++ join_string ", " (map fst kvs)
       Just x -> x
-    buildin_if env (Bool True) x _ = go env x
-    buildin_if env (Bool False) _ x = go env x
+    buildin_if env (Bool True) x _ = unify env x
+    buildin_if env (Bool False) _ x = unify env x
     buildin_if env x _ _ = error $ "Invalid argument " ++ show x ++ " in build-in `if`"
     buildin_join glue params = join_string glue $ filter_string params
     filter_string [] = []
