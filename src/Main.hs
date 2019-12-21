@@ -73,7 +73,7 @@ test = go
       read "add a b = a + b"
       read "vector1: x int\nvector1(1)"
       read "table: values tuple(string int).array"
-      read "counter: count int, incr = count += 1"
+      read "counter: count var(int), incr = count += 1"
       read "a.b"
       read "a.b.c(1).d(2 e.f(3))"
       read "mix: a int, add b = a + b\nmix(1).add(2)"
@@ -97,16 +97,16 @@ test = go
       stmt "ab.b" "ab:\n| a\n| b\nab.b"
       stmt "10" "a = 1\na\n| 1 = 10\n| _ = 20"
       stmt "20" "a = 2\na\n| 1 = 10\n| _ = 20"
-      stmt "3" "counter: count int, incr = count += 1, twice = incr; incr\ncounter(1).twice"
-      stmt "5" "counter: count int, incr = log.debug(count); count += 1, twice = a <- incr; b <- incr; a + b\ncounter(1).twice"
-      stmt "14" "counter:\n  count int\n  incr a = log.debug(count); count += a\n  twice =\n    b <- incr(1)\n    c <- incr(1)\n    b + c\n  quad =\n    d <- twice\n    e <- twice\n    d + e\ncounter(1).quad"
+      stmt "3" "counter: count var(int), incr = count += 1, twice = incr; incr\ncounter(1).twice"
+      stmt "5" "counter: count var(int), incr = count += 1, twice = a <- incr; b <- incr; a + b\ncounter(1).twice"
+      stmt "14" "counter:\n  count var(int)\n  incr a = count += a\n  twice =\n    b <- incr(1)\n    c <- incr(1)\n    b + c\n  quad =\n    d <- twice\n    e <- twice\n    d + e\ncounter(1).quad"
       stmt "[\"1\" \"2\"]" "\"12\".to_array"
       stmt "3" "\"1\".to_int + 2"
       stmt "\"0\"" "0.to_string"
       stmt "[1 2]" "[1] ++ [2]"
       stmt "[1 2]" "f x = x < 2\n| x + 1\n| false.guard(0)\nloop x acc = y <- f(x)\n| acc\n| loop(y acc ++ [y])\nloop(0 [])"
-      stmt "3" "s: n 0, inc = log.debug(1); n += 1, b1 = b2; b2, b2 = v <- inc\n| 9\n| n\ns(1).b1"
-      stmt "3" "s: n 0, inc = n += 1, calc = twice(inc)\ntwice f = log.debug(f); f; f\ns(1).calc"
+      stmt "3" "s: n var(0), inc = n += 1, b1 = b2; b2, b2 = v <- inc\n| 9\n| n\ns(1).b1"
+      stmt "3" "s: n var(0), inc = n += 1, calc = twice(inc)\ntwice f = f; f\ns(1).calc"
       -- build-in functions
       stmt "1" "if(true 1 2)"
       stmt "2" "if(false 1 2)"
@@ -122,7 +122,12 @@ test = go
       putStrLn "done"
     read expr = eq expr (parse expr) expr
     stmt expect expr = eq expect (eval $ parse expr) expr
-    eq a b src = putStrLn $ if a == to_string b then "ok: " ++ oneline a "" else "EXPECT: " ++ a ++ "\nFACT  : " ++ to_string b ++ "\nAST   : " ++ (show b) ++ "\nSRC   : " ++ (src)
+    eq a b src = putStrLn $ if a == to_string b
+      then "ok: " ++ oneline a ""
+      else "EXPECT: " ++ a ++
+           "\nFACT  : " ++ to_string b ++ " # " ++ (show b) ++
+           "\nAST   : " ++ (show $ parse src) ++
+           "\nSRC   : " ++ (src)
     oneline "" acc = reverse acc
     oneline ('\n':xs) acc = oneline xs ('n' : '\\' : acc)
     oneline (x:xs) acc = oneline xs (x : acc)
@@ -231,7 +236,7 @@ parse input = go
       return $ Def id (make_func args body)
     parse_class name = do
       (attrs, methods) <- read_attrs_and_methods
-      return $ Class name attrs methods
+      return $ make_class name attrs methods
     parse_enum name = Enum name <$> read_enums1 (name ++ ".")
     parse_exp_or_fork = do
       exp <- parse_exp
@@ -311,6 +316,12 @@ parse input = go
     make_apply node args = Apply node args
     make_seq [x] = x
     make_seq xs = Seq xs
+    make_class name attrs methods = Class name attrs (if any is_variable attrs
+      then map (\(k, v) -> (k, Eff v)) methods
+      else methods)
+    is_variable (_, Type (Apply (Ref "var") _)) = True
+    is_variable x = False
+
 
     read_enums1 prefix = go
       where
@@ -435,10 +446,10 @@ eval :: AST -> AST
 eval root = unwrap $ go [] root
   where
     unwrap x = case x of
-      (Update _ body) -> body
-      (Def _ body) -> body
+      (Update _ body) -> unwrap body
+      (Def _ body) -> unwrap body
       (Seq body) -> error $ show body
-      (Eff x) -> eval x
+      (Eff body) -> unwrap $ go [] body
       _ -> x
 
     go :: Env -> AST -> AST
@@ -462,15 +473,24 @@ eval root = unwrap $ go [] root
     go env (Seq xs) = run_eff env [] xs
     go _ x = x
 
+    effect env eff x = case go (eff ++ env) x of
+      (Eff (Seq xs)) -> run_eff env eff xs
+      (Eff x) -> run_eff env eff [x]
+      x -> x
+
     run_eff :: Env -> Env -> [AST] -> AST
     run_eff env [] [] = snd $ head env
     run_eff env eff [] = Update eff (snd $ head env)
-    run_eff env eff ((Def name body):ys) = run_eff ((name, go (eff ++ env) body) : env) eff ys
-    run_eff env eff ((Assign name right):ys) = case go (eff ++ env) right of
+    run_eff env eff ((Def name body):ys) = run_eff ((name, go env body) : env) eff ys
+    run_eff env eff ((Fork (Assign name y) branches):ys) = case run_fork env (effect env eff y) branches of
       (Update diff body) -> run_eff ((name, body) : env) (diff ++ eff) ys
       (Modify field body) -> run_eff ((name, body) : env) ((field, go (eff ++ env) body) : eff) ys
       body               -> run_eff ((name, body) : env) eff ys
-    run_eff env eff (y:ys) = case go (eff ++ env) y of
+    run_eff env eff ((Assign name right):ys) = case effect env eff right of
+      (Update diff body) -> run_eff ((name, body) : env) (diff ++ eff) ys
+      (Modify field body) -> run_eff ((name, body) : env) ((field, go (eff ++ env) body) : eff) ys
+      body               -> run_eff ((name, body) : env) eff ys
+    run_eff env eff (y:ys) = case effect env eff y of
       (Update diff body) -> run_eff (("_", body) : diff ++ env) (diff ++ eff) ys
       (Modify name body) -> run_eff ((name, go (eff ++ env) body) : env) ((name, go (eff ++ env) body) : eff) ys
       body -> run_eff (("_", body): env) eff ys
@@ -499,6 +519,10 @@ eval root = unwrap $ go [] root
       ((Func args body), _) -> go ((zip args argv) ++ env) body
       ((Class name attrs methods), _) -> Instance name ((zip (map fst attrs) argv) ++ methods)
       ((String s), [Int x]) -> if x < length s then String $ [s !! x] else Error "out of index"
+      (Eff (Func args body), _) -> Eff (Seq $ (zipWith Def args argv) ++ [body])
+      (Eff (Seq s), []) -> Eff (Seq $ map (\(k, v) -> Def k v) env ++ s)
+      (Eff x, []) -> Eff (Seq $ map (\(k, v) -> Def k v) env ++ [x])
+      (Eff _, _) -> error "Invalid eff pattern"
       (x, []) -> go env x
       x -> error $ "Unexpected applying " ++ show x
     run_op2 :: Env -> String -> AST -> AST -> AST
@@ -527,5 +551,5 @@ eval root = unwrap $ go [] root
     filter_string ((x:_)) = error $ "Not string type " ++ show x
 
 debug x = trace ("# " ++ show x) x
-debug2 x y = trace ("# " ++ show x ++ "\n- " ++ show y) y
-debug3 x y z = trace ("# " ++ show x ++ "\n- " ++ show y ++ "\n- " ++ show z) z
+debug1 x y = trace ("# " ++ show x ++ "\n- " ++ show y) y
+debug2 x y z = trace ("# " ++ show x ++ "\n- " ++ show y ++ "\n- " ++ show z) z
