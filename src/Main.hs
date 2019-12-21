@@ -98,14 +98,14 @@ test = go
       stmt "10" "a = 1\na\n| 1 = 10\n| _ = 20"
       stmt "20" "a = 2\na\n| 1 = 10\n| _ = 20"
       stmt "3" "counter: count int, incr = count += 1, twice = incr; incr\ncounter(1).twice"
-      stmt "5" "counter: count int, incr = count += 1, twice = a <- incr; b <- incr; a + b\ncounter(1).twice"
-      stmt "14" "counter:\n  count int\n  incr a = count += a\n  twice =\n    b <- incr(1)\n    c <- incr(1)\n    b + c\n  quad =\n    d <- twice\n    e <- twice\n    d + e\ncounter(1).quad"
+      stmt "5" "counter: count int, incr = log.debug(count); count += 1, twice = a <- incr; b <- incr; a + b\ncounter(1).twice"
+      stmt "14" "counter:\n  count int\n  incr a = log.debug(count); count += a\n  twice =\n    b <- incr(1)\n    c <- incr(1)\n    b + c\n  quad =\n    d <- twice\n    e <- twice\n    d + e\ncounter(1).quad"
       stmt "[\"1\" \"2\"]" "\"12\".to_array"
       stmt "3" "\"1\".to_int + 2"
       stmt "\"0\"" "0.to_string"
       stmt "[1 2]" "[1] ++ [2]"
       stmt "[1 2]" "f x = x < 2\n| x + 1\n| false.guard(0)\nloop x acc = y <- f(x)\n| acc\n| loop(y acc ++ [y])\nloop(0 [])"
-      stmt "3" "s: n 0, inc = n += 1, b1 = b2; b2, b2 = v <- inc\n| 9\n| n\ns(1).b1"
+      stmt "3" "s: n 0, inc = log.debug(1); n += 1, b1 = b2; b2, b2 = v <- inc\n| 9\n| n\ns(1).b1"
       stmt "3" "s: n 0, inc = n += 1, calc = twice(inc)\ntwice f = log.debug(f); f; f\ns(1).calc"
       -- build-in functions
       stmt "1" "if(true 1 2)"
@@ -151,6 +151,7 @@ data AST = Void
   | Pure [AST]
   | Eff [AST]
   | Fork AST Branches -- target, branches
+  | Modify String AST
   | Update Env AST
   | Type AST
   | Error String
@@ -176,6 +177,7 @@ to_string x = go x
     go (Enum name _) = name
     go (Op2 op l r) = go l ++ " " ++ op ++ " " ++ go r
     go (Ref id) = id
+    go (Modify name body) = name ++ " := " ++ go body
     go (Member ast member []) = go ast ++ "." ++ member
     go (Member ast member args) = go ast ++ "." ++ member ++ "(" ++ (join_string " " $ map go args) ++ ")"
     go (Apply self args) = go self ++ "(" ++ (join_string " " $ map go args) ++ ")"
@@ -453,10 +455,10 @@ eval root = unwrap $ go [] root
     go env (Apply (Ref "if") [a, b, c]) = buildin_if env (go env a) b c
     go env (Apply target argv) = run_apply env (go env target) argv
     go env (Array xs) = Array $ map (go env) xs
-    go env (Op2 "+=" l@(Ref name) r) = update name $ run_op2 env "+" l r
-    go env (Op2 "-=" l@(Ref name) r) = update name $ run_op2 env "-" l r
-    go env (Op2 "*=" l@(Ref name) r) = update name $ run_op2 env "*" l r
-    go env (Op2 "//=" l@(Ref name) r) = update name $ run_op2 env "//" l r
+    go env (Op2 "+=" l@(Ref name) r) = Modify name $ Op2 "+" l r
+    go env (Op2 "-=" l@(Ref name) r) = Modify name $ Op2 "-" l r
+    go env (Op2 "*=" l@(Ref name) r) = Modify name $ Op2 "*" l r
+    go env (Op2 "//=" l@(Ref name) r) = Modify name $ Op2 "//" l r
     go env (Op2 op l r) = run_op2 env op l r
     go env (Fork raw_target branches) = run_fork env (go env raw_target) branches
     go env (Pure xs) = run_eff env [] xs
@@ -469,13 +471,16 @@ eval root = unwrap $ go [] root
     run_eff :: Env -> Env -> [AST] -> AST
     run_eff env [] [] = snd $ head env
     run_eff env eff [] = Update eff (snd $ head env)
-    run_eff env eff ((Def name body):ys) = run_eff ((name, go env body) : env) eff ys
-    run_eff env eff ((Assign name right):ys) = case go env right of
-      (Update diff body) -> run_eff ((name, body) : diff ++ env) (diff ++ eff) ys
+    run_eff env eff ((Def name body):ys) = run_eff ((name, go (eff ++ env) body) : env) eff ys
+    run_eff env eff ((Assign name right):ys) = case go (eff ++ env) right of
+      (Update diff body) -> run_eff ((name, body) : env) (diff ++ eff) ys
+      (Modify field body) -> run_eff ((name, body) : env) ((field, go (eff ++ env) body) : eff) ys
       body               -> run_eff ((name, body) : env) eff ys
-    run_eff env eff (y:ys) = case go env y of
+    run_eff env eff (y:ys) = case go (eff ++ env) y of
       (Update diff body) -> run_eff (("_", body) : diff ++ env) (diff ++ eff) ys
+      (Modify name body) -> run_eff ((name, go (eff ++ env) body) : env) ((name, go (eff ++ env) body) : eff) ys
       body -> run_eff (("_", body): env) eff ys
+
     run_fork env (Update diff1 body) branches = case run_fork (diff1 ++ env) body branches of
       (Update diff2 body) -> Update (diff1 ++ diff2) body
       body -> Update diff1 body
@@ -515,7 +520,6 @@ eval root = unwrap $ go [] root
       ("<=", (Int l), (Int r)) -> Bool $ l <= r
       ("==", (Int l), (Int r)) -> Bool $ l == r
       x -> error $ "op2: " ++ show x
-    update name body = Update [(name, body)] body
     find :: String -> Env -> AST
     find k kvs = case lookup k kvs of
       Nothing -> error $ "not found " ++ k ++ " in " ++ join_string ", " (map fst kvs)
@@ -527,3 +531,7 @@ eval root = unwrap $ go [] root
     filter_string [] = []
     filter_string ((String x):xs) = x : filter_string xs
     filter_string ((x:_)) = error $ "Not string type " ++ show x
+
+debug x = trace ("# " ++ show x) x
+debug2 x y = trace ("# " ++ show x ++ "\n- " ++ show y) y
+debug3 x y z = trace ("# " ++ show x ++ "\n- " ++ show y ++ "\n- " ++ show z) z
