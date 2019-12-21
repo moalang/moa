@@ -152,12 +152,12 @@ data AST = Void
   | Ref String
   | Member AST String [AST] -- target, name, arguments
   | Apply AST [AST]
-  | Assign String AST
-  | Modify String AST
-  | Seq [AST]
-  | Eff AST
+  | Assign String AST -- name <- exp
+  | Modify String AST -- name := exp
+  | Seq [AST]         -- exp; exp
+  | Eff AST           -- exp could mutate variables
   | Fork AST Branches -- target, branches
-  | Update Env AST
+  | Update Env AST    -- contains mutated variables
   | Type AST
   | Error String
   deriving (Show, Eq)
