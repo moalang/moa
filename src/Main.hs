@@ -24,7 +24,7 @@ main = do
   test "1" "a = 1\na"
   test "3" "c = 1\nb n = n + c\na = b(2)\na"
   test "2" "a = 1\nincr = a += 1\nincr\na"
-  test "2" "a = 1; 2\nb = a; a\nc = b\nc"
+  test "2" "a =\n  1\n  2\nb = a; a\nc = b\nc"
   test "1" "true\n| 1\n| 2"
   test "2" "false\n| 1\n| 2"
   test "true" "1\n| 1 = true\n| 2 = false"
@@ -32,8 +32,11 @@ main = do
   test "false" "3\n| 1 = true\n| _ = false"
   test "1" "ab enum:\n  a\n  b\nab.a\n| a = 1\n| b = 2"
   test "2" "ab enum:\n  a\n  b\nab.b\n| a = 1\n| b = 2"
-  -- container(4)
-  test "1" "[1 2 3](0)"
+  -- container(5)
+  test "1" "[1 2](0)"
+  test "5" "[1 2+3](1)"
+  test "5" "[1, 2+3](1)"
+  test "5" "[1, 2+3].n1"
   test "2" "s class: n int\ns(2).n"
   test "3" "ab enum:\n  a x int\n  b y int\nab.a(3).x"
   test "4" "ab enum:\n  a x int\n  b y int\nab.b(4).y"
@@ -75,8 +78,9 @@ data AST = Void
   | Seq [AST]
   | Def String AST
   | Update String AST
-  -- container(4)
+  -- container(5)
   | Array [AST]
+  | Tuple [AST]
   | Struct String Env
   | Class String [String]
   | Enum String Env
@@ -108,7 +112,7 @@ type Parser a = StateT Source Maybe a
 parse :: String -> AST
 parse input = go
   where
-    go = case runStateT parse_top (Source input 0 0) of
+    go = case runStateT parse_top (Source input 0 1) of
       Nothing -> error $ "parse error: " ++ input
       Just (ast, s) -> case length (src s) == pos s of
         True -> ast
@@ -154,12 +158,14 @@ parse input = go
           parse_next $ Op2 op l r
     parse_unit = (parse_int `or`
                   parse_str `or`
-                  parse_array `or`
+                  parse_tuple_or_array `or`
                   parse_ref)
     parse_seq = Seq <$> read_seq
     parse_int = Int <$> fmap read read_int
     parse_str = String <$> read_between "\"" "\"" (many $ satisfy (/= '"'))
-    parse_array = Array <$> between (read_string "[") (read_string "]") (many parse_exp)
+    parse_tuple_or_array = read_between "[" "]" (parse_tuple `or` parse_array)
+    parse_tuple = Tuple <$> sepBy2 (read_string ",") parse_exp
+    parse_array = Array <$> many parse_exp
     parse_ref = do
       id <- read_id
       return $ case id of
@@ -216,13 +222,11 @@ parse input = go
     read_seq_h = sepBy1 (read_string ";") parse_eff
     read_args = many read_id
     read_id = lex get_id
-    read_ids1 = sepBy1 (satisfy (== '.')) read_id
     read_type = lex $ many1 $ satisfy (\x -> not $ elem x " \t\n")
     read_int = lex $ many1 $ get_any "0123456789"
     read_strings (x:xs) = foldl or (read_string x) (map read_string xs)
     read_string s = lex $ get_string s
     read_between l r m = between (read_string l) (get_string r) m
-    read_char c = lex $ satisfy (== c)
     read_op = read_strings ops_calculate
     read_br = read_string "\n"
     read_any s = lex $ get_any s
@@ -240,13 +244,6 @@ parse input = go
       s <- get
       l <|> (put s >> r)
     lex f = (many $ satisfy (== ' ')) >> f
-    indent :: Parser a -> Parser a
-    indent f = do
-      modify $ \s -> s { depth = depth s + 1 }
-      ret <- f
-      modify $ \s -> s { depth = depth s - 1 }
-      return ret
-    spaces = many $ read_any "\n\t "
     sepBy sep f = (sepBy1 sep f) `or` (return [])
     sepBy1 sep f = do
       x <- f
@@ -256,7 +253,6 @@ parse input = go
       x <- f
       xs <- many1 (sep >> f)
       return $ x : xs
-    char c = satisfy (== c)
     between l r m = do
       l
       v <- m -- `or` (die $ "missing body in " ++ show l ++ show r)
@@ -280,23 +276,6 @@ parse input = go
       guard $ f c
       put (s { pos = (pos s) + 1 })
       return c
-    guard_prev :: (Char -> Bool) -> Parser ()
-    guard_prev f = do
-      s <- get
-      let c = (src s) !! (max 0 (pos s - 2))
-      let b = f c
-      guard b
-    see :: Parser String
-    see = do
-      s <- get
-      return $ if (pos s) < (length $ src s)
-        then [(src s) !! (pos s)]
-        else ""
-    tracer :: Show a => a -> Parser ()
-    tracer mark = do
-      s <- get
-      trace ("TRACER: " ++ (show mark) ++ " " ++ drop (pos s) (src s)) (return ())
-      return ()
     die message = trace message (return ()) >> dump >> error message
     dump :: Parser ()
     dump = do
@@ -344,8 +323,9 @@ eval root = top root
     go (Seq exps) = run exps Void
     go (Def name exp) = append name exp
     go (Update name exp) = go exp >>= update name
-    -- container(4)
+    -- container(5)
     go (Class name []) = return $ Struct name []
+    go (Tuple xs) = Tuple <$> mapM go xs
     go (Array xs) = Array <$> mapM go xs
     -- Struct
     -- Enum
@@ -354,6 +334,8 @@ eval root = top root
     go v = append "" v
     member name (Struct _ xs) = look name xs
     member name (Enum _ xs) = look name xs
+    member "n0" (Tuple xs) = return $ xs !! 0
+    member "n1" (Tuple xs) = return $ xs !! 1
     catch alt (Error _) = go alt
     catch _ x = return x
     fork target branches = go target >>= match branches
@@ -369,6 +351,7 @@ eval root = top root
       case (x, xs) of
         ((Func args exp), _) -> call (zip args argv) exp
         ((Class name props), _) -> return $ Struct name (zip props argv)
+        ((Tuple ys), [Int n]) -> return $ ys !! n
         ((Array ys), [Int n]) -> return $ ys !! n
         _ -> error $ "unkown apply target " ++ show x
     run_op2 op left right = do
@@ -389,7 +372,7 @@ eval root = top root
       look name (change s ++ local s)
     look x xs = case lookup x xs of
       Just x -> go x
-      Nothing -> error $ "Not found " ++ x ++ " in " ++ show (map fst xs)
+      Nothing -> error $ "not found " ++ x ++ " in " ++ show (map fst xs)
     dump :: Runner ()
     dump = do
       s <- get
