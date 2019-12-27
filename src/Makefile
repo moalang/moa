@@ -10,10 +10,7 @@ test:
 
 go:
 	clear
-	runghc Main.hs compile < go.moa
-
-repl:
-	runghc Main.hs repl
+	runghc Main.hs go < go.moa
 
 watch:
 	-make ${command}
