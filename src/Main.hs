@@ -14,22 +14,25 @@ main = do
   test "hello world" "\"hello world\""
   test "true" "true"
   test "false" "false"
+  test "2" "inc a = a + 1\ninc(1)"
+  test "6" "add a b = a + b\nadd(1 2 + 3)"
   -- exp(8)
   test "3" "1 + 2"
   test "-1" "1 - 2"
   test "6" "2 * 3"
   test "4" "9 / 2"
-  test "1" "a = 1; a"
-  test "2" "inc a = a + 1; inc(1)"
-  test "6" "add a b = a + b; add(1 2 + 3)"
-  test "3" "c = 1; b n = n + c; a = b(2); a"
-  test "2" "a = 1; incr = a += 1; incr; a"
+  test "1" "a = 1\na"
+  test "3" "c = 1\nb n = n + c\na = b(2)\na"
+  test "2" "a = 1\nincr = a += 1\nincr\na"
+  test "2" "a = 1; 2\nb = a; a\nc = b\nc"
   test "1" "true\n| 1\n| 2"
   test "2" "false\n| 1\n| 2"
   test "true" "1\n| 1 = true\n| 2 = false"
   test "false" "2\n| 1 = true\n| 2 = false"
   test "false" "3\n| 1 = true\n| _ = false"
-  -- container(3)
+  test "1" "ab enum:\n  a\n  b\nab.a\n| a = 1\n| b = 2"
+  test "2" "ab enum:\n  a\n  b\nab.b\n| a = 1\n| b = 2"
+  -- container(4)
   test "1" "[1 2 3](0)"
   test "2" "s class: n int\ns(2).n"
   test "3" "ab enum:\n  a x int\n  b y int\nab.a(3).x"
@@ -44,7 +47,10 @@ test expect src = go
     ast = parse src
     ret = eval ast
     fact = to_string ret
-    fill s = take 30 (s ++ repeat ' ')
+    fill s = take 45 (liner [] s ++ repeat ' ')
+    liner acc [] = reverse acc
+    liner acc ('\n':xs) = liner ("__" ++ acc) xs
+    liner acc (x:xs) = liner (x : acc) xs
     go = putStrLn $ if expect == fact
       then "ok: " ++ fill src ++ " == " ++ fact
       else "FAIL    : " ++ src ++
@@ -114,8 +120,7 @@ parse input = go
           , "--------------------------------------------"
           ]
     parse_top :: Parser AST
-    parse_top = parse_seq
-    parse_seq = Seq <$> sepBy1 read_br parse_eff
+    parse_top = Seq <$> sepBy1 read_br parse_eff
     parse_eff = parse_def `or` parse_update `or` parse_exp_or_fork
     parse_def = fmap (\(k, v) -> Def k v) read_def
     parse_update = do
@@ -151,6 +156,7 @@ parse input = go
                   parse_str `or`
                   parse_array `or`
                   parse_ref)
+    parse_seq = Seq <$> read_seq
     parse_int = Int <$> fmap read read_int
     parse_str = String <$> read_between "\"" "\"" (many $ satisfy (/= '"'))
     parse_array = Array <$> between (read_string "[") (read_string "]") (many parse_exp)
@@ -182,6 +188,7 @@ parse input = go
         guard_catch = read_string "|" >> parse_exp
     parse_enum id = Enum id <$> read_enums
     parse_class id = Class id <$> read_props
+
     read_enums = many1 (read_string "\n  " >> read_enum)
     read_enum :: Parser (String, AST)
     read_enum = do
@@ -199,11 +206,14 @@ parse input = go
       mark <- read_strings ["=", ":"]
       case mark of
         "=" -> do
-          body <- parse_eff
+          body <- parse_seq
           return (id, if length args == 0 then body else (Func args body))
         ":" -> do
           x <- parse_enum id `or` parse_class id
           return (id, x)
+    read_seq = read_seq_v `or` read_seq_h
+    read_seq_v = many1 (read_indent >> parse_eff)
+    read_seq_h = sepBy1 (read_string ";") parse_eff
     read_args = many read_id
     read_id = lex get_id
     read_ids1 = sepBy1 (satisfy (== '.')) read_id
@@ -214,9 +224,8 @@ parse input = go
     read_between l r m = between (read_string l) (get_string r) m
     read_char c = lex $ satisfy (== c)
     read_op = read_strings ops_calculate
-    read_br = read_strings [";", "\n"]
+    read_br = read_string "\n"
     read_any s = lex $ get_any s
-    read_sep = read_string "," `or` read_indent
     read_indent = do
       s <- get
       let sp = take (2 * depth s) $ repeat ' '
@@ -332,10 +341,11 @@ eval root = top root
     go (Apply target []) = go target
     go (Apply target argv) = apply target argv
     go (Fork target branches) = fork target branches
-    go (Seq list) = error "TBD seq"
+    go (Seq exps) = run exps Void
     go (Def name exp) = append name exp
     go (Update name exp) = go exp >>= update name
-    -- container(3)
+    -- container(4)
+    go (Class name []) = return $ Struct name []
     go (Array xs) = Array <$> mapM go xs
     -- Struct
     -- Enum
@@ -351,6 +361,7 @@ eval root = top root
         match ((cond, exp):xs) x = if eq cond x then return exp else match xs x
         match [] x = error $ "unmatch " ++ show x ++ foldr (\x acc -> acc ++ "\n| " ++ show x) "" branches
         eq (Ref "_") _ = True
+        eq (Ref a) (Struct b _) = a == b
         eq x y = x == y
     apply target argv = do
       x <- go target
