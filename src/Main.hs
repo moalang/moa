@@ -8,7 +8,35 @@ import System.Environment (getArgs)
 import System.IO (isEOF)
 
 -- Entry point
+main :: IO ()
 main = do
+  args <- getArgs
+  case args of
+    ["test"] -> main_test
+    ["go"] -> main_go
+    _ -> main_help
+
+main_help :: IO ()
+main_help = do
+  putStrLn "Usage: runghc Main.hs [command]"
+  putStrLn "The commands are:"
+  putStrLn "\trepl\tstart repl"
+  putStrLn "\ttest\ttest itself"
+  putStrLn "\tgo\tcompile to go"
+
+main_go :: IO ()
+main_go = do
+  src <- getContents
+  let (Seq list1) = parse src
+  let list2 = list1 ++ [Apply (Ref "compile") [String src]]
+  case eval (Seq list2) of
+    (String s) -> putStrLn s
+    x -> print x
+  putStrLn "// done"
+
+
+main_test :: IO ()
+main_test = do
   -- value(4)
   test "1" "1"
   test "hello world" "\"hello world\""
@@ -37,12 +65,15 @@ main = do
   test "5" "[1 2+3](1)"
   test "5" "[1, 2+3](1)"
   test "5" "[1, 2+3].n1"
-  test "2" "s class: n int\ns(2).n"
+  test "1" "s class: n int, m int\ns(1 2).n"
   test "3" "ab enum:\n  a x int\n  b y int\nab.a(3).x"
   test "4" "ab enum:\n  a x int\n  b y int\nab.b(4).y"
   -- error(2)
   test "error: divide by zero" "1 / 0"
   test "2" "1 / 0 | 2"
+  -- build-in
+  test "1" "\"01\".to_i"
+  test "1,2,3" "[1 2 3].map(x -> x.to_s).join(\",\")"
   putStrLn "done"
 
 test expect src = go
@@ -71,7 +102,7 @@ data AST = Void
   | Func [String] AST -- captures, arguments, body
   -- exp(8)
   | Ref String
-  | Member AST String
+  | Member AST String [AST]
   | Op2 String AST AST
   | Apply AST [AST]
   | Fork AST [(AST, AST)] -- target, branches
@@ -124,7 +155,7 @@ parse input = go
           , "--------------------------------------------"
           ]
     parse_top :: Parser AST
-    parse_top = Seq <$> sepBy1 read_br parse_eff
+    parse_top = between spaces spaces $ Seq <$> sepBy1 read_br parse_eff
     parse_eff = parse_def `or` parse_update `or` parse_exp_or_fork
     parse_def = fmap (\(k, v) -> Def k v) read_def
     parse_update = do
@@ -149,7 +180,8 @@ parse input = go
           parse_next $ Apply l argv
         go "." = do
           id <- read_id
-          parse_next $ Member l id
+          argv <- option [] read_argv
+          parse_next $ Member l id argv
         go " | " = do
           alt <- parse_exp
           parse_next $ Catch l alt
@@ -159,6 +191,7 @@ parse input = go
     parse_unit = (parse_int `or`
                   parse_str `or`
                   parse_tuple_or_array `or`
+                  parse_func `or`
                   parse_ref)
     parse_seq = Seq <$> read_seq
     parse_int = Int <$> fmap read read_int
@@ -166,6 +199,11 @@ parse input = go
     parse_tuple_or_array = read_between "[" "]" (parse_tuple `or` parse_array)
     parse_tuple = Tuple <$> sepBy2 (read_string ",") parse_exp
     parse_array = Array <$> many parse_exp
+    parse_func = do
+      ids <- sepBy1 (read_string ",") read_id
+      read_string "->"
+      body <- parse_exp_or_fork
+      return $ Func ids body
     parse_ref = do
       id <- read_id
       return $ case id of
@@ -221,8 +259,9 @@ parse input = go
     read_seq_v = many1 (read_indent >> parse_eff)
     read_seq_h = sepBy1 (read_string ";") parse_eff
     read_args = many read_id
+    read_argv = between (get_string "(") (read_string ")") (many parse_exp)
     read_id = lex get_id
-    read_type = lex $ many1 $ satisfy (\x -> not $ elem x " \t\n")
+    read_type = lex $ many1 $ satisfy (\x -> not $ elem x " ,;\t\n")
     read_int = lex $ many1 $ get_any "0123456789"
     read_strings (x:xs) = foldl or (read_string x) (map read_string xs)
     read_string s = lex $ get_string s
@@ -255,7 +294,7 @@ parse input = go
       return $ x : xs
     between l r m = do
       l
-      v <- m -- `or` (die $ "missing body in " ++ show l ++ show r)
+      v <- m
       r `or` (die $ "Does not close in between")
       return v
     many1 f = do
@@ -268,6 +307,7 @@ parse input = go
         next acc = do
           x <- f
           go (x : acc)
+    spaces = many $ get_any " \t\r\n"
     satisfy :: (Char -> Bool) -> Parser Char
     satisfy f = do
       s <- get
@@ -315,10 +355,10 @@ eval root = top root
     -- Func
     -- exp(8)
     go (Ref name) = find name
-    go (Member ast name) = go ast >>= member name
+    go (Member ast name argv) = go ast >>= member name argv
     go (Op2 op left right) = run_op2 op left right
     go (Apply target []) = go target
-    go (Apply target argv) = apply target argv
+    go (Apply target argv) = apply (go target) argv
     go (Fork target branches) = fork target branches
     go (Seq exps) = run exps Void
     go (Def name exp) = append name exp
@@ -332,10 +372,22 @@ eval root = top root
     -- error(2)
     go (Catch l r) = (go l) >>= catch r
     go v = append "" v
-    member name (Struct _ xs) = look name xs
-    member name (Enum _ xs) = look name xs
-    member "n0" (Tuple xs) = return $ xs !! 0
-    member "n1" (Tuple xs) = return $ xs !! 1
+    member name argv (Struct _ xs) = apply (look name xs) argv
+    member name argv (Enum _ xs) = apply (look name xs) argv
+    member "n0" [] (Tuple xs) = return $ xs !! 0
+    member "n1" [] (Tuple xs) = return $ xs !! 1
+    member "map" [f] (Array xs) = Array <$> mapM (\x -> apply (return f) [x]) xs
+    member "join" [String glue] (Array xs) = return $ buildin_join glue xs
+    member "to_i" [] (String s) = return (Int (read s :: Int))
+    member "to_s" [] (Int n) = return (String $ show n)
+    member name argv x = error $ "unknown member " ++ name ++ " " ++ show x
+    buildin_join :: String -> [AST] -> AST
+    buildin_join glue values = String $ join [] values
+      where
+        join :: String -> [AST] -> String
+        join acc [] = acc
+        join acc [x] = acc ++ to_string x
+        join acc (x:xs) = acc ++ to_string x ++ glue ++ join acc xs
     catch alt (Error _) = go alt
     catch _ x = return x
     fork target branches = go target >>= match branches
@@ -345,15 +397,16 @@ eval root = top root
         eq (Ref "_") _ = True
         eq (Ref a) (Struct b _) = a == b
         eq x y = x == y
+    apply target [] = target
     apply target argv = do
-      x <- go target
+      x <- target
       xs <- mapM go argv
       case (x, xs) of
         ((Func args exp), _) -> call (zip args argv) exp
         ((Class name props), _) -> return $ Struct name (zip props argv)
         ((Tuple ys), [Int n]) -> return $ ys !! n
         ((Array ys), [Int n]) -> return $ ys !! n
-        _ -> error $ "unkown apply target " ++ show x
+        _ -> error $ "unknown apply target " ++ show x ++ " with " ++ show argv
     run_op2 op left right = do
       l <- go left
       r <- go right
