@@ -5,7 +5,7 @@ import Control.Applicative ((<|>), (<$>))
 import Control.Monad (unless, guard)
 import Control.Monad.State (StateT, runStateT, lift, get, put, modify)
 import System.Environment (getArgs)
-import System.IO (isEOF)
+import System.Process (system)
 
 -- Entry point
 main :: IO ()
@@ -13,26 +13,31 @@ main = do
   args <- getArgs
   case args of
     ["test"] -> main_test
-    ["go"] -> main_go
+    ["js"] -> main_js
     _ -> main_help
 
 main_help :: IO ()
 main_help = do
   putStrLn "Usage: runghc Main.hs [command]"
   putStrLn "The commands are:"
-  putStrLn "\trepl\tstart repl"
-  putStrLn "\ttest\ttest itself"
-  putStrLn "\tgo\tcompile to go"
+  putStrLn "  test  execute tests"
+  putStrLn "  js    compile to javascript"
 
-main_go :: IO ()
-main_go = do
+main_js :: IO ()
+main_js = do
   src <- getContents
   let (Seq list1) = parse src
   let list2 = list1 ++ [Apply (Ref "compile") [String src]]
   case eval (Seq list2) of
-    (String s) -> putStrLn s
+    (String s) -> do
+      writeFile "/tmp/moa.js" s
+      putStrLn "# ---( JavaScript )---------------"
+      putStrLn s
+      putStrLn "# ---( Execution result )---------"
+      system $ "node /tmp/moa.js"
+      putStrLn "# --------------------------------"
+      return ()
     x -> print x
-  putStrLn "// done"
 
 
 main_test :: IO ()
@@ -155,7 +160,7 @@ parse input = go
           , "--------------------------------------------"
           ]
     parse_top :: Parser AST
-    parse_top = between spaces spaces $ Seq <$> sepBy1 read_br parse_eff
+    parse_top = between spaces spaces $ Seq <$> sepBy1 read_brs parse_eff
     parse_eff = parse_def `or` parse_update `or` parse_exp_or_fork
     parse_def = fmap (\(k, v) -> Def k v) read_def
     parse_update = do
@@ -267,7 +272,7 @@ parse input = go
     read_string s = lex $ get_string s
     read_between l r m = between (read_string l) (get_string r) m
     read_op = read_strings ops_calculate
-    read_br = read_string "\n"
+    read_brs = read_string "\n" >> (many $ get_any " \t\r\n")
     read_any s = lex $ get_any s
     read_indent = do
       s <- get

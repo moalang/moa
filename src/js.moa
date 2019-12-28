@@ -1,0 +1,6 @@
+compile src = build(parse(src))
+parse src = ast.int(1)
+build node = "console.log(2)"
+
+ast enum:
+  int n int
