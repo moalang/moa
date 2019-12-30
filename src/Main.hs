@@ -76,9 +76,11 @@ main_test = do
   -- error(2)
   test "error: divide by zero" "1 / 0"
   test "2" "1 / 0 | 2"
-  -- build-in
+  -- built-in
   test "1" "\"01\".to_i"
   test "1,2,3" "[1 2 3].map(x -> x.to_s).join(\",\")"
+  -- bugs
+  test "1" "id x = x\nid1 x = id(x)\nid1(1)"
   putStrLn "done"
 
 test expect src = go
@@ -427,7 +429,12 @@ eval root = top root
     find :: String -> Runner AST
     find name = do
       s <- get
-      look name (change s ++ local s)
+      case (lookup name $ change s) <|> (find_next name $ local s) of
+        Just x -> go x
+        Nothing -> error $ "not found " ++ name ++ " in " ++ show (map fst $ change s ++ local s)
+    find_next name [] = Nothing
+    find_next name ((k, (Ref v)):xs) = if k == name then find_next v xs else find_next name xs
+    find_next name ((k, v):xs) = if k == name then Just v else find_next name xs
     look x xs = case lookup x xs of
       Just x -> go x
       Nothing -> error $ "not found " ++ x ++ " in " ++ show (map fst xs)
