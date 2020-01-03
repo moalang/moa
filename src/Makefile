@@ -2,15 +2,15 @@ command=test
 
 help:
 	@clear
-	@runghc Main.hs help
+	@node main.js help
 
 run_test:
 	@clear
-	@runghc Main.hs test
+	@node main.js test
 
 run_js:
 	@clear
-	@runghc Main.hs js < js.moa
+	@node main.js js < js.moa
 
 test:
 	@make watch command=run_test
