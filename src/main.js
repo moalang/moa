@@ -15,7 +15,7 @@ function parse(src) {
     return sep_by1(parse_line(), read_indent(0)).and(x => x.join("\n"))
   }
   function parse_line() {
-    return parse_func().or(parse_exp)
+    return parse_func().or(parse_fork)
   }
   function parse_func() {
     return reg(/^( *)(\w+)((?: \w+)+)? *=/m).and(m => {
@@ -30,7 +30,14 @@ function parse(src) {
     })
   }
   function parse_body() {
-    return many1(read_indent(1).and(parse_line())).and(to_block).or(parse_exp())
+    return many1(read_indent(1).and(parse_line())).and(to_block).or(parse_line())
+  }
+  function parse_fork() {
+    return parse_exp().and(x =>
+      read_fork_match(x).or(read_fork_bool(x)).or(x))
+  }
+  function parse_fork_bool() {
+    return read_fork()
   }
   function parse_exp() {
     return reg(/[^\n]+/).and(x => to_apply(x[0]))
@@ -49,9 +56,25 @@ function parse(src) {
       return "(() => {\n" + lines.join("\n") + "\n})()"
     }
   }
+  function to_match(x, y) {
+    if (y === "_") {
+      return "true"
+    } else {
+      return x + " === " + y
+    }
+  }
   // helpers
   function read_indent(offset) {
     return reg("\n" + "  ".repeat(depth + offset))
+  }
+  function read_fork_match(exp) {
+    return many1(read_indent().and(reg(/^\| ([^=]+) = /)).and(cond =>
+      parse_exp().and(x => "if (" + to_match(exp, cond[1]) + ") { return " + x + "}"))).and(xs => to_block(xs.concat(null)))
+  }
+  function read_fork_bool(exp) {
+    return read_indent().and(reg(/\| /)).and(parse_exp).and(t =>
+      read_indent().and(reg(/\| /)).and(parse_exp).and(f =>
+          exp + " ? " + t + " : " + f))
   }
   // combinators
   function many(p, acc) {
@@ -156,16 +179,15 @@ function test() {
   t(2, "a = 1\nincr = a += 1\nincr\na")
   t(2, "a =\n  1\n  2\nb = a; a\nc = b\nc")
   t(1, "true\n| 1\n| 2")
-  //t("2", "false\n| 1\n| 2")
-  //t("true", "1\n| 1 = true\n| 2 = false")
-  //t("false", "2\n| 1 = true\n| 2 = false")
-  //t("false", "3\n| 1 = true\n| _ = false")
+  t(2, "false\n| 1\n| 2")
+  t(true, "1\n| 1 = true\n| 2 = false")
+  t(false, "2\n| 1 = true\n| 2 = false")
+  t(false, "3\n| 1 = true\n| _ = false")
   //t("1", "ab enum:\n  a\n  b\nab.a\n| a = 1\n| b = 2")
   //t("2", "ab enum:\n  a\n  b\nab.b\n| a = 1\n| b = 2")
   //// container(5)
   //t("1", "[1 2](0)")
   //t("5", "[1 2+3](1)")
-  //t("5", "[1, 2+3](1)")
   //t("5", "[1, 2+3].n1")
   //t("1", "s class: n int, m int\ns(1 2).n")
   //t("3", "ab enum:\n  a x int\n  b y int\nab.a(3).x")
