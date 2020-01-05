@@ -1,5 +1,5 @@
 const log = console.log
-const error = console.error
+const warn = console.error
 function debug(x) {
   log("| " + JSON.stringify(x))
 }
@@ -89,7 +89,7 @@ function parse(src) {
   // converter
   function to_exp(line) {
     let n = 0
-    return line.replace(/[a-zA-Z]\w*\(.+?\)/g, part =>
+    line = line.replace(/[a-zA-Z]\w*\(.+?\)/g, part =>
       part.replace(/ /g, ", ")
     ).replace(/\[\S+( \S+)+\]/g, part =>
       part.replace(/ /g, ", ")
@@ -98,6 +98,11 @@ function parse(src) {
         ", n" + ++n + ":"
       )
     )
+    const lr = line.split(" | ", 2)
+    if (lr.length == 2) {
+      line = "try { " + lr[0] + "} catch {" + lr[1] + "}"
+    }
+    return line
   }
   function to_block(lines) {
     if (lines.length === 1) {
@@ -186,7 +191,7 @@ function parse(src) {
   // run parser
   const ret = unwrap(parse_top())
   if (ret === failure || pos !== src.length) {
-    error("parse failed" +
+    warn("parse failed" +
       "\n|    pos: " + pos +
       "\n| remain: " + JSON.stringify(src.slice(pos)))
   }
@@ -199,11 +204,15 @@ function run(js) {
     Array.prototype.nth = function(n) { return this[n] }
     String.prototype.to_i = function() { return parseInt(this) }
     Number.prototype.to_s = function() { return String(this) }
-    Function.prototype.valueOf = function() { return this.length === 0 ? this() : this }
+    const error = x => { throw("error: " + x) }
     return eval(js)
   } catch (e) {
-    error("failed to eval: " + JSON.stringify(js))
-    return e.message
+    if (typeof(e) === "string") {
+      return e
+    } else {
+      warn("failed to eval: " + JSON.stringify(js))
+      return e.message
+    }
   }
 }
 
@@ -251,8 +260,8 @@ function test() {
   t(1, "s class:\n  n int\n  m int\n  s(1 2).n()")
   t(2, "s class:\n  n int\n  incr = n += 1\nt = s(1)\nt.incr()\nt.n()")
   // error(2)
-  //t("error: divide by zero", "1 / 0")
-  //t("2", "1 / 0 | 2")
+  t("error: failed", "error(\"failed\")")
+  t(2, "error(\"failed\") | 2")
   // built-in
   t(1, "\"01\".to_i()")
   t("1,2,3", "[1 2 3].map(x=>x.to_s()).join(\",\")")
