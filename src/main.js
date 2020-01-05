@@ -52,10 +52,39 @@ function parse(src) {
       many1(reg(/^\n  (\w+)( .*)?/)).and(xs =>
         to_enum(x[1], xs)))
   }
+  function to_enum(id, enums) {
+    return "const " + id + " = {\n" +
+      (enums || []).map(x => to_enum_tag(x[1], x[2])).join(",\n") +
+      "\n}"
+  }
+  function to_enum_tag(tag, attrs) {
+      return tag + ": " + to_enum_new(tag, attrs)
+  }
+  function to_enum_new(id, line) {
+    if (line) {
+      const attrs = line.trim().split(",").map(x => x.split(" ", 2)[0]).join(", ")
+      if (attrs) {
+        return "(" + attrs + ") => { return {_class: '" + id + "', " + attrs + "} }"
+      }
+    }
+    return "{_class: '" + id + "'}"
+  }
   function parse_class() {
     return reg(/^(\w+)(?: \w+)*? class:/).and(x =>
-      many1(reg(/^\n  (\w+) (\S+)/)).and(xs =>
-        to_class(x[1], xs)))
+      many1(reg(/^\n  (\w+) ([^=\n]+)/)).and(vars =>
+        many(reg(/^\n  (\w+)((?: \w+)*) = ([^\n]+)/)).and(methods =>
+          to_class(x[1], vars || [], methods || []))))
+  }
+  function to_class(id, vars, methods) {
+    const args = vars.map(x => x[1])
+    const attrs = args.map(x => x + ": () => " + x)
+    methods = methods.map(x => ", " + to_method(x[1], x[2], x[3]))
+    return "const " + id + " = (" + args.join(", ") + ") => {return {_class: '" + id +"', " + attrs + methods + "} }"
+  }
+  function to_method(id, args, body) {
+    args = args.trim().split(/ /).join(", ")
+    body = to_exp(body)
+    return id + ": (" + args + ") => " + body
   }
   // converter
   function to_exp(line) {
@@ -87,30 +116,9 @@ function parse(src) {
       return x + " === " + y
     }
   }
-  function to_enum(id, enums) {
-    return "const " + id + " = {\n" +
-      (enums || []).map(x => to_enum_unit(x[1], x[2])).join(",\n") +
-      "\n}"
-  }
-  function to_enum_unit(tag, attrs) {
-      return tag + ": " + to_enum_new(tag, attrs)
-  }
-  function to_enum_new(id, line) {
-    if (line) {
-      const attrs = line.trim().split(",").map(x => x.split(" ", 2)[0]).join(", ")
-      if (attrs) {
-        return "(" + attrs + ") => { return {_class: '" + id + "', " + attrs + "} }"
-      }
-    }
-    return "{_class: '" + id + "'}"
-  }
-  function to_class(id, attrs) {
-    const args = attrs.map(x => x[1]).join(", ")
-    return "const " + id + " = (" + args + ") => {return {_class: '" + id +"', " + args + "} }"
-  }
   // helpers
   function read_indent(offset) {
-    return reg("\n" + "  ".repeat(depth + offset))
+    return reg("\n+" + "  ".repeat(depth + offset))
   }
   function read_fork_match(exp) {
     return many1(read_indent().and(reg(/^\| ([^=]+) = /)).and(cond =>
@@ -191,6 +199,7 @@ function run(js) {
     Array.prototype.nth = function(n) { return this[n] }
     String.prototype.to_i = function() { return parseInt(this) }
     Number.prototype.to_s = function() { return String(this) }
+    Function.prototype.valueOf = function() { return this.length === 0 ? this() : this }
     return eval(js)
   } catch (e) {
     error("failed to eval: " + JSON.stringify(js))
@@ -237,9 +246,10 @@ function test() {
   t(1, "[1].nth(0)")
   t(5, "[1 2+3].nth(1)")
   t(5, "(1, 2+3).n1")
-  t(1, "s class:\n  n int\n  m int\n  s(1 2).n")
   t(3, "ab enum:\n  a x int\n  b y int\nab.a(3).x")
   t(4, "ab enum:\n  a x int\n  b y int\nab.b(4).y")
+  t(1, "s class:\n  n int\n  m int\n  s(1 2).n()")
+  t(2, "s class:\n  n int\n  incr = n += 1\nt = s(1)\nt.incr()\nt.n()")
   // error(2)
   //t("error: divide by zero", "1 / 0")
   //t("2", "1 / 0 | 2")
@@ -249,4 +259,12 @@ function test() {
   log("done")
 }
 
-test()
+if (process.argv[2] === "test") {
+  test()
+} else {
+  const fs = require("fs")
+  const src = fs.readFileSync(process.stdin.fd, "utf8").trim()
+  const js = parse(src)
+  const result = run(js + "\ncompile(" + JSON.stringify(src) + ")")
+  log(result)
+}

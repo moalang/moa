@@ -2,6 +2,10 @@ compile src = build(parse(src))
 parse src = ast.string(src)
 build node = node
 
+parser class:
+  src string
+  pos int
+
 ast enum:
   int n int
   string s string
