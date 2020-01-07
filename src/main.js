@@ -239,7 +239,7 @@ function test() {
       log("   moa: " + src.split("\n").join("\n      | "))
     }
   }
-  // -- basic
+  log("---( basic pattern )---------")
   // value(4)
   t(1, "1")
   t("hello world", "\"hello world\"")
@@ -280,7 +280,7 @@ function test() {
   t(5, "[1 2 + 3].nth(1)")
   t("i", "\"hi\".nth(1)")
   t(5, "(1, 2 + 3).n1")
-  // -- complex
+  log("---( complex pattern )---------")
   // container(5)
   t(9, "s class:\n  n int\n  incr = n += 1\n  incr2 = incr()\n  mul x =\n    n := n * x\nt s(1)\nt.incr()\nt.incr2()\nt.mul(3)")
   t(10, "s class:\n  n int\n  f1 =\n    n\n  f2 =\n    f1()\ns(10).f2()")

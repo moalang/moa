@@ -10,7 +10,7 @@ run_test:
 
 run_js:
 	@clear
-	@node main.js js < js.moa > /tmp/moa.js
+	@node main.js js < v1.moa > /tmp/moa.js
 	@node /tmp/moa.js
 
 test:
