@@ -20,18 +20,19 @@ function parse(src) {
     return sep_by1(parse_line(), read_indent(0)).and(x => x.join(";\n"))
   }
   function parse_line() {
-    return parse_enum().or(parse_class()).or(parse_func).or(parse_fork)
+    return parse_enum().or(parse_class).or(parse_var).or(parse_func).or(parse_fork)
+  }
+  function parse_var() {
+    return reg(/^(\w+) ([^=: ]+)$/m).and(m => {
+      return "let " + m[1] + " = " + m[2]
+    })
   }
   function parse_func() {
-    return reg(/^( *)(\w+)((?: \w+)+)? *=/m).and(m => {
+    return reg(/^( *)(\w+)((?: \w+)+)? *= */m).and(m => {
       depth = m[1].length / 2
       const id = m[2]
       const args = (m[3] || "").trim().split(" ").join(", ")
-      if (args === "") {
-        return parse_body().and(exp => "let " + id + " = " + exp)
-      } else {
-        return parse_body().and(exp => "const " + id + " = (" + args + ") => " + exp)
-      }
+      return parse_body().and(exp => "const " + id + " = (" + args + ") => " + exp)
     })
   }
   function parse_body() {
@@ -72,25 +73,16 @@ function parse(src) {
   function parse_class() {
     return reg(/^(\w+)(?: \w+)*? class:/).and(x =>
       many1(reg(/^\n  (\w+) ([^=\n]+)(?=\n)/)).and(vars =>
-        many(reg(/^\n  (\w+)((?: \w+)*) = ([^\n]+)/)).and(methods1 =>
-        many(reg(/^\n  (\w+)((?: \w+)*) =((?:\n    [^\n]+)+)/)).and(methods2 =>
-          to_class(x[1], vars, methods1, methods2)))))
+        many(read_indent(1).and(parse_line())).and(methods =>
+          to_class(x[1], vars, methods))))
   }
-  function to_class(id, vars, methods1, methods2) {
+  function to_class(id, vars, methods) {
     const args = vars.map(x => x[1])
-    const methods =
-      methods1.map(x => "\n" + to_func(x[1], x[2], x[3])).join("") +
-      methods2.map(x => "\n" + to_func(x[1], x[2], to_block(x[3].trim().split("\n    ")))).join("")
-    const ids = args.concat(methods1.map(x => x[1])).concat(methods2.map(x => x[1]))
-    return "const " + id + " = (" + args.join(", ") + ") => {"+
-      methods +
-      "return {_class: '" + id +"'," + ids + " }\n" +
-    "}"
-  }
-  function to_func(id, args, body) {
-    args = args.trim().split(/ /).join(", ")
-    body = fix_exp(body)
-    return "const " + id + " = (" + args + ") => " + body + "\n"
+    const ids = args.concat(methods.map(x => x.match(/const (\w+)/)[1])).join(", ")
+    return "const " + id + " = (" + args.join(", ") + ") => {\n  "+
+      methods.join(";\n  ") +
+      "\n  return {_class: '" + id +"', " + ids + " }" +
+    "\n}"
   }
   // converter
   function fix_exp(line) {
@@ -103,7 +95,7 @@ function parse(src) {
       part.replace("(", "({n0:").replace(")", "})").replace(/, /g, _ =>
         ", n" + ++n + ":"
       )
-    )
+    ).replace(/ := /g, " = ")
     const lr = line.split(" | ", 2)
     if (lr.length == 2) {
       line = "(() => { try { return " + lr[0] + "} catch { return " + lr[1] + "} })()"
@@ -234,7 +226,8 @@ function test() {
     } else {
       log("expect: " + JSON.stringify(expect))
       log("  fact: " + JSON.stringify(fact))
-      log("    js: " + JSON.stringify(js))
+      log("    js: " + js.split("\n").join("\n      | "))
+      log("   moa: " + src.split("\n").join("\n      | "))
     }
   }
   // value(4)
@@ -249,10 +242,10 @@ function test() {
   t(-1, "1 - 2")
   t(6, "2 * 3")
   //t(4, "9 / 2")
-  t(1, "a = 1\na")
-  t(3, "c = 1\nb n = n + c\na = b(2)\na")
-  t(2, "a = 1\nincr = a += 1\nincr\na")
-  t(2, "a =\n  1\n  2\nb = a; a\nc = b\nc")
+  t(1, "a = 1\na()")
+  t(3, "c = 1\nb n = n + c()\na = b(2)\na()")
+  t(2, "a 1\nincr = a += 1\nincr()\na")
+  t(2, "a =\n  1\n  2\nb = a(); a()\nc = b()\nc()")
   t(1, "true\n| 1\n| 2")
   t(2, "false\n| 1\n| 2")
   t(true, "1\n| 1 = true\n| 2 = false")
@@ -266,12 +259,12 @@ function test() {
   t(5, "(1, 2 + 3).n1")
   t(3, "ab enum:\n  a x int\n  b y int\nab.a(3).x")
   t(4, "ab enum:\n  a x int\n  b y int\nab.b(4).y")
-  t(1, "s class:\n  n int\n  m int\n  s(1 2).n")
-  t(9, "s class:\n  n int\n  incr = n += 1\n  incr2 = incr()\n  mul x =\n    n = n * x\nt = s(1)\nt.incr()\nt.incr2()\nt.mul(3)")
+  t(1, "s class:\n  n int\n  m int\ns(1 2).n")
+  t(9, "s class:\n  n int\n  incr = n += 1\n  incr2 = incr()\n  mul x =\n    n := n * x\nt s(1)\nt.incr()\nt.incr2()\nt.mul(3)")
   // error(2)
   t("error: failed", "f x = error(\"failed\")\nf(1)")
   t(2, "error(\"failed\") | 2")
-  t("message", "f x = error(x)\ncalc =\n  r y = r(y) | y\n  r(\"message\")\ncalc")
+  t("message", "f x = error(x)\ncalc =\n  r y = r(y) | y\n  r(\"message\")\ncalc()")
   // built-in
   t(1, "\"01\".to_i()")
   t("1,2,3", "[1 2 3].map(x=>x.to_s()).join(\",\")")
