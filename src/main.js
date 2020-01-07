@@ -45,7 +45,7 @@ function parse(src) {
     return read_fork()
   }
   function parse_exp() {
-    return reg(/[^\n]+/).and(x => to_exp(x[0]))
+    return reg(/[^\n]+/).and(x => fix_exp(x[0]))
   }
   function parse_enum() {
     return reg(/^(\w+)(?: \w+)*? enum:/).and(x =>
@@ -89,16 +89,16 @@ function parse(src) {
   }
   function to_func(id, args, body) {
     args = args.trim().split(/ /).join(", ")
-    body = to_exp(body)
+    body = fix_exp(body)
     return "const " + id + " = (" + args + ") => " + body + "\n"
   }
   // converter
-  function to_exp(line) {
+  function fix_exp(line) {
     let n = 0
     line = line.replace(/[a-zA-Z]\w*\(.+?\)/g, part =>
-      part.replace(/ /g, ", ")
+      part.replace(/(?<=\w) (?=\w)/g, ", ")
     ).replace(/\[\S+( \S+)+\]/g, part =>
-      part.replace(/ /g, ", ")
+      part.replace(/(?<=\w) (?=\w)/g, ", ")
     ).replace(/(?<!\w)\([^,)]+(?:, [^,)]+)+\)/g, part =>
       part.replace("(", "({n0:").replace(")", "})").replace(/, /g, _ =>
         ", n" + ++n + ":"
@@ -243,7 +243,7 @@ function test() {
   t(true, "true")
   t(false, "false")
   t(2, "inc a = a + 1\ninc(1)")
-  t(6, "add a b = a + b\nadd(1 2+3)")
+  t(6, "add a b = a + b\nadd(1 2 + 3)")
   //// exp(8)
   t(3, "1 + 2")
   t(-1, "1 - 2")
@@ -262,8 +262,8 @@ function test() {
   t(2, "ab enum:\n  a\n  b\nab.b\n| a = 1\n| b = 2")
   //// container(5)
   t([1], "[1]")
-  t([1, 5], "[1 2+3]")
-  t(5, "(1, 2+3).n1")
+  t([1, 5], "[1 2 + 3]")
+  t(5, "(1, 2 + 3).n1")
   t(3, "ab enum:\n  a x int\n  b y int\nab.a(3).x")
   t(4, "ab enum:\n  a x int\n  b y int\nab.b(4).y")
   t(1, "s class:\n  n int\n  m int\n  s(1 2).n")
@@ -276,9 +276,9 @@ function test() {
   t(1, "\"01\".to_i()")
   t("1,2,3", "[1 2 3].map(x=>x.to_s()).join(\",\")")
   t(1, "[1].nth(0)")
-  t(5, "[1 2+3].nth(1)")
+  t(5, "[1 2 + 3].nth(1)")
   t("i", "\"hi\".nth(1)")
-  t(5, "(1, 2+3).n1")
+  t(5, "(1, 2 + 3).n1")
   log("done")
 }
 
