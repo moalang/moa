@@ -54,7 +54,7 @@ function parse(src) {
   }
   function to_enum(id, enums) {
     return "const " + id + " = {\n" +
-      (enums || []).map(x => to_enum_tag(x[1], x[2])).join(",\n") +
+      enums.map(x => to_enum_tag(x[1], x[2])).join(",\n") +
       "\n}"
   }
   function to_enum_tag(tag, attrs) {
@@ -71,20 +71,26 @@ function parse(src) {
   }
   function parse_class() {
     return reg(/^(\w+)(?: \w+)*? class:/).and(x =>
-      many1(reg(/^\n  (\w+) ([^=\n]+)/)).and(vars =>
-        many(reg(/^\n  (\w+)((?: \w+)*) = ([^\n]+)/)).and(methods =>
-          to_class(x[1], vars || [], methods || []))))
+      many1(reg(/^\n  (\w+) ([^=\n]+)(?=\n)/)).and(vars =>
+        many(reg(/^\n  (\w+)((?: \w+)*) = ([^\n]+)/)).and(methods1 =>
+        many(reg(/^\n  (\w+)((?: \w+)*) =((?:\n    [^\n]+)+)/)).and(methods2 =>
+          to_class(x[1], vars, methods1, methods2)))))
   }
-  function to_class(id, vars, methods) {
+  function to_class(id, vars, methods1, methods2) {
     const args = vars.map(x => x[1])
-    const attrs = args.map(x => x + ": () => " + x)
-    methods = methods.map(x => ", " + to_method(x[1], x[2], x[3]))
-    return "const " + id + " = (" + args.join(", ") + ") => {return {_class: '" + id +"', " + attrs + methods + "} }"
+    const methods =
+      methods1.map(x => "\n" + to_func(x[1], x[2], x[3])).join("") +
+      methods2.map(x => "\n" + to_func(x[1], x[2], to_block(x[3].trim().split("\n    ")))).join("")
+    const ids = args.concat(methods1.map(x => x[1])).concat(methods2.map(x => x[1]))
+    return "const " + id + " = (" + args.join(", ") + ") => {"+
+      methods +
+      "return {_class: '" + id +"'," + ids + " }\n" +
+    "}"
   }
-  function to_method(id, args, body) {
+  function to_func(id, args, body) {
     args = args.trim().split(/ /).join(", ")
     body = to_exp(body)
-    return id + ": (" + args + ") => " + body
+    return "const " + id + " = (" + args + ") => " + body + "\n"
   }
   // converter
   function to_exp(line) {
@@ -100,7 +106,7 @@ function parse(src) {
     )
     const lr = line.split(" | ", 2)
     if (lr.length == 2) {
-      line = "try { " + lr[0] + "} catch {" + lr[1] + "}"
+      line = "(() => { try { return " + lr[0] + "} catch { return " + lr[1] + "} })()"
     }
     return line
   }
@@ -136,7 +142,7 @@ function parse(src) {
   }
   // combinators
   function many(p, acc) {
-    return p.and(x => many(p, append(acc, x))).or(() => acc)
+    return p.and(x => many(p, append(acc, x))).or(() => acc || [])
   }
   function many1(p, acc) {
     return p.and(x => many(p, [x]))
@@ -202,7 +208,10 @@ function run(js) {
   try {
     Array.prototype.n1 = function(n) { return this[n] }
     Array.prototype.nth = function(n) { return this[n] }
+    Array.prototype.contains = function(x) { return this.indexOf(x) !== -1 }
+    String.prototype.nth = function(n) { return this[n] }
     String.prototype.to_i = function() { return parseInt(this) }
+    String.prototype.to_a = function() { return this.split("") }
     Number.prototype.to_s = function() { return String(this) }
     const error = x => { throw("error: " + x) }
     return eval(js)
@@ -220,7 +229,7 @@ function test() {
   function t(expect, src) {
     const js = parse(src)
     const fact = run(js)
-    if (expect === fact) {
+    if (JSON.stringify(expect) === JSON.stringify(fact)) {
       log("ok: " + fact)
     } else {
       log("expect: " + JSON.stringify(expect))
@@ -252,19 +261,24 @@ function test() {
   t(1, "ab enum:\n  a\n  b\nab.a\n| a = 1\n| b = 2")
   t(2, "ab enum:\n  a\n  b\nab.b\n| a = 1\n| b = 2")
   //// container(5)
-  t(1, "[1].nth(0)")
-  t(5, "[1 2+3].nth(1)")
+  t([1], "[1]")
+  t([1, 5], "[1 2+3]")
   t(5, "(1, 2+3).n1")
   t(3, "ab enum:\n  a x int\n  b y int\nab.a(3).x")
   t(4, "ab enum:\n  a x int\n  b y int\nab.b(4).y")
-  t(1, "s class:\n  n int\n  m int\n  s(1 2).n()")
-  t(2, "s class:\n  n int\n  incr = n += 1\nt = s(1)\nt.incr()\nt.n()")
+  t(1, "s class:\n  n int\n  m int\n  s(1 2).n")
+  t(9, "s class:\n  n int\n  incr = n += 1\n  incr2 = incr()\n  mul x =\n    n = n * x\nt = s(1)\nt.incr()\nt.incr2()\nt.mul(3)")
   // error(2)
-  t("error: failed", "error(\"failed\")")
+  t("error: failed", "f x = error(\"failed\")\nf(1)")
   t(2, "error(\"failed\") | 2")
+  t("message", "f x = error(x)\ncalc =\n  r y = r(y) | y\n  r(\"message\")\ncalc")
   // built-in
   t(1, "\"01\".to_i()")
   t("1,2,3", "[1 2 3].map(x=>x.to_s()).join(\",\")")
+  t(1, "[1].nth(0)")
+  t(5, "[1 2+3].nth(1)")
+  t("i", "\"hi\".nth(1)")
+  t(5, "(1, 2+3).n1")
   log("done")
 }
 

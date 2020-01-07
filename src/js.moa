@@ -1,12 +1,22 @@
 compile src = build(parse(src))
-parse src = ast.string(src)
+parse src = parser("123" 0).parse_int()
 build node = node
-
-parser class:
-  src string
-  pos int
 
 ast enum:
   int n int
   string s string
   apply target ast, argv [ast]
+
+parser class:
+  src string
+  pos int
+  parse_int = ast.int(read_int())
+  read_int = many(()=>satisfy(x=>"0123456789".to_a().contains(x)))
+  many f =
+    rec acc = rec(acc++[f()]) | acc
+    rec([])
+  satisfy f =
+    c = src.nth(pos)
+    f(c) || error("failed")
+    pos += 1
+    c
