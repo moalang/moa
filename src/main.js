@@ -43,14 +43,14 @@ function parse(src) {
       read_fork_match(x).or(read_fork_bool(x)).or(x))
   }
   function parse_fork_bool() {
-    return read_fork()
+    return read_fork_bool()
   }
   function parse_exp() {
     return reg(/[^\n]+/).and(x => fix_exp(x[0]))
   }
   function parse_enum() {
     return reg(/^(\w+)(?: \w+)*? enum:/).and(x =>
-      many1(reg(/^\n  (\w+)( .*)?/)).and(xs =>
+      many1(reg(/^\n  (\w+)((?: \S+)*)/)).and(xs =>
         to_enum(x[1], xs)))
   }
   function to_enum(id, enums) {
@@ -63,12 +63,12 @@ function parse(src) {
   }
   function to_enum_new(id, line) {
     if (line) {
-      const attrs = line.trim().split(",").map(x => x.split(" ", 2)[0]).join(", ")
+      const attrs = line.trim().split(", ").map(x => x.split(" ", 2)[0]).join(", ")
       if (attrs) {
-        return "(" + attrs + ") => { return {_class: '" + id + "', " + attrs + "} }"
+        return "(" + attrs + ") => { return {_tag: '" + id + "', " + attrs + "} }"
       }
     }
-    return "{_class: '" + id + "'}"
+    return "{_tag: '" + id + "'}"
   }
   function parse_class() {
     return reg(/^(\w+)(?: \w+)*? class:/).and(x =>
@@ -81,7 +81,7 @@ function parse(src) {
     const ids = args.concat(methods.map(x => x.match(/const (\w+)/)[1])).join(", ")
     return "const " + id + " = (" + args.join(", ") + ") => {\n  "+
       methods.join(";\n  ") +
-      "\n  return {_class: '" + id +"', " + ids + " }" +
+      "\n  return {_tag: '" + id +"', " + ids + " }" +
     "\n}"
   }
   // converter
@@ -98,7 +98,7 @@ function parse(src) {
     ).replace(/ := /g, " = ")
     const lr = line.split(" | ", 2)
     if (lr.length == 2) {
-      line = "(() => { try { return " + lr[0] + "} catch { return " + lr[1] + "} })()"
+      line = "(() => { try { return " + lr[0] + "} catch(e) { if(e.isMoa) { return " + lr[1] + "} else { throw(e) } } })()"
     }
     return line
   }
@@ -120,7 +120,7 @@ function parse(src) {
     if (y === "_") {
       return "true"
     } else if (y.match(/^[a-zA-Z]\w*$/)) {
-      return x + "._class === '" + y + "'"
+      return x + "._tag === '" + y + "'"
     } else {
       return x + " === " + y
     }
@@ -210,19 +210,21 @@ function prepare() {
   String.prototype.to_i = function() { return parseInt(this) }
   String.prototype.to_a = function() { return this.split("") }
   Number.prototype.to_s = function() { return String(this) }
-  this.error = x => { throw("error: " + x) }
+  this.error = x => {
+    const e = new Error("error: " + x)
+    e.isMoa = true
+    throw(e)
+  }
 }
 
 function run(js) {
   try {
     return eval(js)
   } catch (e) {
-    if (typeof(e) === "string") {
-      return e
-    } else {
+    if (!e.isMoa) {
       warn("failed to eval: " + js)
-      return e.message
     }
+    return e.message
   }
 }
 
@@ -268,7 +270,6 @@ function test() {
   t([1, 5], "[1 2 + 3]")
   t(5, "(1, 2 + 3).n1")
   t(3, "ab enum:\n  a x int\n  b y int\nab.a(3).x")
-  t(4, "ab enum:\n  a x int\n  b y int\nab.b(4).y")
   t(1, "s class:\n  n int\n  m int\ns(1 2).n")
   // error(2)
   t("error: failed", "f x = error(\"failed\")\nf(1)")
@@ -282,10 +283,11 @@ function test() {
   t(5, "(1, 2 + 3).n1")
   log("---( complex pattern )---------")
   // container(5)
+  t(4, "ab enum:\n  a x int\n  b y int, z int\nab.b(1).y + ab.b(2 3).z")
   t(9, "s class:\n  n int\n  incr = n += 1\n  incr2 = incr()\n  mul x =\n    n := n * x\nt s(1)\nt.incr()\nt.incr2()\nt.mul(3)")
   t(10, "s class:\n  n int\n  f1 =\n    n\n  f2 =\n    f1()\ns(10).f2()")
   // error(2)
-  t("message", "f x = error(x)\ncalc =\n  r y = r(y) | y\n  r(\"message\")\ncalc()")
+  t("message", "f x = error(x)\ncalc =\n  r y = f(y) | y\n  r(\"message\")\ncalc()")
   log("done")
 }
 

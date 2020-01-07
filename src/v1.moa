@@ -1,20 +1,37 @@
 compile src = build(parse(src))
-parse src = parser("123" 0).parse_int()
+parse src = parser("1+2" 0).parse_top()
 build node = node
 
 ast enum:
   int n int
   string s string
+  op2 op string, left ast, right ast
   apply target ast, argv [ast]
 
 parser class:
   src string
   pos int
+  parse_top = parse_exp()
+  parse_exp =
+    l := parse_unit()
+    parse_op2(l) | l
+  parse_op2 l =
+    op := read_op()
+    r := parse_exp()
+    ast.op2(op l r)
+  parse_unit = parse_int()
   parse_int = ast.int(read_int())
+  read_op = equal("+") | equal("-")
   read_int = many(() => satisfy(x => "0123456789".to_a().contains(x))).join("").to_i()
   many f =
     rec acc = rec( acc.concat([f()]) ) | acc
     rec([])
+  equal x =
+    s := src.slice(pos pos + x.length)
+    r := s == x
+    r || error("failed")
+    pos += x.length
+    x
   satisfy f =
     c := src.nth(pos)
     f(c) || error("failed")
