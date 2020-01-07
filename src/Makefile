@@ -10,7 +10,8 @@ run_test:
 
 run_js:
 	@clear
-	@node main.js js < js.moa
+	@node main.js js < js.moa > /tmp/moa.js
+	@node /tmp/moa.js
 
 test:
 	@make watch command=run_test

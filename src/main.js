@@ -19,24 +19,24 @@ function parse(src) {
   function parse_lines() {
     return sep_by1(parse_line(), read_indent(0)).and(x => x.join(";\n"))
   }
-  function parse_line() {
-    return parse_enum().or(parse_class).or(parse_var).or(parse_func).or(parse_fork)
+  function parse_line(offset) {
+    return parse_enum().or(parse_class).or(parse_var).or(parse_func(offset)).or(parse_fork)
   }
   function parse_var() {
     return reg(/^(\w+) ([^=: ]+)$/m).and(m => {
       return "let " + m[1] + " = " + m[2]
     })
   }
-  function parse_func() {
+  function parse_func(offset) {
     return reg(/^( *)(\w+)((?: \w+)+)? *= */m).and(m => {
-      depth = m[1].length / 2
       const id = m[2]
       const args = (m[3] || "").trim().split(" ").join(", ")
-      return parse_body().and(exp => "const " + id + " = (" + args + ") => " + exp)
+      return parse_body(offset).and(exp => "const " + id + " = (" + args + ") => " + exp)
     })
   }
-  function parse_body() {
-    return many1(read_indent(1).and(parse_line())).and(to_block).or(parse_line())
+  function parse_body(offset) {
+    offset = offset || 0
+    return many1(read_indent(1 + offset).and(parse_line())).and(to_block).or(parse_line())
   }
   function parse_fork() {
     return parse_exp().and(x =>
@@ -73,7 +73,7 @@ function parse(src) {
   function parse_class() {
     return reg(/^(\w+)(?: \w+)*? class:/).and(x =>
       many1(reg(/^\n  (\w+) ([^=\n]+)(?=\n)/)).and(vars =>
-        many(read_indent(1).and(parse_line())).and(methods =>
+        many(read_indent(1).and(parse_line(1))).and(methods =>
           to_class(x[1], vars, methods))))
   }
   function to_class(id, vars, methods) {
@@ -88,9 +88,9 @@ function parse(src) {
   function fix_exp(line) {
     let n = 0
     line = line.replace(/[a-zA-Z]\w*\(.+?\)/g, part =>
-      part.replace(/(?<=\w) (?=\w)/g, ", ")
+      part.replace(/(?<=[\w"']) (?=[\w"'])/g, ", ")
     ).replace(/\[\S+( \S+)+\]/g, part =>
-      part.replace(/(?<=\w) (?=\w)/g, ", ")
+      part.replace(/(?<=[\w"']) (?=[\w"'])/g, ", ")
     ).replace(/(?<!\w)\([^,)]+(?:, [^,)]+)+\)/g, part =>
       part.replace("(", "({n0:").replace(")", "})").replace(/, /g, _ =>
         ", n" + ++n + ":"
@@ -106,7 +106,13 @@ function parse(src) {
     if (lines.length === 1) {
       return lines[0]
     } else {
-      lines[lines.length - 1] = "return " + lines[lines.length - 1]
+      const last = lines[lines.length - 1]
+      const m = last.match(/^const (\w+)/)
+      if (m) {
+        lines[lines.length - 1] = last + ";\nreturn " + m[1]
+      } else {
+        lines[lines.length - 1] = "return " + last
+      }
       return "(() => {\n" + lines.join(";\n") + "\n})()"
     }
   }
@@ -125,7 +131,7 @@ function parse(src) {
   }
   function read_fork_match(exp) {
     return many1(read_indent().and(reg(/^\| ([^=]+) = /)).and(cond =>
-      parse_exp().and(x => "if (" + to_match(exp, cond[1]) + ") { return " + x + "}"))).and(xs => to_block(append(xs, null)))
+      parse_exp().and(x => "if (" + to_match(exp, cond[1]) + ") { return " + x + "}"))).and(xs => to_block(append(xs, "null")))
   }
   function read_fork_bool(exp) {
     return read_indent().and(reg(/\| /)).and(parse_exp).and(t =>
@@ -196,22 +202,25 @@ function parse(src) {
   return ret
 }
 
+function prepare() {
+  Array.prototype.n1 = function(n) { return this[n] }
+  Array.prototype.nth = function(n) { return this[n] }
+  Array.prototype.contains = function(x) { return this.indexOf(x) !== -1 }
+  String.prototype.nth = function(n) { return this[n] }
+  String.prototype.to_i = function() { return parseInt(this) }
+  String.prototype.to_a = function() { return this.split("") }
+  Number.prototype.to_s = function() { return String(this) }
+  this.error = x => { throw("error: " + x) }
+}
+
 function run(js) {
   try {
-    Array.prototype.n1 = function(n) { return this[n] }
-    Array.prototype.nth = function(n) { return this[n] }
-    Array.prototype.contains = function(x) { return this.indexOf(x) !== -1 }
-    String.prototype.nth = function(n) { return this[n] }
-    String.prototype.to_i = function() { return parseInt(this) }
-    String.prototype.to_a = function() { return this.split("") }
-    Number.prototype.to_s = function() { return String(this) }
-    const error = x => { throw("error: " + x) }
     return eval(js)
   } catch (e) {
     if (typeof(e) === "string") {
       return e
     } else {
-      warn("failed to eval: " + JSON.stringify(js))
+      warn("failed to eval: " + js)
       return e.message
     }
   }
@@ -230,6 +239,7 @@ function test() {
       log("   moa: " + src.split("\n").join("\n      | "))
     }
   }
+  // -- basic
   // value(4)
   t(1, "1")
   t("hello world", "\"hello world\"")
@@ -237,7 +247,7 @@ function test() {
   t(false, "false")
   t(2, "inc a = a + 1\ninc(1)")
   t(6, "add a b = a + b\nadd(1 2 + 3)")
-  //// exp(8)
+  // exp(8)
   t(3, "1 + 2")
   t(-1, "1 - 2")
   t(6, "2 * 3")
@@ -253,18 +263,16 @@ function test() {
   t(false, "3\n| 1 = true\n| _ = false")
   t(1, "ab enum:\n  a\n  b\nab.a\n| a = 1\n| b = 2")
   t(2, "ab enum:\n  a\n  b\nab.b\n| a = 1\n| b = 2")
-  //// container(5)
+  // container(5)
   t([1], "[1]")
   t([1, 5], "[1 2 + 3]")
   t(5, "(1, 2 + 3).n1")
   t(3, "ab enum:\n  a x int\n  b y int\nab.a(3).x")
   t(4, "ab enum:\n  a x int\n  b y int\nab.b(4).y")
   t(1, "s class:\n  n int\n  m int\ns(1 2).n")
-  t(9, "s class:\n  n int\n  incr = n += 1\n  incr2 = incr()\n  mul x =\n    n := n * x\nt s(1)\nt.incr()\nt.incr2()\nt.mul(3)")
   // error(2)
   t("error: failed", "f x = error(\"failed\")\nf(1)")
   t(2, "error(\"failed\") | 2")
-  t("message", "f x = error(x)\ncalc =\n  r y = r(y) | y\n  r(\"message\")\ncalc()")
   // built-in
   t(1, "\"01\".to_i()")
   t("1,2,3", "[1 2 3].map(x=>x.to_s()).join(\",\")")
@@ -272,15 +280,28 @@ function test() {
   t(5, "[1 2 + 3].nth(1)")
   t("i", "\"hi\".nth(1)")
   t(5, "(1, 2 + 3).n1")
+  // -- complex
+  // container(5)
+  t(9, "s class:\n  n int\n  incr = n += 1\n  incr2 = incr()\n  mul x =\n    n := n * x\nt s(1)\nt.incr()\nt.incr2()\nt.mul(3)")
+  t(10, "s class:\n  n int\n  f1 =\n    n\n  f2 =\n    f1()\ns(10).f2()")
+  // error(2)
+  t("message", "f x = error(x)\ncalc =\n  r y = r(y) | y\n  r(\"message\")\ncalc()")
   log("done")
 }
 
 if (process.argv[2] === "test") {
+  prepare()
   test()
 } else {
   const fs = require("fs")
   const src = fs.readFileSync(process.stdin.fd, "utf8").trim()
   const js = parse(src)
-  const result = run(js + "\ncompile(" + JSON.stringify(src) + ")")
-  log(result)
+  const code = [
+    prepare.toString(),
+    js,
+    "prepare()",
+    "const ret = compile(" + JSON.stringify(src) + ")",
+    "console.log(ret)"
+  ].join("\n\n")
+  log(code)
 }

@@ -11,12 +11,12 @@ parser class:
   src string
   pos int
   parse_int = ast.int(read_int())
-  read_int = many(()=>satisfy(x=>"0123456789".to_a().contains(x)))
+  read_int = many(() => satisfy(x => "0123456789".to_a().contains(x))).join("").to_i()
   many f =
-    rec acc = rec(acc++[f()]) | acc
+    rec acc = rec( acc.concat([f()]) ) | acc
     rec([])
   satisfy f =
-    c = src.nth(pos)
+    c := src.nth(pos)
     f(c) || error("failed")
     pos += 1
     c
