@@ -1,7 +1,7 @@
 const log = console.log
 const warn = console.error
 function debug(x) {
-  log("| " + JSON.stringify(x))
+  warn("| " + JSON.stringify(x))
 }
 function append(x, y) {
   let z = x || []
@@ -11,19 +11,18 @@ function append(x, y) {
 function parse(src) {
   let pos = 0
   let depth = 0
+  let def_mode = 0
+  let seq_mode = 1
 
   // parser
   function parse_top() {
-    return parse_lines()
+    return sep_by1(parse_line(0, def_mode), read_indent(0)).and(x => x.join(";\n"))
   }
-  function parse_lines() {
-    return sep_by1(parse_line(), read_indent(0)).and(x => x.join(";\n"))
-  }
-  function parse_line(offset) {
+  function parse_line(offset, mode) {
     return first([
       parse_enum(),
       parse_class(),
-      parse_func(offset),
+      parse_func(offset, mode),
       parse_var(),
       parse_fork()])
   }
@@ -31,16 +30,20 @@ function parse(src) {
     return reg(/^(\w+) (\S+)$/m).and(m =>
       "let " + m[1] + " = " + fix_exp(m[2]))
   }
-  function parse_func(offset) {
+  function parse_func(offset, mode) {
     return reg(/^( *)(\w+)((?: \w+)+)? *=(?!=)/m).and(m => {
       const id = m[2]
       const args = (m[3] || "").trim().split(" ").join(", ")
-      return parse_body(offset).and(exp => "const " + id + " = (" + args + ") => " + exp)
+      const in_seq = mode === seq_mode
+      const next_mode = (mode === def_mode && src[pos] === "\n") ? seq_mode : mode
+      return parse_body(offset, next_mode).and(exp =>
+        (in_seq && args.length === 0)
+        ? "let " + id + " = " + exp
+        : "const " + id + " = (" + args + ") => " + exp)
     })
   }
-  function parse_body(offset) {
-    offset = offset || 0
-    return many1(read_indent(1 + offset).and(parse_line())).and(to_block).or(parse_line())
+  function parse_body(offset, mode) {
+    return many1(read_indent(1 + offset).and(parse_line(offset, mode))).and(to_block).or(parse_line(offset, mode))
   }
   function parse_fork() {
     return parse_exp().and(x => first([
@@ -80,12 +83,13 @@ function parse(src) {
   function parse_class() {
     return reg(/^(\w+)(?: \w+)*? class:/).and(x =>
       many1(reg(/^\n  (\w+) ([^=\n]+)(?=\n)/)).and(vars =>
-        many(read_indent(1).and(parse_line(1))).and(methods =>
+        many(read_indent(1).and(parse_line(1, def_mode))).and(methods =>
           to_class(x[1], vars, methods))))
   }
   function to_class(id, vars, methods) {
     const args = vars.map(x => x[1])
-    const ids = args.concat(methods.map(x => x.match(/const (\w+)/)[1])).join(", ")
+    const names = methods.map(x => x.match(/const (\w+)/)).filter(x => x).map(x => x[1])
+    const ids = args.concat(names).join(", ")
     return "const " + id + " = (" + args.join(", ") + ") => {\n  "+
       methods.join(";\n  ") +
       "\n  return {_tag: '" + id +"', " + ids + " }" +
@@ -217,18 +221,30 @@ function parse(src) {
 }
 
 function prepare() {
-  Array.prototype.n1 = function(n) { return this[n] }
-  Array.prototype.nth = function(n) { return this[n] }
-  Array.prototype.contains = function(x) { return this.indexOf(x) !== -1 }
-  String.prototype.nth = function(n) { return this[n] }
-  String.prototype.to_i = function() { return parseInt(this) }
-  String.prototype.to_a = function() { return this.split("") }
-  Number.prototype.to_s = function() { return String(this) }
   this.error = x => {
     const e = new Error("error: " + x)
     e.isMoa = true
     throw(e)
   }
+  Array.prototype.n1 = function(n) { return this[n] }
+  Array.prototype.contains = function(x) { return this.indexOf(x) !== -1 }
+  Array.prototype.nth = function(n) {
+    if (n >= this.length) {
+      error("out of index")
+    } else {
+      return this[n]
+    }
+  }
+  String.prototype.nth = function(n) {
+    if (n >= this.length) {
+      error("out of index")
+    } else {
+      return this[n]
+    }
+  }
+  String.prototype.to_i = function() { return parseInt(this) }
+  String.prototype.to_a = function() { return this.split("") }
+  Number.prototype.to_s = function() { return String(this) }
 }
 
 function run(js) {
@@ -296,10 +312,12 @@ function test() {
   // exp(8)
   t(3, "c = 1\nb n = n + c()\na = b(2)\na()")
   t(2, "a =\n  1\n  2\nb = a(); a()\nc = b()\nc()")
+  t(1, "f =\n  v = 1\n  v\nf()")
   // container(5)
   t(4, "ab enum:\n  a x int\n  b y int, z int\nab.b(1).y + ab.b(2 3).z")
   t(9, "s class:\n  n int\n  incr = n += 1\n  incr2 = incr()\n  mul x =\n    n := n * x\nt s(1)\nt.incr()\nt.incr2()\nt.mul(3)")
   t(10, "s class:\n  n int\n  f1 =\n    n\n  f2 =\n    f1()\ns(10).f2()")
+  t(1, "s class:\n  n int\n  f =\n    v = n\n    v\ns(1).f()")
   // error(2)
   t("message", "f x = error(x)\ncalc =\n  r y = f(y) | y\n  r(\"message\")\ncalc()")
   log("done")
