@@ -1,5 +1,5 @@
 compile src = build(parse(src))
-parse src = parser("1+2" 0).parse_top()
+parse src = parser("1+2 + 3" 0).parse_top()
 build node = node
 
 ast enum:
@@ -21,14 +21,16 @@ parser class:
     ast.op2(op l r)
   parse_unit = parse_int()
   parse_int = ast.int(read_int())
-  read_op = equal("+") | equal("-")
-  read_int = many(() => satisfy(x => "0123456789".to_a().contains(x))).join("").to_i()
-  many f =
-    rec acc = rec( acc.concat([f()]) ) | acc
-    rec([])
-  equal x =
-    s = src.slice(pos pos + x.length)
-    r = s == x
+  read_op = spaces(); eq("+") | eq("-")
+  read_int = spaces(); many1(() => select("0123456789".to_a())).join("").to_i()
+  spaces =
+    sp = " "
+    many(() => eq(sp))
+  many1 f = [f()].concat(many(f))
+  many f = (rec acc = rec(acc.append(f())) | acc)([])
+  select xs = satisfy(x => xs.contains(x))
+  eq x =
+    r = x == src.slice(pos pos + x.length)
     r || error("failed")
     pos += x.length
     x

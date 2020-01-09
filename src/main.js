@@ -48,7 +48,7 @@ function parse(src) {
     })
   }
   function parse_body(offset, mode) {
-    return many1(read_indent(1 + offset).and(parse_line(offset, mode))).and(to_block).or(parse_line(offset, mode))
+    return many1(read_indent(1 + offset).and(parse_line(offset, mode))).or(parse_line(offset, mode)).and(to_block)
   }
   function parse_fork() {
     return parse_exp().and(x => first([
@@ -69,9 +69,9 @@ function parse(src) {
         to_enum(x[1], xs)))
   }
   function to_enum(id, enums) {
-    return "const " + id + " = {\n" +
-      enums.map(x => to_enum_tag(x[1], x[2])).join(",\n") +
-      "\n}"
+    return "const " + id + " = {" +
+      enums.map(x => to_enum_tag(x[1], x[2])).join(",") +
+      "}"
   }
   function to_enum_tag(tag, attrs) {
       return tag + ": " + to_enum_new(tag, attrs)
@@ -95,15 +95,19 @@ function parse(src) {
     const args = vars.map(x => x[1])
     const names = methods.map(x => x.match(/const (\w+)/)).filter(x => x).map(x => x[1])
     const ids = args.concat(names).join(", ")
-    return "const " + id + " = (" + args.join(", ") + ") => {\n  "+
-      methods.join(";\n  ") +
-      "\n  return {_tag: '" + id +"', " + ids + " }" +
-    "\n}"
+    return "const " + id + " = (" + args.join(", ") + ") => { "+
+      methods.join(";") +
+      "; return {_tag: '" + id +"', " + ids + " }" +
+    " }"
   }
   // converter
-  function fix_exp(line) {
+  function fix_exp(input) {
+    return split_seq([input]).map(fix_one_exp).join("; ")
+  }
+
+  function fix_one_exp(input) {
     let n = 0
-    line = line.replace(/\(\w+(?: \w+)* = .+/m, to_func).replace(/^[a-zA-Z]\w*\(.+?\)$/, part =>
+    const exp = input.replace(/\(\w+(?: \w+)* = .+/m, to_func).replace(/^[a-zA-Z]\w*\(.+?\)$/, part =>
       part.replace(/(?<=[\w"')]) (?=[\w"'(])/g, ", ")
     ).replace(/[a-zA-Z]\w*\(.+?(?<!\()\)/g, part =>
       part.replace(/(?<=[\w"')]) (?=[\w"'(])/g, ", ")
@@ -114,11 +118,11 @@ function parse(src) {
         ", n" + ++n + ":"
       )
     ).replace(/ := /g, " = ").replace(/\.(\d+)/g, ".n$1")
-    const lr = line.split(" | ", 2)
+    const lr = exp.split(" | ", 2)
     if (lr.length == 2) {
-      line = "(() => { try { return " + lr[0] + "} catch(e) { if(e.isMoa) { return " + lr[1] + "} else { throw(e) } } })()"
+      return "(() => { try { return " + lr[0] + "} catch(e) { if(e.isMoa) { return " + lr[1] + "} else { throw(e) } } })()"
     }
-    return line
+    return exp
   }
   function to_func(s) {
     const m = s.match(/\((\w+)((?: \w+)*) = (.+)\)\(([^)]*)\)/)
@@ -129,18 +133,22 @@ function parse(src) {
     const func = "(function " + id + "(" + args + ") { return " + body + " })(" + argv + ")"
     return func
   }
-  function to_block(lines) {
-    if (lines.length === 1) {
-      return lines[0]
+  function split_seq(lines) {
+    return lines.reduce((acc, x) => acc.concat(x.split(";")), [])
+  }
+  function to_block(exp) {
+    const seq = split_seq(Array.isArray(exp) ? exp : [exp])
+    if (seq.length === 1) {
+      return seq[0]
     } else {
-      const last = lines[lines.length - 1]
+      const last = seq[seq.length - 1]
       const m = last.match(/^const (\w+)/)
       if (m) {
-        lines[lines.length - 1] = last + ";\nreturn " + m[1]
+        seq[seq.length - 1] = last + "; return " + m[1]
       } else {
-        lines[lines.length - 1] = "return " + last
+        seq[seq.length - 1] = "return " + last
       }
-      return "(() => {\n" + lines.join(";\n") + "\n})()"
+      return "(() => { " + seq.join("; ") + " })()"
     }
   }
   function to_match(x, y) {
@@ -256,6 +264,7 @@ function prepare() {
       return this[n]
     }
   }
+  Array.prototype.append = function(x) { return this.concat(x) }
   String.prototype.nth = function(n) {
     if (n >= this.length) {
       error("out of index")
@@ -336,6 +345,7 @@ function test() {
   t(1, "f =\n  v = 1\n  v\nf()")
   t(1, "f x = x\ng a b c d = a\ng(1 \"a\" f(2) 3)")
   t(6, "sum xs = (f acc xs = f(acc + xs.head() xs.tail()) | acc)(0 xs)\nsum([1 2 3])")
+  t(3, "f = 1 | 2; 3\nf()")
   // container(5)
   t(4, "ab enum:\n  a x int\n  b y int, z int\nab.b(1).y + ab.b(2 3).z")
   t(9, "s class:\n  n int\n  incr = n += 1\n  incr2 = incr()\n  mul x =\n    n := n * x\nt s(1)\nt.incr()\nt.incr2()\nt.mul(3)")
@@ -346,10 +356,7 @@ function test() {
   log("done")
 }
 
-if (process.argv[2] === "test") {
-  prepare()
-  test()
-} else {
+function compile() {
   const fs = require("fs")
   const src = fs.readFileSync(process.stdin.fd, "utf8").trim()
   const js = parse(src)
@@ -360,5 +367,15 @@ if (process.argv[2] === "test") {
     "const ret = compile(" + JSON.stringify(src) + ")",
     "console.log(ret)"
   ].join("\n\n")
-  log(code)
+  return code
+}
+
+const cmd = process.argv[2]
+if (cmd === "test") {
+  prepare()
+  test()
+} else if (cmd === "html") {
+  log("<html><script>function runDebug() {" + compile() + "}</script><body><button onclick=runDebug()>Debug</button></body></html>")
+} else {
+  log(compile())
 }
