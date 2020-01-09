@@ -20,10 +20,15 @@ function parse(src) {
     return sep_by1(parse_line(), read_indent(0)).and(x => x.join(";\n"))
   }
   function parse_line(offset) {
-    return parse_enum().or(parse_class).or(parse_var).or(parse_func(offset)).or(parse_fork)
+    return first([
+      parse_enum(),
+      parse_class(),
+      parse_func(offset),
+      parse_var(),
+      parse_fork()])
   }
   function parse_var() {
-    return reg(/^(\w+) (\w+[^=:\n]*)$/m).and(m =>
+    return reg(/^(\w+) (\S+)$/m).and(m =>
       "let " + m[1] + " = " + fix_exp(m[2]))
   }
   function parse_func(offset) {
@@ -38,8 +43,11 @@ function parse(src) {
     return many1(read_indent(1 + offset).and(parse_line())).and(to_block).or(parse_line())
   }
   function parse_fork() {
-    return parse_exp().and(x =>
-      read_fork_match(x).or(read_fork_bool(x)).or(x))
+    return parse_exp().and(x => first([
+      read_fork_match(x),
+      read_fork_bool(x),
+      x
+    ]))
   }
   function parse_fork_bool() {
     return read_fork_bool()
@@ -147,6 +155,13 @@ function parse(src) {
   function sep_by1(p, s) {
     return p.and(x => many(s.and(p), [x]))
   }
+  function first(xs) {
+    let x = xs[0]
+    for (let i = 1; i<xs.length; ++i) {
+      x = x.or(xs[i])
+    }
+    return x
+  }
   // matcher
   function reg(x) {
     return promise(() => {
@@ -246,6 +261,7 @@ function test() {
   t("hello world", "\"hello world\"")
   t(true, "true")
   t(false, "false")
+  t(true, "1 == 1")
   t(2, "inc a = a + 1\ninc(1)")
   t(6, "add a b = a + b\nadd(1 2 + 3)")
   // exp(8)
