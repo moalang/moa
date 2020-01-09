@@ -27,13 +27,13 @@ parser class:
     rec acc = rec( acc.concat([f()]) ) | acc
     rec([])
   equal x =
-    s := src.slice(pos pos + x.length)
-    r := s == x
+    s src.slice(pos pos + x.length)
+    r s==x
     r || error("failed")
     pos += x.length
     x
   satisfy f =
-    c := src.nth(pos)
+    c src.nth(pos)
     f(c) || error("failed")
     pos += 1
     c

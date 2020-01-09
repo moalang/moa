@@ -23,9 +23,8 @@ function parse(src) {
     return parse_enum().or(parse_class).or(parse_var).or(parse_func(offset)).or(parse_fork)
   }
   function parse_var() {
-    return reg(/^(\w+) ([^=: ]+)$/m).and(m => {
-      return "let " + m[1] + " = " + m[2]
-    })
+    return reg(/^(\w+) (\w+[^=:\n]*)$/m).and(m =>
+      "let " + m[1] + " = " + fix_exp(m[2]))
   }
   function parse_func(offset) {
     return reg(/^( *)(\w+)((?: \w+)+)? *= */m).and(m => {
@@ -95,7 +94,7 @@ function parse(src) {
       part.replace("(", "({n0:").replace(")", "})").replace(/, /g, _ =>
         ", n" + ++n + ":"
       )
-    ).replace(/ := /g, " = ")
+    ).replace(/ := /g, " = ").replace(/\.(\d+)/g, ".n$1")
     const lr = line.split(" | ", 2)
     if (lr.length == 2) {
       line = "(() => { try { return " + lr[0] + "} catch(e) { if(e.isMoa) { return " + lr[1] + "} else { throw(e) } } })()"
@@ -254,6 +253,7 @@ function test() {
   //t(4, "9 / 2")
   t(1, "a = 1\na()")
   t(2, "a 1\nincr = a += 1\nincr()\na")
+  t(1, "(x => x)(1)")
   t(1, "true\n| 1\n| 2")
   t(2, "false\n| 1\n| 2")
   t(true, "1\n| 1 = true\n| 2 = false")
@@ -263,7 +263,7 @@ function test() {
   // container(5)
   t([1], "[1]")
   t([1, 5], "[1 2 + 3]")
-  t(5, "(1, 2 + 3).n1")
+  t(5, "(1, 2 + 3).1")
   t(3, "ab enum:\n  a x int\n  b y int\nab.a(3).x")
   t(1, "s class:\n  n int\n  m int\ns(1 2).n")
   // error(2)
@@ -275,7 +275,7 @@ function test() {
   t(1, "[1].nth(0)")
   t(5, "[1 2 + 3].nth(1)")
   t("i", "\"hi\".nth(1)")
-  t(5, "(1, 2 + 3).n1")
+  t(5, "(1, 2 + 3).1")
   log("---( complex pattern )---------")
   // exp(8)
   t(3, "c = 1\nb n = n + c()\na = b(2)\na()")
