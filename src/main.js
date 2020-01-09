@@ -1,12 +1,17 @@
-const log = console.log
-const warn = console.error
-function debug(x) {
-  warn("| " + JSON.stringify(x))
-}
+const log = x => { console.log(x); return x }
+const warn = x => { console.warn({x}); return x }
+function debug(x) { return warn("| " + JSON.stringify(x)) }
 function append(x, y) {
   let z = x || []
   z.push(y)
   return z
+}
+function swap(s, r, f) {
+  let m
+  while (m = s.match(r)) {
+    s = s.replace(m[0], f(m))
+  }
+  return s
 }
 function parse(src) {
   let pos = 0
@@ -98,10 +103,12 @@ function parse(src) {
   // converter
   function fix_exp(line) {
     let n = 0
-    line = line.replace(/[a-zA-Z]\w*\(.+?\)/g, part =>
-      part.replace(/(?<=[\w"']) (?=[\w"'])/g, ", ")
+    line = line.replace(/\(\w+(?: \w+)* = .+/m, to_func).replace(/^[a-zA-Z]\w*\(.+?\)$/, part =>
+      part.replace(/(?<=[\w"')]) (?=[\w"'(])/g, ", ")
+    ).replace(/[a-zA-Z]\w*\(.+?(?<!\()\)/g, part =>
+      part.replace(/(?<=[\w"')]) (?=[\w"'(])/g, ", ")
     ).replace(/\[\S+( \S+)+\]/g, part =>
-      part.replace(/(?<=[\w"']) (?=[\w"'])/g, ", ")
+      part.replace(/(?<=[\w"')]) (?=[\w"'(])/g, ", ")
     ).replace(/(?<!\w)\([^,)]+(?:, [^,)]+)+\)/g, part =>
       part.replace("(", "({n0:").replace(")", "})").replace(/, /g, _ =>
         ", n" + ++n + ":"
@@ -112,6 +119,15 @@ function parse(src) {
       line = "(() => { try { return " + lr[0] + "} catch(e) { if(e.isMoa) { return " + lr[1] + "} else { throw(e) } } })()"
     }
     return line
+  }
+  function to_func(s) {
+    const m = s.match(/\((\w+)((?: \w+)*) = (.+)\)\(([^)]*)\)/)
+    const id = m[1]
+    const args = m[2].trim().replace(/ /g, ",")
+    const body = fix_exp(m[3])
+    const argv = m[4].trim().replace(/ /g, ",")
+    const func = "(function " + id + "(" + args + ") { return " + body + " })(" + argv + ")"
+    return func
   }
   function to_block(lines) {
     if (lines.length === 1) {
@@ -226,7 +242,12 @@ function prepare() {
     e.isMoa = true
     throw(e)
   }
-  Array.prototype.n1 = function(n) { return this[n] }
+  function guard(cond, ret, msg) { if (cond) { return ret } else { error(msg) } }
+  Array.prototype.head = function() { return guard(this.length > 0, this[0], "out of index") }
+  Array.prototype.tail = function() { return this.slice(1) }
+  Array.prototype.n0 = function() { return this[0] }
+  Array.prototype.n1 = function() { return this[1] }
+  Array.prototype.n2 = function() { return this[2] }
   Array.prototype.contains = function(x) { return this.indexOf(x) !== -1 }
   Array.prototype.nth = function(n) {
     if (n >= this.length) {
@@ -313,6 +334,8 @@ function test() {
   t(3, "c = 1\nb n = n + c()\na = b(2)\na()")
   t(2, "a =\n  1\n  2\nb = a(); a()\nc = b()\nc()")
   t(1, "f =\n  v = 1\n  v\nf()")
+  t(1, "f x = x\ng a b c d = a\ng(1 \"a\" f(2) 3)")
+  t(6, "sum xs = (f acc xs = f(acc + xs.head() xs.tail()) | acc)(0 xs)\nsum([1 2 3])")
   // container(5)
   t(4, "ab enum:\n  a x int\n  b y int, z int\nab.b(1).y + ab.b(2 3).z")
   t(9, "s class:\n  n int\n  incr = n += 1\n  incr2 = incr()\n  mul x =\n    n := n * x\nt s(1)\nt.incr()\nt.incr2()\nt.mul(3)")
