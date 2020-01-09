@@ -69,9 +69,9 @@ function parse(src) {
         to_enum(x[1], xs)))
   }
   function to_enum(id, enums) {
-    return "const " + id + " = {" +
+    return "const " + id + " = {\n" +
       enums.map(x => to_enum_tag(x[1], x[2])).join(",") +
-      "}"
+      "\n}"
   }
   function to_enum_tag(tag, attrs) {
       return tag + ": " + to_enum_new(tag, attrs)
@@ -95,10 +95,10 @@ function parse(src) {
     const args = vars.map(x => x[1])
     const names = methods.map(x => x.match(/const (\w+)/)).filter(x => x).map(x => x[1])
     const ids = args.concat(names).join(", ")
-    return "const " + id + " = (" + args.join(", ") + ") => { "+
-      methods.join(";") +
-      "; return {_tag: '" + id +"', " + ids + " }" +
-    " }"
+    return "const " + id + " = (" + args.join(", ") + ") => {\n  "+
+      methods.join("\n") +
+      "\nreturn {_tag: '" + id +"', " + ids + " }" +
+    "\n}"
   }
   // converter
   function fix_exp(input) {
@@ -154,7 +154,7 @@ function parse(src) {
   function to_match(x, y) {
     if (y === "_") {
       return "true"
-    } else if (y.match(/^[a-zA-Z]\w*$/)) {
+    } else if (y.match(/^[a-zA-Z][\w.]*$/)) {
       return x + "._tag === '" + y + "'"
     } else {
       return x + " === " + y
@@ -166,7 +166,7 @@ function parse(src) {
   }
   function read_fork_match(exp) {
     return many1(read_indent().and(reg(/^\| ([^=]+) = /)).and(cond =>
-      parse_exp().and(x => "if (" + to_match(exp, cond[1]) + ") { return " + x + "}"))).and(xs => to_block(append(xs, "null")))
+      parse_exp().and(x => "if (" + to_match(exp, cond[1]) + ") { return " + x + "}"))).and(xs => "(() => {" + xs.join("\n") + "\nreturn null })()")
   }
   function read_fork_bool(exp) {
     return read_indent().and(reg(/\| /)).and(parse_exp).and(t =>
@@ -346,8 +346,10 @@ function test() {
   t(1, "f x = x\ng a b c d = a\ng(1 \"a\" f(2) 3)")
   t(6, "sum xs = (f acc xs = f(acc + xs.head() xs.tail()) | acc)(0 xs)\nsum([1 2 3])")
   t(3, "f = 1 | 2; 3\nf()")
+  t(1, "f x = x\n| 1 = 1\n| _ = 2\nf(1)")
   // container(5)
   t(4, "ab enum:\n  a x int\n  b y int, z int\nab.b(1).y + ab.b(2 3).z")
+  t(3, "ab enum:\n  a\n  b\nf x = x\n| ab.a = 1\n| ab.b = 2\nf(ab.a) + f(ab.b)")
   t(9, "s class:\n  n int\n  incr = n += 1\n  incr2 = incr()\n  mul x =\n    n := n * x\nt s(1)\nt.incr()\nt.incr2()\nt.mul(3)")
   t(10, "s class:\n  n int\n  f1 =\n    n\n  f2 =\n    f1()\ns(10).f2()")
   t(1, "s class:\n  n int\n  f =\n    v = n\n    v\ns(1).f()")
@@ -375,7 +377,7 @@ if (cmd === "test") {
   prepare()
   test()
 } else if (cmd === "html") {
-  log("<html><script>function runDebug() {" + compile() + "}</script><body><button onclick=runDebug()>Debug</button></body></html>")
+  log("<html><script>function runDebug() {" + compile() + "}</script><body onload=runDebug()><button onclick=runDebug()>Debug</button></body></html>")
 } else {
   log(compile())
 }
