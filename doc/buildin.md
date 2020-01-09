@@ -17,7 +17,7 @@ Interface
 - void
 - number
 - try
-- eff (rename from seq)
+- eff
 Control flow
 - effect
 - recursive call
@@ -72,10 +72,11 @@ number a:
 try a:
   and : a.try a.try
   or : a.try a.try
+  fmap b : function(a b) try.b
+  then b : function(error try.b) try.b
 eff a:
-  and : a.try a.try
-  or : a.try a.try
-  then : function(error eff.a) eff.a
+  and : a.eff a.eff
+  or : a.eff a.eff
 log:
   debug a : a void
   info a : a void
