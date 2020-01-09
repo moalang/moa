@@ -1,7 +1,9 @@
 compile src = build(parse(src))
-parse src = parser("1+2 - 3*4" 0).parse_top()
+parse src = parser("1+2 - 3" 0).parse_top()
 build node = node
+| ref = node.id
 | int = node.n
+| string = "\"" + node.s + "\""
 | op2 = build(node.left) + node.op + build(node.right)
 | _ = node
 
@@ -9,7 +11,7 @@ ast enum:
   int n int
   string s string
   op2 op string, left ast, right ast
-  apply target ast, argv [ast]
+  ref id string
 
 parser class:
   src string
@@ -23,19 +25,33 @@ parser class:
     op = read_op()
     r = parse_exp()
     ast.op2(op l r)
-  parse_unit = parse_int()
+  parse_unit = or(parse_int () => or(parse_string parse_ref))
   parse_int = ast.int(read_int())
+  parse_string = ast.string(pair("\"" "\"" (() => many(() => satisfy(x => x != "\"")).join(""))))
+  parse_ref = ast.ref(read_id())
 
+  read_id = spaces(); str(x => "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ".to_a().contains(x))
   read_op = spaces(); select("+-*/".to_a())
   read_int = spaces(); many1(() => select("0123456789".to_a())).join("").to_i()
 
+  or l r =
+    bk = pos
+    alt _ = pos := bk; r()
+    l() | alt(1)
+  pair l r m = between(() => equal(l) () => equal(r) m)
+  between l r m =
+    l()
+    ret = m()
+    r()
+    ret
   spaces =
     sp = " "
-    many(() => eq(sp))
+    many(() => equal(sp))
   many1 f = [f()].concat(many(f))
   many f = (rec acc = rec(acc.append(f())) | acc)([])
+  str f = many(() => satisfy(f)).join("")
   select xs = satisfy(x => xs.contains(x))
-  eq x =
+  equal x =
     r = x == src.slice(pos pos + x.length)
     r || error("failed")
     pos += x.length
