@@ -32,7 +32,7 @@ function parse(src) {
       "let " + m[1] + " = " + fix_exp(m[2]))
   }
   function parse_func(offset) {
-    return reg(/^( *)(\w+)((?: \w+)+)? *= */m).and(m => {
+    return reg(/^( *)(\w+)((?: \w+)+)? *=(?!=)/m).and(m => {
       const id = m[2]
       const args = (m[3] || "").trim().split(" ").join(", ")
       return parse_body(offset).and(exp => "const " + id + " = (" + args + ") => " + exp)
