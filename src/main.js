@@ -50,23 +50,31 @@ function parse(src) {
   function parse_exp() {
     const exp = or(
       () => {
-        const args = or(() => sepby1(read_id, () => eq(",")), () => [])
+        const args = sepby(read_id, () => eq(","))
         eq(" => ")
         const stmt = parse_step()
         return "(" + args + ") => " + stmt
       },
-      () => read_between("[", "]", () => "[" + many(parse_unit).join(",") + "]"),
-      () => read_between("(", ")", () => "[" + sepby2(parse_unit, () => eq(",")).join(",") + "]"),
+      () => {
+        const l = parse_unit()
+        eq(" | ")
+        const r = parse_exp()
+        return "try_(() =>" + l + ", () => " + r + ")"
+      },
       () => and(parse_unit, read_op, parse_exp).join(""),
       parse_unit)
     const after = many(() => or(read_member, read_argv)).join("")
     return exp + after
   }
   function parse_unit() {
-    return or(
+    const unit = or(
+      () => read_between("[", "]", () => "[" + sepby(parse_unit, () => reg(/ +/)).join(",") + "]"),
+      () => read_between("(", ")", () => "[" + sepby2(parse_unit, () => eq(",")).join(",") + "]"),
       () => read_between("(", ")", () => "(" + parse_exp() + ")"),
       read_id,
       parse_value)
+    const after = many(() => or(read_member, read_argv)).join("")
+    return unit + after
   }
   function parse_value() {
     return or(
@@ -84,9 +92,7 @@ function parse(src) {
       const tags = many(() => {
         read_indent()
         const tag = read_id()
-        const args = sepby(
-          () => and(read_id, read_type)[0],
-          () => eq(",")).join(",")
+        const args = read_attrs()
         if (args) {
           return tag + ": (" + args + ") => { return {_tag: '" + tag + "'," + args + "} }"
         } else {
@@ -99,7 +105,17 @@ function parse(src) {
         throw new Error("failed to parse enum body")
       }
     }
-    throw err("class does not support")
+    if (mark === "class") {
+      const args = many(() => serial(read_indent, read_attr)).join(",")
+      const methods = many(parse_func).map(x => ",\n  " + x).join("")
+      const body = args + methods
+      if (args.length > 0) {
+        return "const " + id + " = (" + args + ") => { return {\n  " + body + "\n} }"
+      } else {
+        throw new Error("failed to parse class body")
+      }
+    }
+    throw err("unkown type definition")
   }
   // consumer
   function read_id() {
@@ -107,6 +123,12 @@ function parse(src) {
   }
   function read_type() {
     return read_id()
+  }
+  function read_attr() {
+    return and(read_id, read_type)[0]
+  }
+  function read_attrs() {
+    return sepby(read_attr, () => eq(",")).join(",")
   }
   function read_stmt() {
     return reg(/^ *[^\n]+/)
@@ -119,10 +141,13 @@ function parse(src) {
     return m[1].match(/[0-9]/) ? m.replace(".", ".n") : m
   }
   function read_argv() {
-    return read_between("(", ")", () => "(" + many(parse_step) + ")")
+    return between(() => eq("("), () => eq(")"), () => "(" + many(parse_step) + ")")
   }
   function read_between(l, r, m) {
-    return between(() => eq(l), () => eq(r), m)
+    return between(
+      () => { many(() => eq(" ")); return eq(l) },
+      () => { many(() => eq(" ")); return eq(r) },
+      m)
   }
   function read_indent() {
     return reg(/^\n(?:  )+/)
@@ -150,12 +175,12 @@ function parse(src) {
   function sepby1(f, s) {
     const x = f()
     const xs = many(() => serial(s, f))
-    return [x].concat(xs[xs.length - 1])
+    return [x].concat(xs)
   }
   function sepby2(f, s) {
     const x = f()
-    const xs = many1(() => serial(s, f))
-    return [x].concat(xs[xs.length - 1])
+    const xs = many(() => serial(s, f))
+    return [x].concat(xs)
   }
   function between(l, r, m) {
     return and(l, m, r)[1]
@@ -228,7 +253,6 @@ function prepare() {
   function install(obj, name, f) {
     Object.defineProperty(obj.prototype, name, {get: function() { return f(this) }})
   }
-  warn({xxx:[1,2].n1})
   install(Array, 'head', x => guard(x.length > 0, x[0], "out of index"))
   install(Array, 'tail', x => x.slice(1))
   install(Array, 'n0', x => x[0])
@@ -253,6 +277,16 @@ function prepare() {
   install(String, 'to_i', parseInt)
   install(String, 'to_a', x => x.split(""))
   install(Number, 'to_s', String)
+  this.try_ = function(l, r) {
+    try {
+      return l()
+    } catch (e) {
+      if (e.isMoa) {
+        return r()
+      }
+      throw e
+    }
+  }
 }
 
 function run(js) {
@@ -302,6 +336,7 @@ function test() {
   // container(5)
   t([1], "[1]")
   t([1, 2], "[1 2]")
+  t([1, 2, 3], "[1 2 3]")
   t(2, "(1, 2).1")
   t(3, "ab enum:\n  a x int\n  b y int\nab.a(3).x")
   t(1, "s class:\n  n int\n  m int\ns(1 2).n")
@@ -309,12 +344,12 @@ function test() {
   t("error: failed", "f x = error(\"failed\")\nf(1)")
   t(2, "error(\"failed\") | 2")
   // built-in
-  t(1, "\"01\".to_i()")
-  t("1,2,3", "[1 2 3].map(x=>x.to_s()).join(\",\")")
+  t(1, "\"01\".to_i")
+  t("1,2,3", "[1 2 3].map(x => x.to_s).join(\",\")")
   t(1, "[1].nth(0)")
-  t(5, "[1 (2 + 3)].nth(1)")
+  t([1, 5], "[1 (2 + 3)]")
   t("i", "\"hi\".nth(1)")
-  t(5, "(1, 2 + 3).1")
+  t(5, "(1, (2 + 3)).1")
   log("---( complex pattern )---------")
   // exp(8)
   t(3, "c = 1\nb n = n + c()\na = b(2)\na()")
@@ -326,7 +361,7 @@ function test() {
   t(1, "f x = x\n| 1 = 1\n| _ = 2\nf(1)")
   t(8, "f x = x\ng a b c d = a\ng(f(8) 2 g(3) f(4))")
   // container(5)
-  t(5, "(1, 2 + 3).1")
+  t(5, "(1, (2 + 3)).1")
   t([1, 5], "[1 (2 + 3)]")
   t(4, "ab enum:\n  a x int\n  b y int, z int\nab.b(1).y + ab.b(2 3).z")
   t(3, "ab enum:\n  a\n  b\nf x = x\n| a = 1\n| b = 2\nf(ab.a) + f(ab.b)")

@@ -5,8 +5,8 @@ help:
 	@node main.js help
 
 watch:
-	@make ${command}
-	@fswatch -0 -o . | xargs -I {} -n1 -0 make ${command}
+	@-make ${command}
+	@-fswatch -0 -o . | xargs -I {} -n1 -0 make ${command}
 
 test:
 	@make watch command=run_test
