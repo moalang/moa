@@ -1,248 +1,263 @@
 const log = x => { console.log(x); return x }
-const warn = x => { console.warn({x}); return x }
+const trace = x => { console.warn({trace: x}); return x }
+const warn = x => { console.warn({warn: x}); return x }
 function debug(x) { return warn("| " + JSON.stringify(x)) }
 function append(x, y) {
   let z = x || []
   z.push(y)
   return z
 }
-function swap(s, r, f) {
-  let m
-  while (m = s.match(r)) {
-    s = s.replace(m[0], f(m))
+function exec(x) {
+  while (typeof(x) === 'function') {
+    x = x()
   }
-  return s
+  return x
 }
 function parse(src) {
   let pos = 0
-  let depth = 0
-  let def_mode = 0
-  let seq_mode = 1
-
-  // parser
   function parse_top() {
-    return sep_by1(parse_line(0, def_mode), read_indent(0)).and(x => x.join(";\n"))
+    return sepby1(or(parse_func, parse_type, parse_stmt), reg(/( *\n)+/))
   }
-  function parse_line(offset, mode) {
-    return first([
-      parse_enum(),
-      parse_class(),
-      parse_func(offset, mode),
-      parse_var(),
-      parse_fork()])
+  function parse_func() {
+    return to_func(and(
+      read_id,
+      many(read_id),
+      reg(/^ *= +/),
+      parse_stmt))
   }
-  function parse_var() {
-    return reg(/^(\w+) (\S+)$/m).and(m =>
-      "let " + m[1] + " = " + fix_exp(m[2]))
+  function parse_stmt() {
+    return () => {
+      const exp = exec(parse_step)
+      const branch = exec(many(and(reg(/^\n\| /), parse_unit, eq(" = "), parse_exp)))
+      if (branch.length > 0) {
+        return "let _ret = " + exp + ";" + branch.map(x => {
+          const val = x[1]
+          const ret = x[3]
+          const cond = val === "_" ? "true" : "_ret === " + val
+          return "if (" + cond + ") {\n" + ret + "\n} else "
+        }).join("") + "\n { throw new Error('Does not match') }"
+      }
+      const fork = exec(many(and(reg(/^\n\| /), parse_exp)))
+      if (fork.length > 0) {
+        const t = fork[0][1]
+        const f = fork[1][1]
+        return " if (" + exp + ") {" + t + "} else {" + f + "}"
+      }
+      return exp
+    }
   }
-  function parse_func(offset, mode) {
-    return reg(/^( *)(\w+)((?: \w+)+)? *=(?!=)/m).and(m => {
-      const id = m[2]
-      const args = (m[3] || "").trim().split(" ").join(", ")
-      const in_seq = mode === seq_mode
-      const next_mode = (mode === def_mode && src[pos] === "\n") ? seq_mode : mode
-      return parse_body(offset, next_mode).and(exp =>
-        (in_seq && args.length === 0)
-        ? "let " + id + " = " + exp
-        : "const " + id + " = (" + args + ") => " + exp)
-    })
-  }
-  function parse_body(offset, mode) {
-    return many1(read_indent(1 + offset).and(parse_line(offset, mode))).or(parse_line(offset, mode)).and(to_block)
-  }
-  function parse_fork() {
-    return parse_exp().and(x => first([
-      read_fork_match(x),
-      read_fork_bool(x),
-      x
-    ]))
-  }
-  function parse_fork_bool() {
-    return read_fork_bool()
+  function parse_step() {
+    return parse_exp
   }
   function parse_exp() {
-    return reg(/[^\n]+/).and(x => fix_exp(x[0]))
+    return or(
+      to_lambda(and(
+        or(between(eq("("), eq(")"), many(read_id)), read_id),
+        eq(" => "),
+        parse_step)),
+      to_op2(and(parse_unit, read_op, parse_exp)),
+      parse_unit)
   }
-  function parse_enum() {
-    return reg(/^(\w+)(?: \w+)*? enum:/).and(x =>
-      many1(reg(/^\n  (\w+)((?: \S+)*)/)).and(xs =>
-        to_enum(x[1], xs)))
+  function parse_unit() {
+    return or(
+      to_ref(and(
+        or(between(eq("("), eq(")"), () => "(" + parse_exp()() + ")"), read_id),
+        many(or(read_member, read_argv)))),
+      parse_value)
   }
-  function to_enum(id, enums) {
-    return "const " + id + " = {\n" +
-      enums.map(x => to_enum_tag(x[1], x[2])).join(",") +
-      "\n}"
+  function parse_value() {
+    return or(
+      reg(/^ *(\d+)/, parseInt),
+      reg(/^ *"[^"]*"/, eval),
+      reg(/^ *(true|false)/, x => x[1] === "true")
+    )
   }
-  function to_enum_tag(tag, attrs) {
-      return tag + ": " + to_enum_new(tag, attrs)
+  function parse_type() {
+    throw err("not yet")
   }
-  function to_enum_new(id, line) {
-    if (line) {
-      const attrs = line.trim().split(", ").map(x => x.split(" ", 2)[0]).join(", ")
-      if (attrs) {
-        return "(" + attrs + ") => { return {_tag: '" + id + "', " + attrs + "} }"
+  // nodes
+  function to_func(f) {
+    return () => {
+      const m = exec(f)
+      const id = m[0][0]
+      const args = m[1].join(",")
+      const stmt = m[3]
+      return "const " + id + " = (" + args + ") => " + stmt
+    }
+  }
+  function to_lambda(f) {
+    return () => {
+      const m = exec(f)
+      const args = m[0]
+      const stmt = m[2]
+      return "(" + args + ") => " + stmt
+    }
+  }
+  function to_op2(f) {
+    return () => {
+      const m = exec(f)
+      const l = m[0]
+      const op = m[1][1]
+      const r = m[2]
+      return l + op + r
+    }
+  }
+  function to_ref(f) {
+    return () => {
+      const m = exec(f)
+      const id = m[0]
+      const after = (m[1] || []).join("")
+      return id + after
+    }
+  }
+  // combinator
+  function many(f, acc) {
+    acc = acc || []
+    return () => or(
+      () => many(f, append(acc, exec(f))),
+      acc)
+  }
+  function many1(f) {
+    return many(f, [exec(f)])
+  }
+  function err(message) {
+    const extra = "\n   src: " + src + "\nremain: " + remain()
+    const e = new Error(message + extra)
+    e.isParser = true
+    return e
+  }
+  function sepby1(f, s) {
+    return () => {
+      const x = exec(f)
+      const xs =  exec(many(() => serial(s, f)))
+      return [x].concat(xs[xs.length - 1])
+    }
+  }
+  function between(l, r, m) {
+    return () => and(l, m, r)()[1]
+  }
+  function or() {
+    return () => {
+      const bk = pos
+      for (let i=0; i<arguments.length; i++) {
+        const f = arguments[i]
+        try {
+          return exec(f)
+        } catch (e) {
+          if (!e.isParser) {
+            throw e
+          }
+          pos = bk
+        }
       }
-    }
-    return "{_tag: '" + id + "'}"
-  }
-  function parse_class() {
-    return reg(/^(\w+)(?: \w+)*? class:/).and(x =>
-      many1(reg(/^\n  (\w+) ([^=\n]+)(?=\n)/)).and(vars =>
-        many(read_indent(1).and(parse_line(1, def_mode))).and(methods =>
-          to_class(x[1], vars, methods))))
-  }
-  function to_class(id, vars, methods) {
-    const args = vars.map(x => x[1])
-    const names = methods.map(x => x.match(/const (\w+)/)).filter(x => x).map(x => x[1])
-    const ids = args.concat(names).join(", ")
-    return "const " + id + " = (" + args.join(", ") + ") => {\n  "+
-      methods.join("\n") +
-      "\nreturn {_tag: '" + id +"', " + ids + " }" +
-    "\n}"
-  }
-  // converter
-  function fix_exp(input) {
-    return split_seq([input]).map(fix_one_exp).join("; ")
-  }
-
-  function fix_one_exp(input) {
-    input = input.trim()
-    let n = 0
-    const exp = input.replace(/\(\w+(?: \w+)* = .+/m, to_func).replace(/^[a-zA-Z]\w*\(.+?\)$/, part =>
-      part.replace(/(?<=[\w"')\]]) (?=[\w"'(\[])/g, ", ")
-    ).replace(/[a-zA-Z]\w*\(.+?(?<!\()\)/g, part =>
-      part.replace(/(?<=[\w"')\]]) (?=[\w"'(\[])/g, ", ")
-    ).replace(/\[\S+( \S+)+\]/g, part =>
-      part.replace(/(?<=[\w"')]) (?=[\w"'(])/g, ", ")
-    ).replace(/(?<!\w)\([^,)]+(?:, [^,)]+)+\)/g, part =>
-      part.replace("(", "({n0:").replace(")", "})").replace(/, /g, _ =>
-        ", n" + ++n + ":"
-      )
-    ).replace(/ := /g, " = ").replace(/\.(\d+)/g, ".n$1")
-    const lr = exp.split(" | ", 2)
-    if (lr.length == 2) {
-      return "(() => { try { return " + lr[0] + "} catch(e) { if(e.isMoa) { return " + lr[1] + "} else { throw(e) } } })()"
-    }
-    return exp
-  }
-  function to_func(s) {
-    const m = s.match(/\((\w+)((?: \w+)*) = (.+)\)\(([^)]*)\)/)
-    const id = m[1]
-    const args = m[2].trim().replace(/ /g, ",")
-    const body = fix_exp(m[3])
-    const argv = m[4].trim().replace(/ /g, ",")
-    const func = "(function " + id + "(" + args + ") { return " + body + " })(" + argv + ")"
-    return func
-  }
-  function split_seq(lines) {
-    return lines.reduce((acc, x) => acc.concat(x.split(";")), [])
-  }
-  function to_block(exp) {
-    const seq = split_seq(Array.isArray(exp) ? exp : [exp])
-    if (seq.length === 1) {
-      return seq[0]
-    } else {
-      const last = seq[seq.length - 1]
-      const m = last.match(/^const (\w+)/)
-      if (m) {
-        seq[seq.length - 1] = last + "; return " + m[1]
-      } else {
-        seq[seq.length - 1] = "return " + last
-      }
-      return "(() => { " + seq.join("; ") + " })()"
+      throw err("not match in or combinator" +
+        "\n- " + Array.from(arguments).map(x => x.toString()).join("\n- "))
     }
   }
-  function to_match(x, y) {
-    if (y === "_") {
-      return "true"
-    } else if (y.match(/^[a-zA-Z][\w.]*$/)) {
-      return x + "._tag === '" + y + "'"
-    } else {
-      return x + " === " + y
-    }
+  function and() {
+    return () => Array.from(arguments).map(exec)
   }
-  // helpers
-  function read_indent(offset) {
-    return reg("\n+" + "  ".repeat(depth + offset))
+  function serial() {
+    return () => Array.from(arguments).map(exec).slice(-1)[0]
   }
-  function read_fork_match(exp) {
-    return many1(read_indent().and(reg(/^\| ([^=]+) = /)).and(cond =>
-      parse_exp().and(x => "if (" + to_match(exp, cond[1]) + ") { return " + x + "}"))).and(xs => "(() => {" + xs.join("\n") + "\nreturn null })()")
+  // consumer
+  function read_id() {
+    return reg(/^ *[a-zA-Z_][a-zA-Z0-9_]*/)
   }
-  function read_fork_bool(exp) {
-    return read_indent().and(reg(/\| /)).and(parse_exp).and(t =>
-      read_indent().and(reg(/\| /)).and(parse_exp).and(f =>
-          exp + " ? " + t + " : " + f))
+  function read_stmt() {
+    return reg(/^ *[^\n]+/)
   }
-  // combinators
-  function many(p, acc) {
-    return p.and(x => many(p, append(acc, x))).or(() => acc || [])
+  function read_op() {
+    return reg(/^ *([+\-*/:]=?|==)/)
   }
-  function many1(p, acc) {
-    return p.and(x => many(p, [x]))
+  function read_member() {
+    return reg(/^\.[a-zA-Z_][a-zA-Z_0-9]*/)
   }
-  function sep_by1(p, s) {
-    return p.and(x => many(s.and(p), [x]))
-  }
-  function first(xs) {
-    let x = xs[0]
-    for (let i = 1; i<xs.length; ++i) {
-      x = x.or(xs[i])
-    }
-    return x
+  function read_argv() {
+    return between(
+      eq("("),
+      eq(")"),
+      () => "(" + exec(many(parse_step)) + ")")
   }
   // matcher
-  function reg(x) {
-    return promise(() => {
-      const m = src.slice(pos).match(x)
-      if (m === null || m.index !== 0) {
-        return failure
+  function reg(r, f) {
+    f = f || (x => x)
+    return () => {
+      let m = src.slice(pos).match(r)
+      if (!m) {
+        throw err("miss match regexp: " + r + "\nremain: " + remain())
       }
-      pos += m[0].length
-      return m
-    })
-  }
-  // promise
-  const failure = "'--parse-failed--'"
-  function promise(run) {
-    return {
-      run,
-      isPromise: true,
-      and: f => promise(() => flow(run, f, fail)),
-      or: f => promise(() => flow(run, echo, f)),
+      if (m.index !== 0) {
+        throw err("matched position should be 0 regexp: " + r)
+      }
+      const len = m[0].length
+      if (len == 0) {
+        throw err("invalid zero width matching regexp: " + r)
+      }
+      pos += len
+      return f(m)
     }
   }
-  function flow(f0, f1, f2) {
-    let memory = pos
-    let x = unwrap(f0)
-    if (x === failure) {
-      pos = memory
-      return unwrap(f2)
-    } else {
-      return unwrap(f1, x)
+  function eq(s) {
+    return () => {
+      if (src.slice(pos, pos + s.length) === s) {
+        pos += s.length
+        return s
+      } else {
+        throw err("does not match: " + s)
+      }
     }
   }
-  function unwrap(x, argv) {
-    const t = typeof(x)
-    if (t === 'object'  && x.isPromise) {
-      return unwrap(x.run())
-    } else if (t === 'function') {
-      return unwrap(x(argv))
-    } else {
-      return x
-    }
+  function remain() {
+    return src.slice(pos)
   }
-  function fail() { return failure }
-  function echo(x) { return x }
-
-  // run parser
-  const ret = unwrap(parse_top())
-  if (ret === failure || pos !== src.length) {
-    warn("parse failed" +
-      "\n|    pos: " + pos +
-      "\n| remain: " + JSON.stringify(src.slice(pos)))
+  // do parsing
+  const js = exec(parse_top).join("\n").trim()
+  if (remain().length !== 0) {
+    throw new Error("Failed parsing remaining: `" + remain() + "`")
   }
-  return ret
+  return js
+  // top: def ([\n=] def)*
+  // def:
+  // | id id* ":" (props | tags)
+  // body:
+  // | exp (br if_bool){2} # switch to binary branch
+  // | exp (br if_cond)+   # pattern match
+  // | (br seq)+
+  // seq:
+  // | exp (; seq)*
+  // | id "=" body     # const
+  // | id id+ "=" body # func
+  // exp:
+  // | unit ("," unit)+ # tuple  : 1, 2
+  // | unit op2 exp     # op2    : v + 1
+  // | ref op2u exp     # set    : n += 1, s := "hi"
+  // | args => exp      # lambda : x, y => x + y
+  // | unit
+  // unit:
+  // | value
+  // | "[" unit* "]" # array : [1]
+  // | id call*      # call  : v, o.m(x y).v
+  // | "(" exp ")"
+  // | "(" id id* = exp ")" # (loop f = f(); loop(f))(func)
+  // value:
+  // | int    # 1
+  // | float  # 1.0
+  // | string # "hi"
+  // | bool   # true
+  //   id: [a-z0-9_]+
+  //  ref: id (. id)*
+  // call: "." id | "(" exp* ")"
+  //  op2: + - * / ...
+  // op2u: += -= := ...
+  // attr: id unit
+  // func: id id* "=" body # now : time.now, add x y : x + y
+  // prop: attr | func
+  //  tag: id (prop (";" prop)*)?
+  // tags: tag ([\n;] tag)*
+  // args: "()" | id (, id)*
+  // if_bool: "|" exp
+  // if_cond: "|" unit "=" exp
 }
 
 function prepare() {
@@ -252,11 +267,14 @@ function prepare() {
     throw(e)
   }
   function guard(cond, ret, msg) { if (cond) { return ret } else { error(msg) } }
-  Array.prototype.head = function() { return guard(this.length > 0, this[0], "out of index") }
-  Array.prototype.tail = function() { return this.slice(1) }
-  Array.prototype.n0 = function() { return this[0] }
-  Array.prototype.n1 = function() { return this[1] }
-  Array.prototype.n2 = function() { return this[2] }
+  function install(obj, name, f) {
+    Object.defineProperty(obj.prototype, name, function() { return f(this) })
+  }
+  install(Array, 'head', x => guard(x.length > 0, x[0], "out of index"))
+  install(Array, 'tail', x => x.slice(1))
+  install(Array, 'n0', x => x[0])
+  install(Array, 'n1', x => x[1])
+  install(Array, 'n2', x => x[2])
   Array.prototype.contains = function(x) { return this.indexOf(x) !== -1 }
   Array.prototype.nth = function(n) {
     if (n >= this.length) {
@@ -273,9 +291,9 @@ function prepare() {
       return this[n]
     }
   }
-  String.prototype.to_i = function() { return parseInt(this) }
-  String.prototype.to_a = function() { return this.split("") }
-  Number.prototype.to_s = function() { return String(this) }
+  install(String, 'to_i', parseInt)
+  install(String, 'to_a', x => x.split(""))
+  install(Number, 'to_s', String)
 }
 
 function run(js) {
@@ -310,15 +328,14 @@ function test() {
   t(false, "false")
   t(true, "1 == 1")
   t(2, "inc a = a + 1\ninc(1)")
-  t(6, "add a b = a + b\nadd(1 2 + 3)")
+  t(3, "add a b = a + b\nadd(1 2)")
   // exp(8)
-  t(3, "1 + 2")
+  t(4, "1 + 3")
   //t(4, "9 / 2")
-  t(1, "a = 1\na()")
-  t(2, "a 1\nincr = a += 1\nincr()\na")
-  t(1, "(x => x)(1)")
-  t(1, "true\n| 1\n| 2")
-  t(2, "false\n| 1\n| 2")
+  t(5, "a = 5\na()")
+  t(6, "(x => x)(6)")
+  t(7, "true\n| 7\n| 8")
+  t(8, "false\n| 7\n| 8")
   t(true, "1\n| 1 = true\n| 2 = false")
   t(false, "3\n| 1 = true\n| _ = false")
   t(1, "ab enum:\n  a\n  b\nab.a\n| a = 1\n| b = 2")
