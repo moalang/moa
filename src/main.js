@@ -28,7 +28,9 @@ function parse(src) {
       const val = parse_unit()
       eq(" = ")
       const ret = parse_exp()
-      const cond = val === "_" ? "true" : "_ret === " + val
+      const cond = val === "_" ? "true" :
+        (typeof val === "string" && val.match(/^[a-z]/) ? "_ret._tag === '" + val + "'" :
+        "_ret === " + val)
       return "if (" + cond + ") {\n" + ret + "\n} else "
     })
     if (branch.length > 0) {
@@ -46,23 +48,24 @@ function parse(src) {
     return parse_exp()
   }
   function parse_exp() {
-    return or(
+    const exp = or(
       () => {
         const args = or(() => sepby1(read_id, () => eq(",")), () => [])
         eq(" => ")
         const stmt = parse_step()
         return "(" + args + ") => " + stmt
       },
+      () => read_between("[", "]", () => "[" + many(parse_unit).join(",") + "]"),
+      () => read_between("(", ")", () => "[" + sepby2(parse_unit, () => eq(",")).join(",") + "]"),
       () => and(parse_unit, read_op, parse_exp).join(""),
       parse_unit)
+    const after = many(() => or(read_member, read_argv)).join("")
+    return exp + after
   }
   function parse_unit() {
     return or(
-      () => {
-        const exp = or(() => read_between("(", ")", () => "(" + parse_exp() + ")"), read_id)
-        const after = many(() => or(read_member, read_argv)).join("")
-        return exp + after
-      },
+      () => read_between("(", ")", () => "(" + parse_exp() + ")"),
+      read_id,
       parse_value)
   }
   function parse_value() {
@@ -73,11 +76,37 @@ function parse(src) {
     )
   }
   function parse_type() {
-    throw err("not yet")
+    const id = read_id()
+    const type_args = many(read_id)
+    const mark = type_args[type_args.length - 1]
+    eq(":")
+    if (mark === "enum") {
+      const tags = many(() => {
+        read_indent()
+        const tag = read_id()
+        const args = sepby(
+          () => and(read_id, read_type)[0],
+          () => eq(",")).join(",")
+        if (args) {
+          return tag + ": (" + args + ") => { return {_tag: '" + tag + "'," + args + "} }"
+        } else {
+          return tag + ": {_tag: '" + tag + "'}"
+        }
+      })
+      if (tags.length > 0) {
+        return "const " + id + " = {\n  " + tags.join(",\n  ") + "\n}"
+      } else {
+        throw new Error("failed to parse enum body")
+      }
+    }
+    throw err("class does not support")
   }
   // consumer
   function read_id() {
-    return reg(/^ *[a-zA-Z_][a-zA-Z0-9_]*/)
+    return reg(/^ *([a-zA-Z_][a-zA-Z0-9_]*)/)[1]
+  }
+  function read_type() {
+    return read_id()
   }
   function read_stmt() {
     return reg(/^ *[^\n]+/)
@@ -86,13 +115,17 @@ function parse(src) {
     return reg(/^ *([+\-*/:]=?|==)/)[1]
   }
   function read_member() {
-    return reg(/^\.[a-zA-Z_][a-zA-Z_0-9]*/)
+    const m = reg(/^\.[a-zA-Z_0-9]*/)[0]
+    return m[1].match(/[0-9]/) ? m.replace(".", ".n") : m
   }
   function read_argv() {
     return read_between("(", ")", () => "(" + many(parse_step) + ")")
   }
   function read_between(l, r, m) {
     return between(() => eq(l), () => eq(r), m)
+  }
+  function read_indent() {
+    return reg(/^\n(?:  )+/)
   }
   // combinator
   function many(f, acc) {
@@ -103,7 +136,7 @@ function parse(src) {
   }
   function many1(f) {
     const v = f()
-    return many(f, () => [v])
+    return many(f, [v])
   }
   function err(message) {
     const extra = "\n   src: " + src + "\nremain: " + remain()
@@ -111,9 +144,17 @@ function parse(src) {
     e.isParser = true
     return e
   }
+  function sepby(f, s) {
+    return or(() => sepby1(f, s), () => [])
+  }
   function sepby1(f, s) {
     const x = f()
     const xs = many(() => serial(s, f))
+    return [x].concat(xs[xs.length - 1])
+  }
+  function sepby2(f, s) {
+    const x = f()
+    const xs = many1(() => serial(s, f))
     return [x].concat(xs[xs.length - 1])
   }
   function between(l, r, m) {
@@ -172,7 +213,7 @@ function parse(src) {
   // do parsing
   const js = parse_top().join("\n").trim()
   if (remain().length !== 0) {
-    throw new Error("Failed parsing remaining: `" + remain() + "`")
+    throw err("Failed parsing remaining: `" + remain() + "`")
   }
   return js
 }
@@ -185,8 +226,9 @@ function prepare() {
   }
   function guard(cond, ret, msg) { if (cond) { return ret } else { error(msg) } }
   function install(obj, name, f) {
-    Object.defineProperty(obj.prototype, name, function() { return f(this) })
+    Object.defineProperty(obj.prototype, name, {get: function() { return f(this) }})
   }
+  warn({xxx:[1,2].n1})
   install(Array, 'head', x => guard(x.length > 0, x[0], "out of index"))
   install(Array, 'tail', x => x.slice(1))
   install(Array, 'n0', x => x[0])
@@ -229,7 +271,7 @@ function test() {
     const js = parse(src)
     const fact = run(js)
     if (JSON.stringify(expect) === JSON.stringify(fact)) {
-      log("ok: " + fact)
+      log("ok: " + JSON.stringify(fact))
     } else {
       log("expect: " + JSON.stringify(expect))
       log("  fact: " + JSON.stringify(fact))
@@ -259,8 +301,8 @@ function test() {
   t(2, "ab enum:\n  a\n  b\nab.b\n| a = 1\n| b = 2")
   // container(5)
   t([1], "[1]")
-  t([1, 5], "[1 2 + 3]")
-  t(5, "(1, 2 + 3).1")
+  t([1, 2], "[1 2]")
+  t(2, "(1, 2).1")
   t(3, "ab enum:\n  a x int\n  b y int\nab.a(3).x")
   t(1, "s class:\n  n int\n  m int\ns(1 2).n")
   // error(2)
@@ -270,7 +312,7 @@ function test() {
   t(1, "\"01\".to_i()")
   t("1,2,3", "[1 2 3].map(x=>x.to_s()).join(\",\")")
   t(1, "[1].nth(0)")
-  t(5, "[1 2 + 3].nth(1)")
+  t(5, "[1 (2 + 3)].nth(1)")
   t("i", "\"hi\".nth(1)")
   t(5, "(1, 2 + 3).1")
   log("---( complex pattern )---------")
@@ -284,6 +326,8 @@ function test() {
   t(1, "f x = x\n| 1 = 1\n| _ = 2\nf(1)")
   t(8, "f x = x\ng a b c d = a\ng(f(8) 2 g(3) f(4))")
   // container(5)
+  t(5, "(1, 2 + 3).1")
+  t([1, 5], "[1 (2 + 3)]")
   t(4, "ab enum:\n  a x int\n  b y int, z int\nab.b(1).y + ab.b(2 3).z")
   t(3, "ab enum:\n  a\n  b\nf x = x\n| a = 1\n| b = 2\nf(ab.a) + f(ab.b)")
   t(9, "s class:\n  n int\n  incr = n += 1\n  incr2 = incr()\n  mul x =\n    n := n * x\nt s(1)\nt.incr()\nt.incr2()\nt.mul(3)")
