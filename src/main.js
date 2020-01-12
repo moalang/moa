@@ -53,18 +53,13 @@ function parse(src) {
         const stmt = parse_step()
         return "(" + args + ") => " + stmt
       },
-      () => {
-        const l = parse_unit()
-        const op = read_op()
-        const r = parse_exp()
-        return l + op + r
-      },
+      () => and(parse_unit, read_op, parse_exp).join(""),
       parse_unit)
   }
   function parse_unit() {
     return or(
       () => {
-        const exp = or(() => between(() => eq("("), () => eq(")"), () => "(" + parse_exp() + ")"), read_id)
+        const exp = or(() => read_between("(", ")", () => "(" + parse_exp() + ")"), read_id)
         const after = many(() => or(read_member, read_argv)).join("")
         return exp + after
       },
@@ -80,13 +75,26 @@ function parse(src) {
   function parse_type() {
     throw err("not yet")
   }
-  // combinator
-  function should_be_function(f) {
-    const t = typeof f
-    if (t !== "function") {
-      throw new Error("Programming bug: f should be function type " + t)
-    }
+  // consumer
+  function read_id() {
+    return reg(/^ *[a-zA-Z_][a-zA-Z0-9_]*/)
   }
+  function read_stmt() {
+    return reg(/^ *[^\n]+/)
+  }
+  function read_op() {
+    return reg(/^ *([+\-*/:]=?|==)/)[1]
+  }
+  function read_member() {
+    return reg(/^\.[a-zA-Z_][a-zA-Z_0-9]*/)
+  }
+  function read_argv() {
+    return read_between("(", ")", () => "(" + many(parse_step) + ")")
+  }
+  function read_between(l, r, m) {
+    return between(() => eq(l), () => eq(r), m)
+  }
+  // combinator
   function many(f, acc) {
     acc = acc || []
     return or(
@@ -109,10 +117,7 @@ function parse(src) {
     return [x].concat(xs[xs.length - 1])
   }
   function between(l, r, m) {
-    l()
-    const ret = m()
-    r()
-    return ret
+    return and(l, m, r)[1]
   }
   function or() {
     const bk = pos
@@ -135,25 +140,6 @@ function parse(src) {
   }
   function serial() {
     return Array.from(arguments).map(x => x()).slice(-1)[0]
-  }
-  // consumer
-  function read_id() {
-    return reg(/^ *[a-zA-Z_][a-zA-Z0-9_]*/)
-  }
-  function read_stmt() {
-    return reg(/^ *[^\n]+/)
-  }
-  function read_op() {
-    return reg(/^ *([+\-*/:]=?|==)/)[1]
-  }
-  function read_member() {
-    return reg(/^\.[a-zA-Z_][a-zA-Z_0-9]*/)
-  }
-  function read_argv() {
-    return between(
-      () => eq("("),
-      () => eq(")"),
-      () => "(" + many(parse_step) + ")")
   }
   // matcher
   function reg(r, f) {
