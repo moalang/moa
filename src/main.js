@@ -7,118 +7,95 @@ function append(x, y) {
   z.push(y)
   return z
 }
-function exec(x) {
-  while (typeof(x) === 'function') {
-    x = x()
-  }
-  return x
-}
 function parse(src) {
   let pos = 0
   function parse_top() {
-    return sepby1(or(parse_func, parse_type, parse_stmt), reg(/( *\n)+/))
+    return sepby1(
+      () => or(parse_func, parse_type, parse_stmt),
+      () => reg(/( *\n)+/))
   }
   function parse_func() {
-    return to_func(and(
-      read_id,
-      many(read_id),
-      reg(/^ *= +/),
-      parse_stmt))
+    const id = read_id()
+    const args = many(read_id).join(",")
+    reg(/^ *= +/)
+    const stmt = parse_stmt()
+    return "const " + id + " = (" + args + ") => " + stmt
   }
   function parse_stmt() {
-    return () => {
-      const exp = exec(parse_step)
-      const branch = exec(many(and(reg(/^\n\| /), parse_unit, eq(" = "), parse_exp)))
-      if (branch.length > 0) {
-        return "let _ret = " + exp + ";" + branch.map(x => {
-          const val = x[1]
-          const ret = x[3]
-          const cond = val === "_" ? "true" : "_ret === " + val
-          return "if (" + cond + ") {\n" + ret + "\n} else "
-        }).join("") + "\n { throw new Error('Does not match') }"
-      }
-      const fork = exec(many(and(reg(/^\n\| /), parse_exp)))
-      if (fork.length > 0) {
-        const t = fork[0][1]
-        const f = fork[1][1]
-        return " if (" + exp + ") {" + t + "} else {" + f + "}"
-      }
-      return exp
+    const exp = parse_step()
+    const branch = many(() => {
+      reg(/^\n\| /)
+      const val = parse_unit()
+      eq(" = ")
+      const ret = parse_exp()
+      const cond = val === "_" ? "true" : "_ret === " + val
+      return "if (" + cond + ") {\n" + ret + "\n} else "
+    })
+    if (branch.length > 0) {
+      return "let _ret = " + exp + ";" + branch.join("") + "\n { throw new Error('Does not match') }"
     }
+    const fork = many(() => serial(() => reg(/^\n\| /), parse_exp))
+    if (fork.length > 0) {
+      const t = fork[0]
+      const f = fork[1]
+      return " if (" + exp + ") {" + t + "} else {" + f + "}"
+    }
+    return exp
   }
   function parse_step() {
-    return parse_exp
+    return parse_exp()
   }
   function parse_exp() {
     return or(
-      to_lambda(and(
-        or(between(eq("("), eq(")"), many(read_id)), read_id),
-        eq(" => "),
-        parse_step)),
-      to_op2(and(parse_unit, read_op, parse_exp)),
+      () => {
+        const args = or(() => sepby1(read_id, () => eq(",")), () => [])
+        eq(" => ")
+        const stmt = parse_step()
+        return "(" + args + ") => " + stmt
+      },
+      () => {
+        const l = parse_unit()
+        const op = read_op()
+        const r = parse_exp()
+        return l + op + r
+      },
       parse_unit)
   }
   function parse_unit() {
     return or(
-      to_ref(and(
-        or(between(eq("("), eq(")"), () => "(" + parse_exp()() + ")"), read_id),
-        many(or(read_member, read_argv)))),
+      () => {
+        const exp = or(() => between(() => eq("("), () => eq(")"), () => "(" + parse_exp() + ")"), read_id)
+        const after = many(() => or(read_member, read_argv)).join("")
+        return exp + after
+      },
       parse_value)
   }
   function parse_value() {
     return or(
-      reg(/^ *(\d+)/, parseInt),
-      reg(/^ *"[^"]*"/, eval),
-      reg(/^ *(true|false)/, x => x[1] === "true")
+      () => reg(/^ *(\d+)/, parseInt),
+      () => reg(/^ *"[^"]*"/, eval),
+      () => reg(/^ *(true|false)/, x => x[1] === "true")
     )
   }
   function parse_type() {
     throw err("not yet")
   }
-  // nodes
-  function to_func(f) {
-    return () => {
-      const m = exec(f)
-      const id = m[0][0]
-      const args = m[1].join(",")
-      const stmt = m[3]
-      return "const " + id + " = (" + args + ") => " + stmt
-    }
-  }
-  function to_lambda(f) {
-    return () => {
-      const m = exec(f)
-      const args = m[0]
-      const stmt = m[2]
-      return "(" + args + ") => " + stmt
-    }
-  }
-  function to_op2(f) {
-    return () => {
-      const m = exec(f)
-      const l = m[0]
-      const op = m[1][1]
-      const r = m[2]
-      return l + op + r
-    }
-  }
-  function to_ref(f) {
-    return () => {
-      const m = exec(f)
-      const id = m[0]
-      const after = (m[1] || []).join("")
-      return id + after
-    }
-  }
   // combinator
+  function should_be_function(f) {
+    const t = typeof f
+    if (t !== "function") {
+      throw new Error("Programming bug: f should be function type " + t)
+    }
+  }
   function many(f, acc) {
     acc = acc || []
-    return () => or(
-      () => many(f, append(acc, exec(f))),
-      acc)
+    return or(
+      () => many(f, append(acc, f())),
+      () => acc)
   }
   function many1(f) {
-    return many(f, [exec(f)])
+    const v = f()
+    return many(f, () => [v])
   }
   function err(message) {
     const extra = "\n   src: " + src + "\nremain: " + remain()
@@ -127,38 +104,37 @@ function parse(src) {
     return e
   }
   function sepby1(f, s) {
-    return () => {
-      const x = exec(f)
-      const xs =  exec(many(() => serial(s, f)))
-      return [x].concat(xs[xs.length - 1])
-    }
+    const x = f()
+    const xs = many(() => serial(s, f))
+    return [x].concat(xs[xs.length - 1])
   }
   function between(l, r, m) {
-    return () => and(l, m, r)()[1]
+    l()
+    const ret = m()
+    r()
+    return ret
   }
   function or() {
-    return () => {
-      const bk = pos
-      for (let i=0; i<arguments.length; i++) {
-        const f = arguments[i]
-        try {
-          return exec(f)
-        } catch (e) {
-          if (!e.isParser) {
-            throw e
-          }
-          pos = bk
+    const bk = pos
+    for (let i=0; i<arguments.length; i++) {
+      const f = arguments[i]
+      try {
+        return f()
+      } catch (e) {
+        if (!e.isParser) {
+          throw e
         }
+        pos = bk
       }
-      throw err("not match in or combinator" +
-        "\n- " + Array.from(arguments).map(x => x.toString()).join("\n- "))
     }
+    throw err("not match in or combinator" +
+      "\n- " + Array.from(arguments).map(x => x.toString()).join("\n- "))
   }
   function and() {
-    return () => Array.from(arguments).map(exec)
+    return Array.from(arguments).map(x => x())
   }
   function serial() {
-    return () => Array.from(arguments).map(exec).slice(-1)[0]
+    return Array.from(arguments).map(x => x()).slice(-1)[0]
   }
   // consumer
   function read_id() {
@@ -168,96 +144,51 @@ function parse(src) {
     return reg(/^ *[^\n]+/)
   }
   function read_op() {
-    return reg(/^ *([+\-*/:]=?|==)/)
+    return reg(/^ *([+\-*/:]=?|==)/)[1]
   }
   function read_member() {
     return reg(/^\.[a-zA-Z_][a-zA-Z_0-9]*/)
   }
   function read_argv() {
     return between(
-      eq("("),
-      eq(")"),
-      () => "(" + exec(many(parse_step)) + ")")
+      () => eq("("),
+      () => eq(")"),
+      () => "(" + many(parse_step) + ")")
   }
   // matcher
   function reg(r, f) {
     f = f || (x => x)
-    return () => {
-      let m = src.slice(pos).match(r)
-      if (!m) {
-        throw err("miss match regexp: " + r + "\nremain: " + remain())
-      }
-      if (m.index !== 0) {
-        throw err("matched position should be 0 regexp: " + r)
-      }
-      const len = m[0].length
-      if (len == 0) {
-        throw err("invalid zero width matching regexp: " + r)
-      }
-      pos += len
-      return f(m)
+    let m = src.slice(pos).match(r)
+    if (!m) {
+      throw err("miss match regexp: " + r + "\nremain: " + remain())
     }
+    if (m.index !== 0) {
+      throw err("matched position should be 0 regexp: " + r)
+    }
+    const len = m[0].length
+    if (len == 0) {
+      throw err("invalid zero width matching regexp: " + r)
+    }
+    pos += len
+    return f(m)
   }
   function eq(s) {
-    return () => {
-      if (src.slice(pos, pos + s.length) === s) {
-        pos += s.length
-        return s
-      } else {
-        throw err("does not match: " + s)
-      }
+    if (src.slice(pos, pos + s.length) === s) {
+      pos += s.length
+      return s
+    } else {
+      throw err("does not match: " + s)
     }
   }
   function remain() {
     return src.slice(pos)
   }
   // do parsing
-  const js = exec(parse_top).join("\n").trim()
+  const js = parse_top().join("\n").trim()
   if (remain().length !== 0) {
     throw new Error("Failed parsing remaining: `" + remain() + "`")
   }
   return js
-  // top: def ([\n=] def)*
-  // def:
-  // | id id* ":" (props | tags)
-  // body:
-  // | exp (br if_bool){2} # switch to binary branch
-  // | exp (br if_cond)+   # pattern match
-  // | (br seq)+
-  // seq:
-  // | exp (; seq)*
-  // | id "=" body     # const
-  // | id id+ "=" body # func
-  // exp:
-  // | unit ("," unit)+ # tuple  : 1, 2
-  // | unit op2 exp     # op2    : v + 1
-  // | ref op2u exp     # set    : n += 1, s := "hi"
-  // | args => exp      # lambda : x, y => x + y
-  // | unit
-  // unit:
-  // | value
-  // | "[" unit* "]" # array : [1]
-  // | id call*      # call  : v, o.m(x y).v
-  // | "(" exp ")"
-  // | "(" id id* = exp ")" # (loop f = f(); loop(f))(func)
-  // value:
-  // | int    # 1
-  // | float  # 1.0
-  // | string # "hi"
-  // | bool   # true
-  //   id: [a-z0-9_]+
-  //  ref: id (. id)*
-  // call: "." id | "(" exp* ")"
-  //  op2: + - * / ...
-  // op2u: += -= := ...
-  // attr: id unit
-  // func: id id* "=" body # now : time.now, add x y : x + y
-  // prop: attr | func
-  //  tag: id (prop (";" prop)*)?
-  // tags: tag ([\n;] tag)*
-  // args: "()" | id (, id)*
-  // if_bool: "|" exp
-  // if_cond: "|" unit "=" exp
 }
 
 function prepare() {
