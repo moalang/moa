@@ -9,6 +9,7 @@ function append(x, y) {
 }
 function parse(src) {
   src = src.trim() + "\n"
+  let depth = 0
   let pos = 0
   function parse_top() {
     return sepby1(parse_def, () => reg(/( *\n)+/))
@@ -47,9 +48,18 @@ function parse(src) {
 
   function def_class(id, type_args) {
     const args = many(() => serial(read_indent, read_attr)).join(",")
-    const methods = many(parse_def).map(x => ",\n  " + x).join("")
-    const body = args + methods
-    return "const " + id + " = (" + args + ") => { return {\n  " + body + "\n} }"
+    const methods = many(() => serial(read_indent, def_method))
+    const body = args + methods.map(x => "," + x.id).join("")
+    const defs = methods.map(x => "\n  " + x.body).join("")
+    return "const " + id + " = (" + args + ") => {" + defs + "\n  return {\n  " + body + "\n} }"
+  }
+  function def_method() {
+    const id = read_id()
+    const args = many(read_id)
+    eq(" =")
+    const exp = or(() => indent(parse_seq), parse_step)
+    const body = "const " + id + " = " + "(" + args + ") =>" + exp
+    return {id, body}
   }
   function def_func(id, args) {
     const body = or(parse_seq, parse_step)
@@ -148,7 +158,15 @@ function parse(src) {
       m)
   }
   function read_indent() {
-    return reg(/^\n(?:  )+/)
+    return eq("\n  " + "  ".repeat(depth))
+  }
+  function indent(f) {
+    try {
+      depth += 1
+      return f()
+    } finally {
+      depth -= 1
+    }
   }
   // combinator
   function many(f, acc) {
@@ -364,8 +382,8 @@ function test() {
   t([1, 5], "[1 (2 + 3)]")
   t(4, "ab.b(1).y + ab.b(2 3).z", "ab enum:\n  a x int\n  b y int, z int")
   t(3, "f(ab.a) + f(ab.b)", "ab enum:\n  a\n  b\nf x = x\n| a = 1\n| b = 2")
-  //t(9, "t s(1)\n  t.incr()\n  t.incr2()\n  t.mul(3)", "s class:\n  n int\n  incr = n += 1\n  incr2 = incr()\n  mul x =\n    n := n * x")
-  //t(10, "s(10).f2()", "s class:\n  n int\n  f1 =\n    n\n  f2 =\n    f1()")
+  //t(9, "\nt s(1)\n  t.incr()\n  t.incr2()\n  t.mul(3)", "s class:\n  n int\n  incr = n += 1\n  incr2 = incr()\n  mul x =\n    n := n * x")
+  t(10, "s(10).f2()", "s class:\n  n int\n  f1 =\n    n\n  f2 =\n    f1()")
   t(1, "s(1).f()", "s class:\n  n int\n  f =\n    v = n\n    v")
   // error(2)
   //t("message", "calc()", "f x = error(x)\ncalc =\n  r y = f(y) | y\n  r(\"message\")")
