@@ -52,11 +52,11 @@ function parse(src) {
     return "const " + id + " = (" + args + ") => { return {\n  " + body + "\n} }"
   }
   function def_func(id, args) {
-    const stmt = parse_stmt()
-    return "const " + id + " = (" + args + ") => " + stmt
+    const body = or(parse_seq, parse_step)
+    return "const " + id + " = (" + args + ") => " + body
   }
-  function parse_stmt() {
-    return parse_step()
+  function parse_seq() {
+    return "(" + many1(() => serial(read_indent, parse_step)).join(",\n") + ")"
   }
   function parse_step() {
     const exp = parse_exp()
@@ -104,6 +104,7 @@ function parse(src) {
     const unit = or(
       () => read_between("[", "]", () => "[" + sepby(parse_unit, () => reg(/ +/)).join(",") + "]"),
       () => read_between("(", ")", () => "[" + sepby2(parse_unit, () => eq(",")).join(",") + "]"),
+      () => read_between("(", ")", () => "(" + parse_def().replace("const ", "") + ")"),
       () => read_between("(", ")", () => "(" + parse_exp() + ")"),
       read_id,
       parse_value)
@@ -131,7 +132,7 @@ function parse(src) {
     return sepby(read_attr, () => eq(",")).join(",")
   }
   function read_op() {
-    return reg(/^ *([+\-*/:]=?|==)/)[1]
+    return reg(/^ *([+\-*/:]=?|==|=)/)[1]
   }
   function read_member() {
     const m = reg(/^\.[a-zA-Z_0-9]*/)[0]
@@ -351,22 +352,21 @@ function test() {
   t(5, "(1, (2 + 3)).1")
   log("---( complex pattern )---------")
   // exp(8)
-  ///t(3, "c = 1\nb n = n + c()\na = b(2)\na()")
-  ///t(2, "a =\n  1\n  2\nb = a(); a()\nc = b()\nc()")
-  ///t(1, "f =\n  v = 1\n  v\nf()")
-  ///t(1, "f x = x\ng a b c d = a\ng(1 \"a\" f(2) 3)")
-  ///t(6, "sum xs = (f acc xs = f(acc + xs.head() xs.tail()) | acc)(0 xs)\nsum([1 2 3])")
-  ///t(3, "f = 1 | 2; 3\nf()")
-  ///t(1, "f x = x\n| 1 = 1\n| _ = 2\nf(1)")
-  ///t(8, "f x = x\ng a b c d = a\ng(f(8) 2 g(3) f(4))")
+  /t(3, "a()", "c = 1\nb n = n + c()\na = b(2)")
+  /t(2, "c()", "a =\n  1\n  2\nb =\n  a()\n  a()\nc = b()")
+  /t(1, "f()", "f =\n  v = 1\n  v")
+  /t(1, "g(1 \"a\" f(2) 3)", "f x = x\ng a b c d = a")
+  /t(6, "sum([1 2 3])", "sum xs = (f acc xs = f(acc + xs.head xs.tail) | acc)(0 xs)")
+  /t(1, "f(1)", "f x = x\n| 1 = 1\n| _ = 2")
+  /t(8, "g(f(8) 2 g(3) f(4))", "f x = x\ng a b c d = a")
   // container(5)
   t(5, "(1, (2 + 3)).1")
   t([1, 5], "[1 (2 + 3)]")
-  //t(4, "ab.b(1).y + ab.b(2 3).z", "ab enum:\n  a x int\n  b y int, z int")
-  //t(3, "f(ab.a) + f(ab.b)", "ab enum:\n  a\n  b\nf x = x\n| a = 1\n| b = 2")
-  //t(9, "t s(1)\nt.incr()\nt.incr2()\nt.mul(3)", "s class:\n  n int\n  incr = n += 1\n  incr2 = incr()\n  mul x =\n    n := n * x")
+  t(4, "ab.b(1).y + ab.b(2 3).z", "ab enum:\n  a x int\n  b y int, z int")
+  t(3, "f(ab.a) + f(ab.b)", "ab enum:\n  a\n  b\nf x = x\n| a = 1\n| b = 2")
+  //t(9, "t s(1)\n  t.incr()\n  t.incr2()\n  t.mul(3)", "s class:\n  n int\n  incr = n += 1\n  incr2 = incr()\n  mul x =\n    n := n * x")
   //t(10, "s(10).f2()", "s class:\n  n int\n  f1 =\n    n\n  f2 =\n    f1()")
-  //t(1, "s(1).f()", "s class:\n  n int\n  f =\n    v = n\n    v")
+  t(1, "s(1).f()", "s class:\n  n int\n  f =\n    v = n\n    v")
   // error(2)
   //t("message", "calc()", "f x = error(x)\ncalc =\n  r y = f(y) | y\n  r(\"message\")")
   log("done")
