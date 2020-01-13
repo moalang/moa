@@ -8,21 +8,58 @@ function append(x, y) {
   return z
 }
 function parse(src) {
+  src = src.trim() + "\n"
   let pos = 0
   function parse_top() {
-    return sepby1(
-      () => or(parse_func, parse_type, parse_stmt),
-      () => reg(/( *\n)+/))
+    return sepby1(parse_def, () => reg(/( *\n)+/))
   }
-  function parse_func() {
+  function parse_def() {
     const id = read_id()
-    const args = many(read_id).join(",")
-    reg(/^ *= +/)
+    const args = many(read_id)
+    const mark = reg(/^ *([:=\n])/)[1]
+    if (mark === ":") {
+      const type_args = args.slice(0, args.length - 1)
+      const type_mark = args.slice(-1)[0]
+      if (type_mark === "enum") {
+        return def_enum(id, type_args)
+      } else if (type_mark === "class") {
+        return def_class(id, type_args)
+      }
+    } else if (mark === "=") {
+      return def_func(id, args)
+    } else {
+      throw err("unkown type definition")
+    }
+  }
+  function def_enum(id, type_args) {
+    const tags = many(() => {
+      read_indent()
+      const tag = read_id()
+      const args = read_attrs()
+      if (args) {
+        return tag + ": (" + args + ") => { return {_tag: '" + tag + "'," + args + "} }"
+      } else {
+        return tag + ": {_tag: '" + tag + "'}"
+      }
+    })
+    return "const " + id + " = {\n  " + tags.join(",\n  ") + "\n}"
+  }
+
+  function def_class(id, type_args) {
+    const args = many(() => serial(read_indent, read_attr)).join(",")
+    const methods = many(parse_def).map(x => ",\n  " + x).join("")
+    const body = args + methods
+    return "const " + id + " = (" + args + ") => { return {\n  " + body + "\n} }"
+  }
+  function def_func(id, args) {
     const stmt = parse_stmt()
     return "const " + id + " = (" + args + ") => " + stmt
   }
   function parse_stmt() {
-    const exp = parse_step()
+    return parse_step()
+  }
+  function parse_step() {
+    const exp = parse_exp()
     const branch = many(() => {
       reg(/^\n\| /)
       const val = parse_unit()
@@ -43,9 +80,6 @@ function parse(src) {
       return exp + " ? " + t + " : " + f
     }
     return exp
-  }
-  function parse_step() {
-    return parse_exp()
   }
   function parse_exp() {
     const exp = or(
@@ -83,40 +117,6 @@ function parse(src) {
       () => reg(/^ *(true|false)/, x => x[1] === "true")
     )
   }
-  function parse_type() {
-    const id = read_id()
-    const type_args = many(read_id)
-    const mark = type_args[type_args.length - 1]
-    eq(":")
-    if (mark === "enum") {
-      const tags = many(() => {
-        read_indent()
-        const tag = read_id()
-        const args = read_attrs()
-        if (args) {
-          return tag + ": (" + args + ") => { return {_tag: '" + tag + "'," + args + "} }"
-        } else {
-          return tag + ": {_tag: '" + tag + "'}"
-        }
-      })
-      if (tags.length > 0) {
-        return "const " + id + " = {\n  " + tags.join(",\n  ") + "\n}"
-      } else {
-        throw new Error("failed to parse enum body")
-      }
-    }
-    if (mark === "class") {
-      const args = many(() => serial(read_indent, read_attr)).join(",")
-      const methods = many(parse_func).map(x => ",\n  " + x).join("")
-      const body = args + methods
-      if (args.length > 0) {
-        return "const " + id + " = (" + args + ") => { return {\n  " + body + "\n} }"
-      } else {
-        throw new Error("failed to parse class body")
-      }
-    }
-    throw err("unkown type definition")
-  }
   // consumer
   function read_id() {
     return reg(/^ *([a-zA-Z_][a-zA-Z0-9_]*)/)[1]
@@ -129,9 +129,6 @@ function parse(src) {
   }
   function read_attrs() {
     return sepby(read_attr, () => eq(",")).join(",")
-  }
-  function read_stmt() {
-    return reg(/^ *[^\n]+/)
   }
   function read_op() {
     return reg(/^ *([+\-*/:]=?|==)/)[1]
@@ -237,7 +234,7 @@ function parse(src) {
   }
   // do parsing
   const js = parse_top().join("\n").trim()
-  if (remain().length !== 0) {
+  if (remain().trim().length !== 0) {
     throw err("Failed parsing remaining: `" + remain() + "`")
   }
   return js
