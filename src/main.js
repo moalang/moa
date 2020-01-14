@@ -137,7 +137,7 @@ function parse(src) {
   function parse_value() {
     return or(
       () => reg(/^ *(\d+)/, parseInt),
-      () => reg(/^ *"[^"]*"/, eval),
+      () => reg(/^ *"(?:(?:\\")|[^"])*"/, eval),
       () => reg(/^ *(true|false)/, x => x[1] === "true")
     )
   }
@@ -385,6 +385,8 @@ function test() {
   t("i", "\"hi\".nth(1)")
   t(5, "(1, (2 + 3)).1")
   log("---( complex pattern )---------")
+  // value(4)
+  t('\"', '"\\""')
   // exp(8)
   t(3, "a()", "c = 1\nb n = n + c()\na = b(2)")
   t(2, "c()", "a =\n  1\n  2\nb =\n  a()\n  a()\nc = b()")
