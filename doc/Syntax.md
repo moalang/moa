@@ -1,49 +1,47 @@
 # Syntax
 
 ```
-root = top+
-top = package? | import* | export* | defines
-package = "package" name
-import = "import" name+
-export = "export" id+
-defines = define (BR define)*
-define = func | declear
-func =
-| id id* "::" type+
-| id arg* "=" body
-field = id type value?
-declear =
-| "struct" id+ ":" BR? members?
-| "enum" id+ ":" BR? id type? (SEP id type)*
-body = closure | exp | matches | (BR INDENT (func | exp))+ with?
-exp = unit (OP2 exp)?
-matches = (PIPE matcher+ "=" exp)+
-matcher =
+root: def++
+ def: id id* ":" (tags | prop++)
+tags: tag ([\n;] tag)*
+ tag: id (prop (";" prop)*)?
+prop: attr | func
+attr: id type
+func: id id* ":" stmt
+stmt:
+| line
+| (br indent line)+
+line: exp (; exp)* switch?
+exp:
+| unit ("," unit)+ # tuple  : 1, 2
+| unit op2 exp     # op2    : v + 1
+| ref op2u exp     # set    : n = 0, n += 1, n := -1
+| args => exp      # lambda : x, y => x + y
+| unit
+unit:
 | value
-| id
-| "[" matcher "]"
-with = BR "with: " (BR INDENT (func | var))+
-
-id = [a-zA-Z_] [a-zA-Z0-9_]
-name = id ("." id)*
-arg = id
-type = (id | ("[" type+ "]")) "?"?
-unit = bottom ("." id ("(" unit* ")")?)*
-bottom = "(" (bottom | closure) ")" | value | id
-member = INDENT field | func
-members = member (SEP member)*
-value =
-| [0-9]+(. [0-9]+)*
-| "true" | "false"
-| '"' [^"] '"'
-| "[" unit* "]"
-closure = (id | (" id+ ")") "->" exp
-
-BR = "\n"
-PIPE = "\n|"
-SEP = BR | ","
-INDENT = "  "
-OP2 = [; + - * / % & | << >> + - > >= < <=  == != || && := += /= *= /= %=]
+| call
+| "[" unit* "]" # array : [1]
+| "(" id exp ("," id exp)+ ")" # struct?
+| "(" id ":" exp ("," id ":" exp)+ ")" # dictionary?
+| "(" exp "=" exp ("," exp "=" exp)+ ")" # dictionary?
+| "(" func | exp ")"
+value:
+| int    # 1
+| float  # 1.0
+| string # "hi"
+| bool   # true
+  id: [a-z0-9_]+
+ ref: id (. id)*
+type: id call*
+call: id ("." id | "(" exp* ")")*
+ op2: [; + - * / % & | << >> + - > >= < <=  == != || &&]
+op2u: [= := += /= *= /= %=]
+args: "()" | id (, id)*
+switch:
+| (br "|" exp){2}           # binary branch
+| (br "|" unit " = " exp)+  # pattern match
+indent: "  "+
 ```
 
 ## Values
@@ -52,67 +50,42 @@ OP2 = [; + - * / % & | << >> + - > >= < <=  == != || && := += /= *= /= %=]
 1               # integer 64bit
 1.2             # float 64bit
 "string"        # string
-true, false     # bool
-(a,b) -> a + b  # function
+true            # bool
+(a,b) => a + b  # function
 ```
 
 ## Containers
 
 ```
-[1 2 3]          # array
-(a = 1, b = "s") # struct
-("a": 1, "b": 2) # dictionary
+[1 2 3]        # array
+(a: 1, b: "s") # struct?
+(n = 1, 2 = 2) # dictionary?
 ```
 
 ## Function
 
 ```
-one = 1
-inc x = x + one
-pair x = (x = x, y = inc(x))
+one: 1
+inc x: x + one
 ```
 
 
 ## Types
 
 ```
-struct vector2 {
-  x i64
-  y i64
-}
-interface printable {
-  to_string string
-}
-struct vector3 {
-  inherit(vector2)
-  inherit(printable) {
-    to_string = "($x, $y, $z)"
-  }
-  z i64
-}
-enum option a {
-  some a
-  none
-}
-inc :: i64 i64
-inc x = x + 1
-add num(n) :: n n n # n is acceptable for i8 to i64 and f32 to f64
-add x y = x + y
-hello :: string io
+vector2: x int, y int
+printable: to_string (string)
+vector3: inherit(vector2, printable(to_string: "($x, $y, $z)")), z int
+option a: some a | none
+inc (i64 i64)
+inc x : x + 1
+add num(n) (n n n) # n is acceptable for i8 to i64 and f32 to f64
+add x y: x + y
+hello (string void)
 hello name = print("Hello" name)
-trace x :: x io(x)
-trace x = print(x); x
+trace printable(x) x x
+trace x : print(x); x
 ```
-
-## Sequence
-
-```
-hi = println("Hi."); println("How's going?")
-reply =
-  println("Oh, Hi.")
-  println("Pretty good.")
-```
-
 
 ## Branch
 
@@ -129,32 +102,22 @@ fib x =
 ## Coroutine
 
 ```
-nat n = coroutine(f -> f(n); nat(n + 1))
+nat n = coroutine(n, () => nat(n + 1))
 ten = nat(1).take(10) # [1, 2, ..., 10]
 ```
 
 ## Error handling
 
 ```
-find a :: [a] (a bool) error(a)
-find xs f = xs
+find any(a) [a] (a bool) error(a)
+find xs f: xs
 | [] = error("not found")
 | [y ys] = f(y) ? y : find(ys y)
-match a :: [a] [a] (a a) error(bool)
-match xs ys f =
-  x <- find(xs f)
-  y <- find(ys f)
+match any(a) [a] [a] (a a) error(bool)
+match xs ys f:
+  x = find(xs f)
+  y = find(ys f)
   x == y
-```
-
-
-## Namespace
-
-```
-package util
-import protocol
-export y2j
-y2j s = protocol.yaml.parse(s).(protocol.json.dump)
 ```
 
 
@@ -184,7 +147,7 @@ bool
 int
 float
 string
-closure
+function
 coroutine
 array
 dict
@@ -192,4 +155,10 @@ struct
 enum
 error
 try(a)
+```
+
+## Reserved type
+```
+i8 .. i64, u8 .. u64
+f32, f64
 ```

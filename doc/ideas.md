@@ -89,67 +89,23 @@ const: n = 1
   set: n += 1, s := "hi"
 
 ### BNF
-top: def ([\n=] def)*
-def:
-| func
-| id id* ":" prop+ :: struct # v2: x int; y int
-| id id* ":" tags+ :: enum   # b: t; f
-body:
-| exp (br if_bool){2} # switch to binary branch
-| exp (br if_cond)+   # pattern match
-| (br seq)+
-seq:
-| exp (; seq)*
-| id "=" body # const
-| id id+ "=" body # func
-exp:
-| tuple  :: unit ("," unit)+ # 1, 2
-| op2    :: unit op2 exp     # v + 1
-| set    :: ref op2u exp     # n += 1, s := "hi"
-| lambda :: args => exp      # x, y => x + y
-| unit
-unit:
-| value
-| array  :: "[" unit* "]" # [1]
-| call   :: id call*      # v, o.m(x y).v
-| "(" exp ")"
-| "(" id id* = exp ")"   # id x y = x + y
-value:
-| int    # 1
-| float  # 1.0
-| string # hi"
-| bool   # true
-  id: [a-z0-9_]+
- ref: id (. id)*
-call: "." id | "(" exp* ")"
- op2: + - * / ...
-op2u: += -= := ...
-attr: id unit
-func: id id* "=" body # now : time.now, add x y : x + y
-prop: attr | func
- tag: id (prop (";" prop)*)?
-tags: tag ([\n;] tag)*
-args:
-| "()"
-| id (, id)*
-if_bool: "|" exp
-if_cond: "|" unit "=" exp
 
 ### Examples
 ast:
   int n int
   op2 op string, left ast, right ast
+
 parser:
   src string
   pos 0
-  eq s =
+  eq s:
     src.slice(pos).is_head(s) || error("miss")
     pos += s.length
     s
-  read_int = many1(() => any("0123456789".to_a)).join("").to_i
-  any xs = xs.one(y, ys => or(eq(y) any(ys)))
-  or l r = bk = pos; l | pos := bk; r
-  many1 f = [f()].concat(many(f))
-  many f = (rec acc = rec(acc.push(f())) | acc)([])
+  read_int: many1(() => any("0123456789".to_a)).join("").to_i
+  any xs: xs.one(y, ys => or(eq(y) any(ys)))
+  or l r: bk = pos; l | pos := bk; r
+  many1 f: [f()].concat(many(f))
+  many f: (rec acc = rec(acc.push(f())) | acc)([])
 
 main = parser("123").read_int
