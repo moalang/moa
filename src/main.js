@@ -69,7 +69,20 @@ function parse(src) {
     return "(" + many1(() => serial(read_indent, parse_step)).join(",\n") + ")"
   }
   function parse_step() {
-    const exp = parse_exp()
+    let exp = parse_exp()
+    if (exp.match(/^([a-z]\w*)$/)) {
+      if (check(/^( \w)* *=/)) {
+        const id = exp
+        const args = many(read_id).join(",")
+        eq(" =")
+        const body = or(parse_seq, parse_step)
+        if (args) {
+          exp = id + " = (" + args + ") => " + body
+        } else {
+          exp = id + " = " + body
+        }
+      }
+    }
     const branch = many(() => {
       reg(/^\n\| /)
       const val = parse_unit()
@@ -224,6 +237,9 @@ function parse(src) {
     return Array.from(arguments).map(x => x()).slice(-1)[0]
   }
   // matcher
+  function check(r) {
+    return src.slice(pos).match(r)
+  }
   function reg(r, f) {
     f = f || (x => x)
     let m = src.slice(pos).match(r)
@@ -254,7 +270,7 @@ function parse(src) {
   // do parsing
   const js = parse_top().join("\n").trim()
   if (remain().trim().length !== 0) {
-    throw err("Failed parsing remaining: `" + remain() + "`")
+    throw err("Failed parsing remaining: `" + JSON.stringify(remain()) + "`")
   }
   return js
 }
@@ -370,13 +386,13 @@ function test() {
   t(5, "(1, (2 + 3)).1")
   log("---( complex pattern )---------")
   // exp(8)
-  /t(3, "a()", "c = 1\nb n = n + c()\na = b(2)")
-  /t(2, "c()", "a =\n  1\n  2\nb =\n  a()\n  a()\nc = b()")
-  /t(1, "f()", "f =\n  v = 1\n  v")
-  /t(1, "g(1 \"a\" f(2) 3)", "f x = x\ng a b c d = a")
-  /t(6, "sum([1 2 3])", "sum xs = (f acc xs = f(acc + xs.head xs.tail) | acc)(0 xs)")
-  /t(1, "f(1)", "f x = x\n| 1 = 1\n| _ = 2")
-  /t(8, "g(f(8) 2 g(3) f(4))", "f x = x\ng a b c d = a")
+  t(3, "a()", "c = 1\nb n = n + c()\na = b(2)")
+  t(2, "c()", "a =\n  1\n  2\nb =\n  a()\n  a()\nc = b()")
+  t(1, "f()", "f =\n  v = 1\n  v")
+  t(1, "g(1 \"a\" f(2) 3)", "f x = x\ng a b c d = a")
+  t(6, "sum([1 2 3])", "sum xs = (f acc xs = f(acc + xs.head xs.tail) | acc)(0 xs)")
+  t(1, "f(1)", "f x = x\n| 1 = 1\n| _ = 2")
+  t(8, "g(f(8) 2 g(3) f(4))", "f x = x\ng a b c d = a")
   // container(5)
   t(5, "(1, (2 + 3)).1")
   t([1, 5], "[1 (2 + 3)]")
@@ -386,7 +402,7 @@ function test() {
   t(10, "s(10).f2()", "s class:\n  n int\n  f1 =\n    n\n  f2 =\n    f1()")
   t(1, "s(1).f()", "s class:\n  n int\n  f =\n    v = n\n    v")
   // error(2)
-  //t("message", "calc()", "f x = error(x)\ncalc =\n  r y = f(y) | y\n  r(\"message\")")
+  t("message", "calc()", "f x = error(x)\ncalc =\n  r y = f(y) | y\n  r(\"message\")")
   log("done")
 }
 
