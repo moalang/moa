@@ -17,22 +17,18 @@ function parse(src) {
   function parse_def() {
     const id = read_id()
     const args = many(read_id)
-    const mark = reg(/^ *([:=\n])/)[1]
+    const mark = reg(/^ *(:\||[:=\n])/)[1]
     if (mark === ":") {
-      const type_args = args.slice(0, args.length - 1)
-      const type_mark = args.slice(-1)[0]
-      if (type_mark === "enum") {
-        return def_enum(id, type_args)
-      } else if (type_mark === "class") {
-        return def_class(id, type_args)
-      }
+      return def_class(id, args)
+    } if (mark === ":|") {
+      return def_enum(id, args)
     } else if (mark === "=") {
       return def_func(id, args)
     } else {
       throw err("unkown type definition")
     }
   }
-  function def_enum(id, type_args) {
+  function def_enum(id, args) {
     const tags = many(() => {
       read_indent()
       const tag = read_id()
@@ -46,12 +42,12 @@ function parse(src) {
     return "const " + id + " = {\n  " + tags.join(",\n  ") + "\n}"
   }
 
-  function def_class(id, type_args) {
-    const args = many(() => serial(read_indent, read_attr)).join(",")
+  function def_class(id, args) {
+    const names = many(() => serial(read_indent, read_attr)).join(",")
     const methods = many(() => serial(read_indent, def_method))
-    const body = args + methods.map(x => "," + x.id).join("")
+    const body = names + methods.map(x => "," + x.id).join("")
     const defs = methods.map(x => "\n  " + x.body).join("")
-    return "const " + id + " = (" + args + ") => {" + defs + "\n  return {\n  " + body + "\n} }"
+    return "const " + id + " = (" + names + ") => {" + defs + "\n  return {\n  " + body + "\n} }"
   }
   function def_method() {
     const id = read_id()
@@ -365,15 +361,15 @@ function test() {
   t(8, "false\n| 7\n| 8")
   t(true, "1\n| 1 = true\n| 2 = false")
   t(false, "3\n| 1 = true\n| _ = false")
-  t(1, "ab.a\n| a = 1\n| b = 2", "ab enum:\n  a\n  b")
-  t(2, "ab.b\n| a = 1\n| b = 2", "ab enum:\n  a\n  b")
+  t(1, "ab.a\n| a = 1\n| b = 2", "ab:|\n  a\n  b")
+  t(2, "ab.b\n| a = 1\n| b = 2", "ab:|\n  a\n  b")
   // container(5)
   t([1], "[1]")
   t([1, 2], "[1 2]")
   t([1, 2, 3], "[1 2 3]")
   t(2, "(1, 2).1")
-  t(3, "ab.a(3).x", "ab enum:\n  a x int\n  b y int")
-  t(4, "s(4 0).n", "s class:\n  n int\n  m int")
+  t(3, "ab.a(3).x", "ab:|\n  a x int\n  b y int")
+  t(4, "s(4 0).n", "s:\n  n int\n  m int")
   // error(2)
   t("error: failed", "f(1)", "f x = error(\"failed\")")
   t(2, "error(\"failed\") | 2")
@@ -398,11 +394,11 @@ function test() {
   // container(5)
   t(5, "(1, (2 + 3)).1")
   t([1, 5], "[1 (2 + 3)]")
-  t(4, "ab.b(1).y + ab.b(2 3).z", "ab enum:\n  a x int\n  b y int, z int")
-  t(3, "f(ab.a) + f(ab.b)", "ab enum:\n  a\n  b\nf x = x\n| a = 1\n| b = 2")
-  //t(9, "\nt s(1)\n  t.incr()\n  t.incr2()\n  t.mul(3)", "s class:\n  n int\n  incr = n += 1\n  incr2 = incr()\n  mul x =\n    n := n * x")
-  t(10, "s(10).f2()", "s class:\n  n int\n  f1 =\n    n\n  f2 =\n    f1()")
-  t(1, "s(1).f()", "s class:\n  n int\n  f =\n    v = n\n    v")
+  t(4, "ab.b(1).y + ab.b(2 3).z", "ab:|\n  a x int\n  b y int, z int")
+  t(3, "f(ab.a) + f(ab.b)", "ab:|\n  a\n  b\nf x = x\n| a = 1\n| b = 2")
+  //t(9, "\nt s(1)\n  t.incr()\n  t.incr2()\n  t.mul(3)", "s:\n  n int\n  incr = n += 1\n  incr2 = incr()\n  mul x =\n    n := n * x")
+  t(10, "s(10).f2()", "s:\n  n int\n  f1 =\n    n\n  f2 =\n    f1()")
+  t(1, "s(1).f()", "s:\n  n int\n  f =\n    v = n\n    v")
   // error(2)
   t("message", "calc()", "f x = error(x)\ncalc =\n  r y = f(y) | y\n  r(\"message\")")
   log("done")

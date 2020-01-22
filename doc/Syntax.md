@@ -2,15 +2,18 @@
 
 ```
 root: def++
- def: id id* ":" (tags | prop++)
-tags: tag ([\n;] tag)*
- tag: id (prop (";" prop)*)?
+ def:
+| ref id* "=" statement      # function or assign
+| ref id* ":" type           # function signature
+| ref id* ":" (indent prop)+ # type defintion
+| ref id* ":|" (indent tag)+ # enum definition
+ tag: ref (prop ("," prop)*)*
 prop: attr | func
 attr: id type
-func: id id* ":" stmt
-stmt:
+func: id id* ":" statement
+statement:
 | line
-| (br indent line)+
+| (indent line)+
 line: exp (; exp)* switch?
 exp:
 | unit ("," unit)+ # tuple  : 1, 2
@@ -38,9 +41,10 @@ call: id ("." id | "(" exp* ")")*
  op2: [; + - * / % & | << >> + - > >= < <=  == != || &&]
 op2u: [= := += /= *= /= %=]
 args: "()" | id (, id)*
+indent: "\n  "
 switch:
 | (br "|" exp){2}           # binary branch
-| (br "|" unit " = " exp)+  # pattern match
+| (br "|" unit " : " exp)+  # pattern match
 indent: "  "+
 ```
 
@@ -67,6 +71,7 @@ true            # bool
 ```
 one: 1
 inc x: x + one
+int.neg n: n * -1
 ```
 
 
@@ -75,16 +80,17 @@ inc x: x + one
 ```
 vector2: x int, y int
 printable: to_string (string)
-vector3: inherit(vector2, printable(to_string: "($x, $y, $z)")), z int
+vector3: +vector2 +printable(to_string: "($x, $y, $z)") z int
 option a: some a | none
-inc (i64 i64)
-inc x : x + 1
-add num(n) (n n n) # n is acceptable for i8 to i64 and f32 to f64
-add x y: x + y
-hello (string void)
-hello name = print("Hello" name)
-trace printable(x) x x
-trace x : print(x); x
+functions:
+  inc :: i64 i64
+  inc x: x + 1
+  add n.num :: n n n # n is acceptable for i8 to i64 and f32 to f64
+  add x y: x + y
+  hello :: string void
+  hello name: print("Hello" name)
+  trace printable(x) :: x x
+  trace x: print(x); x
 ```
 
 ## Branch
