@@ -79,7 +79,7 @@ function parse(src) {
     return {id, body}
   }
   function def_func(id, args) {
-    const body = or(parse_seq, parse_step)
+    const body = or(parse_stmt, parse_seq, parse_step)
     return make_func(id, args, body)
   }
   function make_func(id, args, body) {
@@ -88,6 +88,13 @@ function parse(src) {
     } else {
       return "function " + id + " (" + args + ") { return " + body + " }"
     }
+  }
+  function parse_stmt() {
+    reg(/ *{/)
+    const org = many1(() => serial(read_white_spaces, parse_step)).join(";\n")
+    const body = org.replace(/(\w+[+-\\*/]=)/g, 'this.$1')
+    reg(/\s*}/)
+    return body
   }
   function parse_seq() {
     return "(" + many1(() => serial(read_indent, parse_step)).join(",\n") + ")"
@@ -204,6 +211,9 @@ function parse(src) {
       () => { many(() => eq(" ")); return eq(l) },
       () => { many(() => eq(" ")); return eq(r) },
       m)
+  }
+  function read_white_spaces() {
+    return reg(/[ \t\n]+/)
   }
   function read_indent() {
     return eq("\n  " + "  ".repeat(depth))
@@ -432,7 +442,8 @@ function test() {
   t([1, 5], "[1 (2 + 3)]")
   t(4, "ab.b(1).y + ab.b(2 3).z", "ab:|\n  a x int\n  b y int, z int")
   t(3, "f(ab.a) + f(ab.b)", "ab:|\n  a\n  b\nf x = x\n| a = 1\n| b = 2")
-  //t(9, "\nt s(1)\n  t.incr\n  t.incr2\n  t.mul(3)", "s:\n  n int\n  incr = n += 1\n  incr2 = incr()\n  mul x =\n    n := n * x")
+  //t(9, "s(8).incr",  "s:\n  n int\n  incr { n += 1 }")
+  t(9, "s(8).incr",  "s:\n  n int\n  incr = { n += 1 }")
   t(10, "s(10).f2", "s:\n  n int\n  f1 =\n    n\n  f2 =\n    f1")
   t(11, "10 + s(1).f", "s:\n  n int\n  f =\n    v = n\n    v")
   // error(2)
