@@ -1,16 +1,31 @@
 const log = x => { console.log(x); return x }
 const trace = x => { console.warn({trace: x}); return x }
 const warn = x => { console.warn({warn: x}); return x }
-function debug(x) { return warn("| " + JSON.stringify(x)) }
+function debug(x) { return warn(JSON.stringify(x)) }
 function append(x, y) {
   let z = x || []
   z.push(y)
   return z
 }
+function install(obj, name, f) {
+  Object.defineProperty(obj.prototype, name, {
+    configurable: true,
+    get: function() { return f(this) }
+  })
+}
+function define_global_prop(name, body) {
+  return "Object.defineProperty(Object.prototype, '" + name + "', {" +
+    "configurable: true," +
+    "get() { return " + body + " }" +
+  "})"
+}
 function parse(src) {
   src = src.trim() + "\n"
   let depth = 0
   let pos = 0
+  function ellipsis(s) {
+    return s.length <= 100 ? s : s.slice(0, 100 - 3) + " ..."
+  }
   function parse_top() {
     return sepby1(parse_def, () => reg(/( *\n)+/))
   }
@@ -43,23 +58,34 @@ function parse(src) {
   }
 
   function def_class(id, args) {
-    const names = many(() => serial(read_indent, read_attr)).join(",")
+    const names = many(() => serial(read_indent, read_attr))
     const methods = many(() => serial(read_indent, def_method))
-    const body = names + methods.map(x => "," + x.id).join("")
+    const body = names.concat(methods.map(x => x.id)).join(",")
     const defs = methods.map(x => "\n  " + x.body).join("")
-    return "const " + id + " = (" + names + ") => {" + defs + "\n  return {\n  " + body + "\n} }"
+    if (names.length === 0) {
+      return define_global_prop(id, "(function(){ " + defs + "\nreturn {" + body + "}" + "})()")
+    } else {
+      return "function " + id + "(" + names.join(",") + ") {" + defs + "\n  return {\n  " + body + "\n} }"
+    }
   }
   function def_method() {
     const id = read_id()
     const args = many(read_id)
     eq(" =")
     const exp = or(() => indent(parse_seq), parse_step)
-    const body = "const " + id + " = " + "(" + args + ") =>" + exp
+    const body = make_func(id, args, exp)
     return {id, body}
   }
   function def_func(id, args) {
     const body = or(parse_seq, parse_step)
-    return "const " + id + " = (" + args + ") => " + body
+    return make_func(id, args, body)
+  }
+  function make_func(id, args, body) {
+    if (args.length === 0) {
+      return define_global_prop(id, body)
+    } else {
+      return "function " + id + " (" + args + ") { return " + body + " }"
+    }
   }
   function parse_seq() {
     return "(" + many1(() => serial(read_indent, parse_step)).join(",\n") + ")"
@@ -103,7 +129,9 @@ function parse(src) {
   function parse_exp() {
     const exp = or(
       () => {
-        const args = sepby(read_id, () => eq(","))
+        const args = or(
+          () => read_between("(", ")", () => sepby(read_id, () => eq(","))),
+          () => sepby(read_id, () => eq(",")))
         eq(" => ")
         const stmt = parse_step()
         return "(" + args + ") => " + stmt
@@ -114,7 +142,16 @@ function parse(src) {
         const r = parse_exp()
         return "try_(() =>" + l + ", () => " + r + ")"
       },
-      () => and(parse_unit, read_op, parse_exp).join(""),
+      () => {
+        const l = parse_unit()
+        const o = read_op()
+        const r = parse_exp()
+        if (o === ";") {
+          return "(" + l + "," + r + ")"
+        } else {
+          return l + o + r
+        }
+      },
       parse_unit)
     const after = many(() => or(read_member, read_argv)).join("")
     return exp + after
@@ -151,7 +188,7 @@ function parse(src) {
     return sepby(read_attr, () => eq(",")).join(",")
   }
   function read_op() {
-    return reg(/^ *([+\-*/:]=?|==|=)/)[1]
+    return reg(/^ *([+\-*/:]=?|==|!=|=|;)/)[1]
   }
   function read_member() {
     const m = reg(/^\.[a-zA-Z_0-9]*/)[0]
@@ -189,7 +226,7 @@ function parse(src) {
     return many(f, [v])
   }
   function err(message) {
-    const extra = "\n   src: " + src + "\nremain: " + remain()
+    const extra = "\n   src: " + ellipsis(src) + "\nremain: " + ellipsis(remain())
     const e = new Error(message + extra)
     e.isParser = true
     return e
@@ -240,7 +277,7 @@ function parse(src) {
     f = f || (x => x)
     let m = src.slice(pos).match(r)
     if (!m) {
-      throw err("miss match regexp: " + r + "\nremain: " + remain())
+      throw err("miss match regexp: " + r + "\nremain: " + ellipsis(remain()))
     }
     if (m.index !== 0) {
       throw err("matched position should be 0 regexp: " + r)
@@ -264,9 +301,15 @@ function parse(src) {
     return src.slice(pos)
   }
   // do parsing
-  const js = parse_top().join("\n").trim()
+  const lines = parse_top()
+  const js = lines.join("\n").trim()
   if (remain().trim().length !== 0) {
-    throw err("Failed parsing remaining: `" + JSON.stringify(remain()) + "`")
+    const red = src.slice(0, pos)
+    const line = red.split("\n").length
+    const column = red.length - red.lastIndexOf("\n") + 1
+      throw err("Failed parsing remaining: at " + line + ":" + column +
+        "\n`" + ellipsis(remain()) + "`" +
+        "\nlines: # " + lines.join("\n# "))
   }
   return js
 }
@@ -278,9 +321,6 @@ function prepare() {
     throw(e)
   }
   function guard(cond, ret, msg) { if (cond) { return ret } else { error(msg) } }
-  function install(obj, name, f) {
-    Object.defineProperty(obj.prototype, name, {get: function() { return f(this) }})
-  }
   install(Array, 'head', x => guard(x.length > 0, x[0], "out of index"))
   install(Array, 'tail', x => x.slice(1))
   install(Array, 'n0', x => x[0])
@@ -333,7 +373,7 @@ function test() {
     const defs = Array.from(arguments).slice(2)
     const src = "main = " + main + (defs || []).map(x => "\n" + x).join("")
     const js = parse(src)
-    const fact = run(js + "\nmain()")
+    const fact = run(js + "\nmain")
     if (JSON.stringify(expect) === JSON.stringify(fact)) {
       log("ok: " + JSON.stringify(fact))
     } else {
@@ -350,12 +390,13 @@ function test() {
   t(true, "true")
   t(false, "false")
   t(true, "1 == 1")
-  t(2, "inc(1)", "inc a = a + 1")
+  t(1, "inc(0)", "inc a = a + 1")
+  t(2, "id(2)", "id = x => x")
   t(3, "add(1 2)", "add a b = a + b")
   // exp(8)
   t(4, "1 + 3")
   //t(4, "9 / 2")
-  t(5, "a()", "a = 5")
+  t(5, "a", "a = 5")
   t(6, "(x => x)(6)")
   t(7, "true\n| 7\n| 8")
   t(8, "false\n| 7\n| 8")
@@ -383,12 +424,14 @@ function test() {
   log("---( complex pattern )---------")
   // value(4)
   t('\"', '"\\""')
+  t(1, "call(() => 1)", "call f = f()")
+  t(2, 'call("\\"" "\\"")', "call a b = 2")
   // exp(8)
-  t(3, "a()", "c = 1\nb n = n + c()\na = b(2)")
-  t(2, "c()", "a =\n  1\n  2\nb =\n  a()\n  a()\nc = b()")
-  t(1, "f()", "f =\n  v = 1\n  v")
-  t(1, "g(1 \"a\" f(2) 3)", "f x = x\ng a b c d = a")
-  t(6, "sum([1 2 3])", "sum xs = (f acc xs = f(acc + xs.head xs.tail) | acc)(0 xs)")
+  t(3, "a", "c = 1\nb n = n + c\na = b(2)")
+  t(4, "c + 2", "a =\n  1\n  2\nb =\n  a\n  a\nc = b")
+  t(5, "f + 4", "f =\n  v = 1\n  v")
+  t(6, "5 + g(1 \"a\" f(2) 3)", "f x = x\ng a b c d = a")
+  t(7, "1 + sum([1 2 3])", "sum xs = (f acc xs = f(acc + xs.head xs.tail) | acc)(0 xs)")
   t(1, "f(1)", "f x = x\n| 1 = 1\n| _ = 2")
   t(8, "g(f(8) 2 g(3) f(4))", "f x = x\ng a b c d = a")
   // container(5)
@@ -396,11 +439,14 @@ function test() {
   t([1, 5], "[1 (2 + 3)]")
   t(4, "ab.b(1).y + ab.b(2 3).z", "ab:|\n  a x int\n  b y int, z int")
   t(3, "f(ab.a) + f(ab.b)", "ab:|\n  a\n  b\nf x = x\n| a = 1\n| b = 2")
-  //t(9, "\nt s(1)\n  t.incr()\n  t.incr2()\n  t.mul(3)", "s:\n  n int\n  incr = n += 1\n  incr2 = incr()\n  mul x =\n    n := n * x")
-  t(10, "s(10).f2()", "s:\n  n int\n  f1 =\n    n\n  f2 =\n    f1()")
-  t(1, "s(1).f()", "s:\n  n int\n  f =\n    v = n\n    v")
+  //t(9, "\nt s(1)\n  t.incr\n  t.incr2\n  t.mul(3)", "s:\n  n int\n  incr = n += 1\n  incr2 = incr()\n  mul x =\n    n := n * x")
+  t(10, "s(10).f2", "s:\n  n int\n  f1 =\n    n\n  f2 =\n    f1")
+  t(11, "10 + s(1).f", "s:\n  n int\n  f =\n    v = n\n    v")
   // error(2)
-  t("message", "calc()", "f x = error(x)\ncalc =\n  r y = f(y) | y\n  r(\"message\")")
+  t("message", "calc", "f x = error(x)\ncalc =\n  r y = f(y) | y\n  r(\"message\")")
+  // indent
+  t(1, "p.n", "p:\n  m =\n    n\n  n =\n    1")
+  t(2, "or(1 2)", "or l r =\n  a = l\n  alt x = 1; x\n  2 | alt(1)")
   log("done")
 }
 

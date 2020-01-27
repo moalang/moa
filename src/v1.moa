@@ -7,57 +7,65 @@ build node = node
 | op2 = build(node.left) + node.op + build(node.right)
 | _ = node
 
-ast enum:
-  int n int
-  string s string
-  op2 op string, left ast, right ast
-  ref id string
+ast:
+| int n int
+| string s string
+| op2 op string, left ast, right ast
+| ref id string
 
-parser class:
+parser:
   src string
   pos int
 
-  parse_top = parse_exp()
+  parse_top = parse_exp
   parse_exp =
-    l = parse_unit()
-    parse_op2(l) | l
-  parse_op2 l =
-    op = read_op()
-    r = parse_exp()
+    l <- parse_unit
+    or(parse_op2(l) l)
+  parse_op2 l {
+    op <- read_op
+    r <- parse_exp
     ast.op2(op l r)
-  parse_unit = or(parse_int () => or(parse_string parse_ref))
-  parse_int = ast.int(read_int())
-  parse_string = ast.string(pair("\"" "\"" (() => many(() => satisfy(x => x != "\"")).join(""))))
-  parse_ref = ast.ref(read_id())
+  }
+  parse_unit = or(parse_int or(parse_string parse_ref))
+  parse_int = ast.int(read_int)
+  parse_string = ast.string(pair("\"" "\"" many(satisfy(x => x != "\"")).join("")))
+  parse_ref = ast.ref(read_id)
 
-  read_id = spaces(); str(x => "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ".to_a().contains(x))
-  read_op = spaces(); select("+-*/".to_a())
-  read_int = spaces(); many1(() => select("0123456789".to_a())).join("").to_i()
+  read_id = spaces; str(x => "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ".to_a.contains(x))
+  read_op = spaces; select("+-*/".to_a)
+  read_int = spaces; many1(() => select("0123456789".to_a)).join("").to_i
 
-  or l r =
+  or l r {
     bk = pos
-    alt _ = pos := bk; r()
-    l() | alt(1)
+    l() | {
+      pos := bk
+      r()
+    }
+  }
   pair l r m = between(() => equal(l) () => equal(r) m)
-  between l r m =
-    l()
-    ret = m()
-    r()
+  between l r m {
+    l
+    ret <- m
+    r
     ret
-  spaces =
-    sp = " "
-    many(() => equal(sp))
-  many1 f = [f()].concat(many(f))
-  many f = (rec acc = rec(acc.append(f())) | acc)([])
-  str f = many(() => satisfy(f)).join("")
+  }
+  spaces = many(equal(" "))
+  many1 f = {
+    x <- f
+    [x].concat(many(f))
+  }
+  many f = (rec acc = { x <- f; rec(acc.append(v)) } | acc)([])
+  str f = many(satisfy(f)).fmap(x => x.join(""))
   select xs = satisfy(x => xs.contains(x))
-  equal x =
+  equal x {
     r = x == src.slice(pos pos + x.length)
     r || error("failed")
     pos += x.length
     x
-  satisfy f =
+  }
+  satisfy f {
     c = src.nth(pos)
     f(c) || error("failed")
     pos += 1
     c
+  }
