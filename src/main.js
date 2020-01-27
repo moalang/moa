@@ -19,13 +19,16 @@ function define_global_prop(name, body) {
     "get() { return " + body + " }" +
   "})"
 }
+function ellipsis(s) {
+  return s.length <= 100 ? s : s.slice(0, 100 - 3) + " ..."
+}
+function guard(cond, ret, message) {
+  return cond ? ret : error(message)
+}
 function parse(src) {
   src = src.trim() + "\n"
   let depth = 0
   let pos = 0
-  function ellipsis(s) {
-    return s.length <= 100 ? s : s.slice(0, 100 - 3) + " ..."
-  }
   function parse_top() {
     return sepby1(parse_def, () => reg(/( *\n)+/))
   }
@@ -56,7 +59,6 @@ function parse(src) {
     })
     return "const " + id + " = {\n  " + tags.join(",\n  ") + "\n}"
   }
-
   function def_class(id, args) {
     const names = many(() => serial(read_indent, read_attr))
     const methods = many(() => serial(read_indent, def_method))
@@ -320,7 +322,6 @@ function prepare() {
     e.isMoa = true
     throw(e)
   }
-  function guard(cond, ret, msg) { if (cond) { return ret } else { error(msg) } }
   install(Array, 'head', x => guard(x.length > 0, x[0], "out of index"))
   install(Array, 'tail', x => x.slice(1))
   install(Array, 'n0', x => x[0])
@@ -328,19 +329,11 @@ function prepare() {
   install(Array, 'n2', x => x[2])
   Array.prototype.contains = function(x) { return this.indexOf(x) !== -1 }
   Array.prototype.nth = function(n) {
-    if (n >= this.length) {
-      error("out of index")
-    } else {
-      return this[n]
-    }
+    return n >= this.length ? error("out of index") : this[n]
   }
   Array.prototype.append = function(x) { return this.concat(x) }
   String.prototype.nth = function(n) {
-    if (n >= this.length) {
-      error("out of index")
-    } else {
-      return this[n]
-    }
+    return n >= this.length ? error("out of index") : this[n]
   }
   install(String, 'to_i', parseInt)
   install(String, 'to_a', x => x.split(""))
