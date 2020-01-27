@@ -91,10 +91,12 @@ function parse(src) {
   }
   function parse_stmt() {
     reg(/ *{/)
-    const org = many1(() => serial(read_white_spaces, parse_step)).join(";\n")
-    const body = org.replace(/(\w+[+-\\*/]=)/g, 'this.$1')
+    const s0 = many1(() => serial(read_white_spaces, parse_step))
+    const s1 = s0.join(",\n")
+    const s2 = s1.replace(/(\w+[+-\\*/]=)/g, 'this.$1')
+    const s3 = s2.replace(/(\w+) *<- *([^\n,]+)/g, '$1 = ($2)()')
     reg(/\s*}/)
-    return body
+    return "(() => (" + s3 + "))"
   }
   function parse_seq() {
     return "(" + many1(() => serial(read_indent, parse_step)).join(",\n") + ")"
@@ -197,7 +199,7 @@ function parse(src) {
     return sepby(read_attr, () => eq(",")).join(",")
   }
   function read_op() {
-    return reg(/^ *([+\-*/:]=?|==|!=|=|;)/)[1]
+    return reg(/^ *([+\-*/:]=?|==|!=|<-|=|;)/)[1]
   }
   function read_member() {
     const m = reg(/^\.[a-zA-Z_0-9]*/)[0]
@@ -376,7 +378,7 @@ function test() {
     const defs = Array.from(arguments).slice(2)
     const src = "main = " + main + (defs || []).map(x => "\n" + x).join("")
     const js = parse(src)
-    const fact = run(js + "\nmain")
+    const fact = run(js + "\ntypeof(main) === 'function' ? main() : main")
     if (JSON.stringify(expect) === JSON.stringify(fact)) {
       log("ok: " + JSON.stringify(fact))
     } else {
@@ -407,6 +409,10 @@ function test() {
   t(false, "3\n| 1 = true\n| _ = false")
   t(1, "ab.a\n| a = 1\n| b = 2", "ab:|\n  a\n  b")
   t(2, "ab.b\n| a = 1\n| b = 2", "ab:|\n  a\n  b")
+  t(9, "{ 9 }")
+  t(9, "{ e <- f\ne }", "f = { 9 }")
+  t(9, "{ e = f\n9 }", "f = { error(\"ignore\") }")
+  t("error: fail", "{ e <- f\ne }", "f = { error(\"fail\") }")
   // container(5)
   t([1], "[1]")
   t([1, 2], "[1 2]")
