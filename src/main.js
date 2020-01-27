@@ -7,12 +7,6 @@ function append(x, y) {
   z.push(y)
   return z
 }
-function install(obj, name, f) {
-  Object.defineProperty(obj.prototype, name, {
-    configurable: true,
-    get: function() { return f(this) }
-  })
-}
 function define_global_prop(name, body) {
   return "Object.defineProperty(Object.prototype, '" + name + "', {" +
     "configurable: true," +
@@ -79,7 +73,7 @@ function parse(src) {
     return {id, body}
   }
   function def_func(id, args) {
-    const body = or(parse_stmt, parse_seq, parse_step)
+    const body = or(parse_seq, parse_step)
     return make_func(id, args, body)
   }
   function make_func(id, args, body) {
@@ -93,10 +87,9 @@ function parse(src) {
     reg(/ *{/)
     const s0 = many1(() => serial(read_white_spaces, parse_step))
     const s1 = s0.join(",\n")
-    const s2 = s1.replace(/(\w+[+-\\*/]=)/g, 'this.$1')
-    const s3 = s2.replace(/(\w+) *<- *([^\n,]+)/g, '$1 = ($2)()')
+    const s2 = s1.replace(/(\w+) *(?:<-|:=) *([^\n,]+)/g, '$1 = ($2)()')
     reg(/\s*}/)
-    return "(() => (" + s3 + "))"
+    return "(() => (" + s2 + "))"
   }
   function parse_seq() {
     return "(" + many1(() => serial(read_indent, parse_step)).join(",\n") + ")"
@@ -149,9 +142,9 @@ function parse(src) {
       },
       () => {
         const l = parse_unit()
-        eq(" | ")
+        eq(" ||| ")
         const r = parse_exp()
-        return "try_(() =>" + l + ", () => " + r + ")"
+        return "try_(() => " + l + ", () => " + r + ")"
       },
       () => {
         const l = parse_unit()
@@ -169,6 +162,7 @@ function parse(src) {
   }
   function parse_unit() {
     const unit = or(
+      parse_stmt,
       () => read_between("[", "]", () => "[" + sepby(parse_unit, () => reg(/ +/)).join(",") + "]"),
       () => read_between("(", ")", () => "[" + sepby2(parse_unit, () => eq(",")).join(",") + "]"),
       () => read_between("(", ")", () => "(" + parse_def().replace("const ", "") + ")"),
@@ -199,7 +193,7 @@ function parse(src) {
     return sepby(read_attr, () => eq(",")).join(",")
   }
   function read_op() {
-    return reg(/^ *([+\-*/:]=?|==|!=|<-|=|;)/)[1]
+    return reg(/^ *([+\-*/:]=?|==|!=|<-|\|\||&&|=|;)/)[1]
   }
   function read_member() {
     const m = reg(/^\.[a-zA-Z_0-9]*/)[0]
@@ -329,16 +323,25 @@ function parse(src) {
 }
 
 function prepare() {
+  function install_(obj, name, f) {
+    Object.defineProperty(obj.prototype, name, {
+      configurable: true,
+      get: function() { return f(this) }
+    })
+  }
+  function call_(f) {
+    return typeof(f) === "function" ? call_(f()) : f
+  }
   this.error = x => {
     const e = new Error("error: " + x)
     e.isMoa = true
     throw(e)
   }
-  install(Array, 'head', x => guard(x.length > 0, x[0], "out of index"))
-  install(Array, 'tail', x => x.slice(1))
-  install(Array, 'n0', x => x[0])
-  install(Array, 'n1', x => x[1])
-  install(Array, 'n2', x => x[2])
+  install_(Array, 'head', x => guard(x.length > 0, x[0], "out of index"))
+  install_(Array, 'tail', x => x.slice(1))
+  install_(Array, 'n0', x => x[0])
+  install_(Array, 'n1', x => x[1])
+  install_(Array, 'n2', x => x[2])
   Array.prototype.contains = function(x) { return this.indexOf(x) !== -1 }
   Array.prototype.nth = function(n) {
     return n >= this.length ? error("out of index") : this[n]
@@ -347,15 +350,15 @@ function prepare() {
   String.prototype.nth = function(n) {
     return n >= this.length ? error("out of index") : this[n]
   }
-  install(String, 'to_i', parseInt)
-  install(String, 'to_a', x => x.split(""))
-  install(Number, 'to_s', String)
+  install_(String, 'to_i', parseInt)
+  install_(String, 'to_a', x => x.split(""))
+  install_(Number, 'to_s', String)
   this.try_ = function(l, r) {
     try {
-      return l()
+      return call_(l)
     } catch (e) {
       if (e.isMoa) {
-        return r()
+        return call_(r)
       }
       throw e
     }
@@ -378,7 +381,7 @@ function test() {
     const defs = Array.from(arguments).slice(2)
     const src = "main = " + main + (defs || []).map(x => "\n" + x).join("")
     const js = parse(src)
-    const fact = run(js + "\ntypeof(main) === 'function' ? main() : main")
+    const fact = run(js + "\n" + "call_(main)")
     if (JSON.stringify(expect) === JSON.stringify(fact)) {
       log("ok: " + JSON.stringify(fact))
     } else {
@@ -413,6 +416,7 @@ function test() {
   t(9, "{ e <- f\ne }", "f = { 9 }")
   t(9, "{ e = f\n9 }", "f = { error(\"ignore\") }")
   t("error: fail", "{ e <- f\ne }", "f = { error(\"fail\") }")
+  t(9, "{ e <- f } ||| 9", "f = { error(\"fail\") }")
   // container(5)
   t([1], "[1]")
   t([1, 2], "[1 2]")
@@ -422,7 +426,7 @@ function test() {
   t(4, "s(4 0).n", "s:\n  n int\n  m int")
   // error(2)
   t("error: failed", "f(1)", "f x = error(\"failed\")")
-  t(2, "error(\"failed\") | 2")
+  t(2, "error(\"failed\") ||| 2")
   // built-in
   t(1, "\"01\".to_i")
   t("1,2,3", "[1 2 3].map(x => x.to_s).join(\",\")")
@@ -440,7 +444,7 @@ function test() {
   t(4, "c + 2", "a =\n  1\n  2\nb =\n  a\n  a\nc = b")
   t(5, "f + 4", "f =\n  v = 1\n  v")
   t(6, "5 + g(1 \"a\" f(2) 3)", "f x = x\ng a b c d = a")
-  t(7, "1 + sum([1 2 3])", "sum xs = (f acc xs = f(acc + xs.head xs.tail) | acc)(0 xs)")
+  t(7, "1 + sum([1 2 3])", "sum xs = (f acc xs = f(acc + xs.head xs.tail) ||| acc)(0 xs)")
   t(1, "f(1)", "f x = x\n| 1 = 1\n| _ = 2")
   t(8, "g(f(8) 2 g(3) f(4))", "f x = x\ng a b c d = a")
   // container(5)
@@ -453,10 +457,10 @@ function test() {
   t(10, "s(10).f2", "s:\n  n int\n  f1 =\n    n\n  f2 =\n    f1")
   t(11, "10 + s(1).f", "s:\n  n int\n  f =\n    v = n\n    v")
   // error(2)
-  t("message", "calc", "f x = error(x)\ncalc =\n  r y = f(y) | y\n  r(\"message\")")
+  t("message", "calc", "f x = error(x)\ncalc =\n  r y = f(y) ||| y\n  r(\"message\")")
   // indent
   t(1, "p.n", "p:\n  m =\n    n\n  n =\n    1")
-  t(2, "or(1 2)", "or l r =\n  a = l\n  alt x = 1; x\n  2 | alt(1)")
+  t(2, "or(1 2)", "or l r =\n  a = l\n  alt x = 1; x\n  2 ||| alt(1)")
   log("done")
 }
 
