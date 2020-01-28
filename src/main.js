@@ -85,11 +85,11 @@ function parse(src) {
   }
   function parse_stmt() {
     reg(/ *{/)
-    const s0 = many1(() => serial(read_white_spaces, parse_step))
-    const s1 = s0.join(",\n")
-    const s2 = s1.replace(/(\w+) *(?:<-|:=) *([^\n,]+)/g, '$1 = ($2)()')
+    const lines = many1(() => serial(read_white_spaces, parse_step)).map(x =>
+      x.replace(/(\w+) *(?:<-|:=) *([^\n,]+)/g, 'let $1 = call_($2)'))
     reg(/\s*}/)
-    return "(() => (" + s2 + "))"
+    lines[lines.length - 1] = "return " + lines[lines.length - 1]
+    return "function() {\n" + lines.join("\n") + "}"
   }
   function parse_seq() {
     return "(" + many1(() => serial(read_indent, parse_step)).join(",\n") + ")"
@@ -329,9 +329,7 @@ function prepare() {
       get: function() { return f(this) }
     })
   }
-  function call_(f) {
-    return typeof(f) === "function" ? call_(f()) : f
-  }
+  this.call_ = (f) => typeof(f) === "function" ? call_(f()) : f
   this.error = x => {
     const e = new Error("error: " + x)
     e.isMoa = true
@@ -353,6 +351,7 @@ function prepare() {
   install_(String, 'to_i', parseInt)
   install_(String, 'to_a', x => x.split(""))
   install_(Number, 'to_s', String)
+  Function.prototype.fmap = function(f) { return () => f(this()) }
   this.try_ = function(l, r) {
     try {
       return call_(l)
@@ -472,7 +471,7 @@ function compile() {
     prepare.toString(),
     js,
     "prepare()",
-    "const ret = compile(" + JSON.stringify(src) + ")",
+    "const ret = call_(compile(" + JSON.stringify(src) + "))",
     "console.log(ret)"
   ].join("\n\n")
   return code
