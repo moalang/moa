@@ -415,7 +415,7 @@ function test() {
   t(9, "{ e <- f\ne }", "f = { 9 }")
   t(9, "{ e = f\n9 }", "f = { error(\"ignore\") }")
   t("error: fail", "{ e <- f\ne }", "f = { error(\"fail\") }")
-  t(9, "{ e <- f } ||| 9", "f = { error(\"fail\") }")
+  t(9, "{ e <- f\n0 } ||| 9", "f = { error(\"fail\") }")
   // container(5)
   t([1], "[1]")
   t([1, 2], "[1 2]")
