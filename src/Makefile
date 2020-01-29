@@ -1,8 +1,8 @@
 command=test
 
 help:
-	@clear
-	@node main.js help
+	@echo "make js"
+	@echo "make test"
 
 watch:
 	@-make ${command}
@@ -15,11 +15,11 @@ js:
 	@make watch command=run_js
 
 run_test:
-	@clear
+	@clear && printf '\e[3J'
 	@node main.js test
 
 run_js:
-	@clear
+	@clear && printf '\e[3J'
 	@node main.js js < v1.moa > /tmp/moa.js
 	@node main.js html < v1.moa > /tmp/moa.html
 	@node /tmp/moa.js
