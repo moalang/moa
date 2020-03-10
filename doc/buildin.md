@@ -1,26 +1,24 @@
-# Build in types
+# Build-in types
 Primitive
 - bool
 - int
 - float
 - string
-- function
-- error
 Container
 - tuple
 - class
 - array
-- map
+- dict
 - set
 - enum
 Interface
 - void
+- error
+- function
 - number
 - try
-- eff
 Control flow
-- effect
-- recursive call
+- effect?
 - branch
 Binary operators
 - effect      : <-
@@ -74,9 +72,6 @@ try a:
   or : a.try a.try
   fmap b : function(a b) try.b
   then b : function(error try.b) try.b
-eff a:
-  and : a.eff a.eff
-  or : a.eff a.eff
 log:
   debug a : a void
   info a : a void

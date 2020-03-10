@@ -4,19 +4,19 @@
 root: def++
  def:
 | func
-| "class" ref+ : prop++
-| "enum"  ref+ : tag++
-| "alias" ref+ : ref
-| "func"  ref+ : ref+
+| ref+ tag++
+| ref+ : prop++
+| ref+ :: type+
 func: ref id* "=" stmt
-tag : ref (prop ("," prop)*)*
-prop: attr | func
+tag : "|" ref (prop ("," prop)*)*
+prop: call | attr | func
+call: id ("." id | "(" exp* ")")*
 attr: id type
 stmt: exp switch?
 exp:
-| unit op2 exp     # op2    : v + 1
-| ref op2u exp     # set    : n = 0, n += 1, n := -1
-| args => exp      # lambda : x, y => x + y
+| unit op2 exp # op2    : v + 1
+| ref op2u exp # set    : n = 0, n += 1, n := -1
+| args => exp  # lambda : x, y => x + y
 | unit
 unit:
 | value
@@ -34,8 +34,7 @@ value:
 kv  : id exp # decided?
 id  : [a-z0-9_]+
 ref : id (. id)*
-type: ref
-call: id ("." id | "(" exp* ")")*
+type: ref | "(" ref+ ")"
 op2 : [; + - * / % & | << >> + - > >= < <=  == != || &&]
 op2u: [= := += /= *= /= %=]
 args: "()" | id (, id)*
@@ -77,28 +76,33 @@ one = 1
 inc x = x + one
 add = (a b) => a + b
 id x = x
+echo =
+  line <- readline
+  puts(line)
 ```
 
 
 ## Types
 
 ```
-class error: message string, backtrace array(string,int)
-class tuple: values array(type)
-class cache k v: values dict(k v)
+error: message string, backtrace array(string,int)
+tuple: values array(type)
+cache k v: values dict(k v)
 
-enum bool: true | false
-enum optionx a: some a | none
-enum try a: ok a | na error
+bool | true | false
+optionx a | some a | none
+try a | ok a | na error
 
-alias age: int
+age: int # alias
 
-interface printable: string string
-interface mappable a b: map seq(a) (a b) seq(b)
+printable: string :: string
+mappable: map a b :: seq(a) (a b) seq(b)
+vector2: x int, y int
+vector3: vector2, z int, printable("($x,$y,$z)")
 
-func inc: int int
-func add: n.num: n n n
-func id x: x x
+inc :: int int
+add n.num :: n n n
+id x :: x x
 inc x = x + 1
 add x y = x + y
 id x = x
@@ -139,6 +143,18 @@ find_pair xs ys f =
   x <- find(xs f)
   y <- find(ys f)
   x == y || find_pair(xs ys f)
+```
+
+## Name scope
+
+```
+define foo.bar {
+  add int int int
+  person: name string, age int
+}
+belong foo.bar
+import net.tcp, protocol.http
+export add, person
 ```
 
 ## Order of operation
