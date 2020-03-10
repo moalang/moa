@@ -18,7 +18,7 @@ syn sync minlines=500
 
 "*Comment        o コメント
 syn region Comment start=/__comment__/ end="__uncomment__"
-syn match  Comment / *#.*$/
+syn match  Comment /#.*$/
 
 "*Constant       o 定数
 syn region String start='"' end='"' skip='\\"'
@@ -27,36 +27,38 @@ syn match Number / [0-9]\+\(\.[0-9]\+\)\?/
 syn keyword Boolean true false
 
 "*Identifier     o 変数名
-syn match Function /^[a-zA-Z0-9:_]\+\%([a-zA-Z0-9:_ ]*=[ \n]\)\@=/
+syn match Function /^ *[a-zA-Z0-9_. ]\+\%(.*:[ \n]\)\@=/
 "syn region vlBlock start=/:$/ end=/\n[^a-zA-Z]/ contains=vlMember
 "syn match vlMember /^[ \t]\+[a-zA-Z_0-9]\+[ \n]/ contained
 "hi def link vlMember Identifier
 
 "*Statement      o 命令文
-syn keyword Statement next break return goto
-syn keyword Conditional if else match
-syn keyword Repeat for
-syn keyword Exception catch throw
+""syn keyword Statement next break return goto
+""syn keyword Conditional if else match
+""syn keyword Repeat for
+""syn keyword Exception catch throw
 syn match Operator "|||"
-syn match Operator "[+\-\*/|&]=\="
+syn match Operator "[+\-\*/|&:]=\="
 syn match Operator "[<>]=\="
 syn match Operator "=="
+syn match Operator "="
 syn match Operator "<-"
 syn match Operator "->"
 syn match Operator "||"
 syn match Operator "&&"
 syn match Operator " \. "
+syn match Operator "|"
 
 "*PreProc        o 一般的なプリプロセッサー命令
-"syn match Macro /@[a-zA-Z0-9:_]\+/
+""syn match Macro /@[a-zA-Z0-9:_]\+/
 
 "*Type           o int, long, char, その他
-syn match Structure "^[a-zA-Z0-9_() ]*:$"
-syn match Type "^.* : "
-syn keyword StorageClass let var
+syn match Structure "^.*::\n"
+syn match Type "^.*:: [a-zA-Z].*"
+""syn keyword StorageClass let var
 
 "*Underlined     o 目立つ文章, HTMLリンク
-syn keyword Define package import export
+""syn keyword Define package import export
 
 "hi def link vlRepeat Repeat
 

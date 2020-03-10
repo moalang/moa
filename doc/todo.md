@@ -1,21 +1,22 @@
 # TODO (v0.1 self booting)
 [x] Design error handling type and sequence syntax
 [x] Tidy up documents
-[] Uniqueness
+[x] Uniqueness
     1. compile to other languages
-    2. monad like error handling
+    2. no system call
+    3. monad like error handling
     ```
     find a : a.array a try(a)
     main =
       hit <- find([1 2 3] 1)
     ```
-    3. monad like variables
+    4. monad like variables
     ```
     n var(int)
     incr : eff(int)
     incr = n += 1
     ```
-    4. branch syntax
+    5. minimal syntax
     ```
     exp.if(true false)
     exp
@@ -25,34 +26,40 @@
     | matcher = exp
     | _ = exp
     ```
-[] Minimal to Go compiler
+[] Minimal compiler to make JavaScript
     ```
-    main : io(int)
-    main _ = 0
+    main = 0
+    --
+    function moa_main() { return 0 }
     ```
-[] Support IO
+[] Minimal compiler to make Go
     ```
-    main : io(int)
-    main io =
-      now <- io.now
-      io.stdout(now.format("YYYY/MM/DD hh:mm:ss"))
-      0
+    main = 0
+    --
+    func moa_main() int64 { return 0 }
     ```
 [] Support primitive values
     - bool
     - int
     - float
     - string
+    - closure
+[] Support function
     - func
+[] Support containers
     - array
     - map
-    - class
+    - struct
     - enum
-[] Support define
-[] Support branch
 [] Support variable
     - var
-    - eff
+[] Support io
+    - in
+    - out
+    - io
+[] Support expression
+[] Support branch
+[] Support standard library for values
 [] Self booting
 # TODO (v0.2 core library)
 # TODO (v0.3 standard library)

@@ -33,3 +33,35 @@ Moa is an open source programming language that makes programming fun.
 - Ownership
 - Worker and transactional shared database
 - Preconditions and Postconditions
+
+## The expression for optional, error and side effect
+opt a: some a value | none
+try a: ok a value | fail message string, params ...
+eff a: _
+
+Syntax sugar.
+```
+<-   # try + eff?
+exp! # try + eff?
+
+# opt
+head a : [a] a?
+head xs = xs.0.rescue(_ -> none)
+convert : [num] num?
+convert xs = head(xs)?abs ?+ 1
+calc : [num] num
+calc xs = convert(xs).alt(0)
+# try
+head a : [a] a!
+head xs = xs.0
+convert : [num] num!
+convert xs = head(xs)!abs !+ 1
+calc : [num] num
+calc xs = convert(xs).rescue(e -> 0)
+# eff
+count var(n)
+incr : int&
+incr = count += 1
+main : int&
+main = incr; incr
+```

@@ -2,7 +2,7 @@ compile src = {
   tree <- parse(src)
   build(tree)
 }
-parse src = parser("1+2-3" 0).parse_top
+parse src = parser("11+2-3*4" 0).parse_top
 build node = node
 | ref = node.id
 | int = node.n
@@ -87,8 +87,8 @@ parser:
     c
   }
   equal x = {
-    r <- x == src.slice(pos pos + x.length)
-    r || error("failed")
+    r <- src.slice(pos pos + x.length)
+    r == x || error("failed")
     pos += x.length
     x
   }
