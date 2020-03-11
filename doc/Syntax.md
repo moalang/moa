@@ -4,12 +4,11 @@
 root: def++
  def:
 | func
-| ref+ tag++
-| ref+ : prop++
-| ref+ :: type+
+| ref+ : tag* prop*
+| ref+ : type+
 func: ref id* "=" stmt
-tag : "|" ref (prop ("," prop)*)*
-prop: call | attr | func
+tag : "\n|" ref (attr ("," attr)*)*
+prop: "\n" (call | attr | func)
 call: id ("." id | "(" exp* ")")*
 attr: id type
 stmt: exp switch?
@@ -37,10 +36,13 @@ ref : id (. id)*
 type: ref | "(" ref+ ")"
 op2 : [; + - * / % & | << >> + - > >= < <=  == != || &&]
 op2u: [= := += /= *= /= %=]
-args: "()" | id (, id)*
+args: 
+| "(" id+ ")"
+| id (, id)*
 switch:
 | (br? "|" exp){2}           # binary branch
 | (br? "|" unit " : " exp)+  # pattern match
+| ":\n" attr** func++
 ```
 
 ## Primitives

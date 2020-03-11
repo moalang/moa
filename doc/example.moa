@@ -1,74 +1,65 @@
-# Entry point
-main : io @int
-main io {
+main: io(int)
+main =
   src <- io.stdin.string
   ret <- run(src)
   io.write(ret)
   return(0)
-}
 
-run : string @string
+run: string try(string)
 run src = eval(parser(src).parse_top)
 
-# data types
 ast:
 | int value int
 | op2 op string, left ast, right ast
 
-# parser
 parser:
   src string
   pos 0
-  satisfy : (string bool) @string
-  satisfy f {
+  satisfy: (string bool) try(string)
+  satisfy f =
     c <- src(pos)
     f(c) || throw("char: $c, checker: $f.name, pos: $p.pos")
     p.pos += 1
     return(c)
-  }
-  parse_top : @ast
+  parse_top: try(ast)
   parse_top = many1(parse_def)
-  parse_def : @ast
-  parse_def {
+  parse_def: try(ast)
+  parse_def =
     id <- read_id
     read_string("=")
     body <- parse_exp
     def(id body)
-  }
-  parse_exp : @ast
-  parse_exp {
+  parse_exp: try(ast)
+  parse_exp =
     l <- parse_unit
     op <- read_op
     r <- parse_exp
     ast.op2(op l r)
-  }
-  parse_unit : @ast
+  parse_unit: try(ast)
   parse_unit = parse_int | parse_ref
-  parse_int : @ast
-  parse_int {
+  parse_int: try(ast)
+  parse_int =
     x <- many1(p.satisfy(range("0" "9").contains))
     ast.int(x.to_int)
-  }
-  read_id : @string
+  read_id: try(string)
   read_op = one(["+" "-" "*" "/"].contains)
   read_string s = s == src.slice(pos s.length)
 
-many1 a : @a @[]a
+many1 a: try(a) try([]a)
 many1 f = f() ++ many(f)
-many a : @a @[]a
-many f = rec([]) with:
-  rec acc = {
+many a: try(a) try([]a)
+many f = rec([]):
+  rec acc =
     v <- f()
-    | error = acc
-    | rec(acc ++ v)
-  }
+    | _ = return acc
+    rec(acc ++ v)
 
 # evaluator
-eval : ast @ast
+eval: ast try(ast)
 eval env =
   main <- env.find("main")
   apply(main).to_string
-apply : ast @ast
+apply: ast try(ast)
 apply node = node
 | ast.int = node
 | ast.op2 = operate(node.op node.left node.rigth)
@@ -77,7 +68,7 @@ apply node = node
   apply(v)
 extract_int x = i <- apply(x)
 | ast.int = i.value
-operate : string ast ast @ast
+operate: string ast ast try(ast)
 operate op left right =
   l <- apply(left).extract_int
   r <- apply(right).extract_int
