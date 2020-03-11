@@ -18,13 +18,12 @@
     ```
     5. minimal syntax
     ```
-    exp.if(true false)
     exp
     | error case
     | success case
     exp
-    | matcher = exp
-    | _ = exp
+    | matcher : exp
+    | _ : exp
     ```
 [] Minimal compiler to make JavaScript
     ```

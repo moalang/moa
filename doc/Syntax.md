@@ -64,6 +64,7 @@ true # bool
 [1]          # array
 {"a" 1}      # dictionary
 # multiple
+(1, n)       # tuple
 (a 1, b n)   # struct
 [1 n]        # array
 {"a" 1, k n} # dictionary
@@ -85,39 +86,72 @@ echo =
 ## Types
 
 ```
-error: message string, backtrace array(string,int)
-tuple: values array(type)
-cache k v: values dict(k v)
+printable:
+  string: string
+vector2:
+  x int
+  y int
+  printable("($x,$y)")
+cache k v:
+  values dict(k v)
 
-bool | true | false
-optionx a | some a | none
-try a | ok a | na error
+bool:
+| true
+| false
+option a:
+| some a
+| none
 
-age: int # alias
-
-printable: string :: string
-mappable: map a b :: seq(a) (a b) seq(b)
-vector2: x int, y int
-vector3: vector2, z int, printable("($x,$y,$z)")
-
-inc :: int int
-add n.num :: n n n
-id x :: x x
+inc: int int
 inc x = x + 1
+
+add n.num: n n n
 add x y = x + y
+
+id x: x x
 id x = x
+
 echo =
   line <- readline
   puts(line)
-parse = or(exp number)
-  exp = ...
-  number = ...
+ast:
+  int int
+  op2:
+    op2 string
+    left ast
+    right ast
+parse src = top:
+  pos int
+  top = or(exp number)
+  or l r = l | _ -> r
+  exp =
+    l <- number
+    or(op2(l) l)
+  op2 l =
+    op <- operator
+    r <- exp
+    ast.op2(op l r)
+  number =
+    n <- many(satisfy("0123456789".contains))
+    ast.int(n)
+  many f = rec([]):
+    rec acc =
+      v <- f
+      | _ -> return acc
+      rec(acc ++ v)
+  satisfy f =
+    c <- src(pos)
+    guard f(c)
+    pos += 1
+    c
 ```
 
 ## Branch
 
 ```
-gcd a b = b == 0 | a | gcd(b a % b)
+gcd a b = b == 0
+| a
+| gcd(b a % b)
 fib x =
 | (< 0) = 0
 | 1 = one
@@ -127,34 +161,32 @@ fib x =
 ## Sequence
 
 ```
-nat n = seq(n, () => nat(n + 1))
+nat n = seq(n () => nat(n + 1))
 ten = nat(1).take(10) # [1, 2, ..., 10]
 ```
 
 ## Error handling
 
 ```
-func find a: seq(a) (a bool) try(a)
+find a: seq(a) (a bool) try(a)
 find s f =
   v <- s
-  f(v) | v | find(s f)
-func find_pair a: seq(a) seq(a) (a bool) try(bool)
-find_pair xs ys f =
-  x <- find(xs f)
-  y <- find(ys f)
-  x == y || find_pair(xs ys f)
+  f(v)
+  | v
+  | find(s f)
 ```
 
 ## Name scope
 
 ```
-define foo.bar {
-  add int int int
-  person: name string, age int
+library foo.bar {
+  add: int int int
+  person:
+    name string
+    age int
 }
 belong foo.bar
-import net.tcp, protocol.http
-export add, person
+use net.tcp, protocol.http
 ```
 
 ## Order of operation
