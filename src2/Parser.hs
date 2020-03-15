@@ -12,9 +12,21 @@ parse_top = Stmt <$> sep_by1 parse_line read_br1
 parse_line = parse_type <|> parse_def <|> parse_exp
 parse_type = do
   name <- read_id
-  args <- many (read_spaces1 >> read_id)
+  many (read_spaces1 >> read_id) -- drop type information
   string ":\n"
-  fields <- sep_by (indent parse_field) br
+  parse_struct name <|> parse_enum name
+parse_enum name = go
+  where
+    go = do
+      tags <- sep_by1 tag br
+      return $ Enum name tags
+    tag = do
+      string "| "
+      name <- read_id
+      fields <- many (read_spaces1 >> parse_field)
+      return (name, fields)
+parse_struct name = do
+  fields <- sep_by1 (indent parse_field) br
   methods <- sep_by (indent parse_def) br
   return $ Struct name fields methods
 parse_field = do
@@ -138,8 +150,10 @@ between l r c = do
   v <- c <|> error "failed in between on the center"
   r <|> error "faield in between on the right"
   return $ v
+
 -- const
 br = char '\n'
+
 -- indent
 indent f = do
   string "  "
@@ -150,3 +164,5 @@ indent f = do
 back :: Int -> Parser ()
 back n = Parser $ \s -> return ((), s { pos = pos s - n })
 
+-- debug
+debug msg = Parser $ \s -> trace (msg ++ " " ++ (show $ drop (pos s) (src s))) (return ((), s))

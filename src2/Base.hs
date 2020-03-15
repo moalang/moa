@@ -18,7 +18,9 @@ data AST =
   | Def String [String] AST
   | Call String [AST]
   | Struct String [String] [AST]
+  | Enum String [(String, [String])]
   | Stmt [AST]
+  | Branch AST [(AST, AST)]
   deriving (Show, Eq)
 
 -- Pparser
@@ -63,4 +65,3 @@ to_string (Struct name _ _) = name
 string_join glue [] = ""
 string_join glue [x] = x
 string_join glue (x:xs) = x ++ glue ++ (string_join glue xs)
-debug x = trace ("DEBUG: " ++ show x) (return x)

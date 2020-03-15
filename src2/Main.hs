@@ -16,7 +16,7 @@ main = do
   test "1" $ code ["x = 1", "x"]
   test "2" $ code ["inc x = x + 1", "inc(1)"]
   test "3" $ code ["vector2:", "  x int", "  y int", "v = vector2(1 2)", "v.x + v.y"]
-  test "node(leaf(1) node(leaf(2) leaf(3)))" $ code ["tree a | leaf a | node tree tree", "node(leaf(1) node(leaf(2) leaf(3)))"]
+  test "3" $ code ["ab:", "| a", "| b", "f x = x", "| a -> 1", "| b -> 2", "f(a) + f(b)"]
   test "2" $ code ["add x y =", "  z = x + y", "  z", "add(1, 2)"]
   -- operations
   test "5" "2 + 3"
