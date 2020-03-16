@@ -45,7 +45,7 @@ parse_def = do
   return $ Def name args body
 parse_stmt = do
   br
-  Stmt <$> sep_by (string "  " >> parse_line) br
+  Stmt <$> sep_by (indent parse_line) br
 parse_exp :: Parser AST
 parse_exp = go
   where

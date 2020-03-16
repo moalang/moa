@@ -31,7 +31,7 @@ eval_op2 op [l, r] = eval l ++ " " ++ op ++ " " ++ eval r
 eval_call_func name [] = name
 eval_call_func name argv = name ++ "(" ++ (cjoin $ map eval argv) ++ ")"
 eval_def name args body = unlines [
-                            "def " ++ name ++ " " ++ (cjoin args)
+                            "define_method(:" ++ name ++ ") do |" ++ (cjoin args) ++ "|"
                           , eval body
                           , "end"
                           ]

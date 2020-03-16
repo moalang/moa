@@ -17,7 +17,7 @@ main = do
   test "2" $ code ["inc x = x + 1", "inc(1)"]
   test "3" $ code ["vector2:", "  x int", "  y int", "v = vector2(1 2)", "v.x + v.y"]
   test "3" $ code ["ab:", "| a", "| b", "f x = x", "| a -> 1", "| b -> 2", "f(a) + f(b)"]
-  --test "2" $ code ["add x y =", "  z = x + y", "  z", "add(1, 2)"]
+  test "3" $ code ["add x y =", "  z = x + y", "  z", "add(1 2)"]
   -- operations
   --test "5" "2 + 3"
   --test "-1" "2 - 3"
