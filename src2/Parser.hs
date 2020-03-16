@@ -44,16 +44,28 @@ parse_def = do
   body <- parse_stmt <|> parse_exp
   return $ Def name args body
 parse_stmt = do
-  char '\n'
-  Stmt <$> sep_by (string "  " >> parse_line) (char '\n')
+  br
+  Stmt <$> sep_by (string "  " >> parse_line) br
 parse_exp :: Parser AST
 parse_exp = go
   where
-    go :: Parser AST
     go = do
+      exp <- body
+      switch exp
+    body = do
       left <- parse_unit
       (exp_op_remaining left) <|> (return left)
-    exp_op_remaining :: AST -> Parser AST
+    switch exp = do
+      conds <- many cond
+      return $ if conds == []
+        then exp
+        else Branch exp conds
+    cond = do
+      string "\n| "
+      m <- (TypeMatcher <$> read_id) <|> (ValueMatcher <$> body)
+      string " -> "
+      b <- body
+      return (m, b)
     exp_op_remaining left = do
       read_spaces
       op <- read_op
@@ -108,7 +120,7 @@ read_separator = many $ satisfy ((flip elem) "\n\t ")
 read_br1 :: Parser ()
 read_br1 = do
   read_spaces
-  char '\n'
+  br
   many $ satisfy ((flip elem) "\n\t ")
   return ()
 
@@ -118,7 +130,6 @@ satisfy f = Parser $ \s -> do
   guard $ pos s < len s
   let c = (src s) !! (pos s)
   guard $ f c
-  let br = c == '\n'
   return (c, s { pos = 1 + pos s })
 many :: Parser a -> Parser [a]
 many f = many_acc f []

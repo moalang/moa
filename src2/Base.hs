@@ -20,7 +20,12 @@ data AST =
   | Struct String [String] [AST]
   | Enum String [(String, [String])]
   | Stmt [AST]
-  | Branch AST [(AST, AST)]
+  | Branch AST [(Matcher, AST)]
+  deriving (Show, Eq)
+
+data Matcher =
+    TypeMatcher String
+  | ValueMatcher AST
   deriving (Show, Eq)
 
 -- Pparser

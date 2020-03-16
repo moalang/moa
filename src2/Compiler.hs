@@ -4,7 +4,7 @@ import Base
 import Debug.Trace (trace)
 
 compile :: AST -> String
-compile top = unlines [
+compile top = std ++ unlines [
                 "def main"
               , eval top
               , "end"
@@ -20,6 +20,8 @@ eval ast = case ast of
   Call name argv -> "(" ++ eval_call name argv ++ ")"
   Stmt lines -> unlines $ map eval lines
   Struct name args methods -> eval_struct name args methods
+  Enum name enums -> eval_enum name enums
+  Branch target conds -> eval_branch target conds
 eval_call name argv = if elem name all_parse_ops
   then eval_op2 name argv
   else eval_call_func name argv
@@ -35,17 +37,39 @@ eval_def name args body = unlines [
                           ]
 eval_struct name args methods = unlines [
                             "def " ++ name ++ " " ++ (cjoin args)
-                          , "Struct.new " ++ (cjoin $ map (\x -> ":" ++ x) args) ++ " do"
+                          , "Struct.new " ++ (cjoin $ map (\x -> ":" ++ x) ("_tag" : args)) ++ " do"
                           , unlines $ map eval methods
-                          , "end.new(" ++ (cjoin args) ++ ")"
+                          , "end.new(" ++ (cjoin $ (':' : name) : args) ++ ")"
                           , "end"
                           ]
-
+eval_enum name enums = unlines $ map to_ruby enums
+  where
+    to_ruby (tag, fields) = eval_struct tag fields []
+eval_branch target conds = "moa_branch(" ++ eval target ++ ", " ++
+                           "[" ++ (cjoin $ map to_ruby conds) ++ "]" ++
+                           ")"
+  where
+    to_ruby (cond, body) = case cond of
+      TypeMatcher t -> "[:" ++ t ++ "," ++ eval body ++ "]"
+      ValueMatcher t -> "[" ++ eval t ++ "," ++ eval body ++ "]"
 
 cjoin xs = go [] xs
   where
     go acc [] = foldr (++) "" $ drop 1 $ reverse acc
     go acc (x:xs) = go (x : "," : acc) xs
---  | Call String [AST]
---  | Struct String [(String, AST)]
---  | Stmt [AST]
+
+std = unlines [
+        "def moa_branch(target, conds)"
+      , "  conds.each do |(cond, body)|"
+      , "    return body if moa_branch_eq(target, cond)"
+      , "  end"
+      , "  raise Exception.new('Unexpected branch ' + target.inspect + ' ' + conds.inspect)"
+      , "end"
+      , "def moa_branch_eq(target, cond)"
+      , "  if cond.instance_of?(Symbol)"
+      , "    target._tag == cond"
+      , "  else"
+      , "    target == cond"
+      , "  end"
+      , "end"
+      ]
