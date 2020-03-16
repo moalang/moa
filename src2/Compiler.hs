@@ -17,7 +17,8 @@ eval ast = case ast of
   Bool b -> if b then "true" else "false"
   String s -> show s
   Def name args body -> eval_def name args body
-  Call name argv -> "(" ++ eval_call name argv ++ ")"
+  Call name argv -> eval_call name argv
+  Parenthesis exp -> "(" ++ eval exp ++ ")"
   Stmt lines -> unlines $ map eval lines
   Struct name args methods -> eval_struct name args methods
   Enum name enums -> eval_enum name enums

@@ -17,6 +17,7 @@ data AST =
   | String String
   | Def String [String] AST
   | Call String [AST]
+  | Parenthesis AST
   | Struct String [String] [AST]
   | Enum String [(String, [String])]
   | Stmt [AST]

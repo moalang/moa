@@ -75,10 +75,13 @@ parse_exp = go
 parse_unit :: Parser AST
 parse_unit = go
   where
-    go = parenthis <|> parse_string <|> parse_int <|> parse_bool <|> parse_call
-    parenthis = between (char '(') (char ')') op1_or_exp
-    op1_or_exp = (char '-') >> (parse_exp >>= \x -> return $ Call "*" [I64 (-1), x]) <|>
-                  parse_exp
+    go = parenthesis <|> parse_string <|> parse_int <|> parse_bool <|> parse_call
+    parenthesis = between (char '(') (char ')') (Parenthesis <$> op1_or_exp)
+    op1_or_exp = op1 <|> parse_exp
+    op1 = do
+      char '-'
+      x <- parse_exp
+      return $ Call "*" [I64 (-1), x]
     parse_string = do
       s <- between (char '"') (char '"') (many $ satisfy (\c -> c /= '"'))
       return $ String s

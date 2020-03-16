@@ -19,26 +19,12 @@ main = do
   test "3" $ code ["ab:", "| a", "| b", "f x = x", "| a -> 1", "| b -> 2", "f(a) + f(b)"]
   test "3" $ code ["add x y =", "  z = x + y", "  z", "add(1 2)"]
   -- operations
-  --test "5" "2 + 3"
-  --test "-1" "2 - 3"
-  --test "6" "2 * 3"
-  --test "0" "2 / 3"
-  --test "2" "2 % 3"
-  --test "9" "2 + 3 + 4"
-  --test "14" "2 + (3 * 4)"
-  --test "20" "(2 + 3) * 4"
-  --test "true" "true && true"
-  --test "false" "false && true"
-  --test "true" "true || true"
-  --test "true" "false || true"
-  --test "true" "1 == 1"
-  --test "false" "1 == 2"
-  --test "false" "1 != 1"
-  --test "true" "1 != 2"
-  --test "true" "1 >= 1"
-  --test "false" "1 > 1"
-  --test "true" "1 <= 1"
-  --test "false" "1 < 1"
+  test "1" "1 + 2 * 3 / (4 - 2) % 3"
+  test "true" "true && (false || true)"
+  test "true" "1 == 1 && 1 != 2"
+  test "false" "1 == 2 || 1 != 1"
+  test "true" "1 >= 1 && 1<= 1"
+  test "false" "1 > 1 || 1 < 1"
   -- mutable
   putStrLn "done"
 
