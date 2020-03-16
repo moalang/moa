@@ -75,10 +75,19 @@ true # bool
 ## Function
 
 ```
+one: int
 one = 1
+
+inc: int int
 inc x = x + one
+
+add: int int int
 add = (a b) => a + b
+
+id a: a a
 id x = x
+
+echo: io
 echo =
   line <- readline
   puts(line)
@@ -88,12 +97,9 @@ echo =
 ## Types
 
 ```
-printable:
-  string: string
 vector2:
   x int
   y int
-  printable("($x,$y)")
 cache k v:
   values dict(k v)
 
@@ -103,49 +109,6 @@ bool:
 option a:
 | some a
 | none
-
-inc: int int
-inc x = x + 1
-
-add n.num: n n n
-add x y = x + y
-
-id x: x x
-id x = x
-
-echo =
-  line <- readline
-  puts(line)
-ast:
-  int int
-  op2:
-    op2 string
-    left ast
-    right ast
-parse src = top:
-  pos int
-  top = or(exp number)
-  or l r = l | _ -> r
-  exp =
-    l <- number
-    or(op2(l) l)
-  op2 l =
-    op <- operator
-    r <- exp
-    ast.op2(op l r)
-  number =
-    n <- many(satisfy("0123456789".contains))
-    ast.int(n)
-  many f = rec([]):
-    rec acc =
-      v <- f
-      | _ -> return acc
-      rec(acc ++ v)
-  satisfy f =
-    c <- src(pos)
-    guard f(c)
-    pos += 1
-    c
 ```
 
 ## Branch
@@ -160,22 +123,15 @@ fib x =
 | _ = fib(x) + fib(x - 1)
 ```
 
-## Sequence
-
-```
-nat n = seq(n () => nat(n + 1))
-ten = nat(1).take(10) # [1, 2, ..., 10]
-```
-
 ## Error handling
 
 ```
-find a: seq(a) (a bool) try(a)
-find s f =
-  v <- s
-  f(v)
-  | v
-  | find(s f)
+div: int int try(int)
+div n m =
+  (m == 0) && throw "zero division error"
+  n / m
+calc: int
+calc n m = div(n m) ||| div(m n) ||| 0
 ```
 
 ## Name scope

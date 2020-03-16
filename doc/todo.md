@@ -25,40 +25,23 @@
     | matcher : exp
     | _ : exp
     ```
-[] Minimal compiler to make JavaScript
-    ```
-    main = 0
-    --
-    function moa_main() { return 0 }
-    ```
-[] Minimal compiler to make Go
-    ```
-    main = 0
-    --
-    func moa_main() int64 { return 0 }
-    ```
-[] Support primitive values
-    - bool
-    - int
-    - float
-    - string
-    - closure
-[] Support function
-    - func
-[] Support containers
-    - array
-    - map
-    - struct
-    - enum
-[] Support variable
-    - var
-[] Support io
-    - in
-    - out
-    - io
-[] Support expression
-[] Support branch
-[] Support standard library for values
-[] Self booting
-# TODO (v0.2 core library)
-# TODO (v0.3 standard library)
+[] Design for exceptions
+   - should be explicit throwing in type system
+   - how to throw and switch specific error type?
+   - allow implicit throwing in code level?
+[] Design for effects
+   - allow implicit effect?
+[] Minimal compiler to Ruby
+[] Self booting with Ruby
+
+# TODO (v0.2 Go and JavaScript)
+[] Minimal compiler to Go
+[] Making API server with Go
+[] Minimal compiler to JavaScript
+[] Making TODO app with Go and JavaScript
+
+# TODO (v0.4 enhance built-in functions)
+
+# TODO (v0.5 tracer)
+
+# TODO (v1.0 relace)

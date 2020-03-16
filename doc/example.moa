@@ -3,10 +3,12 @@ main =
   src <- io.stdin.string
   ret <- run(src)
   io.write(ret)
-  return(0)
+  0
 
 run: string try(string)
-run src = eval(parser(src).parse_top)
+run src =
+  node <- parser(src).parse_top
+  eval(node)
 
 ast:
 | int value int
@@ -18,7 +20,7 @@ parser:
   satisfy: (string bool) try(string)
   satisfy f =
     c <- src(pos)
-    f(c) || throw("char: $c, checker: $f.name, pos: $p.pos")
+    guard f(c) "char: $c, checker: $f.name, pos: $p.pos"
     p.pos += 1
     return(c)
   parse_top: try(ast)
@@ -55,7 +57,7 @@ many f = rec([]):
     rec(acc ++ v)
 
 # evaluator
-eval: ast try(ast)
+eval: ast try(string)
 eval env =
   main <- env.find("main")
   apply(main).to_string
