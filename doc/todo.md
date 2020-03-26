@@ -5,7 +5,7 @@
     1. pure
     2. readable short code
     3. it compiles to other languages
-[] Design for exceptions
+[x] Error handling design
    # pure
    f : int, f : pure(int)
    f = 1
@@ -18,14 +18,13 @@
    # try = mutable + failable
    f : try(int)
    f = var += 1; ok(var)
-   # io = try + system call
+   # io = system call
    f : io(int)
    f = io.stdin.readline..to_int
-   # panic = stsop coroutine due to critical error on runtime
-   f : int
-   f = int[int.max] # panic("out of memory") called by runtime
-[] Design for effects
-   - allow implicit effect
+   # panic = unrecoverable errors
+   f : array(int)
+   f = int[int.max] # panic("out of memory")
+   f = panic("unreachable")
 [] Minimal compiler to Ruby
 [] Self booting with Ruby
 

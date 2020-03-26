@@ -75,16 +75,24 @@ parse_exp = go
 parse_unit :: Parser AST
 parse_unit = go
   where
-    go = parenthesis <|> parse_string <|> parse_int <|> parse_bool <|> parse_call
-    parenthesis = between (char '(') (char ')') (Parenthesis <$> op1_or_exp)
+    go = do
+      u <- unit
+      remain u <|> return u
+    unit = parenthesis <|> parse_array <|> parse_string <|> parse_int <|> parse_bool <|> parse_call
+    remain u = do
+      char '.'
+      name <- read_ref
+      args <- (between_char '(' ')' (sep_by parse_unit read_spaces1)) <|> return []
+      let obj = Method u name args
+      remain obj <|> return obj
+    parenthesis = between_char '(' ')' (Parenthesis <$> op1_or_exp)
     op1_or_exp = op1 <|> parse_exp
     op1 = do
       char '-'
       x <- parse_exp
       return $ Call "*" [I64 (-1), x]
-    parse_string = do
-      s <- between (char '"') (char '"') (many $ satisfy (\c -> c /= '"'))
-      return $ String s
+    parse_array = Array <$> between_char '[' ']' (sep_by parse_unit read_spaces1)
+    parse_string = String <$> between_char '"' '"' (many $ satisfy (\c -> c /= '"'))
     parse_int = do
       s <- many1 (satisfy ((flip elem) "0123456789"))
       return $ I64 (read s :: Int)
@@ -159,6 +167,11 @@ string :: String -> Parser String
 string target = Parser $ \s -> do
   guard $ target == take (length target) (drop (pos s) (src s))
   return (target, s { pos = length target + pos s })
+between_char l r c = do
+  char l
+  v <- c <|> (error $ "failed in between on the center " ++ [l])
+  char r <|> (error $ "faield in between on the right " ++ [l])
+  return $ v
 between l r c = do
   l
   v <- c <|> error "failed in between on the center"
@@ -179,4 +192,4 @@ back :: Int -> Parser ()
 back n = Parser $ \s -> return ((), s { pos = pos s - n })
 
 -- debug
-debug msg = Parser $ \s -> trace (msg ++ " " ++ (show $ drop (pos s) (src s))) (return ((), s))
+debug msg = Parser $ \s -> trace (msg ++ " remain:" ++ (show $ drop (pos s) (src s))) (return ((), s))

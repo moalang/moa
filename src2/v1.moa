@@ -1,0 +1,74 @@
+compile src =
+  tree <- parse(src)
+  build(tree)
+
+parse src = parse("11+2-3*4")
+
+build node = node
+| ref = node.id
+| int = node.n
+| string = "\"" + node.s + "\""
+| op2 = build(node.left) + node.op + build(node.right)
+| _ = node
+
+ast:
+| int n int
+| string s string
+| op2 op string, left ast, right ast
+| ref id string
+
+parse src = parse_exp:
+  pos int
+  fail message = error(message ++ " remain: " ++ src.slice(pos 100))
+  parse_exp =
+    v <- parse_unit
+    or(parse_op2(v) v)
+  parse_op2 l =
+    o <- read_op
+    r <- parse_exp
+    ast.op2(o l r)
+  parse_unit = or(parse_int or(parse_string parse_ref))
+  parse_int =
+    n <- read_int
+    ast.int(n)
+  parse_string =
+    s <- pair("\"" "\"" many(satisfy(x => x != "\"")).fmap(x => x.join("")))
+    ast.string(s)
+  parse_ref =
+    id <- read_id
+    ast.ref(id)
+  read_id =
+    spaces
+    str(x => "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ".to_a.contains(x))
+  read_op =
+    spaces
+    select("+-*/".to_a)
+  read_int =
+    spaces
+    many1(select("0123456789".to_a)).fmap(x => x.join("")).fmap(x => x.to_i)
+  or l r =
+    bk = pos
+    l ||| (pos := bk; r)
+  pair l r m = between(equal(l) equal(r) m)
+  between l r m =
+    l
+    ret <- m
+    r
+    ret
+  spaces = many(equal(" "))
+  many1 f =
+    x <- f
+    [x].concat(many(f))
+  many f = (rec acc = (x <- f; rec(acc.append(x))) ||| acc)([])
+  str f = many(satisfy(f)).fmap(x => x.join(""))
+  select xs = satisfy(x => xs.contains(x))
+  satisfy f =
+    c <- src.nth(pos) ||| fail("eof")
+    f(c) || fail("satisfy")
+    pos += 1
+    c
+  equal x =
+    r <- src.slice(pos pos + x.length)
+    r == x || fail("equal")
+    pos += x.length
+    x

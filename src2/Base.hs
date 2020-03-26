@@ -15,8 +15,10 @@ data AST =
   | I64 Int
   | Bool Bool
   | String String
+  | Array [AST]
   | Def String [String] AST
   | Call String [AST]
+  | Method AST String [AST]
   | Parenthesis AST
   | Struct String [String] [AST]
   | Enum String [(String, [String])]
