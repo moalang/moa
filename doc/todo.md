@@ -2,35 +2,30 @@
 [x] Design error handling type and sequence syntax
 [x] Tidy up documents
 [x] Uniqueness
-    1. compile to other languages
-    2. no system call
-    3. monad like error handling
-    ```
-    find a : a.array a try(a)
-    main =
-      hit <- find([1 2 3] 1)
-    ```
-    4. monad like variables
-    ```
-    n var(int)
-    incr : eff(int)
-    incr = n += 1
-    ```
-    5. minimal syntax
-    ```
-    exp
-    | error case
-    | success case
-    exp
-    | matcher : exp
-    | _ : exp
-    ```
+    1. pure
+    2. readable short code
+    3. it compiles to other languages
 [] Design for exceptions
-   - should be explicit throwing in type system
-   - how to throw and switch specific error type?
-   - allow implicit throwing in code level?
+   # pure
+   f : int, f : pure(int)
+   f = 1
+   # mutable
+   f : do(int)
+   f = var += 1
+   # failable
+   f : opt(int)
+   f = err("failed").or(1).then(x => x + 1)
+   # try = mutable + failable
+   f : try(int)
+   f = var += 1; ok(var)
+   # io = try + system call
+   f : io(int)
+   f = io.stdin.readline..to_int
+   # panic = stsop coroutine due to critical error on runtime
+   f : int
+   f = int[int.max] # panic("out of memory") called by runtime
 [] Design for effects
-   - allow implicit effect?
+   - allow implicit effect
 [] Minimal compiler to Ruby
 [] Self booting with Ruby
 

@@ -17,10 +17,11 @@ ast:
 parser:
   src string
   pos 0
+  guard cond msg = cond | ok(()) | err(msg)
   satisfy: (string bool) try(string)
   satisfy f =
     c <- src(pos)
-    guard f(c) "char: $c, checker: $f.name, pos: $p.pos"
+    guard(f(c) "char: $c, checker: $f.name, pos: $p.pos")
     p.pos += 1
     return(c)
   parse_top: try(ast)

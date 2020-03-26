@@ -61,6 +61,14 @@ true # bool
 ()           # struct
 []           # array
 {}           # dictionary
+# empty typed
+struct()
+array(int)
+dict(string int)
+# empty with capacity
+struct()
+array(int cap:10)
+dict(string int cap:10)
 # single
 (a 1)        # struct
 [1]          # array
@@ -126,25 +134,46 @@ fib x =
 ## Error handling
 
 ```
-div: int int try(int)
-div n m =
-  (m == 0) && throw "zero division error"
-  n / m
-calc: int
-calc n m = div(n m) ||| div(m n) ||| 0
+one : opt(int)
+one = ok(1)
+none a : opt(a)
+none = err("none")
+calc : opt(int)
+calc = none ||| one
+
+run: int
+run = go:
+  n int
+  go =
+    inc
+    inc
+  inc : do(int)
+  inc = n += 1
+
+main : io(int)
+main =
+  # io.stdin.readline : io(string)
+  n <- io.stdin.readline.map(to_i)
+  n
 ```
 
-## Name scope
+## Name space
 
 ```
-library foo.bar {
-  add: int int int
-  person:
-    name string
-    age int
-}
-belong foo.bar
-use net.tcp, protocol.http
+# main.moa
+use math
+main = print(math.pow(math.abs(-9) 2))
+
+# math/main.moa
+in math
+abs x = x > 0 | x | (-x)
+pow: int int int
+
+# math/pow.moa
+pow x y = _pow(x y)
+_pow x y = y <= 0
+| 0
+| _pow((x * x) (y - 1))
 ```
 
 ## Order of operation
