@@ -29,6 +29,7 @@ eval_call name argv = if elem name all_parse_ops
   then eval_op2 name argv
   else eval_call_func name argv
 eval_line s = "_v = " ++ (eval s) ++ "; return _v if _v.err?; _v"
+eval_op2 "<-" [Call name [], r] = name ++ " = " ++ eval r
 eval_op2 ":=" [Call name [], r] = name ++ " = " ++ eval r
 eval_op2 "=" [Call name [], r] = name ++ " = " ++ eval r
 eval_op2 op [l, r] = eval l ++ " " ++ op ++ " " ++ eval r

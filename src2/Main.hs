@@ -76,6 +76,18 @@ main = do
     , "  ok(2)"
     , "f"
     ]
+  test "failed" $ code [
+      "f ="
+    , "  v <- err(\"failed\")"
+    , "  v"
+    , "f"
+    ]
+  test "3" $ code [
+      "f ="
+    , "  v <- err(\"failed\").or(3)"
+    , "  v"
+    , "f"
+    ]
   putStrLn "done"
 
 eval :: String -> IO String
