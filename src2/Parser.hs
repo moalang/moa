@@ -7,9 +7,9 @@ import Control.Monad (guard)
 
 --( Parse AST )----------------------------------------------------------------
 parse :: String -> Maybe (AST, Source)
-parse s = runParser parse_top $ Source s 0 (length s)
+parse s = runParser parse_top $ Source s 0 (length s) 0
 parse_top = Stmt <$> sep_by1 parse_line read_br1
-parse_line = parse_type <|> parse_def <|> parse_exp
+parse_line = parse_type <|> parse_func <|> parse_exp
 parse_type = do
   name <- read_id
   many (read_spaces1 >> read_id) -- drop type information
@@ -25,27 +25,40 @@ parse_enum name = go
       name <- read_id
       fields <- many (read_spaces1 >> parse_field)
       return (name, fields)
-parse_struct name = do
+parse_struct name = block $ do
   fields <- sep_by1 (indent parse_field) br
-  methods <- sep_by (indent parse_def) br
+  methods <- sep_by (indent parse_func) br
   return $ Struct name fields methods
 parse_field = do
   name <- read_id
   read_spaces
   read_id -- drop type
   return name
-parse_def :: Parser AST
-parse_def = do
+parse_func :: Parser AST
+parse_func = go
+  where
+    go = do
+      name <- read_id
+      args <- many (read_spaces1 >> read_id)
+      read_spaces
+      char '='
+      read_spaces
+      body <- parse_stmt <|> parse_exp
+      funcs <- parse_func_private <|> (return [])
+      return $ Def name args (merge_body body funcs)
+    parse_func_private = block $ do
+      char ':'
+      many1 $ br >> indent (parse_func <|> parse_var)
+    merge_body body [] = body
+    merge_body body funcs = Stmt $ funcs ++ [body]
+parse_var :: Parser AST
+parse_var = do
   name <- read_id
-  args <- many (read_spaces1 >> read_id)
-  read_spaces
-  char '='
-  read_spaces
-  body <- parse_stmt <|> parse_exp
-  return $ Def name args body
-parse_stmt = do
-  br
-  Stmt <$> sep_by (indent parse_line) br
+  read_spaces1
+  type_ <- read_id
+  check (== '\n')
+  return $ Var name type_
+parse_stmt = block $ Stmt <$> many1 (br >> indent parse_line)
 parse_exp :: Parser AST
 parse_exp = go
   where
@@ -61,7 +74,9 @@ parse_exp = go
         then exp
         else Branch exp conds
     cond = do
-      string "\n| "
+      br
+      read_spaces
+      string "| "
       m <- (TypeMatcher <$> read_id) <|> (ValueMatcher <$> body)
       string " -> "
       b <- body
@@ -142,6 +157,12 @@ satisfy f = Parser $ \s -> do
   let c = (src s) !! (pos s)
   guard $ f c
   return (c, s { pos = 1 + pos s })
+check :: (Char -> Bool) -> Parser Char
+check f = Parser $ \s -> do
+  guard $ pos s < len s
+  let c = (src s) !! (pos s)
+  guard $ f c
+  return (c, s)
 many :: Parser a -> Parser [a]
 many f = many_acc f []
 many1 :: Parser a -> Parser [a]
@@ -182,14 +203,17 @@ between l r c = do
 br = char '\n'
 
 -- indent
-indent f = do
-  string "  "
+block f = do
+  Parser $ \s -> return (nest s, s { nest = 1 + nest s })
+  n <- Parser $ \s -> return (nest s, s)
   v <- f
-  char '\n'
-  back 1
+  Parser $ \s -> return (v, s { nest = -1 + nest s })
+indent f = do
+  n <- Parser $ \s -> return (nest s, s)
+  string $ (take (n * 2) $ repeat ' ')
+  v <- f
+  check (== '\n')
   return v
-back :: Int -> Parser ()
-back n = Parser $ \s -> return ((), s { pos = pos s - n })
 
 -- debug
 debug msg = Parser $ \s -> trace (msg ++ " remain:" ++ (show $ drop (pos s) (src s))) (return ((), s))

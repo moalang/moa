@@ -8,28 +8,41 @@ compile top = std ++ unlines [
                 "def main"
               , eval top
               , "end"
-              , "print main"
+              , "print main.run!"
               ]
 
 eval ast = case ast of
+  -- simple value
   Void -> "()"
   I64 v -> show v
   Bool b -> if b then "true" else "false"
   String s -> show s
+  -- container
   Array a -> '[' : (cjoin $ map eval a) ++ "]"
+  Struct name args methods -> eval_struct name args methods
+  Enum name enums -> eval_enum name enums
+  -- variable
+  Var name kind -> eval_var name kind
+  -- define and call
   Def name args body -> eval_def name args body
   Call name argv -> eval_call name argv
   Method obj name argv -> eval_method obj name argv
+  -- parenthesis
   Parenthesis exp -> "(" ++ eval exp ++ ")"
-  Stmt lines -> unlines $ map eval_line lines
-  Struct name args methods -> eval_struct name args methods
-  Enum name enums -> eval_enum name enums
+  -- statement
+  Stmt lines -> "lambda do\n" ++ (unlines $ map eval_line lines) ++ "\nend"
+  -- branch
   Branch target conds -> eval_branch target conds
+eval_var name kind = name ++ " = " ++ to_value(kind)
+  where
+    to_value "int" = "0"
+    to_value "string" = ""
+    to_value "array" = "[]"
 eval_call name argv = if elem name all_parse_ops
   then eval_op2 name argv
   else eval_call_func name argv
-eval_line s = "_v = " ++ (eval s) ++ "; return _v if _v.err?; _v"
-eval_op2 "<-" [Call name [], r] = name ++ " = " ++ eval r
+eval_line s = "_v = " ++ (eval s) ++ "; _v = _v.run!; return _v if _v.err?; _v"
+eval_op2 "<-" [Call name [], r] = name ++ " = (" ++ eval r ++ ").run!"
 eval_op2 ":=" [Call name [], r] = name ++ " = " ++ eval r
 eval_op2 "=" [Call name [], r] = name ++ " = " ++ eval r
 eval_op2 op [l, r] = eval l ++ " " ++ op ++ " " ++ eval r
@@ -56,8 +69,11 @@ eval_branch target conds = "moa_branch(" ++ eval target ++ ", " ++
                            ")"
   where
     to_ruby (cond, body) = case cond of
-      TypeMatcher t -> "[:" ++ t ++ "," ++ eval body ++ "]"
+      TypeMatcher t -> "[" ++ (to_sym t) ++ "," ++ eval body ++ "]"
       ValueMatcher t -> "[" ++ eval t ++ "," ++ eval body ++ "]"
+    to_sym "true" = "true"
+    to_sym "false" = "false"
+    to_sym x = ':' : x
 
 cjoin xs = join "," xs
 join glue xs = go [] xs
@@ -102,6 +118,9 @@ std = unlines [
       , "  end"
       , "  def err?"
       , "    instance_of?(MoaError)"
+      , "  end"
+      , "  def run!"
+      , "    instance_of?(Proc) ? self.call : self"
       , "  end"
       , "end"
       ]

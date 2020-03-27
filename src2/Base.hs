@@ -16,13 +16,20 @@ data AST =
   | Bool Bool
   | String String
   | Array [AST]
+-- container
+  | Struct String [String] [AST]
+  | Enum String [(String, [String])]
+-- variable
+  | Var String String
+-- define and call
   | Def String [String] AST
   | Call String [AST]
   | Method AST String [AST]
+-- parenthesis
   | Parenthesis AST
-  | Struct String [String] [AST]
-  | Enum String [(String, [String])]
+-- statement
   | Stmt [AST]
+-- branch
   | Branch AST [(Matcher, AST)]
   deriving (Show, Eq)
 
@@ -32,7 +39,7 @@ data Matcher =
   deriving (Show, Eq)
 
 -- Pparser
-data Source = Source { src :: String, pos :: Int, len :: Int } deriving (Show)
+data Source = Source { src :: String, pos :: Int, len :: Int, nest :: Int } deriving (Show)
 
 data Parser a = Parser { runParser :: Source -> Maybe (a, Source) }
 

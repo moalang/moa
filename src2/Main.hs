@@ -61,7 +61,11 @@ main = do
       "f v = v"
     , "| ok -> 2"
     , "| err -> 3"
-    , "f(ok(1)) + f(err(\"msg\"))"
+    , "go ="
+    , "  v1 <- f(ok(1))"
+    , "  v2 <- f(err(\"msg\"))"
+    , "  v1 + v2"
+    , "go"
     ]
   -- monad try
   test "failed" $ code [
@@ -87,6 +91,34 @@ main = do
     , "  v <- err(\"failed\").or(3)"
     , "  v"
     , "f"
+    ]
+  -- private
+  test "3" $ code [
+      "f = go:"
+    , "  go = a + b"
+    , "  a = 1"
+    , "  b = 2"
+    , "f"
+    ]
+  test "3" $ code [
+      "f x = go:"
+    , "  n int"
+    , "  f1 ="
+    , "    n += 1"
+    , "  f2 ="
+    , "    n += 2"
+    , "  iif cond a b = cond"
+    , "  | true -> a"
+    , "  | false -> b"
+    , "  go ="
+    , "    v <- iif(x f1 f2)"
+    , "    v"
+    , "g = go:"
+    , "  go ="
+    , "    a <- f(true)"
+    , "    b <- f(false)"
+    , "    a + b"
+    , "g"
     ]
   putStrLn "done"
 
