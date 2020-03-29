@@ -50,13 +50,14 @@ parse_func = go
       char ':'
       many1 $ br >> indent (parse_func <|> parse_var)
     merge_body body [] = body
+    merge_body (Stmt lines) funcs = Stmt $ funcs ++ lines
     merge_body body funcs = Stmt $ funcs ++ [body]
 parse_var :: Parser AST
 parse_var = do
   name <- read_id
   read_spaces1
   type_ <- read_id
-  check (== '\n')
+  check_or_eof (== '\n')
   return $ Var name type_
 parse_stmt = block $ Stmt <$> many1 (br >> indent parse_line)
 parse_exp :: Parser AST
@@ -157,12 +158,11 @@ satisfy f = Parser $ \s -> do
   let c = (src s) !! (pos s)
   guard $ f c
   return (c, s { pos = 1 + pos s })
-check :: (Char -> Bool) -> Parser Char
-check f = Parser $ \s -> do
-  guard $ pos s < len s
-  let c = (src s) !! (pos s)
-  guard $ f c
-  return (c, s)
+check_or_eof :: (Char -> Bool) -> Parser ()
+check_or_eof f = Parser $ \s ->
+  if (pos s >= len s) || f ((src s) !! (pos s))
+  then return ((), s)
+  else Nothing
 many :: Parser a -> Parser [a]
 many f = many_acc f []
 many1 :: Parser a -> Parser [a]
@@ -212,7 +212,7 @@ indent f = do
   n <- Parser $ \s -> return (nest s, s)
   string $ (take (n * 2) $ repeat ' ')
   v <- f
-  check (== '\n')
+  check_or_eof (== '\n')
   return v
 
 -- debug
