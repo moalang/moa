@@ -5,10 +5,10 @@ import Debug.Trace (trace)
 
 compile :: AST -> String
 compile top = std ++ unlines [
-                "def main"
+                "def _main"
               , eval top
               , "end"
-              , "print main.run!"
+              , "print _main.run!"
               ]
 
 eval ast = case ast of

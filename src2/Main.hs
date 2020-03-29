@@ -65,27 +65,32 @@ main = do
     , "  v1 <- f(ok(1))"
     , "  v2 <- f(err(\"msg\"))"
     , "  v1 + v2"
+    , "go"
     ]
   -- monad try
   test "failed" $ code [
       "f ="
     , "  err(\"failed\")"
     , "  ok(1)"
+    , "f"
     ]
   test "2" $ code [
       "f ="
     , "  err(\"failed\").or(1)"
     , "  ok(2)"
+    , "f"
     ]
   test "failed" $ code [
       "f ="
     , "  v <- err(\"failed\")"
     , "  v"
+    , "f"
     ]
   test "3" $ code [
       "f ="
     , "  v <- err(\"failed\").or(3)"
     , "  v"
+    , "f"
     ]
   -- private
   test "3" $ code [
@@ -93,6 +98,7 @@ main = do
     , "  go = a + b"
     , "  a = 1"
     , "  b = 2"
+    , "f"
     ]
   test "3" $ code [
       "f x = go:"
@@ -112,15 +118,22 @@ main = do
     , "    a <- f(true)"
     , "    b <- f(false)"
     , "    a + b"
+    , "g"
     ]
   putStrLn "done"
 
 code xs = string_join "\n" xs
 
 test :: String -> String -> IO ()
-test expect input = do
-  test_on_haskell expect input
-  test_on_v1 expect input
+test expect original = go
+  where
+    go = do
+      test_on_haskell expect input
+      test_on_v1 expect input
+    input = to_main (reverse $ lines original) []
+    to_main :: [String] -> [String] -> String
+    to_main [last] acc = (unlines $ reverse acc) ++ "main = " ++ last
+    to_main (x:xs) acc = to_main (x : acc) xs
 
 test_on_haskell :: String -> String -> IO ()
 test_on_haskell expect input = do
