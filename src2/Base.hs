@@ -4,7 +4,7 @@ import Debug.Trace (trace)
 import Control.Applicative
 
 -- Definitions
-all_exec_ops = [":=", "+", "-", "*", "/", "%", ">=", ">", "<=", "<", "!=", "==", "&&", "||"]
+all_exec_ops = [":=", "++", "+", "-", "*", "/", "%", ">=", ">", "<=", "<", "!=", "==", "&&", "||"]
 all_parse_ops = ["<-", "+=", "-=", "*=", "/=", "%="] ++ all_exec_ops
 
 type Env = [(String, AST)]

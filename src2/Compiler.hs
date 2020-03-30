@@ -46,6 +46,7 @@ eval_line s = "_v = (" ++ (eval s) ++ ").run!; if _v.err? then return _v else _v
 eval_op2 "<-" [Call name [], r] = name ++ " = (" ++ eval r ++ ").run!"
 eval_op2 ":=" [Call name [], r] = name ++ " = " ++ eval r
 eval_op2 "=" [Call name [], r] = name ++ " = " ++ eval r
+eval_op2 "++" [l, r] = eval_op2 "+" [l, r]
 eval_op2 op [l, r] = eval l ++ " " ++ op ++ " " ++ eval r
 eval_call_func name [] = name
 eval_call_func name argv = name ++ "(" ++ (cjoin $ map eval argv) ++ ")"
@@ -77,8 +78,8 @@ eval_branch target conds = "moa_branch(" ++ eval target ++ ", " ++
                            ")"
   where
     to_ruby (cond, body) = case cond of
-      TypeMatcher t -> "[" ++ (to_sym t) ++ "," ++ eval body ++ "]"
-      ValueMatcher t -> "[" ++ eval t ++ "," ++ eval body ++ "]"
+      TypeMatcher t -> "[" ++ (to_sym t) ++ ", proc { " ++ eval body ++ " }]"
+      ValueMatcher t -> "[" ++ eval t ++ ", proc { " ++ eval body ++ " }]"
     to_sym "true" = "true"
     to_sym "false" = "false"
     to_sym x = ':' : x
@@ -132,6 +133,12 @@ std = unlines [
       , "  end"
       , "  def run!"
       , "    instance_of?(Proc) || instance_of?(Method) ? self.call.run! : self"
+      , "  end"
+      , "  def to_s"
+      , "    self.to_s"
+      , "  end"
+      , "  def to_i"
+      , "    self.to_int"
       , "  end"
       , "end"
       ]

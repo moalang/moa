@@ -112,7 +112,10 @@ parse_unit = go
       x <- parse_exp
       return $ Call "*" [I64 (-1), x]
     parse_array = Array <$> between_char '[' ']' (sep_by parse_unit read_spaces1)
-    parse_string = String <$> between_char '"' '"' (many $ satisfy (\c -> c /= '"'))
+    parse_string = String <$> (
+                       between_char '"' '"' (many $ satisfy (\c -> c /= '"'))
+                   <|> between_char '`' '`' (many $ satisfy (\c -> c /= '`'))
+                   )
     parse_int = do
       s <- many1 (satisfy ((flip elem) "0123456789"))
       return $ I64 (read s :: Int)

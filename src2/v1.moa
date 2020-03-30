@@ -1,10 +1,12 @@
 ast:
-| int n int
+| int val int
+| string val int
 
 parse src = int(0)
 
 build node = node
-| int -> node.n
+| int -> node.val.to_s
+| string -> `"` ++ node.val ++ `"`
 
 compile src =
   tree <- parse(src)
