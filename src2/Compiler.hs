@@ -42,7 +42,7 @@ eval_call name argv = if elem name all_parse_ops
   then eval_op2 name argv
   else eval_call_func name argv
 eval_line s@(Def _ _ _) = eval s
-eval_line s = "_v = " ++ (eval s) ++ "; _v = _v.run!; return _v if _v.err?; _v"
+eval_line s = "_v = (" ++ (eval s) ++ ").run!; if _v.err? then return _v else _v end"
 eval_op2 "<-" [Call name [], r] = name ++ " = (" ++ eval r ++ ").run!"
 eval_op2 ":=" [Call name [], r] = name ++ " = " ++ eval r
 eval_op2 "=" [Call name [], r] = name ++ " = " ++ eval r
@@ -51,22 +51,22 @@ eval_call_func name [] = name
 eval_call_func name argv = name ++ "(" ++ (cjoin $ map eval argv) ++ ")"
 eval_method obj name argv = eval obj ++ "." ++ name ++ "(" ++ (cjoin $ map eval argv) ++ ")"
 eval_def name [] (Stmt lines) = unlines [
-                            "method(define_method(:" ++ name ++ ") do"
+                            "_method(:" ++ name ++ ") do"
                           , "  lambda do"
                           , unlines $ map eval_line lines
                           , "  end"
-                          , "end)"
+                          , "end"
                           ]
 eval_def name args body = unlines [
-                            "method(define_method(:" ++ name ++ ") do |" ++ (cjoin args) ++ "|"
+                            "_method(:" ++ name ++ ") do |" ++ (cjoin args) ++ "|"
                           , eval body
-                          , "end)"
+                          , "end"
                           ]
 eval_struct name args methods = unlines [
                             "def " ++ name ++ " " ++ (cjoin args)
-                          , "Struct.new " ++ (cjoin $ map (\x -> ":" ++ x) ("_tag" : args)) ++ " do"
+                          , "  Struct.new " ++ (cjoin $ map (\x -> ":" ++ x) ("_tag" : args)) ++ " do"
                           , unlines $ map eval methods
-                          , "end.new(" ++ (cjoin $ (':' : name) : args) ++ ")"
+                          , "  end.new(" ++ (cjoin $ (':' : name) : args) ++ ")"
                           , "end"
                           ]
 eval_enum name enums = unlines $ map to_ruby enums
@@ -116,6 +116,9 @@ std = unlines [
       , "  def or(v)"
       , "    v"
       , "  end"
+      , "end"
+      , "def _method(name, &body)"
+      , "  method(define_method(name, body))"
       , "end"
       , "def err(s)"
       , "  MoaError.new(s)"

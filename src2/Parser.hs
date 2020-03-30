@@ -8,7 +8,11 @@ import Control.Monad (guard)
 --( Parse AST )----------------------------------------------------------------
 parse :: String -> Maybe (AST, Source)
 parse s = runParser parse_top $ Source s 0 (length s) 0
-parse_top = Stmt <$> sep_by1 parse_line read_br1
+parse_top = do
+  stmt <- parse_top_stmt
+  read_separator
+  return stmt
+parse_top_stmt = Stmt <$> sep_by1 parse_line read_br1
 parse_line = parse_type <|> parse_func <|> parse_exp
 parse_type = do
   name <- read_id

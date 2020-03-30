@@ -4,8 +4,11 @@ import Base
 import Parser (parse)
 import Compiler (compile)
 import System.Process (system)
+import System.Directory (removeFile)
+import Data.Time.Clock.System (getSystemTime, systemSeconds)
 
 main = do
+  system $ "mkdir -p /tmp/moa"
   -- primitives
   test "0" "0"
   test "-1" "(-1)"
@@ -125,45 +128,69 @@ main = do
 code xs = string_join "\n" xs
 
 test :: String -> String -> IO ()
-test expect original = go
+test expect input = go
   where
     go = do
-      test_on_haskell expect input
-      test_on_v1 expect input
-    input = to_main (reverse $ lines original) []
-    to_main :: [String] -> [String] -> String
-    to_main [last] acc = (unlines $ reverse acc) ++ "main = " ++ last
-    to_main (x:xs) acc = to_main (x : acc) xs
+      with_rb
+      --with_js
+    name = safe_name input
 
-test_on_haskell :: String -> String -> IO ()
-test_on_haskell expect input = do
-  let ast = parse_or_fail input expect
-  let ruby = compile ast
-  stdout <- eval ruby
-  if expect == stdout
-  then putChar '.'
-  else putStrLn $ unlines [
-      "x"
-    , "- expect: " ++ show expect
-    , "-   fact: " ++ show stdout ++ " :: " ++ show ast
-    , "-    src: " ++ input
-    , "-   ruby: " ++ ruby
-    ]
+    with_rb = do
+      let input_with_main = replace_last (\x -> "main = " ++ x) (reverse $ lines input) []
+      (ast, ruby, stdout) <- eval_with_ruby expect input_with_main name
+      test_eq expect stdout ast input ruby
 
-test_on_v1 expect input = do
-  return ()
-  --v1_src <- readFile "v1.moa"
-  --test_on_haskell expect v1_src
+    with_js = do
+      compiler <- readFile "v1.moa"
+      let moa = compiler ++ "\n" ++ "main = compile(" ++ show input ++ ")"
+      (_, _, js) <- eval_with_ruby expect input name
+      let full_js = "main = () => (" ++ js ++ ")\nprocess.stdout.write(String(main()))"
+      stdout <- exec "node" full_js input ".js"
+      test_eq expect stdout Void input js
 
-parse_or_fail input expect = case parse input of
-  Nothing -> error $ "Parser error " ++ input ++ " expect: " ++ expect
-  Just (ast, s) -> if pos s == len s
-    then ast
-    else error $ "Parser error\n- remaining: " ++ (drop (pos s) (src s)) ++ "\n- src: " ++ input
+    safe_name name = go
+      where
+        go = take 30 $ fst $ foldr glue ("", ' ') name
+        glue c (acc, prev) = let
+          c2 = safe c prev
+          acc2 = if c2 == '*' then acc else c2 : acc
+          in (acc2, c2)
+        safe c prev
+          | elem c "abcdefghijklmnopqrstuvxwyz0123456789" = c
+          | prev == '_' || prev == '*' = '*'
+          | otherwise = '_'
 
-eval :: String -> IO String
-eval ruby = do
-  system $ "mkdir -p /tmp/moa"
-  writeFile "/tmp/moa/moa.rb" ruby
-  system $ "(cd /tmp/moa/ && ruby moa.rb > stdout.txt)"
-  readFile "/tmp/moa/stdout.txt"
+    replace_last :: (String -> String) -> [String] -> [String] -> String
+    replace_last f [last] acc = (unlines $ reverse acc) ++ f last
+    replace_last f (x:xs) acc = replace_last f (x : acc) xs
+
+    test_eq expect stdout ast input code = if expect == stdout
+      then putChar '.'
+      else putStrLn $ unlines [
+          "x"
+        , "- expect: " ++ show expect
+        , "-   fact: " ++ show stdout ++ " :: " ++ show ast
+        , "-    src: " ++ input
+        , "-   code: " ++ code
+        ]
+
+    eval_with_ruby :: String -> String -> String -> IO (AST, String, String)
+    eval_with_ruby expect input name = let
+      ast = case parse input of
+        Nothing -> error $ "Parser error " ++ input ++ " expect: " ++ expect
+        Just (ast, s) -> if pos s == len s
+          then ast
+          else error $ "Parser error\n- remaining: " ++ (drop (pos s) (src s)) ++ "\n- src: " ++ input
+      ruby = compile ast
+      in do
+        stdout <- exec "ruby" ruby input (name ++ ".rb")
+        return (ast, ruby, stdout)
+
+    exec command body unique name = do
+      let exe_path = "/tmp/moa/" ++ name
+      let out_path = "/tmp/moa/stdout_" ++ name
+      writeFile exe_path body
+      system $ command ++ " " ++ exe_path ++ " > " ++ out_path
+      ret <- readFile out_path
+      removeFile out_path
+      return ret
