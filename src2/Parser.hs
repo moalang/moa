@@ -1,6 +1,7 @@
 module Parser where
 
 import Base
+import Data.Foldable (foldrM)
 import Debug.Trace (trace)
 import Control.Applicative ((<|>))
 import Control.Monad (guard)
@@ -16,7 +17,7 @@ parse_top_stmt = Stmt <$> sep_by1 parse_line read_br1
 parse_line = parse_type <|> parse_func <|> parse_exp
 parse_type = do
   name <- read_id
-  many (read_spaces1 >> read_id) -- drop type information
+  many (read_spaces1 >> read_type) -- drop type info
   string ":\n"
   parse_struct name <|> parse_enum name
 parse_enum name = go
@@ -36,7 +37,7 @@ parse_struct name = block $ do
 parse_field = do
   name <- read_id
   read_spaces
-  read_id -- drop type
+  read_type -- drop type info
   return name
 parse_func :: Parser AST
 parse_func = go
@@ -60,7 +61,7 @@ parse_var :: Parser AST
 parse_var = do
   name <- read_id
   read_spaces1
-  type_ <- read_id
+  type_ <- read_type
   check_or_eof (== '\n')
   return $ Var name type_
 parse_stmt = block $ Stmt <$> many1 (br >> indent parse_line)
@@ -92,19 +93,31 @@ parse_exp = go
       read_spaces
       right <- parse_exp
       return $ Call op [left, right]
+
 parse_unit :: Parser AST
 parse_unit = go
   where
     go = do
       u <- unit
-      remain u <|> return u
-    unit = parenthesis <|> parse_array <|> parse_string <|> parse_int <|> parse_bool <|> parse_call
-    remain u = do
+      remain u
+    unit = lambda <|> parenthesis <|> parse_array <|> parse_string <|> parse_int <|> parse_bool <|> parse_call
+    remain u = remain_dot u <|> remain_apply u
+    remain_dot u = do
       char '.'
       name <- read_ref
-      args <- (between_char '(' ')' (sep_by parse_unit read_spaces1)) <|> return []
-      let obj = Method u name args
+      argv <- parse_argv
+      let obj = Method u name argv
       remain obj <|> return obj
+    remain_apply u = do
+      argv <- parse_argv
+      return $ if length argv == 0 then u else Apply u argv
+    lambda = do
+      char '('
+      arg <- read_id
+      string " => "
+      exp <- parse_exp
+      char ')'
+      return $ Def "_" [arg] exp
     parenthesis = between_char '(' ')' (Parenthesis <$> op1_or_exp)
     op1_or_exp = op1 <|> parse_exp
     op1 = do
@@ -124,8 +137,10 @@ parse_unit = go
       return $ Bool (s == "true")
     parse_call = do
       name <- read_ref
-      argv <- between (char '(' >> read_spaces) (read_spaces >> char ')') (sep_by parse_unit read_spaces1) <|> (return [])
+      argv <- parse_argv
       return $ Call name argv
+
+parse_argv = between_char '(' ')' (sep_by parse_unit read_spaces1) <|> (return [])
 
 --( Read String )---------------------------------------------------------------
 read_op :: Parser String
@@ -139,6 +154,11 @@ read_id :: Parser String
 read_id = do
   xs <- many1 $ satisfy ((flip elem) "abcdefghijklmnopqrstuvwxyz_")
   ys <- many $ satisfy ((flip elem) "abcdefghijklmnopqrstuvwxyz_0123456789")
+  return $ xs ++ ys
+read_type :: Parser String
+read_type = do
+  xs <- many1 $ satisfy ((flip elem) "abcdefghijklmnopqrstuvwxyz_")
+  ys <- many $ satisfy ((flip elem) "abcdefghijklmnopqrstuvwxyz_0123456789( )")
   return $ xs ++ ys
 read_ref :: Parser String
 read_ref = do
@@ -197,13 +217,8 @@ string target = Parser $ \s -> do
   return (target, s { pos = length target + pos s })
 between_char l r c = do
   char l
-  v <- c <|> (error $ "failed in between on the center " ++ [l])
-  char r <|> (error $ "faield in between on the right " ++ [l])
-  return $ v
-between l r c = do
-  l
-  v <- c <|> error "failed in between on the center"
-  r <|> error "faield in between on the right"
+  v <- c <|> (die $ "failed in between on the center " ++ [l])
+  char r <|> (die $ "faield in between on the right " ++ [l])
   return $ v
 
 -- const
@@ -223,4 +238,5 @@ indent f = do
   return v
 
 -- debug
+die msg = debug "\n" >> error msg
 debug msg = Parser $ \s -> trace (msg ++ " remain:" ++ (show $ drop (pos s) (src s))) (return ((), s))

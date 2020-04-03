@@ -7,6 +7,18 @@ import System.Process (system)
 import System.Directory (removeFile)
 import Data.Time.Clock.System (getSystemTime, systemSeconds)
 
+main = go
+  where
+    go = do
+      system $ "mkdir -p /tmp/moa"
+      run "ruby" test_rb
+      run "  js" test_js
+      putStrLn "done"
+    run title f = do
+      putStr title
+      mapM_ (\(i, (expect, input)) -> f i expect input) $ zip [0..] tests
+      putStrLn ""
+
 tests = go
   where
     t expect input = (expect, input)
@@ -39,6 +51,14 @@ tests = go
       , t "2" $ code [
             "inc x = x + 1"
           , "inc(1)"]
+      , t "3" "(x => x + 1)(2)"
+      , t "5" $ code [
+            "id x = x"
+          , "id((n => n + 2))(3)"
+          ]
+      -- core methods
+      , t "true" "`hello`.has(`e`)"
+      , t "false" "`hello`.has(`z`)"
       -- operations
       , t "1" "1 + 2 * 3 / (4 - 2) % 3"
       , t "ab" "\"a\" ++ \"b\""
@@ -99,7 +119,7 @@ tests = go
           , "  v"
           , "f"
           ]
-      -- private
+      -- private functions
       , t "3" $ code [
             "f = go:"
           , "  go = a + b"
@@ -127,21 +147,23 @@ tests = go
           , "    a + b"
           , "g"
           ]
+      -- mutation
+      , t "3" $ code [
+            "f = go:"
+          , "  list array(int)"
+          , "  go ="
+          , "    list.push(1)"
+          , "    list.push(2)"
+          , "    list.sum"
+          , "f"
+        ]
       ]
-
-main = do
-  system $ "mkdir -p /tmp/moa"
-  putStr "ruby"
-  mapM_ (\(i, (expect, input)) -> test_rb i expect input) $ zip [0..] tests
-  putStr "\n  js"
-  mapM_ (\(i, (expect, input)) -> test_js i expect input) $ zip [0..] tests
-  putStrLn "done"
 
 test_rb i expect input = do
   let name = "rb_" ++ show i ++ "_" ++ map safe expect
   let input_with_main = replace_last (\x -> "main = " ++ x) (reverse $ lines input) []
   (ast, ruby, stdout) <- eval_with_ruby expect input_with_main name
-  test_eq expect stdout ast input ruby
+  assert_eq expect stdout ast input ruby
 
 test_js i expect input = do
   let name = "js_" ++ show i ++ "_" ++ map safe expect
@@ -150,7 +172,7 @@ test_js i expect input = do
   (_, _, js) <- eval_with_ruby expect moa name
   let full_js = "main = () => (" ++ js ++ ")\nprocess.stdout.write(String(main()))"
   stdout <- exec "node" full_js input (name ++ ".js")
-  test_eq expect stdout Void input js
+  assert_eq expect stdout Void input js
 
 safe c = if elem c "abcdefghijklmnopqrstuvxwyz0123456789" then c else '_'
 
@@ -158,7 +180,7 @@ replace_last :: (String -> String) -> [String] -> [String] -> String
 replace_last f [last] acc = (unlines $ reverse acc) ++ f last
 replace_last f (x:xs) acc = replace_last f (x : acc) xs
 
-test_eq expect stdout ast input code = if expect == stdout
+assert_eq expect stdout ast input code = if expect == stdout
   then putChar '.'
   else error $ unlines [
       "x"

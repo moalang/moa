@@ -1,13 +1,50 @@
 ast:
 | int val int
 | string val int
+| parenthesis val ast
 
-parse src = int(0)
+parse src = parse_exp:
+  pos int
+  parse_exp = parse_int
+  parse_parenthesis =
+    between("(" ")" parse_exp)
+  parse_int =
+    v <- many1(satisfy((x => "0123456789".has(x))))
+    int(v.to_s.to_i)
+  many1 f =
+    x <- f
+    xs <- many(f)
+    [x] ++ xs
+  many f = go.or(acc):
+    acc array
+    go =
+      x <- f
+      acc.push(x)
+      go
+  between l r c =
+    eq(l)
+    v <- c
+    eq(r)
+    v
+  satisfy f =
+    (pos < src.length) || err("eof")
+    c = src.slice(pos 1)
+    f(c)
+    | true -> forward(c)
+    | false -> err("not satisfy")
+  eq s = src.slice(pos s.length) == s
+  | true -> forward(s)
+  | false -> err("not eq")
+  forward s =
+    pos += s.length
+    s
 
 build node = node
 | int -> node.val.to_s
 | string -> `"` ++ node.val ++ `"`
+| parenthesis -> "(" ++ build(node.val) ++ ")"
 
-compile src =
-  tree <- parse(src)
-  build(tree)
+compile src = go:
+  go =
+    tree <- parse(src)
+    build(tree)

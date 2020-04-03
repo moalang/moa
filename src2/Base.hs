@@ -24,6 +24,7 @@ data AST =
 -- define and call
   | Def String [String] AST
   | Call String [AST]
+  | Apply AST [AST]
   | Method AST String [AST]
 -- parenthesis
   | Parenthesis AST

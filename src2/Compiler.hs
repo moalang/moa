@@ -26,6 +26,7 @@ eval ast = case ast of
   -- define and call
   Def name args body -> eval_def name args body
   Call name argv -> eval_call name argv
+  Apply ast argv -> eval_apply ast argv
   Method obj name argv -> eval_method obj name argv
   -- parenthesis
   Parenthesis exp -> "(" ++ eval exp ++ ")"
@@ -38,31 +39,49 @@ eval_var name kind = name ++ " = " ++ to_value(kind)
     to_value "int" = "0"
     to_value "string" = ""
     to_value "array" = "[]"
-eval_call name argv = if elem name all_parse_ops
-  then eval_op2 name argv
-  else eval_call_func name argv
-eval_line s@(Def _ _ _) = eval s
-eval_line s = "_v = (" ++ (eval s) ++ ").run!; if _v.err? then return _v else _v end"
-eval_op2 "<-" [Call name [], r] = name ++ " = (" ++ eval r ++ ").run!"
-eval_op2 ":=" [Call name [], r] = name ++ " = " ++ eval r
-eval_op2 "=" [Call name [], r] = name ++ " = " ++ eval r
-eval_op2 "++" [l, r] = eval_op2 "+" [l, r]
-eval_op2 op [l, r] = eval l ++ " " ++ op ++ " " ++ eval r
-eval_call_func name [] = name
-eval_call_func name argv = name ++ "(" ++ (cjoin $ map eval argv) ++ ")"
+    to_value "array(int)" = "[]"
+    to_value "array(string)" = "[]"
+    to_value "array(bool)" = "[]"
+eval_call name argv = go
+  where
+    go = if elem name all_parse_ops
+      then run_op2 name argv
+      else run_func name argv
+    run_op2 "<-" [Call name [], r] = name ++ " = (" ++ eval r ++ ").run!"
+    run_op2 ":=" [Call name [], r] = name ++ " = " ++ eval r
+    run_op2 "=" [Call name [], r] = name ++ " = " ++ eval r
+    run_op2 "++" [l, r] = run_op2 "+" [l, r]
+    run_op2 op [l, r] = eval l ++ " " ++ op ++ " " ++ eval r
+    run_func name [] = name
+    run_func name argv = name ++ "(" ++ (cjoin $ map eval argv) ++ ")"
+
+eval_apply (Def name args body) argv = (unlines $ zipWith (\k v -> k ++ " = " ++ eval v) args argv) ++ eval body
+eval_apply (Call _ [def]) argv = eval_apply def argv
+eval_apply x argv = error $ show x ++ "\n" ++ show argv
 eval_method obj name argv = eval obj ++ "." ++ name ++ "(" ++ (cjoin $ map eval argv) ++ ")"
-eval_def name [] (Stmt lines) = unlines [
-                            "_method(:" ++ name ++ ") do"
-                          , "  lambda do"
-                          , unlines $ map eval_line lines
-                          , "  end"
-                          , "end"
-                          ]
-eval_def name args body = unlines [
-                            "_method(:" ++ name ++ ") do |" ++ (cjoin args) ++ "|"
-                          , eval body
-                          , "end"
-                          ]
+eval_line (Def name args body) = eval_def name args body
+eval_line s = "_v = (" ++ (eval s) ++ ").run!\nif _v.err? then return _v else _v end"
+eval_def name args body = go body
+  where
+    go (Stmt lines) = unlines [
+        "_method(:" ++ name ++ ") do |" ++ (cjoin args) ++ "|"
+      , "  lambda do"
+      , unlines $ map (eval_line . call) lines
+      , "  end"
+      , "end"
+      ]
+    go _ = unlines [
+      "_method(:" ++ name ++ ") do |" ++ (cjoin args) ++ "|"
+      , eval $ call body
+      , "end"
+      ]
+    call c@(Call _ []) = c
+    call (Call fname argv)
+      | elem fname args = Call (fname ++ ".call") argv
+      | otherwise = Call fname argv
+    call (Stmt lines) = Stmt $ map call lines
+    call (Branch target conds) = Branch (call target) (map (\(c, v) -> (c, (call v))) conds)
+    call x = x
 eval_struct name args methods = unlines [
                             "def " ++ name ++ " " ++ (cjoin args)
                           , "  Struct.new " ++ (cjoin $ map (\x -> ":" ++ x) ("_tag" : args)) ++ " do"
@@ -92,8 +111,9 @@ join glue xs = go [] xs
 
 std = unlines [
         "def moa_branch(target, conds)"
+      , "  target = target.__call"
       , "  conds.each do |(cond, body)|"
-      , "    return body if moa_branch_eq(target, cond)"
+      , "    return body.__call if moa_branch_eq(target, cond)"
       , "  end"
       , "  raise Exception.new('Unexpected branch ' + target.inspect + ' ' + conds.inspect)"
       , "end"
@@ -124,6 +144,17 @@ std = unlines [
       , "def err(s)"
       , "  MoaError.new(s)"
       , "end"
+      , "class String"
+      , "  def has(x)"
+      , "    include?(x)"
+      , "  end"
+      , "end"
+      , "class Proc"
+      , "  def or(x)"
+      , "    p = self"
+      , "    lambda { |*args| p.call(*args).or(x) }"
+      , "  end"
+      , "end"
       , "class Object"
       , "  def or(_)"
       , "    self"
@@ -131,8 +162,12 @@ std = unlines [
       , "  def err?"
       , "    instance_of?(MoaError)"
       , "  end"
+      , "  def __call"
+      , "    instance_of?(Proc) ? self.call.__call : self"
+      , "  end"
       , "  def run!"
-      , "    instance_of?(Proc) || instance_of?(Method) ? self.call.run! : self"
+      , "    v = __call"
+      , "    v.instance_of?(Method) ? v.call.__call : v"
       , "  end"
       , "  def to_s"
       , "    self.to_s"
