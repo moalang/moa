@@ -70,11 +70,11 @@ parse_exp = go
   where
     go = do
       exp <- body
-      switch exp
+      branch exp
     body = do
       left <- parse_unit
       (exp_op_remaining left) <|> (return left)
-    switch exp = do
+    branch exp = do
       conds <- many cond
       return $ if conds == []
         then exp
@@ -91,7 +91,7 @@ parse_exp = go
       read_spaces
       op <- read_op
       read_spaces
-      right <- parse_exp
+      right <- body
       return $ Call op [left, right]
 
 parse_unit :: Parser AST

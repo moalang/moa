@@ -11,7 +11,7 @@ main = go
   where
     go = do
       system $ "mkdir -p /tmp/moa"
-      run "ruby" test_rb
+      --run "ruby" test_rb
       run "  js" test_js
       putStrLn "done"
     run title f = do
@@ -169,10 +169,10 @@ test_js i expect input = do
   let name = "js_" ++ show i ++ "_" ++ map safe expect
   compiler <- readFile "v1.moa"
   let moa = compiler ++ "\n" ++ "main = compile(" ++ show input ++ ")"
-  (_, _, js) <- eval_with_ruby expect moa name
+  (ast, _, js) <- eval_with_ruby expect moa name
   let full_js = "main = () => (" ++ js ++ ")\nprocess.stdout.write(String(main()))"
   stdout <- exec "node" full_js input (name ++ ".js")
-  assert_eq expect stdout Void input js
+  assert_eq expect stdout ast input js
 
 safe c = if elem c "abcdefghijklmnopqrstuvxwyz0123456789" then c else '_'
 

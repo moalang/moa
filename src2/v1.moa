@@ -5,12 +5,13 @@ ast:
 
 parse src = parse_exp:
   pos int
-  parse_exp = parse_int
+  parse_exp = parse_parenthesis.or(parse_int)
   parse_parenthesis =
-    between("(" ")" parse_exp)
+    v <- between("(" ")" parse_exp)
+    parenthesis(v)
   parse_int =
-    v <- many1(satisfy((x => "0123456789".has(x))))
-    int(v.to_s.to_i)
+    v <- many1(satisfy((x => "-0123456789".has(x))))
+    int(v.join.to_i)
   many1 f =
     x <- f
     xs <- many(f)
@@ -32,7 +33,7 @@ parse src = parse_exp:
     f(c)
     | true -> forward(c)
     | false -> err("not satisfy")
-  eq s = src.slice(pos s.length) == s
+  eq s = (src.slice(pos s.length) == s)
   | true -> forward(s)
   | false -> err("not eq")
   forward s =
