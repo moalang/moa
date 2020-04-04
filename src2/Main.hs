@@ -11,7 +11,7 @@ main = go
   where
     go = do
       system $ "mkdir -p /tmp/moa"
-      --run "ruby" test_rb
+      run "ruby" test_rb
       run "  js" test_js
       putStrLn "done"
     run title f = do
@@ -29,8 +29,8 @@ tests = go
       , t "-1" "(-1)"
       , t "true" "true"
       , t "false" "false"
-      , t "" "\"\""
-      , t "a" "\"a\""
+      , t "" "``"
+      , t "a" "`a`"
       -- containers
       , t "2" "[1 3].count"
       , t "3" $ code [

@@ -238,5 +238,5 @@ indent f = do
   return v
 
 -- debug
-die msg = debug "\n" >> error msg
-debug msg = Parser $ \s -> trace (msg ++ " remain:" ++ (show $ drop (pos s) (src s))) (return ((), s))
+die msg = debug "" >> error msg
+debug msg = Parser $ \s -> trace (msg ++ "\nremain:" ++ (show $ drop (pos s) (src s))) (return ((), s))

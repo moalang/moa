@@ -1,17 +1,24 @@
 ast:
 | int val int
 | string val int
+| bool val int
 | parenthesis val ast
 
 parse src = parse_exp:
   pos int
-  parse_exp = parse_parenthesis.or(parse_int)
+  parse_exp = parse_parenthesis.or(parse_string).or(parse_int).or(parse_bool).or(err("Failed to parse"))
   parse_parenthesis =
     v <- between("(" ")" parse_exp)
     parenthesis(v)
+  parse_string =
+    v <- between(`"` `"` many(satisfy((x => x != `"`)))).or(between("`" "`" many(satisfy((x => x != "`")))))
+    string(v.join)
   parse_int =
     v <- many1(satisfy((x => "-0123456789".has(x))))
     int(v.join.to_i)
+  parse_bool =
+    v <- eq("true").or(eq("false"))
+    bool((v == "true"))
   many1 f =
     x <- f
     xs <- many(f)
@@ -35,7 +42,7 @@ parse src = parse_exp:
     | false -> err("not satisfy")
   eq s = (src.slice(pos s.length) == s)
   | true -> forward(s)
-  | false -> err("not eq")
+  | false -> err(("not eq " ++ s))
   forward s =
     pos += s.length
     s
@@ -43,6 +50,7 @@ parse src = parse_exp:
 build node = node
 | int -> node.val.to_s
 | string -> `"` ++ node.val ++ `"`
+| bool -> node.val
 | parenthesis -> "(" ++ build(node.val) ++ ")"
 
 compile src = go:
