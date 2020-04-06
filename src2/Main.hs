@@ -20,12 +20,12 @@ main = go
       mapM_ (\(i, (expect, input)) -> f i expect input) $ zip [0..] tests
       putStrLn ""
 
-tests = go
+tests = go2
   where
     t expect input = (expect, input)
     code xs = string_join "\n" xs
-    go2 = [ t "2" "[1 2].count"]
-    go = [
+    go1 = [ t "0" "[].count" ]
+    go2 = [
       -- primitives
         t "0" "0"
       , t "-1" "(-1)"
@@ -162,15 +162,16 @@ tests = go
       ]
 
 test_rb i expect input = do
-  let name = "rb" ++ show i
+  let name = show i
   let input_with_main = replace_last (\x -> "main = " ++ x) (reverse $ lines input) []
   (ast, ruby, stdout) <- eval_with_ruby expect input_with_main name
   assert_eq expect stdout ast input ruby
 
 test_js i expect input = do
-  let name = "js" ++ show i
+  let name = show i
+  let input_with_main = replace_last (\x -> "main = " ++ x) (reverse $ lines input) []
   compiler <- readFile "v1.moa"
-  let moa = compiler ++ "\n" ++ "main = compile(" ++ show input ++ ")"
+  let moa = compiler ++ "\n" ++ "main = compile(" ++ quote_string input_with_main ++ ")"
   (ast, _, js) <- eval_with_ruby expect moa name
   let full_js = "main = () => (" ++ js ++ ")\nprocess.stdout.write(String(main()))"
   stdout <- exec "node -r ./vm.js" full_js input (name ++ ".js")
@@ -198,9 +199,9 @@ eval_with_ruby expect input name = let
     Just (ast, s) -> if pos s == len s
       then ast
       else error $ "Parser error\n- remaining: " ++ (drop (pos s) (src s)) ++ "\n- src: " ++ input
-  ruby = compile ast
+  ruby = "require './vm'\n" ++ compile ast
   in do
-    stdout <- exec "ruby -r ./vm.rb" ruby input (name ++ ".rb")
+    stdout <- exec "ruby" ruby input (name ++ ".rb")
     return (ast, ruby, stdout)
 
 exec command body unique name = do

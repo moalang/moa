@@ -1,44 +1,22 @@
+define:
+  name string
+  body ast
 ast:
 | int val int
 | string val int
 | bool val int
 | parenthesis val ast
 | array val array(ast)
+| call name string, argv array(ast)
 | method_ target ast, id string, argv array(ast)
+| struct name string, args array(string)
+| func name string, args array(string), body ast
+| define defines array(define)
 
-parse src = parse_exp:
+parse src = parse_defines:
   pos int
-  parse_exp = go_exp:
-    go_exp =
-      spaces
-      b <- go_body
-      go_remain(b)
-    go_body = parse_array.or(parse_parenthesis).or(parse_string).or(parse_int).or(parse_bool).or(fail("parse_exp"))
-    go_remain b = go_ref(b).or(b)
-    go_ref b =
-      eq(".")
-      id <- read_id
-      args <- between("(" ")" many(parse_exp)).or([])
-      method_(b id args)
-  parse_array =
-    v <- between("[" "]" many_(parse_exp))
-    array(v)
-  parse_parenthesis =
-    v <- between("(" ")" parse_exp)
-    parenthesis(v)
-  parse_string =
-    v <- between(`"` `"` many_(satisfy((x => x != `"`)))).or(between("`" "`" many(satisfy((x => x != "`")))))
-    string(v.join)
-  parse_int =
-    v <- many1(satisfy((x => "-0123456789".has(x))))
-    int(v.join.to_i)
-  parse_bool =
-    v <- eq("true").or(eq("false"))
-    bool((v == "true"))
-  read_id =
-    id <- many1(satisfy((x => "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_".has(x))))
-    id.join
   spaces = many(satisfy((x => x == " ")))
+  brs = many(satisfy((x => x == "\n")))
   many1 f =
     x <- f
     xs <- many(f)
@@ -55,10 +33,17 @@ parse src = parse_exp:
       x <- f
       acc.push(x)
       _many_acc
+  sep_by f g = sep_by_acc.or(acc):
+    acc array
+    sep_by_acc =
+      v <- f
+      acc.push(v)
+      g
+      sep_by_acc
   between l r c =
     eq(l)
-    v <- c
-    eq(r)
+    v <- c.or(die(("center in between left=" ++ l)))
+    eq(r).or(die(("right in between left=" ++ l)))
     v
   satisfy f =
     (pos < src.length) || err("eof")
@@ -73,15 +58,95 @@ parse src = parse_exp:
     pos += s.length
     s
   fail title = err(("Failed to parse on " ++ title ++ " pos=" ++ pos.to_s))
+  die title = panic(("Failed to parse on " ++ title ++ " pos=" ++ pos.to_s))
+  read_id =
+    id <- many1(satisfy((x => "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_".has(x))))
+    id.join
+  read_type = go_type:
+    go_type =
+      spaces
+      id <- read_id
+      go_type_remain(id).or(id)
+    go_type_remain id =
+      args <- between("(" ")" many(go_type))
+      v + args.join
+  parse_defines = go_defines:
+    go_defines =
+      defs <- many1(go_define)
+      src.count == pos
+      | true -> defs
+      | false -> fail("define")
+    go_define =
+      brs
+      id <- read_id
+      go_func(id).or(go_struct(id))
+    go_func id =
+      args <- many_(go_arg)
+      spaces
+      eq("=")
+      spaces
+      body <- parse_exp.or(die(("body in " ++ id)))
+      func(id args body)
+    go_arg =
+      eq(" ")
+      read_id
+    go_struct id =
+      eq(":")
+      args <- many1(go_field).or(die(("field in " ++ id)))
+      struct(id args)
+    go_field =
+      eq("\n  ")
+      id <- read_id
+      eq(" ")
+      read_type
+      id
+  parse_exp = go_exp:
+    go_exp =
+      spaces
+      b <- go_body
+      remain_exp(b)
+    go_body = parse_array.or(parse_parenthesis).or(parse_string).or(parse_int).or(parse_bool).or(parse_call).or(die("parse_exp"))
+  parse_array =
+    v <- between("[" "]" many_(parse_exp))
+    array(v)
+  parse_parenthesis =
+    v <- between("(" ")" parse_exp)
+    parenthesis(v)
+  parse_string =
+    v <- between(`"` `"` many_(satisfy((x => x != `"`)))).or(between("`" "`" many(satisfy((x => x != "`")))))
+    string(v.join)
+  parse_int =
+    v <- many1(satisfy((x => "-0123456789".has(x))))
+    int(v.join.to_i)
+  parse_bool =
+    v <- eq("true").or(eq("false"))
+    bool((v == "true"))
+  parse_call =
+    v <- read_id
+    args <- between("(" ")" many(parse_exp)).or([])
+    remain_exp(call(v args))
+  remain_exp b = remain_ref(b).or(b):
+    remain_ref b =
+      eq(".")
+      id <- read_id
+      args <- between("(" ")" many(parse_exp)).or([])
+      m = method_(b id args)
+      remain_ref(m).or(m)
 
+build_call id argv = (argv.size == 0)
+| true -> "__eval(" ++ id ++ ")"
+| false -> id ++ "(" ++ argv.map((x => build(x))).join(", ") ++ ")"
 build node = node
 | int -> node.val.to_s
 | string -> `"` ++ node.val ++ `"`
 | bool -> node.val
 | parenthesis -> "(" ++ build(node.val) ++ ")"
 | array -> "[" ++ node.val.map((x => build(x))).join(", ") ++ "]"
-| method_ -> build(node.target) ++ "." ++ node.id ++ "(" ++ node.argv.map((x => build(x))).join(", ") ++ ")"
+| call -> build_call(node.name node.argv)
+| method_ -> build(node.target) ++ "." ++ build_call(node.id node.argv)
+| struct -> node.name ++ " = (" ++ node.args.join(",") ++ ") => { return {" ++ node.args.join(",") ++ "} }"
+| func -> node.name ++ " = (" ++ node.args.join(",") ++ ") => { return " ++ build(node.body).to_s ++ "}"
 
 compile src =
-  tree <- parse(src)
-  build(tree)
+  defs <- parse(src)
+  "(" ++ defs.map((x => build(x))).join(",\n") ++ ")()"

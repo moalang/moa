@@ -16,9 +16,9 @@ eval ast = case ast of
   Void -> "()"
   I64 v -> show v
   Bool b -> if b then "true" else "false"
-  String s -> show s
+  String s -> quote_string s
   -- container
-  Array a -> "MoaArray.new([" ++ (cjoin $ map eval a) ++ "])"
+  Array a -> "[" ++ (cjoin $ map eval a) ++ "]"
   Struct name args methods -> eval_struct name args methods
   Enum name enums -> eval_enum name enums
   -- variable
@@ -38,10 +38,10 @@ eval_var name kind = name ++ " = " ++ to_value(kind)
   where
     to_value "int" = "0"
     to_value "string" = ""
-    to_value "array" = "MoaArray.new([])"
-    to_value "array(int)" = "MoaArray.new([])"
-    to_value "array(string)" = "MoaArray.new([])"
-    to_value "array(bool)" = "MoaArray([])"
+    to_value "array" = "[]"
+    to_value "array(int)" = "[]"
+    to_value "array(string)" = "[]"
+    to_value "array(bool)" = "[]"
 eval_call name argv = go
   where
     go = if elem name all_parse_ops

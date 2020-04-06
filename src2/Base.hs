@@ -81,3 +81,9 @@ to_string (Struct name _ _) = name
 string_join glue [] = ""
 string_join glue [x] = x
 string_join glue (x:xs) = x ++ glue ++ (string_join glue xs)
+quote_string x = go x []
+  where
+    go ('\\':x:xs) acc = go xs $ x : '\\' : acc
+    go ('"':xs) acc = go xs $ '"' : '\\' : acc
+    go (x:xs) acc = go xs $ x : acc
+    go [] acc = '"' : (reverse ('"' : acc))
