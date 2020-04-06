@@ -93,13 +93,13 @@ parse src = parse_defines:
       id <- read_id
       eq(" ")
       read_type
-      id
+      i
   parse_exp = go_exp:
     go_exp =
       spaces
       b <- go_body
       remain_exp(b)
-    go_body = parse_array.or(parse_parenthesis).or(parse_string).or(parse_int).or(parse_bool).or(parse_call).or(die("parse_exp"))
+    go_body = parse_array.or(parse_parenthesis).or(parse_string).or(parse_int).or(parse_bool).or(parse_call).or(fail("parse_exp"))
   parse_array =
     v <- between("[" "]" many(parse_exp))
     array(v)

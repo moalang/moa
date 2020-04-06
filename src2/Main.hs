@@ -12,7 +12,7 @@ main = go
     go = do
       system $ "mkdir -p /tmp/moa"
       system $ "cp vm.rb vm.js /tmp/moa/"
-      --run "ruby" test_rb
+      run "ruby" test_rb
       run "  js" test_js
       putStrLn "done"
     run title f = do
@@ -20,12 +20,12 @@ main = go
       mapM_ (\(i, (expect, input)) -> f i expect input) $ zip [0..] tests
       putStrLn ""
 
-tests = go2
+tests = go1
   where
     t expect input = (expect, input)
     code xs = string_join "\n" xs
-    go1 = [ t "0" "[].count" ]
-    go2 = [
+    go2 = [ t "0" "[].count" ]
+    go1 = [
       -- primitives
         t "0" "0"
       , t "-1" "(-1)"
