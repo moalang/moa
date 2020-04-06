@@ -12,7 +12,7 @@ main = go
     go = do
       system $ "mkdir -p /tmp/moa"
       system $ "cp vm.rb vm.js /tmp/moa/"
-      run "ruby" test_rb
+      --run "ruby" test_rb
       run "  js" test_js
       putStrLn "done"
     run title f = do

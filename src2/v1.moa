@@ -27,12 +27,6 @@ parse src = parse_defines:
       x <- f
       acc.push(x)
       many_acc
-  many_ f = _many_acc.or(acc):
-    acc array
-    _many_acc =
-      x <- f
-      acc.push(x)
-      _many_acc
   sep_by f g = sep_by_acc.or(acc):
     acc array
     sep_by_acc =
@@ -81,7 +75,7 @@ parse src = parse_defines:
       id <- read_id
       go_func(id).or(go_struct(id))
     go_func id =
-      args <- many_(go_arg)
+      args <- many(go_arg)
       spaces
       eq("=")
       spaces
@@ -107,13 +101,13 @@ parse src = parse_defines:
       remain_exp(b)
     go_body = parse_array.or(parse_parenthesis).or(parse_string).or(parse_int).or(parse_bool).or(parse_call).or(die("parse_exp"))
   parse_array =
-    v <- between("[" "]" many_(parse_exp))
+    v <- between("[" "]" many(parse_exp))
     array(v)
   parse_parenthesis =
     v <- between("(" ")" parse_exp)
     parenthesis(v)
   parse_string =
-    v <- between(`"` `"` many_(satisfy((x => x != `"`)))).or(between("`" "`" many(satisfy((x => x != "`")))))
+    v <- between(`"` `"` many(satisfy((x => x != `"`)))).or(between("`" "`" many(satisfy((x => x != "`")))))
     string(v.join)
   parse_int =
     v <- many1(satisfy((x => "-0123456789".has(x))))

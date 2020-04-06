@@ -84,7 +84,7 @@ class Object
     instance_of?(MoaError) || instance_of?(MoaPanic)
   end
   def __call(*args)
-    instance_of?(Proc) && arity == args.size ? self.call(*args).__call : self
+    instance_of?(Proc) && (arity == args.size || arity == -1) ? self.call(*args).__call : self
   end
   def run!
     v = __call
