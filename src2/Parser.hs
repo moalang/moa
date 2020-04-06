@@ -28,15 +28,16 @@ parse_enum name = go
     tag = do
       string "| "
       name <- read_id
-      fields <- many (read_spaces1 >> parse_field)
+      fields <- sep_by (parse_field) (char ',')
       return (name, fields)
 parse_struct name = block $ do
   fields <- sep_by1 (indent parse_field) br
   methods <- sep_by (indent parse_func) br
   return $ Struct name fields methods
 parse_field = do
-  name <- read_id
   read_spaces
+  name <- read_id
+  read_spaces1
   read_type -- drop type info
   return name
 parse_func :: Parser AST
@@ -69,6 +70,7 @@ parse_exp :: Parser AST
 parse_exp = go
   where
     go = do
+      read_spaces
       exp <- body
       branch exp
     body = do
@@ -124,7 +126,7 @@ parse_unit = go
       char '-'
       x <- parse_exp
       return $ Call "*" [I64 (-1), x]
-    parse_array = Array <$> between_char '[' ']' (sep_by parse_unit read_spaces1)
+    parse_array = Array <$> between_char '[' ']' (many parse_exp)
     parse_string = String <$> (
                        between_char '"' '"' (many $ satisfy (\c -> c /= '"'))
                    <|> between_char '`' '`' (many $ satisfy (\c -> c /= '`'))

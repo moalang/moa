@@ -11,6 +11,7 @@ main = go
   where
     go = do
       system $ "mkdir -p /tmp/moa"
+      system $ "cp vm.rb vm.js /tmp/moa/"
       run "ruby" test_rb
       run "  js" test_js
       putStrLn "done"
@@ -23,6 +24,7 @@ tests = go
   where
     t expect input = (expect, input)
     code xs = string_join "\n" xs
+    go2 = [ t "2" "[1 2].count"]
     go = [
       -- primitives
         t "0" "0"
@@ -32,7 +34,7 @@ tests = go
       , t "" "``"
       , t "a" "`a`"
       -- containers
-      , t "2" "[1 3].count"
+      , t "2" "[1 2].count"
       , t "3" $ code [
             "vec2:"
           , "  x int"
@@ -160,21 +162,19 @@ tests = go
       ]
 
 test_rb i expect input = do
-  let name = "rb_" ++ show i ++ "_" ++ map safe expect
+  let name = "rb" ++ show i
   let input_with_main = replace_last (\x -> "main = " ++ x) (reverse $ lines input) []
   (ast, ruby, stdout) <- eval_with_ruby expect input_with_main name
   assert_eq expect stdout ast input ruby
 
 test_js i expect input = do
-  let name = "js_" ++ show i ++ "_" ++ map safe expect
+  let name = "js" ++ show i
   compiler <- readFile "v1.moa"
   let moa = compiler ++ "\n" ++ "main = compile(" ++ show input ++ ")"
   (ast, _, js) <- eval_with_ruby expect moa name
   let full_js = "main = () => (" ++ js ++ ")\nprocess.stdout.write(String(main()))"
-  stdout <- exec "node" full_js input (name ++ ".js")
+  stdout <- exec "node -r ./vm.js" full_js input (name ++ ".js")
   assert_eq expect stdout ast input js
-
-safe c = if elem c "abcdefghijklmnopqrstuvxwyz0123456789" then c else '_'
 
 replace_last :: (String -> String) -> [String] -> [String] -> String
 replace_last f [last] acc = (unlines $ reverse acc) ++ f last
@@ -184,10 +184,11 @@ assert_eq expect stdout ast input code = if expect == stdout
   then putChar '.'
   else error $ unlines [
       "x"
-    , "- expect: " ++ show expect
-    , "-   fact: " ++ show stdout ++ " :: " ++ show ast
     , "-    src: " ++ input
+    , "- expect: " ++ show expect
+    , "-   fact: " ++ show stdout
     , "-   code: " ++ code
+    --, "-    ast: " ++ show ast
     ]
 
 eval_with_ruby :: String -> String -> String -> IO (AST, String, String)
@@ -199,7 +200,7 @@ eval_with_ruby expect input name = let
       else error $ "Parser error\n- remaining: " ++ (drop (pos s) (src s)) ++ "\n- src: " ++ input
   ruby = compile ast
   in do
-    stdout <- exec "ruby" ruby input (name ++ ".rb")
+    stdout <- exec "ruby -r ./vm.rb" ruby input (name ++ ".rb")
     return (ast, ruby, stdout)
 
 exec command body unique name = do

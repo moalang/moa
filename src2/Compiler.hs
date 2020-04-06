@@ -4,7 +4,7 @@ import Base
 import Debug.Trace (trace)
 
 compile :: AST -> String
-compile top = std ++ unlines [
+compile top = unlines [
                 "def _main"
               , eval top
               , "end"
@@ -18,7 +18,7 @@ eval ast = case ast of
   Bool b -> if b then "true" else "false"
   String s -> show s
   -- container
-  Array a -> '[' : (cjoin $ map eval a) ++ "]"
+  Array a -> "MoaArray.new([" ++ (cjoin $ map eval a) ++ "])"
   Struct name args methods -> eval_struct name args methods
   Enum name enums -> eval_enum name enums
   -- variable
@@ -38,10 +38,10 @@ eval_var name kind = name ++ " = " ++ to_value(kind)
   where
     to_value "int" = "0"
     to_value "string" = ""
-    to_value "array" = "[]"
-    to_value "array(int)" = "[]"
-    to_value "array(string)" = "[]"
-    to_value "array(bool)" = "[]"
+    to_value "array" = "MoaArray.new([])"
+    to_value "array(int)" = "MoaArray.new([])"
+    to_value "array(string)" = "MoaArray.new([])"
+    to_value "array(bool)" = "MoaArray([])"
 eval_call name argv = go
   where
     go = if elem name all_parse_ops
@@ -93,7 +93,7 @@ eval_enum name enums = unlines $ map to_ruby enums
   where
     to_ruby (tag, fields) = eval_struct tag fields []
 eval_branch target conds = "moa_branch(" ++ eval target ++ ", " ++
-                           "[" ++ (cjoin $ map to_ruby conds) ++ "]" ++
+                           "[" ++ (join ",\n  " $ map to_ruby conds) ++ "]" ++
                            ")"
   where
     to_ruby (cond, body) = case cond of
@@ -108,72 +108,3 @@ join glue xs = go [] xs
   where
     go acc [] = foldr (++) "" $ drop 1 $ reverse acc
     go acc (x:xs) = go (x : glue : acc) xs
-
-std = unlines [
-        "def moa_branch(target, conds)"
-      , "  target = target.__call"
-      , "  conds.each do |(cond, body)|"
-      , "    return body.__call if moa_branch_eq(target, cond)"
-      , "  end"
-      , "  raise Exception.new('Unexpected branch ' + target.inspect + ' ' + conds.inspect)"
-      , "end"
-      , "def moa_branch_eq(target, cond)"
-      , "  is_moa_error = target.instance_of?(MoaError)"
-      , "  return target == cond unless cond.instance_of?(Symbol)"
-      , "  return !is_moa_error if cond == :ok"
-      , "  return is_moa_error if cond == :err"
-      , "  return target._tag == cond"
-      , "end"
-      , "def ok(v)"
-      , "  v"
-      , "end"
-      , "class MoaError"
-      , "  def initialize(message)"
-      , "    @m = message"
-      , "  end"
-      , "  def to_s"
-      , "    @m"
-      , "  end"
-      , "  def or(v)"
-      , "    v"
-      , "  end"
-      , "end"
-      , "def _method(name, &body)"
-      , "  method(define_method(name, body))"
-      , "end"
-      , "def err(s)"
-      , "  MoaError.new(s)"
-      , "end"
-      , "class String"
-      , "  def has(x)"
-      , "    include?(x)"
-      , "  end"
-      , "end"
-      , "class Proc"
-      , "  def or(x)"
-      , "    p = self"
-      , "    lambda { |*args| p.call(*args).or(x) }"
-      , "  end"
-      , "end"
-      , "class Object"
-      , "  def or(_)"
-      , "    self"
-      , "  end"
-      , "  def err?"
-      , "    instance_of?(MoaError)"
-      , "  end"
-      , "  def __call"
-      , "    instance_of?(Proc) ? self.call.__call : self"
-      , "  end"
-      , "  def run!"
-      , "    v = __call"
-      , "    v.instance_of?(Method) ? v.call.__call : v"
-      , "  end"
-      , "  def to_s"
-      , "    self.to_s"
-      , "  end"
-      , "  def to_i"
-      , "    self.to_int"
-      , "  end"
-      , "end"
-      ]
