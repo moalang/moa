@@ -49,11 +49,11 @@ eval_call name argv = go
       else run_func name argv
     run_op2 "<-" [Call name [], r] = name ++ " = (" ++ eval r ++ ").run!"
     run_op2 ":=" [Call name [], r] = name ++ " = " ++ eval r
-    run_op2 "=" [Call name [], r] = name ++ " = " ++ eval r
+    run_op2 op@(_:"=") [Call name [], r] = name ++ " " ++ op ++ " " ++ eval r
     run_op2 "++" [l, r] = run_op2 "+" [l, r]
     run_op2 op [l, r] = eval l ++ " " ++ op ++ " " ++ eval r
-    run_func name [] = name
-    run_func name argv = name ++ "(" ++ (cjoin $ map eval argv) ++ ")"
+    run_func name [] = name ++ ".__call"
+    run_func name argv = name ++ ".__call(" ++ (cjoin $ map eval argv) ++ ")"
 
 eval_apply (Def name args body) argv = (unlines $ zipWith (\k v -> k ++ " = " ++ eval v) args argv) ++ eval body
 eval_apply (Call _ [def]) argv = eval_apply def argv
@@ -64,26 +64,27 @@ eval_line s = "_v = (" ++ (eval s) ++ ").run!\nif _v.err? then return _v else _v
 eval_def name args body = go body
   where
     go (Stmt lines) = unlines [
-        "_method(:" ++ name ++ ") do |" ++ (cjoin args) ++ "|"
-      , "  lambda do"
+        local_variables lines
+      , name ++ " = lambda do |" ++ (cjoin args) ++ "|"
+      , "  MoaStmt.new(lambda do"
       , unlines $ map (eval_line . call) lines
-      , "  end"
+      , "  end)"
       , "end"
       ]
     go _ = unlines [
-      "_method(:" ++ name ++ ") do |" ++ (cjoin args) ++ "|"
+        name ++ " = lambda do |" ++ (cjoin args) ++ "|"
       , eval $ call body
       , "end"
       ]
+    local_variables lines = (join "" (map local_variable lines)) ++ " nil "
+    local_variable (Def id _ _) = id ++ " = "
+    local_variable _ = ""
     call c@(Call _ []) = c
-    call (Call fname argv)
-      | elem fname args = Call (fname ++ ".call") argv
-      | otherwise = Call fname argv
     call (Stmt lines) = Stmt $ map call lines
     call (Branch target conds) = Branch (call target) (map (\(c, v) -> (c, (call v))) conds)
     call x = x
 eval_struct name args methods = unlines [
-                            "def " ++ name ++ " " ++ (cjoin args)
+                            name ++ " = lambda do |" ++ (cjoin args) ++ "|"
                           , "  Struct.new " ++ (cjoin $ map (\x -> ":" ++ x) ("_tag" : args)) ++ " do"
                           , unlines $ map eval methods
                           , "  end.new(" ++ (cjoin $ (':' : name) : args) ++ ")"

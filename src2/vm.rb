@@ -1,9 +1,9 @@
-require 'byebug' if $DEBUG
+require 'byebug'
 
 def moa_branch(target, conds)
-  target = target.__call
+  target = target.run!
   conds.each do |(cond, body)|
-    return body.__call if moa_branch_eq(target, cond)
+    return body.run! if moa_branch_eq(target, cond)
   end
   raise Exception.new('Unexpected branch ' + target.inspect + ' ' + conds.inspect)
 end
@@ -15,18 +15,29 @@ def moa_branch_eq(target, cond)
   return is_moa_error if cond == :err
   return target._tag == cond
 end
-def ok(v)
-  v
+def ok
+  lambda { |v| v }
 end
-def err(s)
-  MoaError.new(s)
+def err
+  lambda { |s| MoaError.new(s) }
 end
-def panic(s)
-  byebug if $DEBUG
-  MoaPanic.new(s)
+def panic
+  lambda do |s|
+    byebug if $DEBUG
+    MoaPanic.new(s)
+  end
 end
-def _method(name, &body)
-  method(Object.define_method(name, body))
+class MoaStmt
+  def initialize(f)
+    @f = f
+  end
+  def call
+    @f.call
+  end
+  def or(x)
+    p = @f
+    MoaStmt.new(lambda { |*args| p.call(*args).or(x) })
+  end
 end
 class MoaError
   def initialize(message)
@@ -72,12 +83,12 @@ class Object
   def err?
     instance_of?(MoaError) || instance_of?(MoaPanic)
   end
-  def __call
-    instance_of?(Proc) ? self.call.__call : self
+  def __call(*args)
+    instance_of?(Proc) && arity == args.size ? self.call(*args).__call : self
   end
   def run!
     v = __call
-    v.instance_of?(Method) ? v.call.run! : v
+    v.instance_of?(Method) || v.instance_of?(MoaStmt) ? v.call.run! : v
   end
   def to_s
     self.to_s

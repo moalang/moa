@@ -138,7 +138,7 @@ parse_unit = go
       s <- string "true" <|> string "false"
       return $ Bool (s == "true")
     parse_call = do
-      name <- read_ref
+      name <- read_id
       argv <- parse_argv
       return $ Call name argv
 

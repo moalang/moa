@@ -129,13 +129,13 @@ tests = go2
           , "  b = 2"
           , "f"
           ]
-      , t "3" $ code [
+      , t "4" $ code [
             "f x = go:"
           , "  n int"
           , "  f1 ="
           , "    n += 1"
           , "  f2 ="
-          , "    n += 2"
+          , "    n += 3"
           , "  iif cond a b = cond"
           , "  | true -> a"
           , "  | false -> b"
@@ -150,12 +150,12 @@ tests = go2
           , "g"
           ]
       -- mutation
-      , t "3" $ code [
+      , t "5" $ code [
             "f = go:"
           , "  list array(int)"
           , "  go ="
           , "    list.push(1)"
-          , "    list.push(2)"
+          , "    list.push(4)"
           , "    list.sum"
           , "f"
         ]
@@ -185,9 +185,9 @@ assert_eq expect stdout ast input code = if expect == stdout
   then putChar '.'
   else error $ unlines [
       "x"
-    , "-    src: " ++ input
     , "- expect: " ++ show expect
     , "-   fact: " ++ show stdout
+    , "-    src: " ++ input
     , "-   code: " ++ code
     --, "-    ast: " ++ show ast
     ]
