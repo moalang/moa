@@ -24,7 +24,7 @@ tests = go1
   where
     t expect input = (expect, input)
     code xs = string_join "\n" xs
-    go2 = [ t "0" "[].count" ]
+    go2 = [ t "2" "[123 1].count" ]
     go1 = [
       -- primitives
         t "0" "0"

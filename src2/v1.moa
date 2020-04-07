@@ -44,7 +44,7 @@ parse src = parse_defines:
     c = src.slice(pos 1)
     f(c)
     | true -> forward(c)
-    | false -> err(("not satisfy " ++ c ++ " " ++ f.to_s))
+    | false -> fail(("not satisfy '" ++ c ++ "' " ++ f.to_s))
   eq s = (src.slice(pos s.length) == s)
   | true -> forward(s)
   | false -> err(("not eq " ++ s))
@@ -137,7 +137,7 @@ build node = node
 | parenthesis -> "(" ++ build(node.val) ++ ")"
 | array -> "[" ++ node.val.map((x => build(x))).join(", ") ++ "]"
 | call -> build_call(node.name node.argv)
-| method_ -> build(node.target) ++ "." ++ build_call(node.id node.argv)
+| method_ -> build_call((build(node.target) ++ "." ++ node.id) node.argv)
 | struct -> node.name ++ " = (" ++ node.args.join(",") ++ ") => { return {" ++ node.args.join(",") ++ "} }"
 | func -> node.name ++ " = (" ++ node.args.join(",") ++ ") => { return " ++ build(node.body).to_s ++ "}"
 

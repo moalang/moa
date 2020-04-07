@@ -64,8 +64,8 @@ eval_line s = "_v = (" ++ (eval s) ++ ").run!\nif _v.err? then return _v else _v
 eval_def name args body = go body
   where
     go (Stmt lines) = unlines [
-        local_variables lines
-      , name ++ " = lambda do |" ++ (cjoin args) ++ "|"
+        name ++ " = lambda do |" ++ (cjoin args) ++ "|"
+      , local_variables lines
       , "  MoaStmt.new(lambda do"
       , unlines $ map (eval_line . call) lines
       , "  end)"
