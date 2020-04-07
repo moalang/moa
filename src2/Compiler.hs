@@ -31,7 +31,7 @@ eval ast = case ast of
   -- parenthesis
   Parenthesis exp -> "(" ++ eval exp ++ ")"
   -- statement
-  Stmt lines -> unlines $ map eval_line lines
+  Stmt lines -> unlines $ local_variables lines : map eval_line lines
   -- branch
   Branch target conds -> eval_branch target conds
 eval_var name kind = name ++ " = " ++ to_value(kind)
@@ -65,8 +65,8 @@ eval_def name args body = go body
   where
     go (Stmt lines) = unlines [
         name ++ " = lambda do |" ++ (cjoin args) ++ "|"
-      , local_variables lines
       , "  MoaStmt.new(lambda do"
+      , local_variables lines
       , unlines $ map (eval_line . call) lines
       , "  end)"
       , "end"
@@ -76,9 +76,6 @@ eval_def name args body = go body
       , eval $ call body
       , "end"
       ]
-    local_variables lines = (join "" (map local_variable lines)) ++ " nil "
-    local_variable (Def id _ _) = id ++ " = "
-    local_variable _ = ""
     call c@(Call _ []) = c
     call (Stmt lines) = Stmt $ map call lines
     call (Branch target conds) = Branch (call target) (map (\(c, v) -> (c, (call v))) conds)
@@ -104,6 +101,9 @@ eval_branch target conds = "moa_branch(" ++ eval target ++ ", " ++
     to_sym "false" = "false"
     to_sym x = ':' : x
 
+local_variables lines = (join "" (map local_variable lines)) ++ " nil"
+local_variable (Def id _ _) = id ++ " = "
+local_variable _ = ""
 cjoin xs = join "," xs
 join glue xs = go [] xs
   where

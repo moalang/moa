@@ -12,6 +12,7 @@ ast:
 | struct name string, args array(string)
 | func name string, args array(string), body ast
 | define defines array(define)
+| op2 op string, left ast, right ast
 
 parse src = parse_defines:
   pos int
@@ -93,12 +94,12 @@ parse src = parse_defines:
       id <- read_id
       eq(" ")
       read_type
-      i
+      id
   parse_exp = go_exp:
     go_exp =
       spaces
-      b <- go_body
-      remain_exp(b)
+      body <- go_body
+      remain_exp(body)
     go_body = parse_array.or(parse_parenthesis).or(parse_string).or(parse_int).or(parse_bool).or(parse_call).or(fail("parse_exp"))
   parse_array =
     v <- between("[" "]" many(parse_exp))
@@ -119,13 +120,20 @@ parse src = parse_defines:
     v <- read_id
     args <- between("(" ")" many(parse_exp)).or([])
     remain_exp(call(v args))
-  remain_exp b = remain_ref(b).or(b):
-    remain_ref b =
+  remain_exp top = remain_ref(top).or(remain_op2(top)).or(top):
+    remain_ref target =
       eq(".")
       id <- read_id
       args <- between("(" ")" many(parse_exp)).or([])
-      m = method_(b id args)
+      m = method_(target id args)
       remain_ref(m).or(m)
+    remain_op2 left =
+      spaces
+      op <- satisfy((x => "+-*/".has(x)))
+      spaces
+      right <- parse_exp
+      o = op2(op left right)
+      remain_op2(o).or(o)
 
 build_call id argv = (argv.size == 0)
 | true -> "__eval(" ++ id ++ ")"
@@ -140,6 +148,7 @@ build node = node
 | method_ -> build_call((build(node.target) ++ "." ++ node.id) node.argv)
 | struct -> node.name ++ " = (" ++ node.args.join(",") ++ ") => { return {" ++ node.args.join(",") ++ "} }"
 | func -> node.name ++ " = (" ++ node.args.join(",") ++ ") => { return " ++ build(node.body).to_s ++ "}"
+| op2 -> build(node.left) ++ " " ++ node.op ++ " " ++ build(node.right)
 
 compile src =
   defs <- parse(src)

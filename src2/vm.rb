@@ -23,7 +23,6 @@ def err
 end
 def panic
   lambda do |s|
-    byebug if $DEBUG
     MoaPanic.new(s)
   end
 end
@@ -89,12 +88,6 @@ class Object
   def run!
     v = __call
     v.instance_of?(Method) || v.instance_of?(MoaStmt) ? v.call.run! : v
-  end
-  def to_s
-    self.to_s
-  end
-  def to_i
-    self.to_int
   end
 end
 class Array
