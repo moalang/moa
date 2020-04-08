@@ -4,45 +4,45 @@
 root: def++
  def:
 | func
-| ref+ : tag* prop*
-| ref+ : type+
-func: ref id* "=" stmt
-tag : "\n|" ref (attr ("," attr)*)*
-prop: "\n" (call | attr | func)
-call: id ("." id | "(" exp* ")")*
+| enum
+| struct
+| prototype
+func: ref id* "=" body
+enum:   "enum"   ref+ : (indent tag)+
+struct: "struct" ref+ : (indent attr)+
+prototype:       ref+ : type+
+tag : ref (type | ":") (indent attr)
 attr: id type
-stmt: exp switch?
+body: stmt | (line (: (indent attr)* (indent func)+)?)
+stmt: (indent func)+
+line: exp branch?
 exp:
 | unit op2 exp # op2    : v + 1
-| ref op2u exp # set    : n = 0, n += 1, n := -1
-| args => exp  # lambda : x, y => x + y
+| ref op2u exp # set    : n += 1
 | unit
 unit:
 | value
-| call
-| "(" unit+++ ")" # tuple  : (1, n)
-| "(" kv** ")"    # struct : (name "value")
-| "[" unit** "]"  # array  : [1]
-| "{" kv** "}"    # dict   : {"key" "value"}
-| "(" func | exp ")"
+| id ("." id | "(" exp* ")")*
+| "(" exp ")"
+| "(" id+ => body ")"    # lambda : (x y => x + y)
+| "(" unit (, unit)+ ")" # tuple  : (1, n)
+| "(" kv (, kv)+ ")"     # struct : (name "value", age 30 + 7)
+| "[" unit* "]"          # array  : [1 2]
+| "{" kv (, kv)+ "}"     # dict   : {"name" "value", "age" 30 + 7}
 value:
 | int    # 1
 | float  # 1.0
 | string # "hi"
 | bool   # true
-kv  : id exp # decided?
+kv  : exp exp
 id  : [a-z0-9_]+
 ref : id (. id)*
-type: ref | "(" ref+ ")"
+type: ref ("(" ref+ ")")?
 op2 : [; + - * / % & | << >> + - > >= < <=  == != || &&]
 op2u: [= := += /= *= /= %=]
-args: 
-| "(" id+ ")"
-| id (, id)*
-switch:
-| (br? "|" exp){2}           # binary branch
-| (br? "|" unit " : " exp)+  # pattern match
-| ":\n" attr** func++
+branch: (br? "|" unit " -> " exp)+ # pattern match
+indent: "\n  "
+indent2: "\n    "
 ```
 
 ## Primitives
@@ -62,11 +62,9 @@ true # bool
 []           # array
 {}           # dictionary
 # empty typed
-struct()
 array(int)
 dict(string int)
 # empty with capacity
-struct()
 array(int cap:10)
 dict(string int cap:10)
 # single

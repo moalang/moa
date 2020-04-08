@@ -10,18 +10,19 @@ run src =
   node <- parser(src).parse_top
   eval(node)
 
-ast:
-| int value int
-| op2 op string, left ast, right ast
+enum ast:
+  int int
+  op2:
+    op string
+    left ast
+    right ast
 
-parser:
-  src string
+parse src = parse_top
   pos 0
-  guard cond msg = cond | ok(()) | err(msg)
   satisfy: (string bool) try(string)
   satisfy f =
     c <- src(pos)
-    guard(f(c) "char: $c, checker: $f.name, pos: $p.pos")
+    f(c) || err("char: $c, checker: $f.name, pos: $p.pos")
     p.pos += 1
     return(c)
   parse_top: try(ast)
@@ -39,14 +40,21 @@ parser:
     r <- parse_exp
     ast.op2(op l r)
   parse_unit: try(ast)
-  parse_unit = parse_int | parse_ref
+  parse_unit = parse_int.or(parse_ref)
   parse_int: try(ast)
   parse_int =
-    x <- many1(p.satisfy(range("0" "9").contains))
+    x <- many1(p.satisfy(num.has))
     ast.int(x.to_int)
   read_id: try(string)
-  read_op = one(["+" "-" "*" "/"].contains)
+  read_id =
+    x <- one(az)
+    xs <- many(azn)
+    x ++ xs.join
+  read_op = one("+-*/".to_a.has)
   read_string s = s == src.slice(pos s.length)
+  num = range("0" "9")
+  az = range("a" "z" "A" "Z")
+  azn = az ++ num
 
 many1 a: try(a) try([]a)
 many1 f = f() ++ many(f)
