@@ -16,17 +16,20 @@ parse_top = do
 parse_top_stmt = Stmt <$> sep_by1 parse_line read_br1
 parse_line = parse_type <|> parse_func <|> parse_exp
 parse_type = do
+  kind <- string "enum " <|> string "struct "
   name <- read_id
   many (read_spaces1 >> read_type) -- drop type info
   string ":\n"
-  parse_struct name <|> parse_enum name
+  case kind of
+    "enum " -> parse_enum name
+    "struct " -> parse_struct name
 parse_enum name = go
   where
     go = do
       tags <- sep_by1 tag br
       return $ Enum name tags
     tag = do
-      string "| "
+      string "  "
       name <- read_id
       fields <- sep_by (parse_field) (char ',')
       return (name, fields)

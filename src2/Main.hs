@@ -24,7 +24,15 @@ tests = go1
   where
     t expect input = (expect, input)
     code xs = string_join "\n" xs
-    go2 = [ t "2" "[123 1].count" ]
+    go2 = [ t "3" $ code [
+            "enum ab:"
+          , "  a"
+          , "  b"
+          , "f x = x"
+          , "| a -> 1"
+          , "| b -> 2"
+          , "f(a) + f(b)"]
+          ]
     go1 = [
       -- primitives
         t "0" "0"
@@ -36,15 +44,15 @@ tests = go1
       -- containers
       , t "2" "[1 2].count"
       , t "3" $ code [
-            "vec2:"
+            "struct vec2:"
           , "  x int"
           , "  y int"
           , "vec2(1 2).x + vec2(1 2).y"]
       -- enum and branch
       , t "3" $ code [
-            "ab:"
-          , "| a"
-          , "| b"
+            "enum ab:"
+          , "  a"
+          , "  b"
           , "f x = x"
           , "| a -> 1"
           , "| b -> 2"

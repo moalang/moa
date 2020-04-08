@@ -8,6 +8,7 @@ def moa_branch(target, conds)
   raise Exception.new('Unexpected branch ' + target.inspect + ' ' + conds.inspect)
 end
 def moa_branch_eq(target, cond)
+  return true if cond == :_
   return target if target.instance_of?(MoaPanic)
   is_moa_error = target.instance_of?(MoaError)
   return target == cond unless cond.instance_of?(Symbol)
@@ -36,6 +37,9 @@ class MoaStmt
   def or(x)
     p = @f
     MoaStmt.new(lambda { |*args| p.call(*args).or(x) })
+  end
+  def to_s
+    @f.to_s
   end
 end
 class MoaError
@@ -80,14 +84,23 @@ class Object
     self
   end
   def err?
-    instance_of?(MoaError) || instance_of?(MoaPanic)
+    return true if instance_of?(MoaError)
+    if instance_of?(MoaPanic)
+      if $DEBUG
+        byebug
+      else
+        return true
+      end
+    end
   end
   def __call(*args)
     instance_of?(Proc) && (arity == args.size || arity == -1) ? self.call(*args).__call : self
   end
   def run!
     v = __call
-    v.instance_of?(Method) || v.instance_of?(MoaStmt) ? v.call.run! : v
+    ret = v.instance_of?(Method) || v.instance_of?(MoaStmt) ? v.call.run! : v
+    byebug if $DEBUG && ((ret.instance_of?(Array)) && ret.any?{|x| x.instance_of?(Proc)})
+    ret
   end
 end
 class Array
