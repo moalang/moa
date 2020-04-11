@@ -12,7 +12,7 @@ main = go
     go = do
       system $ "mkdir -p /tmp/moa"
       system $ "cp vm.rb vm.js /tmp/moa/"
-      run "ruby" test_rb
+      --run "ruby" test_rb
       run "  js" test_js
       putStrLn "done"
     run title f = do
@@ -92,40 +92,40 @@ tests = go1
       -- monad opt
       , t "1" "ok(1)"
       , t "1" "ok(1).or(2)"
-      , t "message" "err(\"message\")"
-      , t "1" "err(\"message\").or(1)"
+      , t "message" "err(`message`)"
+      , t "1" "err(`message`).or(1)"
       , t "5" $ code [
             "f v = v"
           , "| ok -> 2"
           , "| err -> 3"
           , "go ="
           , "  v1 <- f(ok(1))"
-          , "  v2 <- f(err(\"msg\"))"
+          , "  v2 <- f(err(`msg`))"
           , "  v1 + v2"
           , "go"
           ]
       -- monad try
       , t "failed" $ code [
             "f ="
-          , "  err(\"failed\")"
+          , "  err(`failed`)"
           , "  ok(1)"
           , "f"
           ]
       , t "2" $ code [
             "f ="
-          , "  err(\"failed\").or(1)"
+          , "  err(`failed`).or(1)"
           , "  ok(2)"
           , "f"
           ]
       , t "failed" $ code [
             "f ="
-          , "  v <- err(\"failed\")"
+          , "  v <- err(`failed`)"
           , "  v"
           , "f"
           ]
       , t "3" $ code [
             "f ="
-          , "  v <- err(\"failed\").or(3)"
+          , "  v <- err(`failed`).or(3)"
           , "  v"
           , "f"
           ]
@@ -181,7 +181,7 @@ test_js i expect input = do
   compiler <- readFile "v1.moa"
   let moa = compiler ++ "\n" ++ "main = compile(" ++ quote_string input_with_main ++ ")"
   (ast, _, js) <- eval_with_ruby expect moa name
-  let full_js = "main = () => (" ++ js ++ ")\nprocess.stdout.write(String(main()))"
+  let full_js = "main = () => (" ++ js ++ ")\nprocess.stdout.write(String(__eval(main)))"
   stdout <- exec "node -r ./vm.js" full_js input (name ++ ".js")
   assert_eq expect stdout ast input js
 
