@@ -46,17 +46,20 @@ parse src = parse_defines:
     eq(r).or(die(("right in between left=" ++ l)))
     v
   satisfy f =
-    (pos < src.length) || err("eof")
+    (pos < src.count) || err("eof")
     c = src.slice(pos 1)
     f(c)
     | true -> forward(c)
     | false -> fail(("not satisfy '" ++ c ++ "' " ++ f.to_s))
-  eq s = (src.slice(pos s.length) == s)
+  eq s = (src.slice(pos s.count) == s)
   | true -> forward(s)
   | false -> err(("not eq " ++ s))
-  see s = (src.slice(pos s.length) == s)
+  any xs =
+    x <- xs.find((x => (src.slice(pos x.count) == x)))
+    forward(x)
+  see s = (src.slice(pos s.count) == s)
   forward s =
-    pos += s.length
+    pos += s.count
     s
   fail title = err(("Failed to parse on " ++ title ++ " pos=" ++ pos.to_s))
   die title = panic(("Fatal to parse on " ++ title ++ " pos=" ++ pos.to_s))
@@ -190,11 +193,13 @@ parse src = parse_defines:
       remain_ref(m).or(m)
     remain_op2 left =
       spaces
-      op <- satisfy((x => "+-*/".has(x)))
+      op <- any(all_ops)
       spaces
       right <- parse_exp
       o = op2(op left right)
       remain_op2(o).or(o)
+
+all_ops = ["||" ">=" "==" "<=" "<-" ":=" "/=" "-=" "+=" "++" "*=" "&&" "%=" "!=" ">" "<" "/" "-" "+" "*" "%"]
 
 build_call id argv = (argv.size == 0)
 | true -> "__eval(" ++ id ++ ")"
@@ -208,10 +213,13 @@ exit_if_match target x = "if (" ++ branch_match(target x) ++ ") { return " ++ bu
 branch_match target x = x
 | type_matcher -> build(target) ++ "._tag == '" ++ x.type ++ "'"
 | type_value -> build(target) ++ " === " ++ build(x.value)
+build_op x = (x == "++")
+| true -> "+"
+| false -> x
 build node = node
 | int -> node.val.to_s
 | string -> `"` ++ node.val ++ `"`
-| bool -> node.val
+| bool -> node.val.to_s
 | parenthesis -> "(" ++ build(node.val) ++ ")"
 | array -> "[" ++ node.val.map((x => build(x))).join(", ") ++ "]"
 | ref -> node.name
@@ -220,7 +228,7 @@ build node = node
 | struct -> node.name ++ " = (" ++ node.args.join(",") ++ ") => { return {" ++ node.args.join(",") ++ "} }"
 | enum -> node.elements.map((x => build_element(x))).join(",\n")
 | func -> node.name ++ " = (" ++ node.args.join(",") ++ ") => { return " ++ build(node.body).to_s ++ "}"
-| op2 -> build(node.left) ++ " " ++ node.op ++ " " ++ build(node.right)
+| op2 -> build(node.left) ++ " " ++ build_op(node.op) ++ " " ++ build(node.right)
 | branch -> build_branch(node.target node.matchers)
 
 compile src =

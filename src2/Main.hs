@@ -71,7 +71,7 @@ tests = go1
       , t "false" "`hello`.has(`z`)"
       -- operations
       , t "1" "1 + 2 * 3 / (4 - 2) % 3"
-      , t "ab" "\"a\" ++ \"b\""
+      , t "ab" "`a` ++ `b`"
       , t "true" "true && (false || true)"
       , t "true" "1 == 1 && 1 != 2"
       , t "false" "1 == 2 || 1 != 1"

@@ -111,6 +111,18 @@ class Array
       super() { |x| f[0].call(x) }
     end
   end
+  def find(*f)
+    x = if block_given?
+          super() { |*x| yield *x }
+        else
+          super() { |x| f[0].call(x) }
+        end
+    return x if x
+    MoaError.new("not found")
+  end
+  def has(x)
+    include?(x)
+  end
   def count
     size
   end
