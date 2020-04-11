@@ -10,12 +10,12 @@ enum ast:
   bool val int
   parenthesis val ast
   array val array(ast)
-  call name string, argv array(ast)
+  ref name string
+  call target ast, argv array(ast)
   method_ target ast, id string, argv array(ast)
   struct name string, args array(string)
   enum name string, elements array(array(string))
   func name string, args array(string), body ast
-  define defines array(define)
   op2 op string, left ast, right ast
   branch target ast, matchers array(matcher)
 
@@ -54,11 +54,12 @@ parse src = parse_defines:
   eq s = (src.slice(pos s.length) == s)
   | true -> forward(s)
   | false -> err(("not eq " ++ s))
+  see s = (src.slice(pos s.length) == s)
   forward s =
     pos += s.length
     s
   fail title = err(("Failed to parse on " ++ title ++ " pos=" ++ pos.to_s))
-  die title = panic(("Failed to parse on " ++ title ++ " pos=" ++ pos.to_s))
+  die title = panic(("Fatal to parse on " ++ title ++ " pos=" ++ pos.to_s))
   read_id =
     id <- many1(satisfy((x => "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_".has(x))))
     id.join
@@ -75,7 +76,7 @@ parse src = parse_defines:
       defs <- many1(go_define)
       src.count == pos
       | true -> defs
-      | false -> fail("define")
+      | false -> die("define")
     go_define =
       brs
       id <- read_id
@@ -151,10 +152,9 @@ parse src = parse_defines:
   parse_call =
     v <- read_id
     args <- between("(" ")" many(parse_exp)).or([])
-    remain_exp(call(v args))
-  remain_body exp =
-    matchers <- many1(read_matcher)
-    branch(exp matchers)
+    see(" => ")
+    | true -> remain_lambda(v)
+    | false -> remain_exp(call(ref(v) args))
   read_matcher =
     eq("\n")
     spaces
@@ -170,12 +170,23 @@ parse src = parse_defines:
     eq(" -> ")
     exp <- parse_exp
     value_matcher(val exp)
-  remain_exp top = remain_ref(top).or(remain_op2(top)).or(top):
+  remain_lambda id =
+    eq(" => ")
+    exp <- parse_exp
+    func("lambda" [id] exp)
+  remain_body exp =
+    matchers <- many1(read_matcher)
+    branch(exp matchers)
+  remain_exp top = remain_ref(top).or(remain_call(top)).or(remain_op2(top)).or(top):
     remain_ref target =
       eq(".")
       id <- read_id
       args <- between("(" ")" many(parse_exp)).or([])
       m = method_(target id args)
+      remain_ref(m).or(m)
+    remain_call target =
+      args <- between("(" ")" many(parse_exp))
+      m = call(target args)
       remain_ref(m).or(m)
     remain_op2 left =
       spaces
@@ -203,7 +214,8 @@ build node = node
 | bool -> node.val
 | parenthesis -> "(" ++ build(node.val) ++ ")"
 | array -> "[" ++ node.val.map((x => build(x))).join(", ") ++ "]"
-| call -> build_call(node.name node.argv)
+| ref -> node.name
+| call -> build_call(build(node.target) node.argv)
 | method_ -> build_call((build(node.target) ++ "." ++ node.id) node.argv)
 | struct -> node.name ++ " = (" ++ node.args.join(",") ++ ") => { return {" ++ node.args.join(",") ++ "} }"
 | enum -> node.elements.map((x => build_element(x))).join(",\n")
