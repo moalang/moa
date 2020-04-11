@@ -5,7 +5,8 @@ def moa_branch(target, conds)
   conds.each do |(cond, body)|
     return body.run! if moa_branch_eq(target, cond)
   end
-  raise Exception.new('Unexpected branch ' + target.inspect + ' ' + conds.inspect)
+  msg = "Unexpected branch\n| target = " + target.inspect + conds.map{ |x| "\n| " + x.inspect }.join
+  raise Exception.new(msg)
 end
 def moa_branch_eq(target, cond)
   return true if cond == :_
@@ -51,6 +52,9 @@ class MoaError
   end
   def or(v)
     v
+  end
+  def inspect
+    "MoaError(#{@m})"
   end
 end
 class MoaPanic

@@ -1,6 +1,3 @@
-struct define:
-  name string
-  body ast
 enum matcher:
   type_matcher type string, body ast
   value_matcher value ast, body ast
@@ -18,6 +15,7 @@ enum ast:
   func name string, args array(string), body ast
   op2 op string, left ast, right ast
   branch target ast, matchers array(matcher)
+  stmt lines array(ast)
 
 parse src = parse_defines:
   pos int
@@ -76,10 +74,11 @@ parse src = parse_defines:
       v + args.join
   parse_defines = go_defines:
     go_defines =
-      defs <- many1(go_define)
+      defs <- many1(parse_define)
       src.count == pos
       | true -> defs
       | false -> die("define")
+  parse_define = go_define:
     go_define =
       brs
       id <- read_id
@@ -87,17 +86,7 @@ parse src = parse_defines:
       id
       | "struct" -> go_struct
       | "enum" -> go_enum
-      | _ -> go_func(id)
-    go_func id =
-      args <- many(go_arg)
-      spaces
-      eq("=")
-      spaces
-      body <- parse_body.or(die(("func " ++ id)))
-      func(id args body)
-    go_arg =
-      spaces
-      read_id
+      | _ -> remain_func(id)
     go_type id = id
     | "struct" -> go_struct
     | "enum" -> go_enum
@@ -128,6 +117,13 @@ parse src = parse_defines:
       spaces
       read_type
       id
+  parse_stmt =
+    lines <- many1(parse_line)
+    stmt(lines)
+  parse_line =
+    eq("\n  ")
+    spaces
+    parse_exp
   parse_body =
     exp <- parse_exp
     remain_body(exp).or(exp)
@@ -152,12 +148,20 @@ parse src = parse_defines:
   parse_bool =
     v <- eq("true").or(eq("false"))
     bool((v == "true"))
-  parse_call =
-    v <- read_id
-    args <- between("(" ")" many(parse_exp)).or([])
-    see(" => ")
-    | true -> remain_lambda(v)
-    | false -> remain_exp(call(ref(v) args))
+  parse_call = go_call:
+    go_call =
+      id <- read_id
+      args <- between("(" ")" many(parse_exp)).or([])
+      (args.count == 0)
+      | true -> go_lambda(id).or(remain_exp(ref(id)))
+      | false -> go_lambda(id).or(remain_exp(call(ref(id) args)))
+    go_lambda id =
+      eq(" => ")
+      exp <- parse_exp
+      func("lambda" [id] exp)
+    go_func id =
+      eq(" = ")
+      remain_func(id)
   read_matcher =
     eq("\n")
     spaces
@@ -173,10 +177,6 @@ parse src = parse_defines:
     eq(" -> ")
     exp <- parse_exp
     value_matcher(val exp)
-  remain_lambda id =
-    eq(" => ")
-    exp <- parse_exp
-    func("lambda" [id] exp)
   remain_body exp =
     matchers <- many1(read_matcher)
     branch(exp matchers)
@@ -198,8 +198,19 @@ parse src = parse_defines:
       right <- parse_exp
       o = op2(op left right)
       remain_op2(o).or(o)
+  remain_func id = go_func:
+    go_func =
+      args <- many(go_arg)
+      spaces
+      eq("=")
+      spaces
+      body <- parse_stmt.or(parse_body).or(die(("func " ++ id)))
+      func(id args body)
+    go_arg =
+      spaces
+      read_id
 
-all_ops = ["||" ">=" "==" "<=" "<-" ":=" "/=" "-=" "+=" "++" "*=" "&&" "%=" "!=" ">" "<" "/" "-" "+" "*" "%"]
+all_ops = ["||" ">=" "==" "<=" "<-" ":=" "/=" "-=" "+=" "++" "*=" "&&" "%=" "!=" ">" "<" "/" "-" "+" "*" "%" "="]
 
 build_call id argv = (argv.size == 0)
 | true -> "__eval(" ++ id ++ ")"
@@ -213,9 +224,10 @@ exit_if_match target x = "if (" ++ branch_match(target x) ++ ") { return " ++ bu
 branch_match target x = x
 | type_matcher -> build(target) ++ "._tag == '" ++ x.type ++ "'"
 | type_value -> build(target) ++ " === " ++ build(x.value)
-build_op x = (x == "++")
-| true -> "+"
-| false -> x
+build_op left x = x
+| "++" -> build(left) ++ " + "
+| "=" -> left.name ++ " = "
+| _ -> build(left) ++ " " ++ x
 build node = node
 | int -> node.val.to_s
 | string -> `"` ++ node.val ++ `"`
@@ -228,8 +240,9 @@ build node = node
 | struct -> node.name ++ " = (" ++ node.args.join(",") ++ ") => { return {" ++ node.args.join(",") ++ "} }"
 | enum -> node.elements.map((x => build_element(x))).join(",\n")
 | func -> node.name ++ " = (" ++ node.args.join(",") ++ ") => { return " ++ build(node.body).to_s ++ "}"
-| op2 -> build(node.left) ++ " " ++ build_op(node.op) ++ " " ++ build(node.right)
+| op2 -> build_op(node.left node.op) ++ " " ++ build(node.right)
 | branch -> build_branch(node.target node.matchers)
+| stmt -> "(" ++ node.lines.map((x => build(x))).join(",\n") ++ ")"
 
 compile src =
   defs <- parse(src)
