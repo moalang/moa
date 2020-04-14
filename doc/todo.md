@@ -25,14 +25,14 @@
    f : array(int)
    f = int[int.max] # panic("out of memory")
    f = panic("unreachable")
-[] Minimal compiler to Ruby
-[] Self booting with Ruby
+[x] Minimal compiler to Ruby
+[x] Self booting with Ruby
 
-# TODO (v0.2 Go and JavaScript)
-[] Minimal compiler to Go
-[] Making API server with Go
-[] Minimal compiler to JavaScript
-[] Making TODO app with Go and JavaScript
+# TODO (v0.2 JavaScript)
+[x] Minimal compiler to JavaScript
+[] Feedback to syntax from making minimal compiler to JavaScript
+[] Making API server by nodejs
+[] Making Kakeibo app on GAE
 
 # TODO (v0.4 enhance built-in functions)
 

@@ -10,14 +10,11 @@ run src =
   node <- parser(src).parse_top
   eval(node)
 
-enum ast:
+enum ast|
   int int
-  op2:
-    op string
-    left ast
-    right ast
+  op2 op string, left ast, right ast
 
-parse src = parse_top
+parse src = parse_top:
   pos 0
   satisfy: (string bool) try(string)
   satisfy f =

@@ -1,24 +1,24 @@
 # Syntax
 
 ```
-root: def++
- def:
+root: def (br def)*
+def:
 | func
-| enum
-| struct
-| prototype
-func: ref id* "=" body
-enum:   "enum"   ref+ : (indent tag)+
-struct: "struct" ref+ : (indent attr)+
-prototype:       ref+ : type+
-tag : ref (type | ":") (indent attr)
+| ref+ | (indent tag)+  # enum
+| ref+ : (indent attr)+ # struct
+| ref+ : type+          # function prototype
+func: id arg* "=" body
+tag : ref (attr ("," attr)*)?
 attr: id type
-body: stmt | (line (: (indent attr)* (indent func)+)?)
-stmt: (indent func)+
-line: exp branch?
+body:
+| stmt
+| exp (branch | helper)?
+stmt: (indent exp)+
+branch: (indent "|" unit " -> " exp)* # pattern match
+helper: : (indent attr)* (indent func)+
 exp:
-| unit op2 exp # op2    : v + 1
-| ref op2u exp # set    : n += 1
+| unit op2 exp # op2 => v + 1
+| ref op2u exp # set => n += 1
 | unit
 unit:
 | value
@@ -26,7 +26,7 @@ unit:
 | "(" exp ")"
 | "(" id+ => body ")"    # lambda : (x y => x + y)
 | "(" unit (, unit)+ ")" # tuple  : (1, n)
-| "(" kv (, kv)+ ")"     # struct : (name "value", age 30 + 7)
+| "(" iv (, iv)+ ")"     # struct : (name "value", age 30 + 7)
 | "[" unit* "]"          # array  : [1 2]
 | "{" kv (, kv)+ "}"     # dict   : {"name" "value", "age" 30 + 7}
 value:
@@ -34,15 +34,15 @@ value:
 | float  # 1.0
 | string # "hi"
 | bool   # true
+iv  : id exp
 kv  : exp exp
 id  : [a-z0-9_]+
 ref : id (. id)*
 type: ref ("(" ref+ ")")?
 op2 : [; + - * / % & | << >> + - > >= < <=  == != || &&]
 op2u: [= := += /= *= /= %=]
-branch: (br? "|" unit " -> " exp)+ # pattern match
 indent: "\n  "
-indent2: "\n    "
+br: "\n  "
 ```
 
 ## Primitives
@@ -109,12 +109,12 @@ vector2:
 cache k v:
   values dict(k v)
 
-bool:
-| true
-| false
-option a:
-| some a
-| none
+bool|
+  true
+  false
+option a|
+  some value a
+  none
 ```
 
 ## Branch
@@ -155,7 +155,7 @@ main =
   n
 ```
 
-## Name space
+## Name space?
 
 ```
 # main.moa
@@ -210,7 +210,10 @@ dict
 struct
 enum
 error
-try(a)
+opt(a) # some(a) | none
+do(a)  # modify memory
+try(a) # opt(a) + do(a)
+io(a)  # try(a) + system call
 ```
 
 ## Reserved type
