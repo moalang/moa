@@ -14,27 +14,40 @@ parse_top = do
   read_separator
   return stmt
 parse_top_stmt = Stmt <$> sep_by1 parse_line read_br1
-parse_line = parse_type <|> parse_func <|> parse_exp
-parse_type = do
-  kind <- string "enum " <|> string "struct "
-  name <- read_id
-  many (read_spaces1 >> read_type) -- drop type info
-  string ":\n"
-  case kind of
-    "enum " -> parse_enum name
-    "struct " -> parse_struct name
+parse_line = go
+  where
+    go = do
+      name <- read_id
+      args <- many(read_arg)
+      read_spaces
+      mark <- satisfy (\c -> elem c "|=:\n")
+      ret <- case mark of
+        ':' -> parse_struct name
+        '|' -> parse_enum name
+        '=' -> remain_func name args
+        '\n' -> if length args == 1
+          then (back 1) >> (return $ Var name (args !! 0))
+          else fail $ "Invalid variable definition " ++ show name ++ show args ++ show mark
+      return ret
+    read_arg = do
+      read_spaces
+      id <- read_id
+      args <- (between_char '(' ')' (many(read_arg))) <|> return []
+      return $ if length args == 0
+        then id
+        else id ++ "(" ++ (string_join " " args) ++ ")"
 parse_enum name = go
   where
     go = do
-      tags <- sep_by1 tag br
+      tags <- many1 tag
       return $ Enum name tags
     tag = do
-      string "  "
+      string "\n  "
       name <- read_id
       fields <- sep_by (parse_field) (char ',')
       return (name, fields)
 parse_struct name = block $ do
-  fields <- sep_by1 (indent parse_field) br
+  fields <- many1 (br >> indent parse_field)
   methods <- sep_by (indent parse_func) br
   return $ Struct name fields methods
 parse_field = do
@@ -44,20 +57,23 @@ parse_field = do
   read_type -- drop type info
   return name
 parse_func :: Parser AST
-parse_func = go
+parse_func = do
+  name <- read_id
+  args <- many (read_spaces >> read_id)
+  read_spaces
+  string "="
+  remain_func name args
+remain_func :: String -> [String] -> Parser AST
+remain_func name args = go
   where
     go = do
-      name <- read_id
-      args <- many (read_spaces1 >> read_id)
-      read_spaces
-      char '='
       read_spaces
       body <- parse_stmt <|> parse_exp
       funcs <- parse_func_private <|> (return [])
       return $ Def name args (merge_body body funcs)
     parse_func_private = block $ do
       char ':'
-      many1 $ br >> indent (parse_func <|> parse_var)
+      many1 $ br >> indent parse_line
     merge_body body [] = body
     merge_body (Stmt lines) funcs = Stmt $ funcs ++ lines
     merge_body body funcs = Stmt $ funcs ++ [body]
@@ -68,7 +84,8 @@ parse_var = do
   type_ <- read_type
   check_or_eof (== '\n')
   return $ Var name type_
-parse_stmt = block $ Stmt <$> many1 (br >> indent parse_line)
+parse_stmt = block $ Stmt <$> many1 (br >> indent parse_stmt_line)
+parse_stmt_line = parse_line <|> parse_exp
 parse_exp :: Parser AST
 parse_exp = go
   where
@@ -225,6 +242,8 @@ between_char l r c = do
   v <- c <|> (die $ "failed in between on the center " ++ [l])
   char r <|> (die $ "faield in between on the right " ++ [l])
   return $ v
+back :: Int -> Parser ()
+back n = Parser $ \s -> return ((), s { pos = pos s - n })
 
 -- const
 br = char '\n'
@@ -244,4 +263,9 @@ indent f = do
 
 -- debug
 die msg = debug "" >> error msg
-debug msg = Parser $ \s -> trace (msg ++ "\nremain:" ++ (show $ drop (pos s) (src s))) (return ((), s))
+debug msg = Parser $ \s -> trace (unlines [
+                msg
+              , "pos: " ++ show (pos s)
+              , "remain: " ++ (show $ take 100 $ drop (pos s) (src s)) ++ " ..."
+              ]) return ((), s)
+

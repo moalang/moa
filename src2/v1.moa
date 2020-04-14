@@ -1,7 +1,7 @@
-enum matcher:
+matcher|
   type_matcher type string, body ast
   value_matcher value ast, body ast
-enum ast:
+ast|
   int val int
   string val int
   bool val int
@@ -19,6 +19,7 @@ enum ast:
 
 parse src = parse_defines:
   pos int
+  indent int
   spaces = many(satisfy((x => x == " ")))
   brs = many(satisfy((x => x == "\n")))
   many1 f =
@@ -51,7 +52,7 @@ parse src = parse_defines:
     | false -> fail(("not satisfy '" ++ c ++ "' " ++ f.to_s))
   eq s = (src.slice(pos s.count) == s)
   | true -> forward(s)
-  | false -> err(("not eq " ++ s))
+  | false -> err(("not eq " ++ s.inspect))
   any xs =
     x <- xs.find((x => (src.slice(pos x.count) == x)))
     forward(x)
@@ -64,6 +65,9 @@ parse src = parse_defines:
   read_id =
     id <- many1(satisfy((x => "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_".has(x))))
     id.join
+  read_arg =
+    spaces
+    read_type
   read_type = go_type:
     go_type =
       spaces
@@ -71,7 +75,9 @@ parse src = parse_defines:
       go_type_remain(id).or(id)
     go_type_remain id =
       args <- between("(" ")" many(go_type))
-      v + args.join
+      args.count == 0
+      | true -> id
+      | false -> id ++ "(" ++ args.join(" ") ++ ")"
   parse_defines = go_defines:
     go_defines =
       defs <- many1(parse_define)
@@ -81,29 +87,35 @@ parse src = parse_defines:
   parse_define = go_define:
     go_define =
       brs
+      read_indent(0)
       id <- read_id
       spaces
-      id
-      | "struct" -> go_struct
-      | "enum" -> go_enum
-      | _ -> remain_func(id)
-    go_type id = id
-    | "struct" -> go_struct
-    | "enum" -> go_enum
-    go_struct =
-      id <- read_id
-      eq(":")
+      args <- many(read_arg)
+      satisfy((c => "|=:\n".has(c)))
+      | "|" -> go_enum(id)
+      | ":" -> go_struct(id)
+      | "\n" -> go_var(id args.first)
+      | "=" -> remain_func(id args)
+      | _ -> fail(("invalid define " ++ id))
+    go_var id type = op2("=" ref(id) go_var_init(type))
+    go_var_init type = type
+    | "int" -> int(0)
+    | "string" -> string("")
+    | "bool" -> bool(false)
+    | "array(int)" -> array([])
+    | "array(string)" -> array([])
+    | "array(bool)" -> array([])
+    go_struct id =
       args <- many1(go_field).or(die(("struct " ++ id)))
       struct(id args)
     go_field =
       eq("\n  ")
+      spaces
       id <- read_id
       eq(" ")
       read_type
       id
-    go_enum =
-      id <- read_id
-      eq(":")
+    go_enum id =
       elements <- many1(go_element).or(die(("enum " ++ id)))
       enum(id elements)
     go_element =
@@ -121,8 +133,8 @@ parse src = parse_defines:
     lines <- many1(parse_line)
     stmt(lines)
   parse_line =
-    eq("\n  ")
-    spaces
+    eq("\n")
+    read_indent(1)
     parse_exp
   parse_body =
     exp <- parse_exp
@@ -161,11 +173,13 @@ parse src = parse_defines:
       func("lambda" [id] exp)
     go_func id =
       eq(" = ")
-      remain_func(id)
+      remain_func(id [])
   read_matcher =
-    eq("\n")
-    spaces
-    eq("| ")
+    indent
+    | 0 -> eq("\n| ")
+    | 1 -> eq("\n  | ")
+    | 2 -> eq("\n    | ")
+    | 3 -> eq("\n      | ")
     read_type_matcher.or(read_value_matcher)
   read_type_matcher =
     id <- read_id
@@ -180,6 +194,11 @@ parse src = parse_defines:
   remain_body exp =
     matchers <- many1(read_matcher)
     branch(exp matchers)
+  read_indent n = indent + n
+  | 0 -> ""
+  | 1 -> eq("  ")
+  | 2 -> eq("    ")
+  | 3 -> eq("      ")
   remain_exp top = remain_ref(top).or(remain_call(top)).or(remain_op2(top)).or(top):
     remain_ref target =
       eq(".")
@@ -198,28 +217,34 @@ parse src = parse_defines:
       right <- parse_exp
       o = op2(op left right)
       remain_op2(o).or(o)
-  remain_func id = go_func:
-    go_func =
-      args <- many(go_arg)
-      spaces
-      eq("=")
-      spaces
-      body <- parse_stmt.or(parse_body).or(die(("func " ++ id)))
-      func(id args body)
-    go_arg =
-      spaces
-      read_id
+  remain_func id args =
+    spaces
+    body <- parse_stmt.or(parse_body).or(die(("func " ++ id)))
+    body2 <- remain_private(body).or(body)
+    func(id args body2)
+  remain_private x =
+    eq(":")
+    add_indent
+    xs <- many1(parse_define).or(die("private"))
+    sub_indent
+    stmt((xs ++ [x]))
+  add_indent =
+    indent += 1
+  sub_indent =
+    indent -= 1
+  back n =
+    pos -= n
 
 all_ops = ["||" ">=" "==" "<=" "<-" ":=" "/=" "-=" "+=" "++" "*=" "&&" "%=" "!=" ">" "<" "/" "-" "+" "*" "%" "="]
 
 build_call id argv = (argv.size == 0)
-| true -> "__eval(" ++ id ++ ")"
+| true -> "__pure(" ++ id ++ ")"
 | false -> id ++ "(" ++ argv.map((x => build(x))).join(", ") ++ ")"
 build_element element = element.first ++ " = " ++ build_element_value(element)
 build_element_value element = (element.size == 1)
 | true -> "{__tag: '" ++ element.first ++ "'}"
 | false -> "(" ++ element.slice(1 element.count) ++ ") => { return { __tag:" ++ element.first ++ ", " ++ element.slice(1 element.count).join(", ") ++ "} }"
-build_branch target matchers = "(() => {\n" ++ matchers.map((x => exit_if_match(target x))).join("\n") ++ "\n})()"
+build_branch target matchers = "(() => {\n" ++ matchers.map((x => exit_if_match(target x))).join("\n") ++ "\nthrow new Error('branch bug')})()"
 exit_if_match target x = "if (" ++ branch_match(target x) ++ ") { return " ++ build(x.body) ++ " }"
 branch_match target x = x
 | type_matcher -> branch_match_matcher(target x)
@@ -227,19 +252,29 @@ branch_match target x = x
 branch_match_matcher target x = x.type
 | "ok" -> "!" ++ build(target) ++ ".__err"
 | "err" -> build(target) ++ ".__err"
+| "true" -> build(target) ++ " === true"
+| "false" -> build(target) ++ " === false"
 | _ -> build(target) ++ ".__tag == '" ++ x.type ++ "'"
 build_op op l r = op
 | "++" -> build(l) ++ " + " ++ build(r)
 | "=" -> l.name ++ " = " ++ build(r)
-| "<-" -> l.name ++ " = " ++ build(r)
+| "+=" -> l.name ++ " += " ++ build(r)
+| "-=" -> l.name ++ " -= " ++ build(r)
+| "*=" -> l.name ++ " *= " ++ build(r)
+| "/=" -> l.name ++ " /= " ++ build(r)
+| "%=" -> l.name ++ " %= " ++ build(r)
+| "<-" -> l.name ++ " = __effect(" ++ build(r) ++ ")"
 | _ -> build(l) ++ " " ++ op ++ " " ++ build(r)
+build_stmt_line node = node
+| ref -> "__effect(" ++ node.name ++ ")"
+| _ -> build(node)
 build node = node
 | int -> node.val.to_s
 | string -> `"` ++ node.val ++ `"`
 | bool -> node.val.to_s
 | parenthesis -> "(" ++ build(node.val) ++ ")"
 | array -> "[" ++ node.val.map((x => build(x))).join(", ") ++ "]"
-| ref -> node.name
+| ref -> "__pure(" ++ node.name ++ ")"
 | call -> build_call(build(node.target) node.argv)
 | method_ -> build_call((build(node.target) ++ "." ++ node.id) node.argv)
 | struct -> node.name ++ " = (" ++ node.args.join(",") ++ ") => { return {" ++ node.args.join(",") ++ "} }"
@@ -247,8 +282,7 @@ build node = node
 | func -> node.name ++ " = (" ++ node.args.join(",") ++ ") => { return " ++ build(node.body).to_s ++ "}"
 | op2 -> build_op(node.op node.left node.right)
 | branch -> build_branch(node.target node.matchers)
-| stmt -> "(() => { let __r\n" ++ node.lines.map((x => "__r = " ++ build(x) ++ "; if (__r.__err) { return __r }\n")).join() ++ "return __r})()"
-
+| stmt -> "(() => {let __f; __f = () => { let __r\n" ++ node.lines.map((x => "__r = " ++ build_stmt_line(x) ++ "; if (__r.__err) { return __r }\n")).join() ++ "return __r}; __f.__stmt = true; return __f})()"
 compile src =
   defs <- parse(src)
   "(" ++ defs.map((x => build(x))).join(",\n") ++ ")()"

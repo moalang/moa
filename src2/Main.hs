@@ -12,7 +12,7 @@ main = go
     go = do
       system $ "mkdir -p /tmp/moa"
       system $ "cp vm.rb vm.js /tmp/moa/"
-      --run "ruby" test_rb
+      run "ruby" test_rb
       run "  js" test_js
       putStrLn "done"
     run title f = do
@@ -24,15 +24,17 @@ tests = go1
   where
     t expect input = (expect, input)
     code xs = string_join "\n" xs
-    go2 = [ t "3" $ code [
-            "enum ab:"
-          , "  a"
-          , "  b"
-          , "f x = x"
-          , "| a -> 1"
-          , "| b -> 2"
-          , "f(a) + f(b)"]
-          ]
+    go2 = [
+        t "5" $ code [
+            "f = go:"
+          , "  list array(int)"
+          , "  go ="
+          , "    list.push(1)"
+          , "    list.push(4)"
+          , "    list.sum"
+          , "f"
+        ]
+        ]
     go1 = [
       -- primitives
         t "0" "0"
@@ -44,13 +46,13 @@ tests = go1
       -- containers
       , t "2" "[1 2].count"
       , t "3" $ code [
-            "struct vec2:"
+            "vec2:"
           , "  x int"
           , "  y int"
           , "vec2(1 2).x + vec2(1 2).y"]
       -- enum and branch
       , t "3" $ code [
-            "enum ab:"
+            "ab|"
           , "  a"
           , "  b"
           , "f x = x"
@@ -181,7 +183,7 @@ test_js i expect input = do
   compiler <- readFile "v1.moa"
   let moa = compiler ++ "\n" ++ "main = compile(" ++ quote_string input_with_main ++ ")"
   (ast, _, js) <- eval_with_ruby expect moa name
-  let full_js = "main = () => (" ++ js ++ ")\nprocess.stdout.write(String(__eval(main)))"
+  let full_js = "main = () => (" ++ js ++ ")\nprocess.stdout.write(String(__effect(main)))"
   stdout <- exec "node -r ./vm.js" full_js input (name ++ ".js")
   assert_eq expect stdout ast input js
 
@@ -195,8 +197,8 @@ assert_eq expect stdout ast input code = if expect == stdout
       "x"
     , "- expect: " ++ show expect
     , "-   fact: " ++ show stdout
-    , "-    src: " ++ input
-    , "-   code: " ++ code
+    , "-    src: " ++ take 100 input ++ " ..."
+    --, "-   code: " ++ code
     --, "-    ast: " ++ show ast
     ]
 
@@ -206,7 +208,7 @@ eval_with_ruby expect input name = let
     Nothing -> error $ "Parser error " ++ input ++ " expect: " ++ expect
     Just (ast, s) -> if pos s == len s
       then ast
-      else error $ "Parser error\n- remaining: " ++ (drop (pos s) (src s)) ++ "\n- src: " ++ input
+      else error $ "Parser error\n- remaining: " ++ (take 100 $ drop (pos s) (src s)) ++ " ...\n- src: " ++ take 100 input ++ " ..."
   ruby = "require './vm'\n" ++ compile ast
   in do
     stdout <- exec "ruby" ruby input (name ++ ".rb")

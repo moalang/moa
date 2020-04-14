@@ -62,6 +62,9 @@ instance Monad Parser where
     Just (a, ss) -> runParser (f a) ss
     _ -> Nothing
 
+instance MonadFail Parser where
+  fail _ = Parser $ \s -> Nothing
+
 instance Alternative Parser where
   empty = Parser $ \_ -> Nothing
   l <|> r = Parser $ \s ->
