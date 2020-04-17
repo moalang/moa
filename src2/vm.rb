@@ -1,5 +1,3 @@
-require 'byebug'
-
 def moa_branch(target, conds)
   target = target.run!
   conds.each do |(cond, body)|
@@ -15,7 +13,7 @@ def moa_branch_eq(target, cond)
   return target == cond unless cond.instance_of?(Symbol)
   return !is_moa_error if cond == :ok
   return is_moa_error if cond == :err
-  return target._tag == cond
+  return target._tag == cond if target.respond_to?(:_tag)
 end
 def ok
   lambda { |v| v }
@@ -56,6 +54,9 @@ class MoaError
   def inspect
     "MoaError(#{@m})"
   end
+  def _tag
+    "err"
+  end
 end
 class MoaPanic
   def initialize(message)
@@ -89,22 +90,13 @@ class Object
   end
   def err?
     return true if instance_of?(MoaError)
-    if instance_of?(MoaPanic)
-      if $DEBUG
-        byebug
-      else
-        return true
-      end
-    end
   end
   def __call(*args)
     instance_of?(Proc) && (arity == args.size || arity == -1) ? self.call(*args).__call : self
   end
   def run!
     v = __call
-    ret = v.instance_of?(Method) || v.instance_of?(MoaStmt) ? v.call.run! : v
-    byebug if $DEBUG && ((ret.instance_of?(Array)) && ret.any?{|x| x.instance_of?(Proc)})
-    ret
+    v.instance_of?(Method) || v.instance_of?(MoaStmt) ? v.call.run! : v
   end
 end
 class Array
@@ -136,3 +128,16 @@ class String
     size
   end
 end
+class MoaIO
+  def stdin
+    Class.new do
+      def string
+        STDIN.read
+      end
+    end.new
+  end
+  def stdout(x)
+    print(x)
+  end
+end
+io = MoaIO.new

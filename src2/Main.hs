@@ -10,15 +10,9 @@ import Data.Time.Clock.System (getSystemTime, systemSeconds)
 main = go
   where
     go = do
-      system $ "mkdir -p /tmp/moa"
-      system $ "cp vm.rb vm.js /tmp/moa/"
-      run "ruby" test_rb
-      run "  js" test_js
+      prepare "/tmp/moa/moa"
+      mapM_ (\(i, (expect, input)) -> run_test i expect input) $ zip [0..] tests
       putStrLn "done"
-    run title f = do
-      putStr title
-      mapM_ (\(i, (expect, input)) -> f i expect input) $ zip [0..] tests
-      putStrLn ""
 
 tests = go1
   where
@@ -171,54 +165,42 @@ tests = go1
         ]
       ]
 
-test_rb i expect input = do
-  let name = show i
-  let input_with_main = replace_last (\x -> "main = " ++ x) (reverse $ lines input) []
-  (ast, ruby, stdout) <- eval_with_ruby expect input_with_main name
-  assert_eq expect stdout ast input ruby
+run_test i expect input = do
+  let moa_path = "/tmp/moa/" ++ show i ++ ".moa"
+  let js_path = "/tmp/moa/" ++ show i ++ ".js"
+  let ret_path = "/tmp/moa/" ++ show i ++ ".txt"
+  let a = lines input
+  let n = length a - 1
+  let test_code = unlines $ (take n a) ++ ["test = " ++ (a !! n)]
+  writeFile moa_path test_code
+  let cmd1 = "/usr/bin/ruby /tmp/moa/moa < " ++ moa_path ++ " > " ++ js_path
+  let cmd2 = "echo \"\n\nprocess.stdout.write(String(__effect(test())))\" >> " ++ js_path
+  let cmd3 = "node -r ./vm.js " ++ js_path ++ " > " ++ ret_path
+  system $ cmd1 ++ ";" ++ cmd2 ++ ";" ++ cmd3
+  stdout <- readFile ret_path
+  if expect == stdout
+    then putChar '.'
+    else error $ unlines [
+        "Failed `" ++ input ++ "`"
+      , "- expect: " ++ show expect
+      , "-   fact: " ++ show stdout
+      , "-   ruby: " ++ "ruby /tmp/moa/moa < " ++ moa_path
+      , "-     js: " ++ "node -r ./vm.js " ++ js_path
+      ]
 
-test_js i expect input = do
-  let name = show i
-  let input_with_main = replace_last (\x -> "main = " ++ x) (reverse $ lines input) []
-  compiler <- readFile "v1.moa"
-  let moa = compiler ++ "\n" ++ "main = compile(" ++ quote_string input_with_main ++ ")"
-  (ast, _, js) <- eval_with_ruby expect moa name
-  let full_js = "main = () => (" ++ js ++ ")\nprocess.stdout.write(String(__effect(main)))"
-  stdout <- exec "node -r ./vm.js" full_js input (name ++ ".js")
-  assert_eq expect stdout ast input js
-
-replace_last :: (String -> String) -> [String] -> [String] -> String
-replace_last f [last] acc = (unlines $ reverse acc) ++ f last
-replace_last f (x:xs) acc = replace_last f (x : acc) xs
-
-assert_eq expect stdout ast input code = if expect == stdout
-  then putChar '.'
-  else error $ unlines [
-      "x"
-    , "- expect: " ++ show expect
-    , "-   fact: " ++ show stdout
-    , "-    src: " ++ take 100 input ++ " ..."
-    --, "-   code: " ++ code
-    --, "-    ast: " ++ show ast
-    ]
-
-eval_with_ruby :: String -> String -> String -> IO (AST, String, String)
-eval_with_ruby expect input name = let
-  ast = case parse input of
-    Nothing -> error $ "Parser error " ++ input ++ " expect: " ++ expect
-    Just (ast, s) -> if pos s == len s
-      then ast
-      else error $ "Parser error\n- remaining: " ++ (take 100 $ drop (pos s) (src s)) ++ " ...\n- src: " ++ take 100 input ++ " ..."
-  ruby = "require './vm'\n" ++ compile ast
-  in do
-    stdout <- exec "ruby" ruby input (name ++ ".rb")
-    return (ast, ruby, stdout)
-
-exec command body unique name = do
-  let exe_path = "/tmp/moa/" ++ name
-  let out_path = "/tmp/moa/stdout_" ++ name
-  writeFile exe_path body
-  system $ command ++ " " ++ exe_path ++ " > " ++ out_path
-  ret <- readFile out_path
-  removeFile out_path
-  return ret
+prepare exe_path = go
+  where
+    go = do
+      system $ "mkdir -p /tmp/moa"
+      system $ "cp vm.js /tmp/moa/"
+      moa <- readFile "v1.moa"
+      vm <- readFile "vm.rb"
+      writeFile exe_path (ruby moa vm)
+      system $ "chmod 0755 " ++ exe_path
+    ruby moa vm = let
+      ast = case parse moa of
+        Nothing -> error $ "Parser error " ++ moa
+        Just (ast, s) -> if pos s == len s
+          then ast
+          else error $ "Parser error\n- remaining: " ++ (take 100 $ drop (pos s) (src s)) ++ " ...\n- src: " ++ take 100 moa ++ " ..."
+      in unlines ["#!/usr/bin/ruby", vm, compile ast]

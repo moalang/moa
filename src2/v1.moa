@@ -286,3 +286,9 @@ build node = node
 compile src =
   defs <- parse(src)
   "(" ++ defs.map((x => build(x))).join(",\n") ++ ")()"
+
+main =
+  moa <- io.stdin.string
+  defs <- parse(moa)
+  js <- defs.map((x => build(x))).join("\n")
+  io.stdout(js)

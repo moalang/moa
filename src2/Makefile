@@ -1,6 +1,6 @@
 run:
 	clear
-	@PATH=/usr/local/opt/node@13/bin/:$$PATH runghc Main
+	@PATH=/usr/local/opt/node@13/bin/:$$PATH time runghc Main
 
 mac:
 	@-make
