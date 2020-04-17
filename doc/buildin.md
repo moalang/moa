@@ -1,79 +1,47 @@
 # Build-in types
 Primitive
 - bool
-- int
-- float
-- string
-Container
-- tuple
+- int         : `(+, -, *, **, ^, //)`, float
+- float       : `(+, -, *, /)`        , int
+- string      : join, split, int, float, array
+Structure
+- tuple       : n0, n1, ...
 - struct
-- array
-- dict
 - enum
+- func        : curry a b c ... func(b c ...)
+Container
+- array       : +seq
+- dict        : +seq, keys, values
 Interface
+- any         : string, empty
 - void
-- error
-- function
-- number
+- error       : and, or
 Control flow
-- try
-- effect
-- branch
+- opt         : and, or
+- try         : and, or
+- do
+- io          : and, or
 Binary operators
-- effect      : <- += -= *= /= %=
-- comparision : == != >= <= > < || &&
-- array       : ++
-- string      : .
-- number      : + - * / % **
-- available   : @ & &&& ||| //
-- reserved    : | , ! ? ^
+- effect      : `<- += -= *= /= %=`
+- comparision : `== != >= <= > < || &&`
+- array       : `++`
+- string      : `.`
+- number      : `+ - * / % **`
+- available   : `@ & &&& ||| //`
+- reserved    : `| , ! ? ^`
+System call
+- io          : stdin.read, stdout, stderr
+Type Class
+- any a       : eq, order, string
+- bounded a   : min, max
+- seq a       : +functor, count, reduce, filter, has, array
+- functor a   : map
 
-# Core library
-any:
-  to_s : string
-bool:
-  -
-num:
-  to_i
-  to_f
-  (+, -, *) : a a a
-int:
-  num
-  // : a a a
-float:
-  num
-  / : a a a
-string:
-  join : string string
-  split : string string
-  to_i : try(int)
-  to_f : try(float)
-  to_a : array(string)
-func a b c:
-  name : string
-  code : string
-  curry a : func(b c)
-turple a b:
-  n0 : a
-  n1 : b
-array a:
-  reduce b : function(a b) b
-  map b : array(b)
-  filter : function(a bool) array(a)
-  has : a bool
-dict k v:
-  keys : array(k)
-  values : array(v)
-enum:
-  keys : string(string)
-  count : int
-try a:
-  and : a.try a.try
-  or : a.try a.try
-  fmap b : (a b) try.b
-  catch b : (error try.b) try.b
-eff a:
-  try
+# Core
+io:
+  stdin
+  stdout
+  stderr
 log:
   debug: any void
   info: any void
