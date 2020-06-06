@@ -104,6 +104,17 @@ maybe a:
 
 
 ## 4. IO
+
+Standard input, output and error
+```
+use io stdin stdout stderr
+main =
+  line <- stdin.readline
+  line.empty
+  | true = stdout(line)
+  | false = stderr(line)
+```
+
 File system
 ```
 use io.fs open ls
@@ -139,6 +150,22 @@ main =
   wait(2.seconds)
   | cancel
   # here, automatically call wait
+```
+
+Random
+```
+use io random exit
+main =
+  n <- ranodm.int(0 2)
+  exit(n)
+```
+
+Time
+```
+use io time
+main =
+  now <- time.now
+  io.print(now)
 ```
 
 
@@ -207,6 +234,7 @@ Reserved keywards
 - i8, i16, i32, i64
 - u8, u16, u32, u64
 - f8, f16, f32, f64
+- trace
 - type?, array?
 
 Binary operators
