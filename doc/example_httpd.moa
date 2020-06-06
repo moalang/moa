@@ -1,0 +1,19 @@
+# example_httpd.md
+
+# main.moa
+use app
+
+main =
+  addr <- io.argv(0 ":8080")
+  c = app.config(addr)
+  app.start(c handle)
+
+handle req = req.method
+| .get = handle_get req
+| .post = handle_post req
+handle_get req = req.path
+| "/" = action_index
+
+
+# app.moa
+TBD

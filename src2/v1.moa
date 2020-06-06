@@ -1,6 +1,7 @@
 matcher|
   type_matcher type string, body ast
   value_matcher value ast, body ast
+
 ast|
   int val int
   string val int
@@ -237,58 +238,59 @@ parse src = parse_defines:
 
 all_ops = ["||" ">=" "==" "<=" "<-" ":=" "/=" "-=" "+=" "++" "*=" "&&" "%=" "!=" ">" "<" "/" "-" "+" "*" "%" "="]
 
-build_call id argv = (argv.size == 0)
-| true -> "__pure(" ++ id ++ ")"
-| false -> id ++ "(" ++ argv.map((x => build(x))).join(", ") ++ ")"
-build_element element = element.first ++ " = " ++ build_element_value(element)
-build_element_value element = (element.size == 1)
-| true -> "{__tag: '" ++ element.first ++ "'}"
-| false -> "(" ++ element.slice(1 element.count) ++ ") => { return { __tag:" ++ element.first ++ ", " ++ element.slice(1 element.count).join(", ") ++ "} }"
-build_branch target matchers = "(() => {\n" ++ matchers.map((x => exit_if_match(target x))).join("\n") ++ "\nthrow new Error('branch bug')})()"
-exit_if_match target x = "if (" ++ branch_match(target x) ++ ") { return " ++ build(x.body) ++ " }"
-branch_match target x = x
-| type_matcher -> branch_match_matcher(target x)
-| type_value -> build(target) ++ " === " ++ build(x.value)
-branch_match_matcher target x = x.type
-| "ok" -> "!" ++ build(target) ++ ".__err"
-| "err" -> build(target) ++ ".__err"
-| "true" -> build(target) ++ " === true"
-| "false" -> build(target) ++ " === false"
-| _ -> build(target) ++ ".__tag == '" ++ x.type ++ "'"
-build_op op l r = op
-| "++" -> build(l) ++ " + " ++ build(r)
-| "=" -> l.name ++ " = " ++ build(r)
-| "+=" -> l.name ++ " += " ++ build(r)
-| "-=" -> l.name ++ " -= " ++ build(r)
-| "*=" -> l.name ++ " *= " ++ build(r)
-| "/=" -> l.name ++ " /= " ++ build(r)
-| "%=" -> l.name ++ " %= " ++ build(r)
-| "<-" -> l.name ++ " = __effect(" ++ build(r) ++ ")"
-| _ -> build(l) ++ " " ++ op ++ " " ++ build(r)
-build_stmt_line node = node
-| ref -> "__effect(" ++ node.name ++ ")"
-| _ -> build(node)
-build node = node
-| int -> node.val.to_s
-| string -> `"` ++ node.val ++ `"`
-| bool -> node.val.to_s
-| parenthesis -> "(" ++ build(node.val) ++ ")"
-| array -> "[" ++ node.val.map((x => build(x))).join(", ") ++ "]"
-| ref -> "__pure(" ++ node.name ++ ")"
-| call -> build_call(build(node.target) node.argv)
-| method_ -> build_call((build(node.target) ++ "." ++ node.id) node.argv)
-| struct -> node.name ++ " = (" ++ node.args.join(",") ++ ") => { return {" ++ node.args.join(",") ++ "} }"
-| enum -> node.elements.map((x => build_element(x))).join(",\n")
-| func -> node.name ++ " = (" ++ node.args.join(",") ++ ") => { return " ++ build(node.body).to_s ++ "}"
-| op2 -> build_op(node.op node.left node.right)
-| branch -> build_branch(node.target node.matchers)
-| stmt -> "(() => {let __f; __f = () => { let __r\n" ++ node.lines.map((x => "__r = " ++ build_stmt_line(x) ++ "; if (__r.__err) { return __r }\n")).join() ++ "return __r}; __f.__stmt = true; return __f})()"
+build node = top(node)
+  top node = node
+  | int -> node.val.to_s
+  | string -> `"` ++ node.val ++ `"`
+  | bool -> node.val.to_s
+  | parenthesis -> "(" ++ build(node.val) ++ ")"
+  | array -> "[" ++ node.val.map((x => build(x))).join(", ") ++ "]"
+  | ref -> "__pure(" ++ node.name ++ ")"
+  | call -> build_call(build(node.target) node.argv)
+  | method_ -> build_call((build(node.target) ++ "." ++ node.id) node.argv)
+  | struct -> node.name ++ " = (" ++ node.args.join(",") ++ ") => { return {" ++ node.args.join(",") ++ "} }"
+  | enum -> node.elements.map((x => build_element(x))).join(",\n")
+  | func -> node.name ++ " = (" ++ node.args.join(",") ++ ") => { return " ++ build(node.body).to_s ++ "}"
+  | op2 -> build_op(node.op node.left node.right)
+  | branch -> build_branch(node.target node.matchers)
+  | stmt -> "(() => {let __f; __f = () => { let __r\n" ++ node.lines.map((x => "__r = " ++ build_stmt_line(x) ++ "; if (__r.__err) { return __r }\n")).join() ++ "return __r}; __f.__stmt = true; return __f})()"
+  build_call id argv = (argv.size == 0)
+  | true -> "__pure(" ++ id ++ ")"
+  | false -> id ++ "(" ++ argv.map((x => build(x))).join(", ") ++ ")"
+  build_element element = element.first ++ " = " ++ build_element_value(element)
+  build_element_value element = (element.size == 1)
+  | true -> "{__tag: '" ++ element.first ++ "'}"
+  | false -> "(" ++ element.slice(1 element.count) ++ ") => { return { __tag:" ++ element.first ++ ", " ++ element.slice(1 element.count).join(", ") ++ "} }"
+  build_branch target matchers = "(() => {\n" ++ matchers.map((x => exit_if_match(target x))).join("\n") ++ "\nthrow new Error('branch bug')})()"
+  exit_if_match target x = "if (" ++ branch_match(target x) ++ ") { return " ++ build(x.body) ++ " }"
+  branch_match target x = x
+  | type_matcher -> branch_match_matcher(target x)
+  | type_value -> build(target) ++ " === " ++ build(x.value)
+  branch_match_matcher target x = x.type
+  | "ok" -> "!" ++ build(target) ++ ".__err"
+  | "err" -> build(target) ++ ".__err"
+  | "true" -> build(target) ++ " === true"
+  | "false" -> build(target) ++ " === false"
+  | _ -> build(target) ++ ".__tag == '" ++ x.type ++ "'"
+  build_op op l r = op
+  | "++" -> build(l) ++ " + " ++ build(r)
+  | "=" -> l.name ++ " = " ++ build(r)
+  | "+=" -> l.name ++ " += " ++ build(r)
+  | "-=" -> l.name ++ " -= " ++ build(r)
+  | "*=" -> l.name ++ " *= " ++ build(r)
+  | "/=" -> l.name ++ " /= " ++ build(r)
+  | "%=" -> l.name ++ " %= " ++ build(r)
+  | "<-" -> l.name ++ " = __effect(" ++ build(r) ++ ")"
+  | _ -> build(l) ++ " " ++ op ++ " " ++ build(r)
+  build_stmt_line node = node
+  | ref -> "__effect(" ++ node.name ++ ")"
+  | _ -> build(node)
+
 compile src =
   defs <- parse(src)
-  "(" ++ defs.map((x => build(x))).join(",\n") ++ ")()"
+  defs.map((x => build(x))).join("\n")
 
 main =
-  moa <- io.stdin.string
-  defs <- parse(moa)
-  js <- defs.map((x => build(x))).join("\n")
+  src <- io.stdin.string
+  js <- compile(src)
   io.stdout(js)
