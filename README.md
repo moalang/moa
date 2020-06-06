@@ -106,26 +106,39 @@ maybe a:
 ## 4. IO
 File system
 ```
-TBD
+use io.fs open ls
+main =
+  files <- ls("/tmp").filter(.is_file)
+  contents <- files.map(path => open(path .r f => f.read))
 ```
 
 TCP
 ```
-TBD
+use tcp listen connect
+main =
+  listen("127.0.0.1:8080" from =>
+    target <- from.readline
+    to <- connect(target)
+    from.bidirectional(to))
 ```
 
 UDP
 ```
-TBD
+use udp bind sendto
+main =
+  bind("127.0.0.1:1234" packet =>
+    target <- packet.string.lines.first
+    sendot(target packet))
 ```
 
 Async and Cancel?
 ```
-use io async
+use io async wait cancel sleep
 main =
   [1,2,3].each(x => async(() => sleep(x)))
-  async.wait(2.seconds)
-  | async.cancel
+  wait(2.seconds)
+  | cancel
+  # here, automatically call wait
 ```
 
 
@@ -232,7 +245,6 @@ Design of Moa language
 - List bounds check
 - Linear logic resource management
 - Threads and STM
-- Preconditions and Postconditions
 
 Pending ideas
 - Global variables
@@ -241,9 +253,9 @@ Pending ideas
 - Using up many core
 - Asynchronous IO
 - Watch dog timer
-- Shared nothing for concurrency
 - Logger, debugger, profiler and resources monitor
 - Strong composability
+- Preconditions and Postconditions
 
 Rejected ideas
 - Null
