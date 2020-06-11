@@ -3,16 +3,51 @@ Moa is an open source programming language.
 This language maximize productivity by fun programming.
 
 Table of contents
+0. Hello world
 1. Value
 2. Expression
 3. Definition
 4. IO
-5. Debugger
-6. Test
-7. Package
-8. Buildin
-9. Appendix
+5. Package
+6. Buildin
+7. Appendix
 
+
+
+
+
+## 0. Hello world
+
+Set up
+```
+mkdir -p ~/moa/bin
+curl https://github.com/moa/releases/mac/latest > ~/moa/bin/moa
+export PATH=$PATH:~/moa/bin
+```
+
+Make a project
+```
+# moa new
+├── test
+│   └── test_main.moa
+└── src
+    └── main.moa
+```
+
+Run
+```
+# moa run
+Hello World.
+```
+
+Test
+```
+# moa test
+...x. Failed
+filename.moa:88|   eq(12 answer)
+expect: 12
+  fact: 11
+```
 
 
 
@@ -53,9 +88,14 @@ Binary operator
 
 Branch
 ```
+n
+| 0 = "zero"
+| 1 = "one"
+| _ = "many"
+
 a > b
-| true = 1
-| false = 0
+| "true"
+| "false"
 ```
 
 Sequence
@@ -70,21 +110,6 @@ value + 1
 
 ## 3. Definition
 
-Function
-```
-pi = 3.14
-add x y = x + y
-
-id a: a a
-id x = x
-
-dice =
-  r <= random(10)
-  r % 2 == 0
-  | true = "even"
-  | false = "odd"
-```
-
 Struct
 ```
 vector2:
@@ -94,9 +119,31 @@ vector2:
 
 Enum
 ```
-maybe a:
-| some a
-| none
+bool:
+| true
+| false
+```
+
+Function
+```
+pi: float
+pi = 3.14
+
+add: int int int
+add x y = x + y
+
+id a: a a
+id x = x
+
+console = loop:
+  loop =
+    print("> ")
+    readline
+    | "exit" = void
+    | line = execute(line)
+  execute cmd =
+    print(cmd)
+    loop
 ```
 
 
@@ -172,58 +219,32 @@ main =
 
 
 
-## 5. Debugger
-```
-moa debug ...
-exit -127
-> show lines
-main.moa:24 | main = run("...")
-main.moa:54 | run arg =
-main.moa:66 |   listen(arg)
-main.moa:94 | listen ip_port =
-...
-```
-
-
-
-
-
-
-## 6. Test
-```
-moa test [name ...]
-pass file name
-pass file name
-...
-pass: 200
-failed: 3
-time: sum 24s, min 1ms, max 9ms, avg 12ms, mid 100ms
-```
-
-
-
-
-
-## 7. Package
+## 5. Package
 Use package
 ```
 use io.tcp             # tcp.listen
 use io.file open close # open("path" .rw)
-use hello.v1           # hello.world(2)
+use hello              # hello.world(2)
+use hello int.double   # 3.double
+use hello int.*        # 3.double
 ```
 
 Define package
 ```
 package hello
-def world int io
+
+world: int string
 world n = "hello world" + "!".repeat(n)
+
+double: int int
+double i = i * 2
 ```
 
 
 
 
 
-## 8. Buildin
+## 6. Buildin
 
 Reserved keywards
 - bool, true, false
@@ -267,7 +288,7 @@ Reserved
 
 
 
-## 9. Appendix
+## 7. Appendix
 
 Design of Moa language
 - List bounds check
