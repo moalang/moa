@@ -28,10 +28,10 @@ export PATH=$PATH:~/moa/bin
 Make a project
 ```
 # moa new
-├── test
-│   └── test_main.moa
-└── src
-    └── main.moa
+├test
+│ └test_main.moa
+└src
+   └main.moa
 ```
 
 Run
@@ -144,6 +144,18 @@ console = loop:
   execute cmd =
     print(cmd)
     loop
+```
+
+Type class
+```
+readable::
+  show string
+
+vector2:
+  int x
+  int y
+vector2.readable:
+  show v = "($x,$y)"
 ```
 
 

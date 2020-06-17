@@ -1,94 +1,23 @@
-compile src = {
+compile_to_js string opt(string)
+
+compile_to_js src =
   tree <- parse(src)
   build(tree)
-}
-parse src = parser("11+2-3*4" 0).parse_top
-build node = node
-| ref = node.id
-| int = node.n
-| string = "\"" + node.s + "\""
-| op2 = build(node.left) + node.op + build(node.right)
-| _ = node
 
-ast:|
-  int n int
-  string s string
+ast|
+  int int
   op2 op string, left ast, right ast
-  ref id string
 
 parser:
   src string
   pos int
   parse_top = parse_exp
-  parse_exp = {
+  parse_value = parse_int
+  parse_exp =
     v <- parse_unit
-    or(parse_op2(v) v)
-  }
-  parse_op2 l = {
-    o <- read_op
+    parse_op2(v).or(v)
+  parse_op2 l =
+    op <- read_op
     r <- parse_exp
-    ast.op2(o l r)
-  }
-  parse_unit = or(parse_int or(parse_string parse_ref))
-  parse_int = {
-    n <- read_int
-    ast.int(n)
-  }
-  parse_string = {
-    s <- pair("\"" "\"" many(satisfy(x => x != "\"")).fmap(x => x.join("")))
-    ast.string(s)
-  }
-  parse_ref = {
-    id <- read_id
-    ast.ref(id)
-  }
-  read_id = {
-    spaces
-    str(x => "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ".to_a.contains(x))
-  }
-  read_op = {
-    spaces
-    select("+-*/".to_a)
-  }
-  read_int = {
-    spaces
-    many1(select("0123456789".to_a)).fmap(x => x.join("")).fmap(x => x.to_i)
-  }
-  or l r = {
-    bk = pos
-    l ||| {
-      pos := bk
-      r
-    }
-  }
-  pair l r m = between(equal(l) equal(r) m)
-  between l r m = {
-    l
-    ret <- m
-    r
-    ret
-  }
-  spaces = many(equal(" "))
-  many1 f = {
-    x <- f
-    [x].concat(many(f))
-  }
-  many f = rec(f [])
-  rec f acc = {
-    x <- f
-    rec(f acc.append(x))
-  } ||| acc
-  str f = many(satisfy(f)).fmap(x => x.join(""))
-  select xs = satisfy(x => xs.contains(x))
-  satisfy f = {
-    c <- src.nth(pos)
-    f(c) || error("failed")
-    pos += 1
-    c
-  }
-  equal x = {
-    r <- src.slice(pos pos + x.length)
-    r == x || error("failed")
-    pos += x.length
-    x
-  }
+    ast.op2(op l r)
+  parse_int = many1(satisfy("0123456789".has))?.join("")?.to_i
