@@ -64,10 +64,11 @@ true # bool
 
 Container
 ```
-[1 2]             # list
-(1, 2)            # tuple
-(x 1, y 2)        # struct
-{1 true, 2 false} # dict
+[1 2]      # list(int)
+(1, 2)     # tuple(int int)
+(x 1, y 2) # struct(x int, y int)
+{1, 2}     # set(int)
+{1 2, 3 4} # dict(int int)
 ```
 
 Closure
@@ -81,7 +82,7 @@ x => x # closure
 
 ## 2. Expression
 
-Binary operator
+Binary operation
 ```
 1 + 2 * 3 # 7
 ```
@@ -115,25 +116,32 @@ Struct
 vector2:
   x int
   y int
+  show v = `($v.x,$v.y)`
+
+dict k v: values [(k, v)]
 ```
 
 Enum
 ```
-bool:
-| true
-| false
+cupon:
+| none
+| prize name string
+  show c =
+  | none = "none"
+  | prize = c.name
+maybe a| just a | nothing
 ```
 
 Function
 ```
-pi: float
+pi float
 pi = 3.14
 
-add: int int int
+add int int int
 add x y = x + y
 
-id a: a a
-id x = x
+sum [a] a :: a.num
+sum xs = xs.reduce((+) 0)
 
 console = loop:
   loop =
@@ -148,14 +156,11 @@ console = loop:
 
 Type class
 ```
-readable::
-  show string
-
-vector2:
-  int x
-  int y
-vector2.readable:
-  show v = "($x,$y)"
+addable t: + t t t
+readable t: show string
+vector1: x int
+vector1.addable: + v = vector1(x + v.x)
+vector1.readable: show = x.string
 ```
 
 
@@ -166,25 +171,25 @@ vector2.readable:
 
 Standard input, output and error
 ```
-use io stdin stdout stderr
+- io.std readline puts warn 
 main =
-  line <- stdin.readline
+  line <- readline
   line.empty
-  | true = stdout(line)
-  | false = stderr(line)
+  | true = puts(line)
+  | false = warn(line)
 ```
 
 File system
 ```
-use io.fs open ls
+- io fs
 main =
-  files <- ls("/tmp").filter(.is_file)
-  contents <- files.map(path => open(path .r f => f.read))
+  files <- fs.ls("/tmp").filter(.is_file)
+  contents <- files.map(path => fs.open(path .r f => f.read))
 ```
 
 TCP
 ```
-use tcp listen connect
+- io.tcp listen connect
 main =
   listen("127.0.0.1:8080" from =>
     target <- from.readline
@@ -194,36 +199,36 @@ main =
 
 UDP
 ```
-use udp bind sendto
+- io.udp bind sendto
 main =
   bind("127.0.0.1:1234" packet =>
     target <- packet.string.lines.first
-    sendot(target packet))
+    sendto(target packet))
 ```
 
 Async and Cancel?
 ```
-use io async wait cancel sleep
+- io
 main =
-  [1,2,3].each(x => async(() => sleep(x)))
+  [1,2,3].each(x => io.async(() => io.sleep(x)))
   wait(2.seconds)
-  | cancel
+  | io.cancel
   # here, automatically call wait
 ```
 
 Random
 ```
-use io random exit
+- io
 main =
-  n <- ranodm.int(0 2)
-  exit(n)
+  n <- io.ranodm.int(0 2)
+  io.exit(n)
 ```
 
 Time
 ```
-use io time
+- io
 main =
-  now <- time.now
+  now <- io.time.now
   io.print(now)
 ```
 
@@ -232,26 +237,23 @@ main =
 
 
 ## 5. Package
-Use package
-```
-use io.tcp             # tcp.listen
-use io.file open close # open("path" .rw)
-use hello              # hello.world(2)
-use hello int.double   # 3.double
-use hello int.*        # 3.double
-```
-
 Define package
 ```
-package hello
+- hello:
+  hi int string
+  vector1: x int
 
-world: int string
-world n = "hello world" + "!".repeat(n)
-
-double: int int
-double i = i * 2
+hi n = message + "!".repeat(n)
+show v = v.string
+message = "hi" # private function
 ```
 
+Use package
+```
+- io print
+- hello hi vector1
+main = print(vector1(1).show)
+```
 
 
 
@@ -272,19 +274,19 @@ Reserved keywards
 
 Binary operators
 ```
-++                     # list?
-.                      # string?
-* // / %               # number (high)
-+ -                    # number (low)
-> >= < <=  == !=       # comparision (high)
-|| &&                  # comparision (low)
-:= += /= *= /= %= <-   # effect
+++                   # list?
+.                    # string?
+* // / %             # number (high)
++ -                  # number (low)
+> >= < <=  == !=     # comparision (high)
+|| &&                # comparision (low)
+:= += /= *= /= %= <- # effect
 ```
 
 Expression
 ```
-|                      # gard
-,                      # separator
+|                    # gard
+,                    # separator
 ```
 
 Unused
@@ -339,6 +341,8 @@ Syntax
 root: def (br def)*
 def:
 | func
+| "- " ref+             # import
+| "- " id:              # export
 | ref+ | (indent tag)+  # enum
 | ref+ : (indent attr)+ # struct
 | ref+ : type+          # function prototype
@@ -361,16 +365,17 @@ unit:
 | "(" exp ")"
 | "(" id+ => body ")"    # lambda : (x y => x + y)
 | "(" unit (, unit)+ ")" # tuple  : (1, n)
-| "(" iv (, iv)+ ")"     # struct : (name "value", age 30 + 7)
-| "[" unit* "]"          # array  : [1 2]
-| "{" kv (, kv)+ "}"     # dict   : {"name" "value", "age" 30 + 7}
+| "(" ie (, ie)+ ")"     # struct : (name "value", age 30 + 7)
+| "[" unit+ "]"          # array  : [1 2]
+| "{" unit+ "}"          # set    : {1 2}
+| "{" ee (, ee)* "}"     # dict   : {"name" "value", "age" 30 + 7}
 value:
 | int    # 1
 | float  # 1.0
 | string # "hi"
 | bool   # true
-iv  : id exp
-kv  : exp exp
+ie  : id exp
+ee  : exp exp
 id  : [a-z0-9_]+
 ref : id (. id)*
 type: ref ("(" ref+ ")")?
