@@ -1,0 +1,54 @@
+# main.moa
+- io argv tcp.listen
+- std.protocol.http
+- dispatch
+
+main =
+  addr <- argv(1 ":8080")
+  listen(addr socket => http(socket req => dispatch(req))
+
+
+# dispatcher.moa
+- io random
+- std.protocol.http request response
++ dispatch request response
+
+dispatch req = go:
+  # dispatcher
+  go = req.method
+  | get = go_get
+  | post = go_post
+  go_get = req.path
+  | "/" = @index.index(this)
+  | _ = not_found
+  go_post = req.path
+  | "/login" = login
+  | _ = not_found
+
+  # internal methods
+  get s = req.query(s "")
+  post s = req.body(s "")
+  sid = req.cookie("sid" "")
+  ok text = response(200 {"content-type" "text/plain; charset=utf8"} text)
+  redirect l h = response(304 ({"location" l} & h) "")
+
+not_found = response(404 {"content-type: text/plain; charset=utf8"} "not found") # file private
+
+
+# dispatcher/index.moa
++ index d = d.ok("hello " + d.sid)
+
+
+
+# dispatcher/login.moa
++ login d = go:
+  go =
+    email = d.get("email")
+    password = d.get("password")
+    email == "hello@example.com" && password == "hello"
+    | success
+    | failure
+  success =
+    sid <- random(2 ** 64).base64
+    d.redirect("/home" {"set-cookie" `sid=$sid`})
+  failure = d.redirect("/login" {"set-cookie" "sid="})

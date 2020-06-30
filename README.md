@@ -8,9 +8,11 @@ Table of contents
 2. Expression
 3. Definition
 4. IO
-5. Package
-6. Buildin
-7. Appendix
+5. Namespace
+6. Package
+7. Buildin
+8. Appendix
+9. TODOs
 
 
 
@@ -29,7 +31,7 @@ Make a project
 ```
 # moa new
 ├test
-│ └test_main.moa
+│ └test.moa
 └src
    └main.moa
 ```
@@ -38,15 +40,27 @@ Run
 ```
 # moa run
 Hello World.
+
+> main.moa
+- io
+main = io.print("Hello World")
 ```
 
 Test
 ```
 # moa test
-...x. Failed
-filename.moa:88|   eq(12 answer)
+..x. Failed
+test.moa:5|   eq(12 v)
 expect: 12
   fact: 11
+
+> test.moa
+- test eq
+main =
+  v = 11
+  eq(1 1)
+  eq(12 v)
+  eq(1 1)
 ```
 
 
@@ -65,15 +79,14 @@ true # bool
 Container
 ```
 [1 2]      # list(int)
-(1, 2)     # tuple(int int)
+(1 2)      # tuple(int int)
 (x 1, y 2) # struct(x int, y int)
-{1, 2}     # set(int)
 {1 2, 3 4} # dict(int int)
 ```
 
 Closure
 ```
-x => x # closure
+a,b => a + b # closure
 ```
 
 
@@ -111,27 +124,6 @@ value + 1
 
 ## 3. Definition
 
-Struct
-```
-vector2:
-  x int
-  y int
-  show v = `($v.x,$v.y)`
-
-dict k v: values [(k, v)]
-```
-
-Enum
-```
-cupon:
-| none
-| prize name string
-  show c =
-  | none = "none"
-  | prize = c.name
-maybe a| just a | nothing
-```
-
 Function
 ```
 pi float
@@ -143,24 +135,42 @@ add x y = x + y
 sum [a] a :: a.num
 sum xs = xs.reduce((+) 0)
 
-console = loop:
-  loop =
-    print("> ")
-    readline
-    | "exit" = void
-    | line = execute(line)
-  execute cmd =
-    print(cmd)
-    loop
+echo =
+  line <- io.readline
+  io.print(line)
+
+list.size l = l.count # [].size == [].count
+```
+
+Struct
+```
+vector2:
+  x int
+  y int
+  show v = `($v.x,$v.y)`
+```
+
+Enum
+```
+cupon:
+| none
+| prize name string, price int
+  show =
+  | none = "none"
+  | price = `$name $price`
+either l r| left l | right r
 ```
 
 Type class
 ```
-addable t: + t t t
-readable t: show string
-vector1: x int
-vector1.addable: + v = vector1(x + v.x)
-vector1.readable: show = x.string
+addable t:
+  + t t t
+
+vector1:
+  x int
+
+addable(vector1):
+  l + r = vector1(l.x + r.x)
 ```
 
 
@@ -171,64 +181,56 @@ vector1.readable: show = x.string
 
 Standard input, output and error
 ```
-- io.std readline puts warn 
 main =
-  line <- readline
+  line <- io.readline
   line.empty
-  | true = puts(line)
-  | false = warn(line)
+  | true = io.puts(line)
+  | false = io.warn(line)
 ```
 
 File system
 ```
-- io fs
 main =
-  files <- fs.ls("/tmp").filter(.is_file)
-  contents <- files.map(path => fs.open(path .r f => f.read))
+  files <- io.fs.ls("/tmp").filter(.is_file)
+  contents <- files.map(file => file.read)
 ```
 
 TCP
 ```
-- io.tcp listen connect
-main =
-  listen("127.0.0.1:8080" from =>
+main = io.tcp.listen("127.0.0.1:8080" handle):
+  handle from =
     target <- from.readline
-    to <- connect(target)
-    from.bidirectional(to))
+    to <- io.tcp.connect(target)
+    from.bidirectional(to)
 ```
 
 UDP
 ```
-- io.udp bind sendto
-main =
-  bind("127.0.0.1:1234" packet =>
+main = io.udp.bind("127.0.0.1:1234" handle):
+  handle packet =
     target <- packet.string.lines.first
-    sendto(target packet))
+    io.udp.sendto(target packet)
 ```
 
-Async and Cancel?
+Async and Cancel
 ```
-- io
 main =
-  [1,2,3].each(x => io.async(() => io.sleep(x)))
-  wait(2.seconds)
-  | io.cancel
-  # here, automatically call wait
+  t <- io.async(io.sleep(10))
+  io.sleep(1)
+  t.done?.else(t.cancel)
 ```
 
 Random
 ```
-- io
 main =
-  n <- io.ranodm.int(0 2)
+  n <- io.random.int(1 3)
   io.exit(n)
 ```
 
 Time
 ```
-- io
 main =
-  now <- io.time.now
+  now <- io.now
   io.print(now)
 ```
 
@@ -236,25 +238,32 @@ main =
 
 
 
-## 5. Package
-Define package
+## 5. Namespace
+
+## 6. Package
+`my` is shared in this package
+`our` is depend on another packages
+
 ```
-- hello:
+# main.moa
+moa v1.2
+require:
+  hello v1
+
+main = io.puts(hello.hi(2))
+
+# ~/moa/vendor/hello__v1_0_0/hello.moa
+moa v1.0
+define hello v1.0.0:
   hi int string
-  vector1: x int
 
-hi n = message + "!".repeat(n)
-show v = v.string
-message = "hi" # private function
-```
+hi n = prefix + helper.suffix(n)
+prefix = "hello"
 
-Use package
+# ~/moa/vendor/hello__v1_0_0/helper/suffix.moa
+helper::
+  suffix n = "!".repeat(n)
 ```
-- io print
-- hello hi vector1
-main = print(vector1(1).show)
-```
-
 
 
 
@@ -263,40 +272,26 @@ main = print(vector1(1).show)
 Reserved keywards
 - bool, true, false
 - int, float, string
-- seq, list, dict, tuple, struct, enum, func
+- seq, list, set, dict, tuple, struct, enum, func
 - opt, do, try, io, error
 - any, void
 - i8, i16, i32, i64
 - u8, u16, u32, u64
 - f8, f16, f32, f64
 - trace
-- type?, array?
+- reflect
+- this
 
-Binary operators
+Binary operators order
 ```
-++                   # list?
-.                    # string?
-* // / %             # number (high)
-+ -                  # number (low)
-> >= < <=  == !=     # comparision (high)
-|| &&                # comparision (low)
-:= += /= *= /= %= <- # effect
-```
-
-Expression
-```
-|                    # gard
-,                    # separator
-```
-
-Unused
-```
-@ & &&& |||
-```
-
-Reserved
-```
-! ? ^
+?                       # boolable
+.                       # combine string or list
+* // / %                # number (high)
++ -                     # number (low)
+> >= < <=  == !=        # comparision (high)
+|| && &                 # comparision (low)
+,                       # reserved to separate struct and dictionary
+:= += /= *= /= %= .= <- # effect
 ```
 
 
@@ -341,11 +336,11 @@ Syntax
 root: def (br def)*
 def:
 | func
-| "- " ref+             # import
-| "- " id:              # export
-| ref+ | (indent tag)+  # enum
-| ref+ : (indent attr)+ # struct
-| ref+ : type+          # function prototype
+| "- " ref+                 # import
+| "+ " id: (indent ref br)+ # export
+| ref+ type+ (:: type+)*    # function prototype
+| ref+ | (indent tag)+      # enum
+| ref+ : (indent attr)+     # struct
 func: id arg* "=" body
 tag : ref (attr ("," attr)*)?
 attr: id type
@@ -357,7 +352,7 @@ branch: (indent "|" unit " -> " exp)* # pattern match
 helper: : (indent attr)* (indent func)+
 exp:
 | unit op2 exp # op2 => v + 1
-| ref op2u exp # set => n += 1
+| ref op2u exp # update => n += 1
 | unit
 unit:
 | value
@@ -367,7 +362,6 @@ unit:
 | "(" unit (, unit)+ ")" # tuple  : (1, n)
 | "(" ie (, ie)+ ")"     # struct : (name "value", age 30 + 7)
 | "[" unit+ "]"          # array  : [1 2]
-| "{" unit+ "}"          # set    : {1 2}
 | "{" ee (, ee)* "}"     # dict   : {"name" "value", "age" 30 + 7}
 value:
 | int    # 1
@@ -388,76 +382,45 @@ br: "\n  "
 All single symbols
 
 ```
---- decided ----------------------------
-_    # namable
+--- single ----------------------------
+_    # ignore
 +-/* # arithmetic
 %    # mod
+&    # intersection
+|    # union
 <>   # bool operator
-()   # priority, tule, struct
-[]   # array
 =    # function
 "    # string
+`    # string with variables evaluation
 #    # comment
-,    # separator inside (), {}
-.    # call
+,    # reserved to separete inside () and {}
+.    # glue two objects
 \    # escape
+:    # define
+?    # to boolean
 
---- provisional ------------------------
-;    # glue?
-:    # define?
-{}   # dictionary?
+--- group -----------------------------
+()   # priority, tule, struct
+[]   # array
+{}   # dictionary
 
 --- not decided yet -------------------
+;    # glue two statements
 ~    # -
-|    # -
 !    # -
 $    # -
 &    # -
-?    # -
 ^    # -
 @    # -
 '    # -
-`    # -
 ```
 
-TODO (v0.1 self booting)
-[x] Design error handling type and sequence syntax
-[x] Tidy up documents
-[x] Uniqueness
-    1. pure
-    2. readable short code
-    3. it compiles to other languages
-[x] Error handling design
-   # pure
-   f : int, f : pure(int)
-   f = 1
-   # mutable
-   f : do(int)
-   f = var += 1
-   # failable
-   f : opt(int)
-   f = err("failed").or(1).then(x => x + 1)
-   # try = mutable + failable
-   f : try(int)
-   f = var += 1; ok(var)
-   # io = system call
-   f : io(int)
-   f = io.stdin.readline..to_int
-   # panic = unrecoverable errors
-   f : array(int)
-   f = int[int.max] # panic("out of memory")
-   f = panic("unreachable")
-[x] Minimal compiler to Ruby
-[x] Self booting with Ruby
-
-# TODO (v0.2 JavaScript)
-[x] Minimal compiler to JavaScript
-[] Feedback to syntax from making minimal compiler to JavaScript
-[] Making API server by nodejs
-[] Making Kakeibo app on GAE
-
-# TODO (v0.4 enhance built-in functions)
-
-# TODO (v0.5 tracer)
-
-# TODO (v1.0 relace)
+## 8. TODOs
+- [] namespace and file structure
+    public   : export(+)
+    internal : ?
+    private  : default
+- [] compile to JavaScript
+- [] self booting by compiled JavaScript
+- [] make memo app
+- [] dog fooding in real world

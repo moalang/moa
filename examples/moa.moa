@@ -1,13 +1,13 @@
 # example_self.md
 
-main: io(int)
+main io.int
 main =
   src <- io.stdin.string
   ret <- run(src)
   io.write(ret)
   0
 
-run: string try(string)
+run string try.string
 run src =
   node <- parser(src).parse_top
   eval(node)
