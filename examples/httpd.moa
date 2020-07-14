@@ -1,10 +1,23 @@
 # main.moa
 - io argv tcp.listen
+- use logger
 - file dispatcher
 
 main =
   addr <- argv(1 ":8080")
+  logger.debug("listen 0.0.0.0:8080")
   listen(addr socket => dispatcher.dispatch)
+
+
+# logger.moa
+- io print
+- def logger
+
+logger:
+  debug string !
+  debug s = print(s)
+  error error !
+  error e = print(e.message, e.stack.join(LF))
 
 
 # dispatcher.moa
@@ -40,14 +53,16 @@ index d = d.ok("hello " + d.sid)
 
 
 # dispatcher/login.moa
+- use logger
+
 login d = go:
-  go =
-    email = d.get("email")
-    password = d.get("password")
-    email == "hello@example.com" && password == "hello"
-    | success
-    | failure
+  email = d.get("email")
+  password = d.get("password")
+  go = email == "hello@example.com" && password == "hello"
+  | success
+  | failure
   success =
     sid <- random(2 ** 64).base64
+    logger.info("login succeed " + email)
     d.redirect("/home" {"set-cookie" `sid=$sid`})
   failure = d.redirect("/login" {"set-cookie" "sid="})
