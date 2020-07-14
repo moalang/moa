@@ -1,47 +1,46 @@
 # main.moa
 - io argv tcp.listen
-- std.protocol.http
-- dispatch
+- file dispatcher
 
 main =
   addr <- argv(1 ":8080")
-  listen(addr socket => http(socket req => dispatch(req))
+  listen(addr socket => dispatcher.dispatch)
 
 
 # dispatcher.moa
 - io random
-- std.protocol.http request response
-+ dispatch request response
+- protocol http
+- file dispatcher(index login)
 
-dispatch req = go:
-  # dispatcher
+dispatcher:
+  req http.request
+  get s = req.query(s "")
+  post s = req.body(s "")
+  sid = req.cookie("sid" "")
+  ok text = http.response(200 {"content-type" "text/plain; charset=utf8"} text)
+  redirect l h = http.response(304 ({"location" l} & h) "")
+
+dispatch = http req => go:
+  d = dispatcher(req)
   go = req.method
   | get = go_get
   | post = go_post
   go_get = req.path
-  | "/" = @index.index(this)
+  | "/" = index.index(d)
   | _ = not_found
   go_post = req.path
-  | "/login" = login
+  | "/login" = login.login(d)
   | _ = not_found
-
-  # internal methods
-  get s = req.query(s "")
-  post s = req.body(s "")
-  sid = req.cookie("sid" "")
-  ok text = response(200 {"content-type" "text/plain; charset=utf8"} text)
-  redirect l h = response(304 ({"location" l} & h) "")
-
-not_found = response(404 {"content-type: text/plain; charset=utf8"} "not found") # file private
+  not_found = http.response(404 {"content-type: text/plain; charset=utf8"} "not found")
 
 
 # dispatcher/index.moa
-+ index d = d.ok("hello " + d.sid)
+index d = d.ok("hello " + d.sid)
 
 
 
 # dispatcher/login.moa
-+ login d = go:
+login d = go:
   go =
     email = d.get("email")
     password = d.get("password")
