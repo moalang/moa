@@ -2,11 +2,6 @@ const log = x => { console.log(x); return x }
 const trace = x => { console.warn({trace: x}); return x }
 const warn = x => { console.warn({warn: x}); return x }
 function debug(x) { return warn(JSON.stringify(x)) }
-function append(x, y) {
-  let z = x || []
-  z.push(y)
-  return z
-}
 function define_global_prop(name, body) {
   return "Object.defineProperty(Object.prototype, '" + name + "', {" +
     "configurable: true," +
@@ -24,7 +19,14 @@ function parse(src) {
   let depth = 0
   let pos = 0
   function parse_top() {
-    return sepby1(parse_def, () => reg(/( *\n)+/))
+    return sepby1(parse_top_line, () => reg(/( *\n)+/))
+  }
+  function parse_import() {
+    const name = reg(/^- (\w+)/)[1]
+    return "const " + name + " = core." + name
+  }
+  function parse_top_line() {
+    return or(parse_import, parse_def)
   }
   function parse_def() {
     const id = read_id()
@@ -226,7 +228,7 @@ function parse(src) {
   function many(f, acc) {
     acc = acc || []
     return or(
-      () => many(f, append(acc, f())),
+      () => many(f, acc.concat(f())),
       () => acc)
   }
   function many1(f) {
@@ -315,9 +317,9 @@ function parse(src) {
     const red = src.slice(0, pos)
     const line = red.split("\n").length
     const column = red.length - red.lastIndexOf("\n") + 1
-      throw err("Failed parsing remaining: at " + line + ":" + column +
-        "\n`" + ellipsis(remain()) + "`" +
-        "\nlines: # " + lines.join("\n# "))
+    throw err("Failed parsing remaining: at " + line + ":" + column +
+      "\n`" + ellipsis(remain()) + "`" +
+      "\nlines: # " + lines.join("\n# "))
   }
   return js
 }
@@ -344,7 +346,6 @@ function prepare() {
   Array.prototype.nth = function(n) {
     return n >= this.length ? error("out of index") : this[n]
   }
-  Array.prototype.append = function(x) { return this.concat(x) }
   String.prototype.nth = function(n) {
     return n >= this.length ? error("out of index") : this[n]
   }
@@ -362,6 +363,14 @@ function prepare() {
       throw e
     }
   }
+  const fs = require('fs')
+  return {
+    io: {
+      stdin: {
+        read: () => fs.readFileSync('/dev/stdin', 'utf8')
+      }
+    }
+  }
 }
 
 function run(js) {
@@ -376,6 +385,48 @@ function run(js) {
 }
 
 function test() {
+// 0. Hello world
+// 1. Value
+// 2. Expression
+// 3. Definition
+// 4. IO
+// 5. Namespace
+// 6. Package
+// 7. Buildin
+// 8. Appendix
+// 9. TODOs
+  test_values()
+  test_io()
+}
+
+function test_io() {
+  const fs = require("fs");
+  const { exec } = require('child_process')
+
+  function t(expect, main, input) {
+    input = input || ""
+    const src = "- io\nmain = " + main + "\n"
+    const js = compile(src) + "\nprocess.stdout.write(__ret__)"
+    fs.writeFileSync('/tmp/moa.js', js);
+    fs.writeFileSync('/tmp/moa.txt', input);
+    exec('node /tmp/a.js < /tmp/moa.txt', (err, stdout, stderr) => {
+      const fact = stdout + stderr
+      if (expect === fact) {
+        log("ok: " + JSON.stringify(fact))
+      } else {
+        log("expect: " + JSON.stringify(expect))
+        log("  fact: " + JSON.stringify(fact))
+        log("    js: " + js.split("\n").join("\n      | "))
+        log("   moa: " + src.split("\n").join("\n      | "))
+      }
+    }
+    )
+  }
+  log("---( io )---------")
+  t("hi", "io.stdin.read", "hi")
+}
+
+function test_values() {
   function t(expect, main) {
     const defs = Array.from(arguments).slice(2)
     const src = "main = " + main + (defs || []).map(x => "\n" + x).join("")
@@ -390,7 +441,8 @@ function test() {
       log("   moa: " + src.split("\n").join("\n      | "))
     }
   }
-  log("---( basic pattern )---------")
+
+  log("---( basic values )---------")
   // value(4)
   t(1, "1")
   t("hello world", "\"hello world\"")
@@ -433,7 +485,8 @@ function test() {
   t([1, 5], "[1 (2 + 3)]")
   t("i", "\"hi\".nth(1)")
   t(5, "(1, (2 + 3)).1")
-  log("---( complex pattern )---------")
+
+  log("---( complex values )---------")
   // value(4)
   t('\"', '"\\""')
   t(1, "call(() => 1)", "call f = f()")
@@ -463,26 +516,21 @@ function test() {
   log("done")
 }
 
-function compile() {
-  const fs = require("fs")
-  const src = fs.readFileSync(process.stdin.fd, "utf8").trim()
-  const js = parse(src)
-  const code = [
+function compile(src) {
+  return [
     prepare.toString(),
-    js,
-    "prepare()",
-    "const ret = call_(compile(" + JSON.stringify(src) + "))",
-    "console.log(ret)"
-  ].join("\n\n")
-  return code
+    "const core = prepare()",
+    parse(src),
+    "const __ret__ = call_(main)"
+  ].join("\n")
 }
 
 const cmd = process.argv[2]
 if (cmd === "test") {
   prepare()
   test()
-} else if (cmd === "html") {
-  log("<html><script>function runDebug() {" + compile() + "}</script><body onload=runDebug()><button onclick=runDebug()>Debug</button></body></html>")
 } else {
-  log(compile())
+  const fs = require("fs")
+  const src = fs.readFileSync(process.stdin.fd, "utf8").trim()
+  log(compile(src))
 }
