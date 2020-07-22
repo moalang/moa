@@ -16,10 +16,9 @@ js:
 
 run_test:
 	@clear && printf '\e[3J'
-	@node main.js test
+	@node test.js
 
 run_js:
 	@clear && printf '\e[3J'
-	@node main.js js < v1.moa > /tmp/moa.js
-	@node main.js html < v1.moa > /tmp/moa.html
+	@node main.js < v1.moa > /tmp/moa.js
 	@node /tmp/moa.js
