@@ -1,27 +1,25 @@
-const moa = require("./main.js")
-const log = x => { console.log(x); return x }
-const trace = x => { console.warn({trace: x}); return x }
-const warn = x => { console.warn({warn: x}); return x }
+const moa = require("./moa.js")
+const log = x => console.log(x)
+const trace = x => console.warn({trace: x})
+const warn = x => console.warn({warn: x})
 const debug = x => warn(JSON.stringify(x))
 function run(js) {
   try {
     return eval(js)
   } catch (e) {
     if (!e.isMoa) {
-      warn("failed to eval: " + js)
+      warn("failed to eval: " + e.message + "\n" + e.stack + js)
     }
     return e.message
   }
 }
-
-
 
 function test_main() {
   function t(expect, main) {
     const defs = Array.from(arguments).slice(2)
     const src = "main = " + main + (defs || []).map(x => "\n" + x).join("")
     const js = moa.parse(src)
-    const fact = run(js + "\n" + "call_(main)")
+    const fact = run(js + "\n" + "__core__.call(main)")
     if (JSON.stringify(expect) === JSON.stringify(fact)) {
       log("ok: " + JSON.stringify(fact))
     } else {
@@ -32,7 +30,8 @@ function test_main() {
     }
   }
 
-  moa.prepare()
+  global.__core__ = moa.prepare()
+  global.error = __core__.error
   test_values(t)
   test_io(t)
   log("done")

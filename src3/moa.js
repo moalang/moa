@@ -19,7 +19,7 @@ function parse(src) {
   }
   function parse_import() {
     const name = reg(/^- (\w+)/)[1]
-    return "const " + name + " = core_." + name
+    return "const " + name + " = __core__." + name
   }
   function parse_top_line() {
     return or(parse_import, parse_def)
@@ -84,7 +84,7 @@ function parse(src) {
   function parse_stmt() {
     reg(/ *{/)
     const lines = many1(() => serial(read_white_spaces, parse_step)).map(x =>
-      x.replace(/(\w+) *(?:<-|:=) *([^\n,]+)/g, 'let $1 = call_($2)'))
+      x.replace(/(\w+) *(?:<-|:=) *([^\n,]+)/g, 'let $1 = __core__.call($2)'))
     reg(/\s*}/)
     lines[lines.length - 1] = "return " + lines[lines.length - 1]
     return "function() {\n  " + lines.join("\n  ") + "\n}"
@@ -118,7 +118,7 @@ function parse(src) {
       return cond + " ? " + ret + " : "
     })
     if (branch.length > 0) {
-      return "(_ret = " + exp + ",true) && " + branch.join("") + "error('Does not match')"
+      return "(_ret = " + exp + ",true) && " + branch.join("") + "__core__.error('Does not match')"
     }
     const fork = many(() => serial(() => reg(/^\n\| /), parse_exp))
     if (fork.length > 0) {
@@ -142,7 +142,7 @@ function parse(src) {
         const l = parse_unit()
         eq(" ||| ")
         const r = parse_exp()
-        return "try_(() => " + l + ", () => " + r + ")"
+        return "__core__.attempt(() => " + l + ", () => " + r + ")"
       },
       () => {
         const l = parse_unit()
@@ -320,24 +320,37 @@ function parse(src) {
   return js
 }
 
+function call(f) {
+  return typeof(f) === "function" ? call(f()) : f
+}
+function error(x) {
+  const e = new Error("error: " + x)
+  e.isMoa = true
+  throw(e)
+}
+function attempt(l, r) {
+  try {
+    return call(l)
+  } catch (e) {
+    if (e.isMoa) {
+      return call(r)
+    }
+    throw e
+  }
+}
+
 function prepare() {
-  function install_(obj, name, f) {
+  function extend(obj, name, f) {
     Object.defineProperty(obj.prototype, name, {
       configurable: true,
       get: function() { return f(this) }
     })
   }
-  this.call_ = (f) => typeof(f) === "function" ? call_(f()) : f
-  this.error = x => {
-    const e = new Error("error: " + x)
-    e.isMoa = true
-    throw(e)
-  }
-  install_(Array, 'head', x => guard(x.length > 0, x[0], "out of index"))
-  install_(Array, 'tail', x => x.slice(1))
-  install_(Array, 'n0', x => x[0])
-  install_(Array, 'n1', x => x[1])
-  install_(Array, 'n2', x => x[2])
+  extend(Array, 'head', x => guard(x.length > 0, x[0], "out of index"))
+  extend(Array, 'tail', x => x.slice(1))
+  extend(Array, 'n0', x => x[0])
+  extend(Array, 'n1', x => x[1])
+  extend(Array, 'n2', x => x[2])
   Array.prototype.contains = function(x) { return this.indexOf(x) !== -1 }
   Array.prototype.nth = function(n) {
     return n >= this.length ? error("out of index") : this[n]
@@ -345,42 +358,36 @@ function prepare() {
   String.prototype.nth = function(n) {
     return n >= this.length ? error("out of index") : this[n]
   }
-  install_(String, 'to_i', parseInt)
-  install_(String, 'to_a', x => x.split(""))
-  install_(Number, 'to_s', String)
+  extend(String, 'to_i', parseInt)
+  extend(String, 'to_a', x => x.split(""))
+  extend(Number, 'to_s', String)
   Function.prototype.fmap = function(f) { return () => f(this()) }
-  this.try_ = function(l, r) {
-    try {
-      return call_(l)
-    } catch (e) {
-      if (e.isMoa) {
-        return call_(r)
-      }
-      throw e
-    }
-  }
+
   const fs = require('fs')
   return {
+    attempt,
+    call,
+    error,
     io: {
       print: s => process.stdout.write(s),
       stdin: {
         read: () => fs.readFileSync('/dev/stdin', 'utf8')
       },
-    }
+    },
   }
 }
 
 function compile(src) {
   return [
     prepare.toString(),
-    "const core_ = prepare()",
+    "const __core__ = prepare()",
     parse(src),
-    "const __ret__ = call_(main)"
+    "const __ret__ = __core__.call(main)"
   ].join("\n")
 }
 exports.compile = compile
 exports.parse = parse
-exports.prepare = () => prepare()
+exports.prepare = prepare
 
 if(require.main === module) {
   const fs = require("fs")
