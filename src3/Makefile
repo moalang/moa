@@ -16,7 +16,7 @@ js:
 
 run_test:
 	@clear && printf '\e[3J'
-	@node test.js
+	@env echo -n input | node test.js
 
 run_js:
 	@clear && printf '\e[3J'

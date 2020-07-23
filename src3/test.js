@@ -37,27 +37,8 @@ function test_main() {
 }
 
 function test_io(t) {
-  const fs = require("fs");
-  const { execSync } = require('child_process')
-
-  function spawn(expect, exp, input) {
-    input = input || ""
-    const src = "- io\nexp = " + exp + "\nmain = io.write(exp)"
-    const js = moa.compile(src)
-    fs.writeFileSync('/tmp/moa.js', js);
-    fs.writeFileSync('/tmp/moa.txt', input);
-    const fact = execSync('node /tmp/moa.js < /tmp/moa.txt').toString()
-    if (expect === fact) {
-      log("ok: " + JSON.stringify(fact))
-    } else {
-      log("expect: " + JSON.stringify(expect))
-      log("  fact: " + JSON.stringify(fact))
-      log("    js: " + js.split("\n").join("\n      | "))
-      log("   moa: " + src.split("\n").join("\n      | "))
-    }
-  }
   log("---( io )---------")
-  spawn("hi", "io.stdin.read", "hi")
+  t("input", "io.stdin.read", "- io")
 }
 
 function test_values(t) {
