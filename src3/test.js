@@ -19,7 +19,7 @@ function test_main() {
     const defs = Array.from(arguments).slice(2)
     const src = "main = " + main + (defs || []).map(x => "\n" + x).join("")
     const js = moa.parse(src)
-    const fact = run(js + "\n" + "__core__.call(main)")
+    const fact = run(js + "\n" + "__moa__.call(main)")
     if (JSON.stringify(expect) === JSON.stringify(fact)) {
       log("ok: " + JSON.stringify(fact))
     } else {
@@ -30,8 +30,7 @@ function test_main() {
     }
   }
 
-  global.__core__ = moa.prepare()
-  global.error = __core__.error
+  moa.prepare(this)
   test_values(t)
   test_io(t)
   log("done")
@@ -41,13 +40,13 @@ function test_io(t) {
   const fs = require("fs");
   const { execSync } = require('child_process')
 
-  function spawn(expect, main, input) {
+  function spawn(expect, exp, input) {
     input = input || ""
-    const src = "- io\nmain = " + main + "\n"
-    const js = moa.compile(src) + "\nprocess.stdout.write(__ret__)"
+    const src = "- io\nexp = " + exp + "\nmain = io.write(exp)"
+    const js = moa.compile(src)
     fs.writeFileSync('/tmp/moa.js', js);
     fs.writeFileSync('/tmp/moa.txt', input);
-    const fact = execSync('node /tmp/a.js < /tmp/moa.txt').toString()
+    const fact = execSync('node /tmp/moa.js < /tmp/moa.txt').toString()
     if (expect === fact) {
       log("ok: " + JSON.stringify(fact))
     } else {

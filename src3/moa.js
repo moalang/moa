@@ -7,9 +7,6 @@ function define_global_prop(name, body) {
 function ellipsis(s) {
   return s.length <= 100 ? s : s.slice(0, 100 - 3) + " ..."
 }
-function guard(cond, ret, message) {
-  return cond ? ret : error(message)
-}
 function parse(src) {
   src = src.trim() + "\n"
   let depth = 0
@@ -19,7 +16,7 @@ function parse(src) {
   }
   function parse_import() {
     const name = reg(/^- (\w+)/)[1]
-    return "const " + name + " = __core__." + name
+    return "const " + name + " = __moa__." + name
   }
   function parse_top_line() {
     return or(parse_import, parse_def)
@@ -84,7 +81,7 @@ function parse(src) {
   function parse_stmt() {
     reg(/ *{/)
     const lines = many1(() => serial(read_white_spaces, parse_step)).map(x =>
-      x.replace(/(\w+) *(?:<-|:=) *([^\n,]+)/g, 'let $1 = __core__.call($2)'))
+      x.replace(/(\w+) *(?:<-|:=) *([^\n,]+)/g, 'let $1 = __moa__.call($2)'))
     reg(/\s*}/)
     lines[lines.length - 1] = "return " + lines[lines.length - 1]
     return "function() {\n  " + lines.join("\n  ") + "\n}"
@@ -118,7 +115,7 @@ function parse(src) {
       return cond + " ? " + ret + " : "
     })
     if (branch.length > 0) {
-      return "(_ret = " + exp + ",true) && " + branch.join("") + "__core__.error('Does not match')"
+      return "(_ret = " + exp + ",true) && " + branch.join("") + "__moa__.error('Does not match')"
     }
     const fork = many(() => serial(() => reg(/^\n\| /), parse_exp))
     if (fork.length > 0) {
@@ -142,7 +139,7 @@ function parse(src) {
         const l = parse_unit()
         eq(" ||| ")
         const r = parse_exp()
-        return "__core__.attempt(() => " + l + ", () => " + r + ")"
+        return "__moa__.attempt(() => " + l + ", () => " + r + ")"
       },
       () => {
         const l = parse_unit()
@@ -320,31 +317,33 @@ function parse(src) {
   return js
 }
 
-function call(f) {
-  return typeof(f) === "function" ? call(f()) : f
-}
-function error(x) {
-  const e = new Error("error: " + x)
-  e.isMoa = true
-  throw(e)
-}
-function attempt(l, r) {
-  try {
-    return call(l)
-  } catch (e) {
-    if (e.isMoa) {
-      return call(r)
-    }
-    throw e
-  }
-}
-
-function prepare() {
+function prepare(target) {
   function extend(obj, name, f) {
     Object.defineProperty(obj.prototype, name, {
       configurable: true,
       get: function() { return f(this) }
     })
+  }
+  function call(f) {
+    return typeof(f) === "function" ? call(f()) : f
+  }
+  function error(x) {
+    const e = new Error("error: " + x)
+    e.isMoa = true
+    throw(e)
+  }
+  function attempt(l, r) {
+    try {
+      return call(l)
+    } catch (e) {
+      if (e.isMoa) {
+        return call(r)
+      }
+      throw e
+    }
+  }
+  function guard(cond, ret, message) {
+    return cond ? ret : error(message)
   }
   extend(Array, 'head', x => guard(x.length > 0, x[0], "out of index"))
   extend(Array, 'tail', x => x.slice(1))
@@ -364,12 +363,14 @@ function prepare() {
   Function.prototype.fmap = function(f) { return () => f(this()) }
 
   const fs = require('fs')
-  return {
+  target.error = error
+  target.__moa__ = {
     attempt,
     call,
     error,
     io: {
-      print: s => process.stdout.write(s),
+      write: s => process.stdout.write(call(s).toString()),
+      print: s => console.log(call(s)),
       stdin: {
         read: () => fs.readFileSync('/dev/stdin', 'utf8')
       },
@@ -380,9 +381,11 @@ function prepare() {
 function compile(src) {
   return [
     prepare.toString(),
-    "const __core__ = prepare()",
+    "(function() {",
+    "prepare(this)",
     parse(src),
-    "const __ret__ = __core__.call(main)"
+    " __moa__.call(main)",
+    "})()"
   ].join("\n")
 }
 exports.compile = compile
