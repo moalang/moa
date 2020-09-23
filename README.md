@@ -7,12 +7,10 @@ Table of contents
 1. Value
 2. Expression
 3. Definition
-4. IO
-5. Namespace
-6. Package
-7. Buildin
-8. Appendix
-9. TODOs
+4. Namespace
+5. Buildin
+6. Appendix
+7. TODOs
 
 
 
@@ -38,23 +36,23 @@ Make a project
 
 Run
 ```
-# moa run
+> moa run
 Hello World.
 
-> main.moa
+# main.moa
 - io
 main = io.print("Hello World")
 ```
 
 Test
 ```
-# moa test
+> moa test
 ..x. Failed
-test.moa:5|   eq(12 v)
+test.moa:5|  eq(12 v)
 expect: 12
   fact: 11
 
-> test.moa
+# test.moa
 - test eq
 main =
   v = 11
@@ -79,7 +77,7 @@ true # bool
 Container
 ```
 [1 2]      # list(int)
-(1 2)      # tuple(int int)
+1, 2       # tuple(int int)
 (x 1, y 2) # struct(x int, y int)
 {1 2, 3 4} # dict(int int)
 ```
@@ -110,12 +108,16 @@ n
 a > b
 | "true"
 | "false"
+
+statement
+| v -> "succeed $v"
+| e -> "failed $e"
 ```
 
-Sequence
+Statement
 ```
-value <- calculate
-value + 1
+value <- calculate(1)
+func
 ```
 
 
@@ -129,6 +131,9 @@ Function
 pi float
 pi = 3.14
 
+id a a :: a
+id x = x
+
 add int int int
 add x y = x + y
 
@@ -138,8 +143,6 @@ sum xs = xs.reduce((+) 0)
 echo =
   line <- io.readline
   io.print(line)
-
-list.size l = l.count # [].size == [].count
 ```
 
 Struct
@@ -148,6 +151,8 @@ vector2:
   x int
   y int
   show v = `($v.x,$v.y)`
+
+dict k v: kvs [k, v]
 ```
 
 Enum
@@ -157,8 +162,9 @@ cupon:
 | prize name string, price int
   show =
   | none = "none"
-  | price = `$name $price`
-either l r| left l | right r
+  | prize = `$name $price`
+
+either l r: | left l | right r
 ```
 
 Type class
@@ -169,15 +175,70 @@ addable t:
 vector1:
   x int
 
-addable(vector1):
-  l + r = vector1(l.x + r.x)
+vector1.addable:
+  + l r = vector1(l.x + r.x)
 ```
 
 
 
 
 
-## 4. IO
+## 4. Namespace
+
+Define name space
+```
+math::
+  pi = 3.141592653589793
+```
+
+Use name space
+```
+- io
+- use math
+main = io.print(math.pi)
+```
+
+Refer file
+```
+# log.moa
+- io
+debug x = io.print(x)
+```
+
+```
+# main.moa
+- file log
+main = log.debug("hello world")
+```
+
+
+## 5. Buildin
+
+Reserved words
+- bool, true, false
+- int, float, string
+- seq, list, set, dict, tuple, func
+- opt, nil, do, try, error
+- any, void
+- i8, i16, i32, i64
+- u8, u16, u32, u64
+- f8, f16, f32, f64
+- trace
+- this
+
+Binary operators order
+```
+?                       # boolable
+.                       # combine string or list
+* // / %                # number (high)
++ -                     # number (low)
+> >= < <=  == !=        # comparision (high)
+|| && &                 # comparision (low)
+,                       # reserved to separate struct and dictionary
+:= += /= *= /= %= .= <- # effect
+```
+
+### IO
 
 Standard input, output and error
 ```
@@ -238,66 +299,10 @@ main =
 
 
 
-## 5. Namespace
-
-## 6. Package
-`my` is shared in this package
-`our` is depend on another packages
-
-```
-# main.moa
-moa v1.2
-require:
-  hello v1
-
-main = io.puts(hello.hi(2))
-
-# ~/moa/vendor/hello__v1_0_0/hello.moa
-moa v1.0
-define hello v1.0.0:
-  hi int string
-
-hi n = prefix + helper.suffix(n)
-prefix = "hello"
-
-# ~/moa/vendor/hello__v1_0_0/helper/suffix.moa
-helper::
-  suffix n = "!".repeat(n)
-```
 
 
 
-## 6. Buildin
-
-Reserved keywards
-- bool, true, false
-- int, float, string
-- seq, list, set, dict, tuple, struct, enum, func
-- opt, do, try, io, error
-- any, void
-- i8, i16, i32, i64
-- u8, u16, u32, u64
-- f8, f16, f32, f64
-- trace
-- reflect
-- this
-
-Binary operators order
-```
-?                       # boolable
-.                       # combine string or list
-* // / %                # number (high)
-+ -                     # number (low)
-> >= < <=  == !=        # comparision (high)
-|| && &                 # comparision (low)
-,                       # reserved to separate struct and dictionary
-:= += /= *= /= %= .= <- # effect
-```
-
-
-
-
-## 7. Appendix
+## 6. Appendix
 
 Design of Moa language
 - List bounds check
@@ -412,10 +417,10 @@ $    # -
 &    # -
 ^    # -
 @    # -
-'    # -
+'    # char?
 ```
 
-## 8. TODOs
+## 7. TODOs
 - [] namespace and file structure
     public   : export(+)
     internal : ?
