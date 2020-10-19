@@ -40,7 +40,6 @@ Run
 Hello World.
 
 # main.moa
-- io
 main = io.print("Hello World")
 ```
 
@@ -53,12 +52,12 @@ expect: 12
   fact: 11
 
 # test.moa
-- test eq
+- test: t
 main =
   v = 11
-  eq(1 1)
-  eq(12 v)
-  eq(1 1)
+  t.eq(1 1)
+  t.eq(12 v)
+  t.eq(1 1)
 ```
 
 
@@ -95,7 +94,7 @@ a,b => a + b # closure
 
 Binary operation
 ```
-1 + 2 * 3 # 7
+1 + 2 * 3 # = 7
 ```
 
 Branch
@@ -128,16 +127,16 @@ func
 
 Function
 ```
-pi float
+pi : float
 pi = 3.14
 
-id a a :: a
+id a : a a
 id x = x
 
-add int int int
+add : int int int
 add x y = x + y
 
-sum [a] a :: a.num
+sum a.num : [a] a
 sum xs = xs.reduce((+) 0)
 
 echo =
@@ -187,34 +186,39 @@ vector1.addable:
 
 Define name space
 ```
-math::
-  pi = 3.141592653589793
+- math
+pi = _private_pi
+_privaet_pi = 3.141592653589793
 ```
 
 Use name space
 ```
-- io
-- use math
+- main: io math
+
 main = io.print(math.pi)
 ```
 
 Refer file
 ```
-# log.moa
-- io
-debug x = io.print(x)
+# logger.moa
+- logger: io
+
+logger::
+  debug x = io.print(x)
 ```
 
 ```
 # main.moa
-- file log
-main = log.debug("hello world")
+- main: logger
+
+main = logger.debug("hello world")
 ```
 
 
 ## 5. Buildin
 
 Reserved words
+types
 - bool, true, false
 - int, float, string
 - seq, list, set, dict, tuple, func
@@ -223,8 +227,11 @@ Reserved words
 - i8, i16, i32, i64
 - u8, u16, u32, u64
 - f8, f16, f32, f64
+methods
 - trace
+values
 - this
+- io, eff
 
 Binary operators order
 ```
@@ -258,19 +265,19 @@ main =
 
 TCP
 ```
-main = io.tcp.listen("127.0.0.1:8080" handle):
-  handle from =
-    target <- from.readline
-    to <- io.tcp.connect(target)
-    from.bidirectional(to)
+main = io.tcp.listen("127.0.0.1:8080" _handle):
+_handle from =
+  target <- from.readline
+  to <- io.tcp.connect(target)
+  from.bidirectional(to)
 ```
 
 UDP
 ```
-main = io.udp.bind("127.0.0.1:1234" handle):
-  handle packet =
-    target <- packet.string.lines.first
-    io.udp.sendto(target packet)
+main = io.udp.bind("127.0.0.1:1234" _handle):
+_handle packet =
+  target <- packet.string.lines.first
+  io.udp.sendto(target packet)
 ```
 
 Async and Cancel
@@ -340,28 +347,28 @@ Syntax
 ```
 root: def (br def)*
 def:
+| "- " ref (: ref+)?     # namespace
+| ref+ (" : " type+)?    # signature
+| ref+ | (indent tag)+   # enum
+| ref+ : (indent attr)+  # struct
 | func
-| "- " ref+                 # import
-| "+ " id: (indent ref br)+ # export
-| ref+ type+ (:: type+)*    # function prototype
-| ref+ | (indent tag)+      # enum
-| ref+ : (indent attr)+     # struct
 func: id arg* "=" body
 tag : ref (attr ("," attr)*)?
 attr: id type
 body:
 | stmt
-| exp (branch | helper)?
+| exp
 stmt: (indent exp)+
 branch: (indent "|" unit " -> " exp)* # pattern match
-helper: : (indent attr)* (indent func)+
-exp:
-| unit op2 exp # op2 => v + 1
-| ref op2u exp # update => n += 1
+#helper: : (indent attr)* (indent func)+
+exp: formula branch?
+formula:
+| unit op2 formula # op2 => v + 1
+| ref op2u formula # update => n += 1
 | unit
 unit:
 | value
-| id ("." id | "(" exp* ")")*
+| id ("." id | "(" formula* ")")*
 | "(" exp ")"
 | "(" id+ => body ")"    # lambda : (x y => x + y)
 | "(" unit (, unit)+ ")" # tuple  : (1, n)
@@ -373,8 +380,8 @@ value:
 | float  # 1.0
 | string # "hi"
 | bool   # true
-ie  : id exp
-ee  : exp exp
+ie  : id formula
+ee  : formula formula
 id  : [a-z0-9_]+
 ref : id (. id)*
 type: ref ("(" ref+ ")")?
@@ -416,8 +423,8 @@ _    # ignore
 $    # -
 &    # -
 ^    # -
-@    # -
 '    # char?
+@    # -
 ```
 
 ## 7. TODOs

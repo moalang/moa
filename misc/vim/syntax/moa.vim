@@ -27,7 +27,8 @@ syn match Number / [0-9]\+\(\.[0-9]\+\)\?/
 syn keyword Boolean true false
 
 "*Identifier     o 変数名
-syn match Function /^ *[a-zA-Z0-9_. ]\+\%(.*:[ \n]\)\@=/
+syn match Function  /^[a-zA-Z0-9]\+\%(.*=[ \n]\)\@=/
+syn match Structure "^[a-zA-Z0-9_.]\+\%([^=]*:\)\@="
 "syn region vlBlock start=/:$/ end=/\n[^a-zA-Z]/ contains=vlMember
 "syn match vlMember /^[ \t]\+[a-zA-Z_0-9]\+[ \n]/ contained
 "hi def link vlMember Identifier
@@ -49,12 +50,12 @@ syn match Operator "&&"
 syn match Operator " \. "
 syn match Operator "|"
 
+syn match Macro /^- [a-zA-Z0-9_ ]*/
+
 "*PreProc        o 一般的なプリプロセッサー命令
 ""syn match Macro /@[a-zA-Z0-9:_]\+/
 
 "*Type           o int, long, char, その他
-syn match Structure "^.*::\n"
-syn match Type "^.*:: [a-zA-Z].*"
 ""syn keyword StorageClass let var
 
 "*Underlined     o 目立つ文章, HTMLリンク

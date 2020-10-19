@@ -1,0 +1,114 @@
+# main.moa
+- mvc = vendor("https://github.com/mvc/mvc" "3.0.0")
+- log = logger(.warn io.stderr)
+- main:
+  io
+  log
+  controller
+
+main : io
+main =
+  listen = io.env("listen" ":8080")
+  log.info("listen" listen)
+  handle request = controller.dispatch(request)
+  http.listen(listen handle)
+
+
+
+
+
+# controller.moa
+- controller: std
+
+dispatch : std.http
+dispatch = req =>
+  d = _dispatcher(req)
+  req.method.lower
+  | "get" = d.get
+  | "post" = d.post
+  | d.notfound
+
+_dispatcher:
+  req io.http.request
+  redirect url = response(301 [("Location" url)])
+  notfound = _text(404 "not found")
+  get = req.path
+  | "/" = _text("index")
+  | _ = notfound
+  post = req.path
+  | "/signin" = signin
+  | _ = notfound
+  signin = my.db.signin(req.post("email" "") res.post("password" ""))
+  | sid => redirect("/home").add_header("Set-Cookie" "sid=" . sid . ";Secure; HttpOnly; SameSite=Strict; Max-Age=2592000")
+  | redirect("/signin?error=failed")
+  _text status body = response(satus [("Content-Type" "text/plain; charset=utf-8")] body)
+
+
+
+
+
+# db.moa
+- db: io eff std
+
+user:
+  email string
+  hashed_password string
+
+signin : string string eff(string)
+signin email password = _pw_eq(store.users.first(email=email).hashed_pasword password)
+| just(_sid!)
+| none
+
+_store = io.store:
+  users []user
+
+_salt = eff.random.azAZ09(4)
+_sid = eff.random.azAZ09(64)
+_pw_hash x =
+  salt <- _salt(4)
+  salt . "$" . std.md5(salt . x)
+_pw_eq hash pw =
+  salt <- hash.left(4)
+  hash == salt . "$" . std.md5(salt . pw)
+
+
+
+
+
+# logger.moa
+- logger: io
+
+levels: | debug | info | warn
+
+debug a+ = _out(levels.debug a)
+info a+ = _out(levels.info a)
+error a+ = _out(levels.error a)
+
+_level = env(levels.debug)
+_writer = env(io.stderr)
+_out : levels.level any io
+_out l a = l >= _level
+| _writer.puts(s)
+| noop
+
+
+
+
+# math.moa
+- math
+
+pi : f64
+pi = 3.14
+
+max a.num : a a a
+max a b = a >= b
+| a
+| b
+
+min a.num : a a a
+min a b = a <= b
+| a
+| b
+
+pow a.num : a a a
+pow a b = a ** b
