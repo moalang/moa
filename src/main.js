@@ -1,124 +1,214 @@
 const str = o => JSON.stringify(o)
 const put = s => process.stdout.write(s)
 const puts = (...args) => console.log(...args)
+const assert = (cond, ...args) => { if (!cond) { console.error('Assert: ', args) } }
+const newToken = (tag, val) => ({tag, val})
 
-function parse(source) {
+
+function tokenize(source) {
+  // source helpers
   let remaining = source
-
-  // parser
-  const parse_top = () => {
-    if (remaining.match(/^ *\)/)) {
-      return {}
-    } else if (remaining.match(/^ *(\w)+ ([\w\(\["])+/)) {
-      return make_struct(sepby(read_kv, ","))
-    } else {
-      const v = sepby(parse_value, ",")
-      return v.length === 1 ? v[0] : v
-    }
-  }
-  const parse_value = () => or(
-    () => parseInt(reg(/^ *(\d+(?:\.\d+)?)/)),
-    () => reg(/^ *("[^"]*")/),
-    () => reg(/^ *(true|false)/) == "true",
-    () => between("[", "]", () => many(parse_value)),
-    () => between("(", ")", parse_top))
-  const parse_exp = () => {
-    const l = parse_value()
-    return or(() => seq(read_op, op => read_op2(op, l)), l)
-  }
-
-  // readers
-  const read_op = () => reg(/^ *([\+\-\*\/])/)
-  const read_op2 = (op, l) => make_value(l) + " " + op + " " + make_value(parse_value())
-  const read_kv = () => {
-    const id = reg(/^ *(\w+)/)
-    const type = parse_value()
-    return [id, type]
-  }
-
-  // helpers
-  const miss = (s, o) => {
-    let e = new Error("miss mtach " + s + " remaining=" + remaining + " " + str(o) + " source=" + source)
-    e.miss = true
-    return e
-  }
-  const call = (f, ...args) => typeof f === "function" ? f(...args) : f
-  const reg = r => {
+  const consume = n => { remaining = remaining.slice(n) }
+  const match = (tag, r, f) => {
     const m = remaining.match(r)
     if (m) {
-      remaining = remaining.slice(m[0].length)
-      return m[1]
-    } else {
-      throw miss("reg", r.source)
+      consume(m[0].length)
+      const v = m[1] || m[0]
+      const val = f ? f(v, m) : v
+      return newToken(tag, val)
     }
   }
-  const eq = s => {
-    if (remaining.startsWith(s)) {
-      remaining = remaining.slice(s.length)
-      return s
-    } else {
-      throw miss("eq", s)
-    }
-  }
-  const seq = (...sequence) => {
-    let ret
-    sequence.forEach(s => { ret = call(s, ret) })
-    return ret
-  }
-  const take = s => { reg(/^( *)/); return eq(s); }
-  const or = (...cases) => {
-    for (let i=0; i<cases.length; ++i) {
-      try {
-        return call(cases[i])
-      } catch (e) {
-        if (!e.miss) {
-          throw e
-        }
-      }
-    }
-    throw miss("or", cases)
-  }
-  const between = (l, r, m) => seq(
-      take(l),
-      m,
-      ret => { take(r); return ret }
-  )
-  const many = f => {
-    let result = []
-    const go = () => { result.push(f()); go() }
-    return or(go, () => result)
-  }
-  const sepby = (f, s) => {
-    let result = []
-    try {
-      result.push(f())
-      const go = () => { take(s); result.push(f()); go() }
-      return or(go, () => result)
-    } catch (e) {
-      if (!e.miss) {
-        throw e
-      }
-      return []
-    }
-  }
-
-  // make AST from arguments
-  const make_struct = xs => {
-    let s = {}
+  const some = (tag, xs) => {
     for(let i=0; i<xs.length; ++i) {
-      s[xs[i][0]] = xs[i][1]
+      const val = xs[i]
+      if (remaining.startsWith(val)) {
+        consume(val.length)
+        return newToken(tag, val)
+      }
     }
-    return s
   }
-  const make_value = o => o
+  const eq = (tag, x) => {
+    if (remaining.startsWith(x)) {
+      consume(x.length)
+      return newToken(tag, x)
+    }
+  }
 
-  // return top AST
-  return parse_exp()
+  // tokenize
+  const read_token = () => {
+    remaining = remaining.replace(/^[ \t]+/, '')
+    return eq('open1', '(') ||
+      eq('close1', ')') ||
+      eq('open2', '[') ||
+      eq('close2', ']') ||
+      some('func', '='.split(' ')) ||
+      some('op2', '+ - * % / , || | && &'.split(' ')) ||
+      some('bool', 'true false'.split(' ')) ||
+      match('num', /^(\d+(?:\.\d+)?)/) ||
+      match('str', /^"[^"]*"/) ||
+      match('id', /^[a-z_][a-zA-Z0-9_]*/) ||
+      match('br', /^[\r\n]([ \t\r\n])*/, _ => '\n')
+  }
+  let tokens = []
+  while (true) {
+    const token = read_token()
+    if (token) {
+      tokens.push(token)
+    } else {
+      assert(!remaining, remaining, source , '=>', tokens)
+      return tokens
+    }
+  }
+}
+
+function parse(tokens) {
+  let index = 0
+  const len = tokens.length
+  const err = (...args) => Error(JSON.stringify(args))
+  const look = () => {
+    if (index < len) {
+      return tokens[index]
+    } else {
+      return {}
+    }
+  }
+  const checkTag = tag => {
+    const next = look()
+    return next && next.tag === tag
+  }
+  const consume = () => {
+    if (index < len) {
+      const token = tokens[index]
+      ++index
+      return token
+    } else {
+      throw err('EOT', tokens)
+    }
+  }
+  const consumeTag = tag => {
+    const token = consume()
+    assert(token.tag === tag, tag, ' != ', token.tag, index, tokens)
+  }
+
+  let indent1 = 0
+  let indent2 = 0
+
+  const parse_exp = (token) => {
+    const l = parse_value(token)
+    const next = look()
+    if (next && next.tag === 'op2') {
+      _ = consume()
+      const r = parse_exp(consume())
+      return l + next.val + r
+    } else {
+      return l
+    }
+  }
+  const parse_open1 = (baseIndent) => {
+      const vals1 = until(t => baseIndent === indent1 && t.tag === 'close1')
+      consumeTag('close1')
+      if (vals1.length === 1) {
+        return vals1[0]
+      } else {
+        return '[' + vals1.join(' ') + ']'
+      }
+  }
+  const parse_open2 = (baseIndent) => {
+      const vals2 = until(t => baseIndent === indent2 && t.tag === 'close2')
+      consumeTag('close2')
+      return '[' + vals2.join(', ').replace(', ]', '') + ']'
+  }
+  const parse_value = (token) => {
+    switch (token.tag) {
+    case 'num':
+    case 'bool':
+    case 'str':
+      return token.val
+    case 'id':
+      if (checkTag('open1')) {
+        _ = consume()
+        const baseIndent = indent1
+        const vals2 = until(t => baseIndent === indent1 && t.tag === 'close1')
+        return token.val + '(' + vals2.join(', ')
+      } else {
+        return token.val
+      }
+    case 'open1':
+      ++indent1
+      return parse_open1(indent1)
+    case 'close1':
+      --indent1
+      return token.val
+    case 'open2':
+      ++indent2
+      return parse_open2(indent2)
+    case 'close2':
+      --indent2
+      return token.val
+    default:
+      throw err('parse_exp', token)
+    }
+  }
+  const take = f => {
+    let result = []
+    while (true) {
+      const token = look()
+      if (f(token)) {
+        ++index
+        result.push(token.val)
+      } else {
+        return result
+      }
+    }
+  }
+  const until = f => take(t => !f(t))
+
+  const parseStmt = (token) => {
+    switch (token.tag) {
+    case 'id':
+      const name = token.val
+      const args = take(t => t.tag === 'id')
+      if (args.length === 0 && look().tag === 'open1') {
+        return parse_exp(token)
+      }
+      consumeTag('func')
+      const body = parse_exp(consume())
+      return 'function ' + name + '(' + args.join(',') + ') { return ' + body + ' }'
+    case 'close':
+      throw err('Invalid close', index, nodes)
+      break
+    default:
+      return parse_exp(token)
+    }
+  }
+  const parseTop = parseStmt
+
+  let nodes = []
+  while (true) {
+    if (index >= len) {
+      return nodes
+    }
+    const token = consume()
+    if (token.tag === 'br') {
+      continue
+    }
+    const node = parseTop(token)
+    nodes.push(node)
+  }
 }
 
 function run(source) {
-  const js = parse(source)
-  return eval(js)
+  const tokens = tokenize(source)
+  const nodes = parse(tokens)
+  const js = nodes.join("\n")
+  try {
+    return eval(js)
+  } catch (e) {
+    puts('-- source:', source)
+    puts('-- tokens:', tokens)
+    puts('-- nodes:', nodes)
+    puts('-- js:', js)
+  }
 }
 
 function run_test() {
@@ -135,22 +225,22 @@ function run_test() {
 
   // value
   eq(1, "1")
-  eq(1.0, "1.0")
+  eq(1.2, "1.2")
   eq("hi", "\"hi\"")
   eq(true, "true")
   // container
   eq([1, 2, 3], "[1 2 3]")
-  eq([1, 2], "(1, 2)")
-  eq({x: 1, y: 2}, "(x 1, y 2)")
+  //eq([1, 2], "(1, 2)")
+  //eq({x: 1, y: 2}, "(x=1, y=2)")
   //eq({1: true, 2: false}, "{1 true, 2 false}")
   // exp
   eq(5, "2 + 3")
   eq(-1, "2 - 3")
   eq(6, "2 * 3")
   eq(2, "6 / 3")
+  eq(2, "inc a = a + 1\ninc(1)")
 /*
-  eq("2", "inc a = a + 1\ninc(1)")
-  eq("6", "add a b = a + b\nadd(1 2 + 3)")
+  eq(6, "add a b = a + b\nadd(1 2 + 3)")
 
   -- value(4)
   test "1" "1"
