@@ -4,6 +4,39 @@ const puts = (...args) => console.log(...args)
 
 function parse(source) {
   let remaining = source
+
+  // parser
+  const parse_top = () => {
+    if (remaining.match(/^ *\)/)) {
+      return {}
+    } else if (remaining.match(/^ *(\w)+ ([\w\(\["])+/)) {
+      return make_struct(sepby(read_kv, ","))
+    } else {
+      const v = sepby(parse_value, ",")
+      return v.length === 1 ? v[0] : v
+    }
+  }
+  const parse_value = () => or(
+    () => parseInt(reg(/^ *(\d+(?:\.\d+)?)/)),
+    () => reg(/^ *("[^"]*")/),
+    () => reg(/^ *(true|false)/) == "true",
+    () => between("[", "]", () => many(parse_value)),
+    () => between("(", ")", parse_top))
+  const parse_exp = () => {
+    const l = parse_value()
+    return or(() => seq(read_op, op => read_op2(op, l)), l)
+  }
+
+  // readers
+  const read_op = () => reg(/^ *([\+\-\*\/])/)
+  const read_op2 = (op, l) => make_value(l) + " " + op + " " + make_value(parse_value())
+  const read_kv = () => {
+    const id = reg(/^ *(\w+)/)
+    const type = parse_value()
+    return [id, type]
+  }
+
+  // helpers
   const miss = (s, o) => {
     let e = new Error("miss mtach " + s + " remaining=" + remaining + " " + str(o) + " source=" + source)
     e.miss = true
@@ -68,6 +101,8 @@ function parse(source) {
       return []
     }
   }
+
+  // make AST from arguments
   const make_struct = xs => {
     let s = {}
     for(let i=0; i<xs.length; ++i) {
@@ -75,34 +110,9 @@ function parse(source) {
     }
     return s
   }
-  const read_op = () => reg(/^ *([\+\-\*\/])/)
-  const read_op2 = (op, l) => build(l) + " " + op + " " + build(parse_value())
-  const read_kv = () => {
-    const id = reg(/^ *(\w+)/)
-    const type = parse_value()
-    return [id, type]
-  }
-  const parse_top = () => {
-    if (remaining.match(/^ *\)/)) {
-      return {}
-    } else if (remaining.match(/^ *(\w)+ ([\w\(\["])+/)) {
-      return make_struct(sepby(read_kv, ","))
-    } else {
-      const v = sepby(parse_value, ",")
-      return v.length === 1 ? v[0] : v
-    }
-  }
-  const parse_value = () => or(
-    () => parseInt(reg(/^ *(\d+(?:\.\d+)?)/)),
-    () => reg(/^ *("[^"]*")/),
-    () => reg(/^ *(true|false)/) == "true",
-    () => between("[", "]", () => many(parse_value)),
-    () => between("(", ")", parse_top))
-  const parse_exp = () => {
-    const l = parse_value()
-    return or(() => seq(read_op, op => read_op2(op, l)), l)
-  }
-  const build = o => o
+  const make_value = o => o
+
+  // return top AST
   return parse_exp()
 }
 
