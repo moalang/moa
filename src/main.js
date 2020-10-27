@@ -63,6 +63,8 @@ function tokenize(source) {
 
 function parse(tokens) {
   let index = 0
+  let nest1 = 0
+  let nest2 = 0
   const len = tokens.length
   const err = (...args) => Error(JSON.stringify(args))
   const look = () => {
@@ -72,81 +74,22 @@ function parse(tokens) {
       return {}
     }
   }
-  const checkTag = tag => {
-    const next = look()
-    return next && next.tag === tag
-  }
   const consume = () => {
     if (index < len) {
       const token = tokens[index]
+      if (token.tag === 'open1') {
+        ++nest1
+      } else if (token.tag === 'open2') {
+        ++nest2
+      } else if (token.tag === 'close1') {
+        --nest1
+      } else if (token.tag === 'close2') {
+        --nest2
+      }
       ++index
       return token
     } else {
       throw err('EOT', tokens)
-    }
-  }
-  const consumeTag = tag => {
-    const token = consume()
-    assert(token.tag === tag, tag, ' != ', token.tag, index, tokens)
-  }
-
-  let indent1 = 0
-  let indent2 = 0
-
-  const parse_exp = (token) => {
-    const l = parse_value(token)
-    const next = look()
-    if (next && next.tag === 'op2') {
-      _ = consume()
-      const r = parse_exp(consume())
-      return l + next.val + r
-    } else {
-      return l
-    }
-  }
-  const parse_open1 = (baseIndent) => {
-      const vals1 = until(t => baseIndent === indent1 && t.tag === 'close1')
-      consumeTag('close1')
-      if (vals1.length === 1) {
-        return vals1[0]
-      } else {
-        return '[' + vals1.join(' ') + ']'
-      }
-  }
-  const parse_open2 = (baseIndent) => {
-      const vals2 = until(t => baseIndent === indent2 && t.tag === 'close2')
-      consumeTag('close2')
-      return '[' + vals2.join(', ').replace(', ]', '') + ']'
-  }
-  const parse_value = (token) => {
-    switch (token.tag) {
-    case 'num':
-    case 'bool':
-    case 'str':
-      return token.val
-    case 'id':
-      if (checkTag('open1')) {
-        _ = consume()
-        const baseIndent = indent1
-        const vals2 = until(t => baseIndent === indent1 && t.tag === 'close1')
-        return token.val + '(' + vals2.join(', ')
-      } else {
-        return token.val
-      }
-    case 'open1':
-      ++indent1
-      return parse_open1(indent1)
-    case 'close1':
-      --indent1
-      return token.val
-    case 'open2':
-      ++indent2
-      return parse_open2(indent2)
-    case 'close2':
-      --indent2
-      return token.val
-    default:
-      throw err('parse_exp', token)
     }
   }
   const take = f => {
@@ -154,7 +97,7 @@ function parse(tokens) {
     while (true) {
       const token = look()
       if (f(token)) {
-        ++index
+        consume()
         result.push(token.val)
       } else {
         return result
@@ -163,22 +106,86 @@ function parse(tokens) {
   }
   const until = f => take(t => !f(t))
 
+  const parseExp = (token) => {
+    const l = parseValue(token)
+    if (look().tag === 'op2') {
+      const op2 = consume().val
+      const r = parseExp(consume())
+      return l + op2 + r
+    } else {
+      return l
+    }
+  }
+  const parseOpen1 = (baseNest) => {
+      const vals1 = until(t => baseNest === nest1 && t.tag === 'close1')
+      consume()
+      if (vals1.length === 1) {
+        return vals1[0]
+      } else {
+        return '[' + vals1.join(' ') + ']'
+      }
+  }
+  const parseOpen2 = (baseNest) => {
+      const vals2 = until(t => baseNest === nest2 && t.tag === 'close2')
+      consume()
+      return '[' + vals2.join(', ').replace(', ]', '') + ']'
+  }
+  const parseValue = (token) => {
+    return tryValue(token) || (() => { throw err('parseExp', token) })()
+  }
+  const tryValue = (token) => {
+    switch (token.tag) {
+    case 'num':
+    case 'bool':
+    case 'str':
+      return token.val
+    case 'id':
+      if (look().tag === 'open1') {
+        const baseNest = nest1
+        _ = consume()
+        let argv = []
+        while (true) {
+          const t = consume()
+          if (t.tag === 'close1' && baseNest === nest1) {
+            return token.val + '(' + argv.join(', ') + ')'
+          }
+
+          const val = parseExp(t)
+          argv.push(val)
+        }
+        const vals = until(t => baseNest === nest1 && t.tag === 'close1')
+      } else {
+        return token.val
+      }
+    case 'open1':
+      return parseOpen1(nest1)
+    case 'open2':
+      return parseOpen2(nest2)
+    case 'close1':
+      return ')'
+    case 'close2':
+      return ']'
+    }
+  }
   const parseStmt = (token) => {
     switch (token.tag) {
     case 'id':
       const name = token.val
       const args = take(t => t.tag === 'id')
-      if (args.length === 0 && look().tag === 'open1') {
-        return parse_exp(token)
+      const next = look()
+      if (args.length === 0 && next.tag === 'open1') {
+        return parseExp(token)
       }
-      consumeTag('func')
-      const body = parse_exp(consume())
-      return 'function ' + name + '(' + args.join(',') + ') { return ' + body + ' }'
-    case 'close':
-      throw err('Invalid close', index, nodes)
-      break
+      if (next.tag === 'func') {
+        consume()
+        const body = parseExp(consume())
+        return 'function ' + name + '(' + args.join(',') + ') { return ' + body + ' }'
+      } else {
+        assert(args.length === 0)
+        return name
+      }
     default:
-      return parse_exp(token)
+      return parseExp(token)
     }
   }
   const parseTop = parseStmt
@@ -223,7 +230,7 @@ function run_test() {
     }
   }
 
-  // value
+  //// value
   eq(1, "1")
   eq(1.2, "1.2")
   eq("hi", "\"hi\"")
@@ -239,8 +246,8 @@ function run_test() {
   eq(6, "2 * 3")
   eq(2, "6 / 3")
   eq(2, "inc a = a + 1\ninc(1)")
-/*
   eq(6, "add a b = a + b\nadd(1 2 + 3)")
+/*
 
   -- value(4)
   test "1" "1"
