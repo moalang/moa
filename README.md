@@ -52,12 +52,12 @@ expect: 12
   fact: 11
 
 # test.moa
-- test: t
+- test
 main =
   v = 11
-  t.eq(1 1)
-  t.eq(12 v)
-  t.eq(1 1)
+  test.eq(1 1)
+  test.eq(12 v)
+  test.eq(1 1)
 ```
 
 
@@ -73,12 +73,12 @@ true # bool
 "hi" # string utf8
 ```
 
-Container
+Container?
 ```
 [1 2]      # list(int)
 1, 2       # tuple(int int)
-(x 1, y 2) # struct(x int, y int)
 {1 2, 3 4} # dict(int int)
+{x=1, y=2} # struct(x:int y:int)
 ```
 
 Closure
@@ -125,18 +125,18 @@ func
 
 ## 3. Definition
 
-Function
+Function?
 ```
-pi : float
+pi: float
 pi = 3.14
 
-id a : a a
+id: a => a a
 id x = x
 
-add : int int int
+add: int int int
 add x y = x + y
 
-sum a.num : [a] a
+sum: a.num => [a] a
 sum xs = xs.reduce((+) 0)
 
 echo =
@@ -146,36 +146,37 @@ echo =
 
 Struct
 ```
-vector2:
+vector2 struct:
   x int
   y int
   show v = `($v.x,$v.y)`
 
-dict k v: kvs [k, v]
+dict struct: k v => kvs [k, v]
 ```
 
 Enum
 ```
-cupon:
-| none
-| prize name string, price int
+abc enum: a b c
+cupon enum:
+  none
+  prize name string, price int
   show =
   | none = "none"
   | prize = `$name $price`
 
-either l r: | left l | right r
+either enum: l r => left l | right r
 ```
 
 Type class
 ```
-addable t:
-  + t t t
-
-vector1:
+vector1 struct:
   x int
 
 vector1.addable:
   + l r = vector1(l.x + r.x)
+
+addable class: t =>
+  + t t t
 ```
 
 
@@ -186,14 +187,14 @@ vector1.addable:
 
 Define name space
 ```
-- math
-pi = _private_pi
+- math:
+  pi = _private_pi
 _privaet_pi = 3.141592653589793
 ```
 
 Use name space
 ```
-- main: io math
+- io math
 
 main = io.print(math.pi)
 ```
@@ -428,10 +429,62 @@ $    # -
 ```
 
 ## 7. TODOs
-- [] namespace and file structure
-    public   : export(+)
-    internal : ?
-    private  : default
+- [] syntax for signature, struct, enum, visibility and namespace
+    # signature
+      pi: float
+      id a: a a
+      find k v: dict(k v) k v
+    # struct
+      vector2:
+        x int
+        y int
+      list a:
+        values [a]
+      dict k v:
+        values [k,v]
+    # enum
+      bool:
+      | true
+      | false
+      maybe a:
+      | just a
+      | none
+    # type class
+      eq t:
+        eq: t bool
+      functor t:
+        fmap u: (t u) u
+      num t:
+        +: t t
+        -: t t
+        *: t t
+    # visibility
+      user:
+        email string
+        hpw string
+        compare pw = hpw == hash(hpw.slice(size) pw)
+        internal:
+          debug = `$email $hpw $const`
+        private:
+          hash seed pw = seed + '-' + (seed + pw).md5
+          new pw = hash(eff.random(size) pw)
+          size = 4
+
+      public1 = const
+      public2 = const
+
+      private:
+        const = 1
+
+    # namespace
+      # math.moa
+      - math: _
+      pi = 1
+      # main.moa
+      - math
+      - m = math@v3.1
+      puts(m.pi + math.pi)
+
 - [] compile to JavaScript
 - [] self booting by compiled JavaScript
 - [] make memo app

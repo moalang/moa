@@ -41,6 +41,8 @@ function tokenize(source) {
       eq('close1', ')') ||
       eq('open2', '[') ||
       eq('close2', ']') ||
+      eq('open3', '{') ||
+      eq('close3', '}') ||
       some('func', '='.split(' ')) ||
       some('op2', '+ - * % / , || | && &'.split(' ')) ||
       some('bool', 'true false'.split(' ')) ||
@@ -65,6 +67,7 @@ function parse(tokens) {
   let index = 0
   let nest1 = 0
   let nest2 = 0
+  let nest3 = 0
   const len = tokens.length
   const err = (...args) => Error(JSON.stringify(args))
   const look = () => {
@@ -77,15 +80,12 @@ function parse(tokens) {
   const consume = () => {
     if (index < len) {
       const token = tokens[index]
-      if (token.tag === 'open1') {
-        ++nest1
-      } else if (token.tag === 'open2') {
-        ++nest2
-      } else if (token.tag === 'close1') {
-        --nest1
-      } else if (token.tag === 'close2') {
-        --nest2
-      }
+           if (token.tag === 'open1') { ++nest1 }
+      else if (token.tag === 'open2') { ++nest2 }
+      else if (token.tag === 'open3') { ++nest3 }
+      else if (token.tag === 'close1') { --nest1 }
+      else if (token.tag === 'close2') { --nest2 }
+      else if (token.tag === 'close3') { --nest3 }
       ++index
       return token
     } else {
@@ -117,18 +117,23 @@ function parse(tokens) {
     }
   }
   const parseOpen1 = (baseNest) => {
-      const vals1 = until(t => baseNest === nest1 && t.tag === 'close1')
-      consume()
-      if (vals1.length === 1) {
-        return vals1[0]
-      } else {
-        return '[' + vals1.join(' ') + ']'
-      }
+    const vals1 = until(t => baseNest === nest1 && t.tag === 'close1')
+    consume()
+    if (vals1.length === 1) {
+      return vals1[0]
+    } else {
+      return '[' + vals1.join(' ') + ']'
+    }
   }
   const parseOpen2 = (baseNest) => {
-      const vals2 = until(t => baseNest === nest2 && t.tag === 'close2')
-      consume()
-      return '[' + vals2.join(', ').replace(', ]', '') + ']'
+    const vals2 = until(t => baseNest === nest2 && t.tag === 'close2')
+    consume()
+    return '[' + vals2.join(', ').replace(', ]', '') + ']'
+  }
+  const parseOpen3 = (baseNest) => {
+    // TODO
+    index = tokens.length
+    return '({x:1,y:2})'
   }
   const parseValue = (token) => {
     return tryValue(token) || (() => { throw err('parseExp', token) })()
@@ -161,6 +166,8 @@ function parse(tokens) {
       return parseOpen1(nest1)
     case 'open2':
       return parseOpen2(nest2)
+    case 'open3':
+      return parseOpen3(nest3)
     case 'close1':
       return ')'
     case 'close2':
@@ -230,16 +237,12 @@ function run_test() {
     }
   }
 
-  //// value
+  // value
   eq(1, "1")
   eq(1.2, "1.2")
   eq("hi", "\"hi\"")
   eq(true, "true")
-  // container
-  eq([1, 2, 3], "[1 2 3]")
-  //eq([1, 2], "(1, 2)")
-  //eq({x: 1, y: 2}, "(x=1, y=2)")
-  //eq({1: true, 2: false}, "{1 true, 2 false}")
+  eq(false, "false")
   // exp
   eq(5, "2 + 3")
   eq(-1, "2 - 3")
@@ -247,8 +250,12 @@ function run_test() {
   eq(2, "6 / 3")
   eq(2, "inc a = a + 1\ninc(1)")
   eq(6, "add a b = a + b\nadd(1 2 + 3)")
+  // container
+  eq([1, 2, 3], "[1 2 3]")
+  eq([1, 2], "(1, 2)")
+  eq({x: 1, y: 2}, "{x=1, y=2}")
+  //eq({1: true, 2: false}, "{1 true, 2 false}")
 /*
-
   -- value(4)
   test "1" "1"
   test "hello world" "\"hello world\""

@@ -6,7 +6,7 @@
   log
   controller
 
-main : io
+main: io
 main =
   listen = io.env("listen" ":8080")
   log.info("listen" listen)
@@ -20,7 +20,7 @@ main =
 # controller.moa
 - controller: std
 
-dispatch : std.http
+dispatch: std.http
 dispatch = req =>
   d = _dispatcher(req)
   req.method.lower
@@ -28,7 +28,7 @@ dispatch = req =>
   | "post" = d.post
   | d.notfound
 
-_dispatcher:
+_dispatcher::
   req io.http.request
   redirect url = response(301 [("Location" url)])
   notfound = _text(404 "not found")
@@ -50,11 +50,11 @@ _dispatcher:
 # db.moa
 - db: io eff std
 
-user:
+user::
   email string
   hashed_password string
 
-signin : string string eff(string)
+signin: string string eff(string)
 signin email password = _pw_eq(store.users.first(email=email).hashed_pasword password)
 | just(_sid!)
 | none
@@ -78,7 +78,7 @@ _pw_eq hash pw =
 # logger.moa
 - logger: io
 
-levels: | debug | info | warn
+levels:| debug info warn
 
 debug a+ = _out(levels.debug a)
 info a+ = _out(levels.info a)
@@ -86,7 +86,7 @@ error a+ = _out(levels.error a)
 
 _level = env(levels.debug)
 _writer = env(io.stderr)
-_out : levels.level any io
+_out: levels.level any io
 _out l a = l >= _level
 | _writer.puts(s)
 | noop
@@ -97,18 +97,18 @@ _out l a = l >= _level
 # math.moa
 - math
 
-pi : f64
+pi: f64
 pi = 3.14
 
-max a.num : a a a
+max a.num: a a a
 max a b = a >= b
 | a
 | b
 
-min a.num : a a a
+min a.num: a a a
 min a b = a <= b
 | a
 | b
 
-pow a.num : a a a
+pow a.num: a a a
 pow a b = a ** b
