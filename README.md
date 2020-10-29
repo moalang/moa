@@ -459,30 +459,19 @@ $    # -
         -: t t
         *: t t
     # visibility
-      user:
-        email string
-        hpw string
-        compare pw = hpw == hash(hpw.slice(size) pw)
-        internal:
-          debug = `$email $hpw $const`
-        private:
-          hash seed pw = seed + '-' + (seed + pw).md5
-          new pw = hash(eff.random(size) pw)
-          size = 4
-
-      public1 = const
-      public2 = const
-
-      private:
-        const = 1
-
+      type:
+        field int
+        - internal
+        debug = `$field $magic`
+        - private
+        magic = 1
+      - private
+      const = 1
     # namespace
-      # math.moa
       - math: _
       pi = 1
-      # main.moa
-      - math
       - m = math@v3.1
+      - main: math
       puts(m.pi + math.pi)
 
 - [] compile to JavaScript

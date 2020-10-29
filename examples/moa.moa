@@ -1,59 +1,57 @@
-# example_self.md
+- main: io moa
 
-## main io.int
-main int!
+main: int!
 main =
   src <- io.stdin.string
-  ret <- run(src)
+  ret <- moa.run(src)
   io.write(ret)
   0
 
-## run string try.string
-run string string?
+- moa: _
+
+run: string string?
 run src =
-  node <- parser(src).parse_top
-  eval(node)
+  node <- parser.parse(src)
+  evaluator.eval(node)
 
-enum ast|
-  int int
-  op2 op string, left ast, right ast
+ast:
+| int int
+| op2 op string, left ast, right ast
 
+parse: string ast!
 parse src = parse_top:
-  pos 0
-  ## satisfy: (string bool) try(string)
-  satisfy (string bool) string!
-  satisfy f =
-    c <- src(pos)
-    f(c) || err("char: $c, checker: $f.name, pos: $p.pos")
-    p.pos += 1
-    return(c)
-  ## parse_top: try(ast)
-  parse_top ast!
+  parse_top: ast!
   parse_top = many1(parse_def)
-  ## parse_def: try(ast)
-  parse_def ast!
+
+  parse_def: ast!
   parse_def =
     id <- read_id
     read_string("=")
     body <- parse_exp
     def(id body)
-  ## parse_exp: try(ast)
-  parse_exp ast!
+
+  parse_exp: ast!
   parse_exp =
     l <- parse_unit
     op <- read_op
     r <- parse_exp
     ast.op2(op l r)
-  ## parse_unit: try(ast)
-  parse_unit ast!
+
+  parse_unit: ast!
   parse_unit = parse_int.or(parse_ref)
-  ## parse_int: try(ast)
-  parse_int ast!
+
+  parse_int: ast!
   parse_int =
     x <- many1(p.satisfy(num.has))
     ast.int(x.to_int)
-  ## read_id: try(string)
-  read_id string!
+
+  - private
+  pos 0
+  satisfy f =
+    c <- src(pos)
+    f(c) || err("char: $c, checker: $f.name, pos: $p.pos")
+    p.pos += 1
+    return(c)
   read_id =
     x <- one(az)
     xs <- many(azn)
@@ -63,42 +61,35 @@ parse src = parse_top:
   num = range("0" "9")
   az = range("a" "z" "A" "Z")
   azn = az ++ num
-
-  ## many1 a: try(a) try([]a)
-  many1 a => a! []a!
   many1 f = f() ++ many(f)
-  ## many a: try(a) try([]a)
-  many a => a! []a!
   many f = rec([]):
     rec acc =
       v <- f()
       | _ = return acc
       rec(acc ++ v)
 
-# evaluator
-## eval: ast try(string)
-eval ast string!
-eval env =
-  main <- env.find("main")
-  apply(main).to_string
-## apply: ast try(ast)
-apply ast ast!
-apply node = node
-| ast.int = node
-| ast.op2 = operate(node.op node.left node.rigth)
-| ast.ref =
-  v <- env.find(node)
-  apply(v)
-extract_int x = i <- apply(x)
-| ast.int = i.value
-## operate: string ast ast try(ast)
-operate string ast ast ast!
-operate op left right =
-  l <- apply(left).extract_int
-  r <- apply(right).extract_int
-  op
-  | "+" = ast.int(l + r)
-  | "-" = ast.int(l - r)
-  | "*" = ast.int(l * r)
-  | "/" = ast.int(l / r)
-  | err("unknown operator $op")
+eval: [string ast] ast!
+eval env = do:
+  do =
+    main <- env.find("main")
+    apply(main).to_string
+  apply node = node
+  | ast.int = node
+  | ast.op2 = operate(node.op node.left node.rigth)
+  | ast.ref = apply_ref(node)
+  apply_ref node =
+    v <- env.find(node)
+    apply(v)
+  operate op left right = do:
+    do =
+      lv <- apply(left)
+      rv <- apply(right)
+      lv, rv
+      | ast.int, ast.int = op2(lv rv)
+      | err("Failed to op2" op lv rv)
+    op2 l r = op
+    | "+" = ast.int(l + r)
+    | "-" = ast.int(l - r)
+    | "*" = ast.int(l * r)
+    | "/" = ast.int(l / r)
+    | err("unknown operator $op")
