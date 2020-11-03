@@ -63,6 +63,7 @@ main =
 
 
 
+
 ## 1. Value
 
 Primitive
@@ -73,12 +74,13 @@ true # bool
 "hi" # string utf8
 ```
 
-Container?
+Container
 ```
-[1 2]      # list(int)
-1, 2       # tuple(int int)
-{1 2, 3 4} # dict(int int)
-{x=1, y=2} # struct(x:int y:int)
+1, 2      # tuple(int int)
+(x=1 y=2) # struct(x:int y:int)
+[1 2]     # list(int)
+[1=2 k=v] # dict(int int)
+[x:1 y:2] # dict(string int)
 ```
 
 Closure
@@ -125,58 +127,102 @@ func
 
 ## 3. Definition
 
-Function?
+Function
 ```
 pi: float
 pi = 3.14
 
-id: a => a a
-id x = x
-
 add: int int int
 add x y = x + y
-
-sum: a.num => [a] a
-sum xs = xs.reduce((+) 0)
 
 echo =
   line <- io.readline
   io.print(line)
 ```
 
+Generics
+```
+id a: a a
+id x = x
+
+sum a.num: []a a
+sum t => xs = xs.reduce((+) t.zero)
+```
+
+Variable arguments
+```
+trace: any+ io
+trace argv+ = print(argv.map(x => x.string).join(" "))
+```
+
+Optional arguments
+```
+join: []string string? string? string
+join ary glue(" ") alt?
+| [] _ some = alt
+| ary.join(glue)
+```
+
+Named arguments
+```
+estimate: decimal (tax decimal, service decimal?, unit string?) string
+estimate base (tax, service 0, unit) = price.string + suffix:
+  price = base * (1 + tax + service)
+  suffix = unit
+  | " " + unit
+  | ""
+# error   <= estimate(100)
+# error   <= estimate(100 0.05)
+# 105     <= estimate(100 tax:0.05)
+# 115     <= estimate(100 tax:0.05 service:0.10)
+# 115 yen <= estimate(100 tax:0.05 service:0.10 unit:"yen")
+```
+
+Type specialization
+```
+boolify a: a bool
+boolify v
+| string = v.size > 0
+| list   = v.size > 0
+| dict   = v.size > 0
+| int    = v != 0
+| float  = v != 0 && v.between(float.min float.max)
+| _      = fail("compile error")
+```
+
 Struct
 ```
-vector2 struct:
+vector2:
   x int
   y int
   show v = `($v.x,$v.y)`
 
-dict struct: k v => kvs [k, v]
+dict k v: kvs [k,v]
 ```
 
 Enum
 ```
-abc enum: a b c
-cupon enum:
-  none
-  prize name string, price int
-  show =
-  | none = "none"
-  | prize = `$name $price`
+abc: | a | b | c
+cupon:
+| zero
+| prize name string, price int
+  show c =
+  | zero = "zero"
+  | prize = `$c.name $c.price`
 
-either enum: l r => left l | right r
+either l r: | left l | right r
 ```
 
 Type class
 ```
-vector1 struct:
+addable t:
+  +: t t t
+
+vector1:
   x int
 
 vector1.addable:
   + l r = vector1(l.x + r.x)
-
-addable class: t =>
-  + t t t
 ```
 
 
@@ -187,33 +233,22 @@ addable class: t =>
 
 Define name space
 ```
-- math:
-  pi = _private_pi
-_privaet_pi = 3.141592653589793
+- math: _
+pi = p
+
+- private
+p = 3.141592653589793
 ```
 
 Use name space
 ```
-- io math
+- main: io math
 
 main = io.print(math.pi)
 ```
 
-Refer file
-```
-# logger.moa
-- logger: io
 
-logger::
-  debug x = io.print(x)
-```
 
-```
-# main.moa
-- main: logger
-
-main = logger.debug("hello world")
-```
 
 
 ## 5. Buildin
@@ -286,7 +321,10 @@ Async and Cancel
 main =
   t <- io.async(io.sleep(10))
   io.sleep(1)
-  t.done?.else(t.cancel)
+  t.done
+  | _
+  | t.cancel
+  t.done.else(t.cancel)
 ```
 
 Random
@@ -302,9 +340,6 @@ main =
   now <- io.now
   io.print(now)
 ```
-
-
-
 
 
 
@@ -410,7 +445,12 @@ _    # ignore
 .    # glue two objects
 \    # escape
 :    # define
-?    # to boolean
+
+--- argument --------------------------
+(1)  # default
+?    # optional
+*    # variables
++    # more than 1 variables
 
 --- group -----------------------------
 ()   # priority, tule, struct
@@ -428,8 +468,12 @@ $    # -
 @    # -
 ```
 
+
+
+
+
 ## 7. TODOs
-- [] syntax for signature, struct, enum, visibility and namespace
+- [x] syntax for signature, struct, enum, visibility and namespace
     # signature
       pi: float
       id a: a a
@@ -474,7 +518,20 @@ $    # -
       - main: math
       puts(m.pi + math.pi)
 
+- [x] dictionary syntax
+    [k v; "k" "v"; 1.string 2.string; k: "v"]
+- [x] struct syntax
+    [a=1; b=2]
+- [] extra arguments: variable, named, optional, default
+    # variable
+    sum a: a+ a | ary = ary.reduce(a.default (+))
+    sum(a) ary:a+ a = ary.reduce(a.default (+))
+    # named
+    copy: from:string to:string io = io.fs.copy(from to)
+    # optional
+    default t: t? t | v = v.if(v t.zero)
+    # default
+    inc: int int? int | a b(1) = a + b
 - [] compile to JavaScript
 - [] self booting by compiled JavaScript
 - [] make memo app
-- [] dog fooding in real world

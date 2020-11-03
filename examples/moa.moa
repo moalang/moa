@@ -20,33 +20,24 @@ ast:
 
 parse: string ast!
 parse src = parse_top:
-  parse_top: ast!
-  parse_top = many1(parse_def)
+  pos 0
 
-  parse_def: ast!
+  parse_top = many1(parse_def)
   parse_def =
     id <- read_id
     read_string("=")
     body <- parse_exp
     def(id body)
-
-  parse_exp: ast!
   parse_exp =
     l <- parse_unit
     op <- read_op
     r <- parse_exp
     ast.op2(op l r)
-
-  parse_unit: ast!
   parse_unit = parse_int.or(parse_ref)
-
-  parse_int: ast!
   parse_int =
     x <- many1(p.satisfy(num.has))
     ast.int(x.to_int)
 
-  - private
-  pos 0
   satisfy f =
     c <- src(pos)
     f(c) || err("char: $c, checker: $f.name, pos: $p.pos")
