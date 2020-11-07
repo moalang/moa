@@ -1,7 +1,7 @@
 const str = o => JSON.stringify(o)
 const put = s => process.stdout.write(s)
 const puts = (...args) => console.log(...args)
-const assert = (cond, ...args) => { if (!cond) { console.error('Assert: ', args) } }
+const assert = (cond, ...args) => { if (!cond) { console.trace('Assert: ', args) } }
 const newToken = (tag, val) => ({tag, val})
 
 
@@ -43,7 +43,9 @@ function tokenize(source) {
       eq('close2', ']') ||
       eq('open3', '{') ||
       eq('close3', '}') ||
-      some('func', '='.split(' ')) ||
+      eq('arrow', '=>') ||
+      eq('func', '=') ||
+      eq('as', ':') ||
       some('op2', '+ - * % / , || | && &'.split(' ')) ||
       some('bool', 'true false'.split(' ')) ||
       match('num', /^(\d+(?:\.\d+)?)/) ||
@@ -57,7 +59,7 @@ function tokenize(source) {
     if (token) {
       tokens.push(token)
     } else {
-      assert(!remaining, remaining, source , '=>', tokens)
+      assert(!remaining, token, remaining, source , '=>', tokens)
       return tokens
     }
   }
@@ -117,23 +119,54 @@ function parse(tokens) {
     }
   }
   const parseOpen1 = (baseNest) => {
-    const vals1 = until(t => baseNest === nest1 && t.tag === 'close1')
+    const vals = until(t => baseNest === nest1 && t.tag === 'close1')
     consume()
-    if (vals1.length === 1) {
-      return vals1[0]
+    if (vals.length === 0) {
+      return undefined
+    } else if (vals.length === 1) {
+      return vals[0]
     } else {
-      return '[' + vals1.join(' ') + ']'
+      const border = vals.findIndex(val => val == '=>')
+      if (border >= 0) {
+        let args = vals.slice(0, border)
+        let body = vals.slice(border + 1)
+        return '((' + args.join('') + ') => ' + body.join('') + ')'
+      }
+    }
+
+    if (vals[1] === ':') {
+      return '({' + vals.join(', ').replace(/, :, /g, ':') + '})'
+    } else {
+      return '[' + vals.join(', ') + ']'
     }
   }
   const parseOpen2 = (baseNest) => {
-    const vals2 = until(t => baseNest === nest2 && t.tag === 'close2')
+    const vals = until(t => baseNest === nest2 && t.tag === 'close2')
     consume()
-    return '[' + vals2.join(', ').replace(', ]', '') + ']'
+    return '[' + vals.join(', ').replace(', ]', '') + ']'
   }
   const parseOpen3 = (baseNest) => {
-    // TODO
-    index = tokens.length
-    return '({x:1,y:2})'
+    const vals = until(t => baseNest === nest3 && t.tag === 'close3')
+    consume()
+    const len = vals.length
+    if (len >= 2 && vals[1] == ':') {
+      let kvs = []
+      for (let i=0; i<len; i+=3) {
+        kvs.push(vals[i]+':'+vals[i+2])
+      }
+      return '({' + kvs.join(',') + '})'
+    } else {
+      let kvs = []
+      for (let i=0; i<len; i+=2) {
+        kvs.push(vals[i]+':'+vals[i+1])
+      }
+      return '({' + kvs.join(',') + '})'
+    }
+  }
+  const parseArguments = (baseNest) => {
+    const vals = until(t => baseNest === nest1 && t.tag === 'close1')
+    consume()
+    return '(' + vals.join(', ') + ')'
   }
   const parseValue = (token) => {
     return tryValue(token) || (() => { throw err('parseExp', token) })()
@@ -163,7 +196,13 @@ function parse(tokens) {
         return token.val
       }
     case 'open1':
-      return parseOpen1(nest1)
+      const node = parseOpen1(nest1)
+      if (look().tag === 'open1') {
+        consume()
+        return node + parseArguments(nest1)
+      } else {
+        return node
+      }
     case 'open2':
       return parseOpen2(nest2)
     case 'open3':
@@ -172,6 +211,8 @@ function parse(tokens) {
       return ')'
     case 'close2':
       return ']'
+    case 'close3':
+      return '}'
     }
   }
   const parseStmt = (token) => {
@@ -215,68 +256,53 @@ function run(source) {
   const tokens = tokenize(source)
   const nodes = parse(tokens)
   const js = nodes.join("\n")
+  let actual
+  let error
   try {
-    return eval(js)
+    actual = eval(js)
   } catch (e) {
-    puts('-- source:', source)
-    puts('-- tokens:', tokens)
-    puts('-- nodes:', nodes)
-    puts('-- js:', js)
+    error = e
   }
+  return { source, tokens, nodes, js, actual, error }
 }
 
 function run_test() {
   let errors = []
   function eq(expect, source) {
-    const actual = run(source)
-    if (str(expect) === str(actual)) {
+    const result = run(source)
+    if (str(expect) === str(result.actual)) {
       put(".")
     } else {
       put("x")
-      errors.push({expect, actual, source})
+      result.expect = expect
+      errors.push(result)
     }
   }
 
-  // value
+  // primitives
   eq(1, "1")
   eq(1.2, "1.2")
   eq("hi", "\"hi\"")
   eq(true, "true")
-  eq(false, "false")
+  // container
+  eq([1, 2, 3], "[1 2 3]")
+  eq([1, 2], "(1 2)")
+  eq({1: 1, a: 2}, "(1:1 a:2)") // struct
+  eq({1: 1, a: 2}, "{1 1 a 2}") // dictionary(any any)
+  eq({x: 1, y: 2}, "{x:1 y:2}") // dictionary(stirng any)
+  // closure
+  eq(3, "(a,b => a + b)(1 2)")
   // exp
   eq(5, "2 + 3")
   eq(-1, "2 - 3")
   eq(6, "2 * 3")
   eq(2, "6 / 3")
+  // function
   eq(2, "inc a = a + 1\ninc(1)")
   eq(6, "add a b = a + b\nadd(1 2 + 3)")
-  // container
-  eq([1, 2, 3], "[1 2 3]")
-  eq([1, 2], "(1, 2)")
-  eq({x: 1, y: 2}, "{x=1, y=2}")
-  //eq({1: true, 2: false}, "{1 true, 2 false}")
+  // enum
 /*
-  -- value(4)
-  test "1" "1"
-  test "hello world" "\"hello world\""
-  test "true" "true"
-  test "false" "false"
-  test "2" "inc a = a + 1\ninc(1)"
-  test "6" "add a b = a + b\nadd(1 2 + 3)"
   -- exp(8)
-  test "3" "1 + 2"
-  test "-1" "1 - 2"
-  test "6" "2 * 3"
-  test "4" "9 / 2"
-  test "1" "a = 1\na"
-  test "3" "c = 1\nb n = n + c\na = b(2)\na"
-  test "2" "a = 1\nincr = a += 1\nincr\na"
-  test "2" "a =\n  1\n  2\nb = a; a\nc = b\nc"
-  test "1" "true\n| 1\n| 2"
-  test "2" "false\n| 1\n| 2"
-  test "true" "1\n| 1 = true\n| 2 = false"
-  test "false" "2\n| 1 = true\n| 2 = false"
-  test "false" "3\n| 1 = true\n| _ = false"
   test "1" "ab enum:\n  a\n  b\nab.a\n| a = 1\n| b = 2"
   test "2" "ab enum:\n  a\n  b\nab.b\n| a = 1\n| b = 2"
   -- container(5)
@@ -303,6 +329,8 @@ function run_test() {
     puts("source: " + e.source)
     puts("expect: " + str(e.expect))
     puts("actual: " + str(e.actual))
+    puts("error : " + str(e.error))
+    puts("js    : " + str(e.js))
   })
   return errors.length
 }

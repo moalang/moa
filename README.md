@@ -76,11 +76,11 @@ true # bool
 
 Container
 ```
-1, 2      # tuple(int int)
-(x=1 y=2) # struct(x:int y:int)
-[1 2]     # list(int)
-[1=2 k=v] # dict(int int)
-[x:1 y:2] # dict(string int)
+(1 2)     # tuple(1 1)      | tuple(int int)
+(x:1 y:2) # struct(x:1 y:2) | struct(x:int y:int)
+[1 2]     # list(1 2)       | list(int)
+{1 2 k v} # dict(1 2 k v)   | dict(int int)
+{x:1 y:2} # dict(x:1 y:2)   | dict(string int)
 ```
 
 Closure
@@ -153,29 +153,36 @@ Variable arguments
 ```
 trace: any+ io
 trace argv+ = print(argv.map(x => x.string).join(" "))
+
+printf: fmt args* io
+printf fmt args* = print(fmt.format(args))
 ```
 
 Optional arguments
 ```
-join: []string string? string? string
-join ary glue(" ") alt?
-| [] _ some = alt
-| ary.join(glue)
+join: []string string=" " string="" string
+join ary glue alt = ary
+| [] = alt
+| _ = ary.join(glue)
 ```
 
 Named arguments
 ```
-estimate: decimal (tax decimal, service decimal?, unit string?) string
-estimate base (tax, service 0, unit) = price.string + suffix:
-  price = base * (1 + tax + service)
-  suffix = unit
-  | " " + unit
-  | ""
-# error   <= estimate(100)
-# error   <= estimate(100 0.05)
-# 105     <= estimate(100 tax:0.05)
-# 115     <= estimate(100 tax:0.05 service:0.10)
-# 115 yen <= estimate(100 tax:0.05 service:0.10 unit:"yen")
+copy from:string to:string io
+copy from to = io.fs.copy(from to)
+# error   <= copy("" "")
+# ok      <= copy(from:"a" to:"b")
+# ok      <= copy(to:"a" from:"b")
+```
+
+Named optional arguments
+```
+estimate: decimal tax:decimal service:decimal=0 decimal
+estimate: price tax service = (price + service) * (1 + tax)
+# error <= estimate(109)
+# error <= estimate(109 0.1)
+# 110   <= estimate(109 tax:0.1)
+# 121   <= estimate(109 tax:0.1 service:10)
 ```
 
 Type specialization
@@ -407,17 +414,20 @@ unit:
 | id ("." id | "(" formula* ")")*
 | "(" exp ")"
 | "(" id+ => body ")"    # lambda : (x y => x + y)
-| "(" unit (, unit)+ ")" # tuple  : (1, n)
-| "(" ie (, ie)+ ")"     # struct : (name "value", age 30 + 7)
+| "(" unit+ ")"          # tuple  : (1, n)
+| "(" kv+ ")"            # struct : (name="value" age=30+7)
 | "[" unit+ "]"          # array  : [1 2]
-| "{" ee (, ee)* "}"     # dict   : {"name" "value", "age" 30 + 7}
+| "{" vv1* "}"           # dict2  : {x:1 y:2}
+| "{" vv2* "}"           # dict1  : {1=2 k=v}
+
 value:
 | int    # 1
 | float  # 1.0
 | string # "hi"
 | bool   # true
-ie  : id formula
-ee  : formula formula
+kv  : id "=" formula
+vv1 : id ":" formula
+vv2 : formula "=" formula
 id  : [a-z0-9_]+
 ref : id (. id)*
 type: ref ("(" ref+ ")")?
@@ -519,19 +529,24 @@ $    # -
       puts(m.pi + math.pi)
 
 - [x] dictionary syntax
-    [k v; "k" "v"; 1.string 2.string; k: "v"]
+    {k v; "k" "v"; 1.string 2.string; k: "v"}
 - [x] struct syntax
-    [a=1; b=2]
+    (a=1, b=2)
 - [] extra arguments: variable, named, optional, default
     # variable
-    sum a: a+ a | ary = ary.reduce(a.default (+))
-    sum(a) ary:a+ a = ary.reduce(a.default (+))
+    sum a.num: a+ a
+    sum ary = ary.reduce(0 (+))
     # named
-    copy: from:string to:string io = io.fs.copy(from to)
+    copy: from:string to:string io
+    copy from to = io.fs.copy(from=from to=to)
     # optional
-    default t: t? t | v = v.if(v t.zero)
-    # default
-    inc: int int? int | a b(1) = a + b
+    pow: int int int=1 int
+    pow a b m = (a ** b) % m
+    # optional named
+    mail: from:string to:string text:string subject:string="no title" html:string?=none
+    mail from to text html subject = html
+    | sendmail(from to subject text html=html)
+    | sendmail(from to subject text)
 - [] compile to JavaScript
 - [] self booting by compiled JavaScript
 - [] make memo app
