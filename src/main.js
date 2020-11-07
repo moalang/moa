@@ -61,9 +61,7 @@ function tokenize(source) {
 
 function parse(tokens) {
   let index = 0
-  let nest1 = 0
-  let nest2 = 0
-  let nest3 = 0
+  let nest = 0
   const len = tokens.length
   const err = (...args) => Error(JSON.stringify(args))
   const look = () => {
@@ -77,12 +75,12 @@ function parse(tokens) {
     if (index < len) {
       const token = tokens[index]
       assert(expectTag || token.tag !== expectTag, expectTag, token)
-           if (token.tag === 'open1') { ++nest1 }
-      else if (token.tag === 'open2') { ++nest2 }
-      else if (token.tag === 'open3') { ++nest3 }
-      else if (token.tag === 'close1') { --nest1 }
-      else if (token.tag === 'close2') { --nest2 }
-      else if (token.tag === 'close3') { --nest3 }
+           if (token.tag === 'open1') { ++nest }
+      else if (token.tag === 'open2') { ++nest }
+      else if (token.tag === 'open3') { ++nest }
+      else if (token.tag === 'close1') { --nest }
+      else if (token.tag === 'close2') { --nest }
+      else if (token.tag === 'close3') { --nest }
       ++index
       return token
     } else {
@@ -101,7 +99,12 @@ function parse(tokens) {
       }
     }
   }
-  const until = f => take(t => !f(t))
+  const untilClose = (tag) => {
+    const base = nest
+    const vals = take(t => !(base === nest && t.tag === tag))
+    consume(tag)
+    return vals
+  }
 
   const parseExp = (token) => {
     return parseIfCall(parseOp2(token))
@@ -119,10 +122,23 @@ function parse(tokens) {
   const parseIfCall = (node) => {
     if (look().tag === 'open1') {
       consume('open1')
-      return parseIfCall(node + parseArguments(nest1 - 1))
+      return parseIfCall(node + parseArguments())
     } else {
       return node
     }
+  }
+  const parseArguments = () => {
+    const baseNest = nest - 1
+    const args = []
+    while (true) {
+      const token = consume()
+      if (baseNest === nest && token.tag === 'close1') {
+        break
+      }
+      const exp = parseOp2(token)
+      args.push(exp)
+    }
+    return '(' + args.join(', ') + ')'
   }
   const parseIfBranch = (node) => {
     const tag = look().tag
@@ -144,9 +160,8 @@ function parse(tokens) {
       return node
     }
   }
-  const parseOpen1 = (baseNest) => {
-    const vals = until(t => baseNest === nest1 && t.tag === 'close1')
-    consume('close1')
+  const parseOpen1 = () => {
+    const vals = untilClose('close1')
     if (vals.length === 0) {
       return undefined
     } else if (vals.length === 1) {
@@ -166,14 +181,12 @@ function parse(tokens) {
       return '[' + vals.join(', ') + ']'
     }
   }
-  const parseOpen2 = (baseNest) => {
-    const vals = until(t => baseNest === nest2 && t.tag === 'close2')
-    consume('close2')
+  const parseOpen2 = () => {
+    const vals = untilClose('close2')
     return '[' + vals.join(', ').replace(', ]', '') + ']'
   }
-  const parseOpen3 = (baseNest) => {
-    const vals = until(t => baseNest === nest3 && t.tag === 'close3')
-    consume('close3')
+  const parseOpen3 = () => {
+    const vals = untilClose('close3')
     const len = vals.length
     if (len >= 2 && vals[1] == ':') {
       let kvs = []
@@ -189,22 +202,7 @@ function parse(tokens) {
       return '({' + kvs.join(',') + '})'
     }
   }
-  const parseArguments = (baseNest) => {
-    const args = []
-    while (true) {
-      const token = consume()
-      if (baseNest === nest1 && token.tag === 'close1') {
-        break
-      }
-      const exp = parseOp2(token)
-      args.push(exp)
-    }
-    return '(' + args.join(', ') + ')'
-  }
   const parseValue = (token) => {
-    return tryValue(token) || (() => { throw err('parseValue', token) })()
-  }
-  const tryValue = (token) => {
     switch (token.tag) {
     case 'num':
     case 'bool':
@@ -213,11 +211,11 @@ function parse(tokens) {
     case 'id':
       return parseIfCall(token.val)
     case 'open1':
-      return parseIfCall(parseOpen1(nest1))
+      return parseIfCall(parseOpen1())
     case 'open2':
-      return parseIfCall(parseOpen2(nest2))
+      return parseIfCall(parseOpen2())
     case 'open3':
-      return parseIfCall(parseOpen3(nest3))
+      return parseIfCall(parseOpen3())
     case 'close1':
     case 'close2':
     case 'close3':
@@ -255,8 +253,8 @@ function run(source) {
   const nodes = parse(tokens)
   const js = nodes.join("\n")
   let stdout = ''
-  let actual
-  let error
+  let actual = null
+  let error = null
   try {
     const print = x => { stdout += x }
     actual = eval(js + "\nmain()")
@@ -280,12 +278,8 @@ function run_test() {
       errors.push(result)
     }
   }
-  function eq(...args) {
-    return test(x => x.actual, ...args)
-  }
-  function stdout(...args) {
-    return test(x => x.stdout, ...args)
-  }
+  const eq = (...args) => test(x => x.actual, ...args)
+  const stdout = (...args) => test(x => x.stdout, ...args)
 
   // primitives
   eq(1, "1")
@@ -338,14 +332,14 @@ function run_test() {
 */
 
   puts(errors.length === 0 ? "ok" : "FAILED")
-  errors.forEach(e => {
+  for (const e of errors) {
     puts("source: " + e.source)
     puts("expect: " + str(e.expect))
     puts("actual: " + str(e.actual))
     puts("stdout: " + str(e.stdout))
     puts("error : " + str(e.error))
     puts("js    : " + str(e.js))
-  })
+  }
   return errors.length
 }
 
