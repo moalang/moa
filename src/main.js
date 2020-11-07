@@ -273,27 +273,35 @@ function run(source) {
   const tokens = tokenize(source)
   const nodes = parse(tokens)
   const js = nodes.join("\n")
+  let stdout = ''
   let actual
   let error
   try {
+    const print = x => { stdout += x }
     actual = eval(js)
   } catch (e) {
     error = e
   }
-  return { source, tokens, nodes, js, actual, error }
+  return { source, tokens, nodes, js, actual, stdout, error }
 }
 
 function run_test() {
   let errors = []
-  function eq(expect, source) {
+  function test(expect, source, f) {
     const result = run(source)
-    if (str(expect) === str(result.actual)) {
+    if (str(expect) === str(f(result))) {
       put(".")
     } else {
       put("x")
       result.expect = expect
       errors.push(result)
     }
+  }
+  function eq(expect, source) {
+    return test(expect, source, x => x.actual)
+  }
+  function stdout(expect, source) {
+    return test(expect, source, x => x.stdout)
   }
 
   // primitives
@@ -318,6 +326,8 @@ function run_test() {
   eq(1, "1\n| 1 = 1\n| 2 = 2")
   eq(2, "2\n| 1 = 1\n| 2 = 2")
   eq(3, "3\n| 1 = 1\n| _ = 3")
+  // statement
+  stdout('hello', 'print("hello")')
   // function
   eq(2, "inc a = a + 1\ninc(1)")
   eq(6, "add a b = a + b\nadd(1 2 + 3)")
@@ -349,6 +359,7 @@ function run_test() {
     puts("source: " + e.source)
     puts("expect: " + str(e.expect))
     puts("actual: " + str(e.actual))
+    puts("stdout: " + str(e.stdout))
     puts("error : " + str(e.error))
     puts("js    : " + str(e.js))
   })
