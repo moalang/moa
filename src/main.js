@@ -8,46 +8,39 @@ const newToken = (tag, val) => ({tag, val})
 function tokenize(source) {
   // source helpers
   let remaining = source
-  const consume = n => { remaining = remaining.slice(n) }
+  const advance = n => { remaining = remaining.slice(n) }
   const match = (tag, r, f) => {
     const m = remaining.match(r)
     if (m) {
-      consume(m[0].length)
+      advance(m[0].length)
       const v = m[1] || m[0]
       const val = f ? f(v, m) : v
       return newToken(tag, val)
     }
   }
-  const some = (tag, xs) => {
-    for(let i=0; i<xs.length; ++i) {
-      const val = xs[i]
+  const some = (tag, str) => {
+    for (const val of str.split(' ')) {
       if (remaining.startsWith(val)) {
-        consume(val.length)
+        advance(val.length)
         return newToken(tag, val)
       }
     }
   }
-  const eq = (tag, x) => {
-    if (remaining.startsWith(x)) {
-      consume(x.length)
-      return newToken(tag, x)
-    }
-  }
 
   // tokenize
-  const read_token = () => {
+  const readToken = () => {
     remaining = remaining.replace(/^[ \t]+/, '')
-    return eq('open1', '(') ||
-      eq('close1', ')') ||
-      eq('open2', '[') ||
-      eq('close2', ']') ||
-      eq('open3', '{') ||
-      eq('close3', '}') ||
-      eq('arrow', '=>') ||
-      eq('func', '=') ||
-      eq('as', ':') ||
-      some('op2', '+ - * % / , || | && &'.split(' ')) ||
-      some('bool', 'true false'.split(' ')) ||
+    return some('open1', '(') ||
+      some('close1', ')') ||
+      some('open2', '[') ||
+      some('close2', ']') ||
+      some('open3', '{') ||
+      some('close3', '}') ||
+      some('arrow', '=>') ||
+      some('func', '=') ||
+      some('as', ':') ||
+      some('op2', '+ - * % / , || | && &') ||
+      some('bool', 'true false') ||
       match('num', /^(\d+(?:\.\d+)?)/) ||
       match('str', /^"[^"]*"/) ||
       match('id', /^[a-z_][a-zA-Z0-9_]*/) ||
@@ -55,7 +48,7 @@ function tokenize(source) {
   }
   let tokens = []
   while (true) {
-    const token = read_token()
+    const token = readToken()
     if (token) {
       tokens.push(token)
     } else {
