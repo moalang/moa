@@ -64,23 +64,13 @@ function parse(tokens) {
   let nest = 0
   const len = tokens.length
   const err = (...args) => Error(JSON.stringify(args))
-  const look = () => {
-    if (index < len) {
-      return tokens[index]
-    } else {
-      return {}
-    }
-  }
+  const look = () => index < len ? tokens[index] : {}
   const consume = (expectTag) => {
     if (index < len) {
       const token = tokens[index]
       assert(expectTag || token.tag !== expectTag, expectTag, token)
-           if (token.tag === 'open1') { ++nest }
-      else if (token.tag === 'open2') { ++nest }
-      else if (token.tag === 'open3') { ++nest }
-      else if (token.tag === 'close1') { --nest }
-      else if (token.tag === 'close2') { --nest }
-      else if (token.tag === 'close3') { --nest }
+      if (['open1', 'open2', 'open3'].includes(token.tag)) { ++nest }
+      if (['close1', 'close2', 'close3'].includes(token.tag)) { --nest }
       ++index
       return token
     } else {
@@ -105,7 +95,6 @@ function parse(tokens) {
     consume(tag)
     return vals
   }
-
   const parseExp = (token) => {
     return parseIfCall(parseOp2(token))
   }
