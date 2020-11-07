@@ -37,6 +37,7 @@ function tokenize(source) {
       some('open3', '{') ||
       some('close3', '}') ||
       some('arrow', '=>') ||
+      some('branch', '\n|') ||
       some('func', '=') ||
       some('as', ':') ||
       some('op2', '+ - * % / , || | && &') ||
@@ -102,13 +103,36 @@ function parse(tokens) {
   const until = f => take(t => !f(t))
 
   const parseExp = (token) => {
+    return parseExpRemaining(parseOp2(token))
+  }
+  const parseOp2 = (token) => {
     const l = parseValue(token)
     if (look().tag === 'op2') {
       const op2 = consume().val
-      const r = parseExp(consume())
+      const r = parseOp2(consume())
       return l + op2 + r
     } else {
       return l
+    }
+  }
+  const parseExpRemaining = (node) => {
+    const tag = look().tag
+    if (tag === 'branch') {
+      let conds = []
+      while (look().tag === 'branch') {
+        consume()
+        const cond = parseValue(consume())
+        consume()
+        const exp = parseOp2(consume())
+        if (cond === '_') {
+          conds.push('return ' + exp)
+        } else {
+          conds.push('if (__branch === ' + cond + ') return ' + exp)
+        }
+      }
+      return '(function(__branch){\n  ' + conds.join('\n  ') + '\n})(' + node + ')'
+    } else {
+      return node
     }
   }
   const parseOpen1 = (baseNest) => {
@@ -162,7 +186,7 @@ function parse(tokens) {
     return '(' + vals.join(', ') + ')'
   }
   const parseValue = (token) => {
-    return tryValue(token) || (() => { throw err('parseExp', token) })()
+    return tryValue(token) || (() => { throw err('parseValue', token) })()
   }
   const tryValue = (token) => {
     switch (token.tag) {
@@ -290,10 +314,13 @@ function run_test() {
   eq(-1, "2 - 3")
   eq(6, "2 * 3")
   eq(2, "6 / 3")
+  // branch
+  eq(1, "1\n| 1 = 1\n| 2 = 2")
+  eq(2, "2\n| 1 = 1\n| 2 = 2")
+  eq(3, "3\n| 1 = 1\n| _ = 3")
   // function
   eq(2, "inc a = a + 1\ninc(1)")
   eq(6, "add a b = a + b\nadd(1 2 + 3)")
-  // enum
 /*
   -- exp(8)
   test "1" "ab enum:\n  a\n  b\nab.a\n| a = 1\n| b = 2"
