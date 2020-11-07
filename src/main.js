@@ -219,25 +219,15 @@ function parse(tokens) {
     }
   }
   const parseStmt = (token) => {
-    switch (token.tag) {
-    case 'id':
-      const name = token.val
-      const args = take(t => t.tag === 'id')
-      const next = look()
-      if (args.length === 0 && next.tag === 'open1') {
-        return parseExp(token)
-      }
-      if (next.tag === 'func') {
-        consume()
-        const body = parseExp(consume())
-        return 'function ' + name + '(' + args.join(',') + ') { return ' + body + ' }'
-      } else {
-        assert(args.length === 0)
-        return name
-      }
-    default:
-      return parseExp(token)
-    }
+    assert(token.tag === 'id')
+
+    const name = token.val
+    const args = take(t => t.tag === 'id')
+    const next = consume()
+    assert(next.tag === 'func')
+
+    const body = parseExp(consume())
+    return 'function ' + name + '(' + args.join(',') + ') { return ' + body + ' }'
   }
   const parseTop = parseStmt
 
@@ -264,7 +254,7 @@ function run(source) {
   let error
   try {
     const print = x => { stdout += x }
-    actual = eval(js)
+    actual = eval(js + "\nmain()")
   } catch (e) {
     error = e
   }
@@ -273,8 +263,10 @@ function run(source) {
 
 function run_test() {
   let errors = []
-  function test(expect, source, f) {
-    const result = run(source)
+  function test(...args) {
+    const [f, expect, source, ...funcs] = args
+    const extra = funcs.map(x => "\n" + x).join()
+    const result = run("main = " + source + extra)
     if (str(expect) === str(f(result))) {
       put(".")
     } else {
@@ -283,11 +275,11 @@ function run_test() {
       errors.push(result)
     }
   }
-  function eq(expect, source) {
-    return test(expect, source, x => x.actual)
+  function eq(...args) {
+    return test(x => x.actual, ...args)
   }
-  function stdout(expect, source) {
-    return test(expect, source, x => x.stdout)
+  function stdout(...args) {
+    return test(x => x.stdout, ...args)
   }
 
   // primitives
@@ -315,8 +307,8 @@ function run_test() {
   // statement
   stdout('hello', 'print("hello")')
   // function
-  eq(2, "inc a = a + 1\ninc(1)")
-  eq(6, "add a b = a + b\nadd(1 2 + 3)")
+  eq(2, "inc(1)", "inc a = a + 1")
+  eq(6, "add(1 2 + 3)", "add a b = a + b")
 /*
   -- exp(8)
   test "1" "ab enum:\n  a\n  b\nab.a\n| a = 1\n| b = 2"
