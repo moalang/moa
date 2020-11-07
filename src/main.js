@@ -73,9 +73,10 @@ function parse(tokens) {
       return {}
     }
   }
-  const consume = () => {
+  const consume = (expectTag) => {
     if (index < len) {
       const token = tokens[index]
+      assert(expectTag || token.tag !== expectTag, expectTag, token)
            if (token.tag === 'open1') { ++nest1 }
       else if (token.tag === 'open2') { ++nest2 }
       else if (token.tag === 'open3') { ++nest3 }
@@ -108,7 +109,7 @@ function parse(tokens) {
   const parseOp2 = (token) => {
     const l = parseValue(token)
     if (look().tag === 'op2') {
-      const op2 = consume().val
+      const op2 = consume('op2').val
       const r = parseOp2(consume())
       return l + op2 + r
     } else {
@@ -117,7 +118,7 @@ function parse(tokens) {
   }
   const parseIfCall = (node) => {
     if (look().tag === 'open1') {
-      consume()
+      consume('open1')
       return parseIfCall(node + parseArguments(nest1 - 1))
     } else {
       return node
@@ -128,7 +129,7 @@ function parse(tokens) {
     if (tag === 'branch') {
       let conds = []
       while (look().tag === 'branch') {
-        consume()
+        consume('branch')
         const cond = parseValue(consume())
         consume()
         const exp = parseOp2(consume())
@@ -145,7 +146,7 @@ function parse(tokens) {
   }
   const parseOpen1 = (baseNest) => {
     const vals = until(t => baseNest === nest1 && t.tag === 'close1')
-    consume()
+    consume('close1')
     if (vals.length === 0) {
       return undefined
     } else if (vals.length === 1) {
@@ -167,12 +168,12 @@ function parse(tokens) {
   }
   const parseOpen2 = (baseNest) => {
     const vals = until(t => baseNest === nest2 && t.tag === 'close2')
-    consume()
+    consume('close2')
     return '[' + vals.join(', ').replace(', ]', '') + ']'
   }
   const parseOpen3 = (baseNest) => {
     const vals = until(t => baseNest === nest3 && t.tag === 'close3')
-    consume()
+    consume('close3')
     const len = vals.length
     if (len >= 2 && vals[1] == ':') {
       let kvs = []
@@ -228,8 +229,7 @@ function parse(tokens) {
 
     const name = token.val
     const args = take(t => t.tag === 'id')
-    const next = consume()
-    assert(next.tag === 'func')
+    consume('func')
 
     const body = parseIfBranch(parseExp(consume()))
     return 'function ' + name + '(' + args.join(',') + ') { return ' + body + ' }'
