@@ -103,7 +103,7 @@ function parse(tokens) {
   const until = f => take(t => !f(t))
 
   const parseExp = (token) => {
-    return parseRemain(parseOp2(token))
+    return parseIfCall(parseOp2(token))
   }
   const parseOp2 = (token) => {
     const l = parseValue(token)
@@ -115,7 +115,15 @@ function parse(tokens) {
       return l
     }
   }
-  const parseRemain = (node) => {
+  const parseIfCall = (node) => {
+    if (look().tag === 'open1') {
+      consume()
+      return parseIfCall(node + parseArguments(nest1 - 1))
+    } else {
+      return node
+    }
+  }
+  const parseIfBranch = (node) => {
     const tag = look().tag
     if (tag === 'branch') {
       let conds = []
@@ -131,9 +139,6 @@ function parse(tokens) {
         }
       }
       return '(function(__branch){\n  ' + conds.join('\n  ') + '\n})(' + node + ')'
-    } else if (tag === 'open1') {
-      consume()
-      return parseRemain(node + parseArguments(nest1 - 1))
     } else {
       return node
     }
@@ -205,13 +210,13 @@ function parse(tokens) {
     case 'str':
       return token.val
     case 'id':
-      return parseRemain(token.val)
+      return parseIfCall(token.val)
     case 'open1':
-      return parseOpen1(nest1)
+      return parseIfCall(parseOpen1(nest1))
     case 'open2':
-      return parseOpen2(nest2)
+      return parseIfCall(parseOpen2(nest2))
     case 'open3':
-      return parseOpen3(nest3)
+      return parseIfCall(parseOpen3(nest3))
     case 'close1':
     case 'close2':
     case 'close3':
@@ -226,7 +231,7 @@ function parse(tokens) {
     const next = consume()
     assert(next.tag === 'func')
 
-    const body = parseExp(consume())
+    const body = parseIfBranch(parseExp(consume()))
     return 'function ' + name + '(' + args.join(',') + ') { return ' + body + ' }'
   }
   const parseTop = parseStmt
