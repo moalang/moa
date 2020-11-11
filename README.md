@@ -69,18 +69,20 @@ main =
 Primitive
 ```
 true # bool
-1    # int 64bit
-1.0  # float 64bit
+1    # int 64bit signed integer
+1.0  # real 64bit
 "hi" # string utf8
 ```
 
 Container
 ```
-(1 2)     # tuple(1 1)      | tuple(int int)
-(x:1 y:2) # struct(x:1 y:2) | struct(x:int y:int)
-[1 2]     # list(1 2)       | list(int)
-{1 2 k v} # dict(1 2 k v)   | dict(int int)
-{x:1 y:2} # dict(x:1 y:2)   | dict(string int)
+(1 2)
+(x:1 y:2)
+array(1 2)
+dict(1 2 k v)
+dict(x:1 y:2)
+set(1 2)
+counter(1 2)
 ```
 
 Closure
@@ -101,21 +103,21 @@ Binary operation
 
 Branch
 ```
+a > b
+| "true"
+| "false"
+
 n
 | 0 = "zero"
 | 1 = "one"
 | _ = "many"
-
-a > b
-| "true"
-| "false"
 
 statement
 | v -> "succeed $v"
 | e -> "failed $e"
 ```
 
-Statement
+Effect
 ```
 value <- calculate(1)
 func
@@ -149,6 +151,14 @@ sum a.num: []a a
 sum t => xs = xs.reduce((+) t.zero)
 ```
 
+Default value
+```
+join: []string string=" " string="" string
+join ary glue alt = ary
+| [] = alt
+| _ = ary.join(glue)
+```
+
 Variable arguments
 ```
 trace: any+ io
@@ -156,14 +166,6 @@ trace argv+ = print(argv.map(x => x.string).join(" "))
 
 printf: fmt args* io
 printf fmt args* = print(fmt.format(args))
-```
-
-Optional arguments
-```
-join: []string string=" " string="" string
-join ary glue alt = ary
-| [] = alt
-| _ = ary.join(glue)
 ```
 
 Named arguments
@@ -190,7 +192,7 @@ Type specialization
 boolify a: a bool
 boolify v
 | string = v.size > 0
-| list   = v.size > 0
+| array  = v.size > 0
 | dict   = v.size > 0
 | int    = v != 0
 | float  = v != 0 && v.between(float.min float.max)
@@ -222,13 +224,15 @@ either l r: | left l | right r
 
 Type class
 ```
-addable t:
+addable t::
+  zero: t
   +: t t t
 
 vector1:
   x int
 
 vector1.addable:
+  zero = vector1(0)
   + l r = vector1(l.x + r.x)
 ```
 
@@ -264,7 +268,7 @@ Reserved words
 types
 - bool, true, false
 - int, float, string
-- seq, list, set, dict, tuple, func
+- seq, array, set, dict, tuple, func
 - opt, nil, do, try, error
 - any, void
 - i8, i16, i32, i64
@@ -278,14 +282,12 @@ values
 
 Binary operators order
 ```
-?                       # boolable
-.                       # combine string or list
 * // / %                # number (high)
 + -                     # number (low)
 > >= < <=  == !=        # comparision (high)
-|| && &                 # comparision (low)
-,                       # reserved to separate struct and dictionary
+|| && | &               # comparision (low)
 := += /= *= /= %= .= <- # effect
+,                       # no effect, just for readability
 ```
 
 ### IO
@@ -383,6 +385,8 @@ Rejected ideas
 - Zero division
 - Standard library
 - GC
+- Destructor
+- Finalizer
 - Globalization
 - Type level programming
 
@@ -390,44 +394,43 @@ Syntax
 ```
 root: def (br def)*
 def:
-| "- " ref (: ref+)?     # namespace
-| ref+ (" : " type+)?    # signature
-| ref+ | (indent tag)+   # enum
-| ref+ : (indent attr)+  # struct
+| "- " ref : ref+ # define namespace
+| "- " ref        # use namespace
+| ref+ ":" type+  # signature
+| ref+ ":" iattr+ # struct
+| ref+ ":" itag+  # enum
 | func
 func: id arg* "=" body
-tag : ref (attr ("," attr)*)?
 attr: id type
+tag : ref (attr ("," attr)*)?
+ifunc: indent func
+iattr: indent attr
+itag: indent tag
 body:
 | stmt
-| exp
+| exp helper?
 stmt: (indent exp)+
-branch: (indent "|" unit " -> " exp)* # pattern match
-#helper: : (indent attr)* (indent func)+
+helper: : iattr* ifunc+
 exp: formula branch?
+branch: (indent "|" unit " -> " exp)* # pattern match
 formula:
-| unit op2 formula # op2 => v + 1
-| ref op2u formula # update => n += 1
+| unit op2 formula # op2    : v + 1
+| ref op2u formula # update : n += 1
 | unit
 unit:
 | value
 | id ("." id | "(" formula* ")")*
 | "(" exp ")"
-| "(" id+ => body ")"    # lambda : (x y => x + y)
-| "(" unit+ ")"          # tuple  : (1, n)
-| "(" kv+ ")"            # struct : (name="value" age=30+7)
-| "[" unit+ "]"          # array  : [1 2]
-| "{" vv1* "}"           # dict2  : {x:1 y:2}
-| "{" vv2* "}"           # dict1  : {1=2 k=v}
+| "(" id+ => body ")" # lambda : (x y => x + y)
+| "(" unit+ ")"       # tuple  : (1 n)
+| "(" kv+ ")"         # struct : (name="value" age=30+7)
 
 value:
 | int    # 1
 | float  # 1.0
 | string # "hi"
 | bool   # true
-kv  : id "=" formula
-vv1 : id ":" formula
-vv2 : formula "=" formula
+kv  : id ":" formula
 id  : [a-z0-9_]+
 ref : id (. id)*
 type: ref ("(" ref+ ")")?
@@ -446,7 +449,8 @@ _    # ignore
 %    # mod
 &    # intersection
 |    # union
-<>   # bool operator
+> >= # bool operator
+< <= # bool operator
 =    # function
 "    # string
 `    # string with variables evaluation
@@ -454,28 +458,28 @@ _    # ignore
 ,    # reserved to separete inside () and {}
 .    # glue two objects
 \    # escape
-:    # define
 
 --- argument --------------------------
-(1)  # default
-?    # optional
+:    # named
+=1   # default
 *    # variables
 +    # more than 1 variables
 
 --- group -----------------------------
-()   # priority, tule, struct
+()   # priority, tuple, struct
 []   # array
 {}   # dictionary
 
 --- not decided yet -------------------
 ;    # glue two statements
 ~    # -
-!    # -
 $    # -
+?    # -
+!    # -
+@    # -
 &    # -
 ^    # -
 '    # char?
-@    # -
 ```
 
 
@@ -492,7 +496,7 @@ $    # -
       vector2:
         x int
         y int
-      list a:
+      array a:
         values [a]
       dict k v:
         values [k,v]
@@ -529,10 +533,11 @@ $    # -
       puts(m.pi + math.pi)
 
 - [x] dictionary syntax
-    {k v; "k" "v"; 1.string 2.string; k: "v"}
+    {k1 v1 k2 v2}
+    {k1:v1 k2:v2}
 - [x] struct syntax
-    (a=1, b=2)
-- [] extra arguments: variable, named, optional, default
+    (a:1 b:2 c:(x => x))
+- [x] extra arguments: variable, named, optional, default
     # variable
     sum a.num: a+ a
     sum ary = ary.reduce(0 (+))
@@ -547,6 +552,70 @@ $    # -
     mail from to text html subject = html
     | sendmail(from to subject text html=html)
     | sendmail(from to subject text)
+- [] core signatures for v0
+    # int
+    # string
+    - slice
+    - replace
+    - int
+    # bool
+    - if
+    # array
+    - size
+    - has
+    - slice
+    - map
+    - keep
+    - sort
+    # map
+    # any
+    - string
+    # opt a
+    - or a: opt(a) a a
+    - then a b: opt(a) (a b) a
+    # err a
+    # io a
+- [] core signatures for v1
+    # int
+    - hex
+    - base int int
+    # string
+    - size
+    - slice
+    - replace
+    - int
+    # bool
+    - if
+    - int
+    # bytes
+    to a: opt(a)
+    # array
+    - size
+    - has
+    - slice
+    - map
+    - keep
+    - sort
+    # map
+    - keys
+    - values
+    - size
+    # any
+    - string
+    - bytes
+    # opt a
+    - or a: opt(a) a a
+    # err a
+    # io a
+    # failable: opt, err, io
+    - then a b: failable(a) (a b) failable(b)
 - [] compile to JavaScript
 - [] self booting by compiled JavaScript
 - [] make memo app
+- [] proposal: checked numbers
+     - ci8, ci16, ci32, ci64
+     - cu8, cf16, cu32, cu64
+- [] proposal: 
+     | "[" unit+ "]"       # array : [1 2]
+     | "{" vv1* "}"        # dict2 : {x:1 y:2}
+     | "{" vv2* "}"        # dict1 : {1 2 k v}

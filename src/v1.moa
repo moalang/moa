@@ -1,21 +1,30 @@
-compile_to_js string opt(string)
+compile src =
+  tokens <- tokenize(src)
+  tree <- parse(tokens)
+  gen(tree)
 
-compile_to_js src =
-  tree <- parse(src)
-  build(tree)
+token:
+  line int
+  column int
+| literal string // string | int | float
+| symbol string  // + - * / ( ) = : ...
+| id string      // [a-z][a-z0-9]*
+| call string    // func(
 
-ast|
-  int int
-  op2 op string, left ast, right ast
+ast:
+| int int
+| string string
+| op2 op string, left ast, right ast
+| call ast list(ast)
 
-parser:
-  src string
-  pos int
+parse src = go:
+  pos 0
   parse_top = parse_exp
-  parse_value = parse_int
   parse_exp =
     v <- parse_unit
     parse_op2(v).or(v)
+  parse_unit = parse_value
+  parse_value = parse_int
   parse_op2 l =
     op <- read_op
     r <- parse_exp

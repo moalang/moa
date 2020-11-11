@@ -241,16 +241,14 @@ function run(source) {
   const tokens = tokenize(source)
   const nodes = parse(tokens)
   const js = nodes.join("\n")
-  let stdout = ''
   let actual = null
   let error = null
   try {
-    const print = x => { stdout += x }
     actual = eval(js + "\nmain()")
   } catch (e) {
     error = e
   }
-  return { source, tokens, nodes, js, actual, stdout, error }
+  return { source, tokens, nodes, js, actual, error }
 }
 
 function run_test() {
@@ -268,7 +266,6 @@ function run_test() {
     }
   }
   const eq = (...args) => test(x => x.actual, ...args)
-  const stdout = (...args) => test(x => x.stdout, ...args)
 
   // primitives
   eq(1, "1")
@@ -292,11 +289,13 @@ function run_test() {
   eq(1, "1\n| 1 = 1\n| 2 = 2")
   eq(2, "2\n| 1 = 1\n| 2 = 2")
   eq(3, "3\n| 1 = 1\n| _ = 3")
-  // statement
-  stdout('hello', 'print("hello")')
+  // effect (omit)
   // function
   eq(2, "inc(1)", "inc a = a + 1")
   eq(6, "add(1 2 + 3)", "add a b = a + b")
+  // enum (TBD)
+  // struct (TBD)
+  // buildin (TBD)
 /*
   -- exp(8)
   test "1" "ab enum:\n  a\n  b\nab.a\n| a = 1\n| b = 2"
