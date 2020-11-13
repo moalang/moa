@@ -17,18 +17,18 @@ syn sync minlines=500
 "inoremap '  ''<Esc>i
 
 "*Comment        o コメント
-syn region Comment start=/__comment__/ end="__uncomment__"
+"syn region Comment start=/__comment__/ end="__uncomment__"
 syn match  Comment /#.*$/
 
 "*Constant       o 定数
 syn region String start='"' end='"' skip='\\"'
-syn region String start='`' end='`' skip='\\`'
+"syn region String start='`' end='`' skip='\\`'
 syn match Number / [0-9]\+\(\.[0-9]\+\)\?/
 syn keyword Boolean true false
 
 "*Identifier     o 変数名
-syn match Function  /^ *[a-zA-Z0-9_]\+\%(.*=[ \n]\)\@=/
-syn match Structure "^ *[a-zA-Z0-9_.]\+\%([^=]*:\)\@="
+syn match Function  /^ *[a-zA-Z0-9_]\+\%([^#\n]*=[ \n]\)\@=/
+syn match Structure "^ *[a-zA-Z0-9_\.]\+\%([^=#]*[:|]\)\@="
 "syn region vlBlock start=/:$/ end=/\n[^a-zA-Z]/ contains=vlMember
 "syn match vlMember /^[ \t]\+[a-zA-Z_0-9]\+[ \n]/ contained
 "hi def link vlMember Identifier
@@ -38,17 +38,14 @@ syn match Structure "^ *[a-zA-Z0-9_.]\+\%([^=]*:\)\@="
 ""syn keyword Conditional if else match
 ""syn keyword Repeat for
 ""syn keyword Exception catch throw
-syn match Operator "|||"
 syn match Operator "[+\-\*/|&:]=\="
 syn match Operator "[<>]=\="
-syn match Operator "=="
+syn match Operator "[=!]="
 syn match Operator "="
 syn match Operator "<-"
 syn match Operator "->"
 syn match Operator "||"
 syn match Operator "&&"
-syn match Operator " \. "
-syn match Operator "|"
 
 syn match Macro /^ *- [a-zA-Z0-9_.]*/
 

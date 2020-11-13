@@ -293,7 +293,7 @@ function run_test() {
   // function
   eq(2, "inc(1)", "inc a = a + 1")
   eq(6, "add(1 2 + 3)", "add a b = a + b")
-  // enum (TBD)
+  // enum
   // struct (TBD)
   // buildin (TBD)
 /*

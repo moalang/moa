@@ -1,0 +1,131 @@
+compile src =
+  tokens <- tokenize(src)
+  defines <- parse(tokens)
+  generate(defines)
+
+token|
+  int string
+  bool string
+  string sring
+  id string
+  symbol string
+  indent string
+  br
+
+node|
+  int int
+  string string
+  stmt: []node
+  op2:
+    op string
+    left ast
+    right ast
+  lambda:
+    name string
+    args []string
+    body node
+  call:
+    self ast
+    argv []ast
+  struct:
+    name string
+    generics []string
+    fields []define
+  enum:
+    name string
+    generics []string
+    tags []define
+
+define:
+  name string
+  node node
+
+mark = ": |".split(" ")
+op2 = "+ - * / > >= < <= == != || && := <-".split(" ")
+op2u = ":= <-".split(" ")
+
+tokenize src = top:
+  pos 0
+  top =
+    tokens <- many1([t_br t_indent t_int t_bool t_string t_id t_symbol].first)
+    assert(pos == src.size)
+    tokens.append(token.br)
+  t_br = many1(line).and(token.br)
+  t_indent = many1(eq("  ")).then(token.indent)
+  t_int = many1(any("0123456789".array)).then(token.int)
+  t_bool = many1(any(["true" "false"])).then(_ s = token.bool(s))
+  t_string = between(eq("\"") eq("\"") many(satisfy(_ c = c != "\"").then(token.string)))
+  t_id = many1(any("abcdefghijklmnopqrstuvwxyz_[]".array)).then(token.id)
+  t_symbol = many1(any(mark ++ op2 ++ op2u)).then(token.symbol)
+  line = many(eq(" ")).then(any("\r\n".array)
+  any ary = ary.first(eq)
+  eq s = (src.slice(pos -1) == s).then(go):
+    go =
+      pos += s.size
+      s
+
+parse tokens = top:
+  pos 0
+  top =
+    defines <- many1(p_define)
+    assert(pos == tokens.size)
+    defines
+  p_define =
+    name <- take(.id)
+    args <- many(take(.id))
+    symbol <- take(.symbol)
+    symbol
+    | "=" -> p_body.then(_ body = define(name node.lambda(args body)))
+    | ":" -> p_fields.then(_ fields = define(name node.struct(name args fields)))
+  p_body = p_stmt.or(p_exp)
+    p_stmt = many1(p_line):
+      p_line =
+        take(.indent)
+        exp <- p_exp
+        take(.br)
+        exp
+    p_exp = p_group.or(p_op2.or(p_unit)):
+      p_group = between(eq("(") eq(")") p_exp)
+      p_op2 =
+        l <- p_exp
+        p_remain(l).or(l)
+      p_remain l =
+        o <- select(op2)
+        r <- p_exp
+        p_remain(node.op2(o l r))
+  p_fields = many1(p_field):
+    p_field =
+      take(.indent)
+      id <- take(.id)
+      type <- take(.id)
+      take(.br)
+      define(id type)
+  take expect = expect.instance_of(t).then(t)
+  select ary = ary.first(eq)
+  eq s = t:
+    | .int = pos+=1; s
+    | .bool = pos+=1; s
+    | .string = pos+=1; s
+    | .id = pos+=1; s
+    | .symbol = pos+=1; s
+    | nil
+  t = tokens.at(pos)
+
+
+generate defines = ...
+
+- private
+many1 f =
+  c <- f
+  cs <- many(f)
+  cs.prepend(c)
+many f = r().or(acc.reverse):
+  acc []
+  r =
+    v <- f
+    acc.push(v)
+between l r m =
+  l
+  v <- m
+  r
+  v
