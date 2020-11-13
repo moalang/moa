@@ -1,0 +1,285 @@
+# Next Action
+[ ] Fix v0
+[ ] Syntax of type class
+[ ] Syntax of optional and named arguments
+
+## 1. Value
+
+Primitive
+```
+true # bool
+1    # int 64bit signed integer
+1.0  # real 64bit
+"hi" # string utf8
+```
+
+Container
+```
+(1 2)
+(x:1 y:2)
+array(1 2)
+dict(1 2 k v)
+dict(x:1 y:2)
+set(1 2)
+counter(1 2)
+```
+
+
+
+
+
+## 2. Expression
+
+Binary operation
+```
+1 + 2 * 3
+```
+
+Branch
+```
+a > b
+| "true"
+| "false"
+
+n
+| 0 = "zero"
+| 1 = "one"
+| _ = "many"
+
+statement
+| v -> "succeed $v"
+| e -> "failed $e"
+```
+
+Effect
+```
+value <- calculate(1)
+func
+```
+
+
+
+
+
+## 3. Definition
+
+Function
+```
+pi: float
+pi = 3.14
+
+add: int int int
+add x y = x + y
+
+echo =
+  line <- io.readline
+  io.print(line)
+```
+
+Generics
+```
+id a: a a
+id x = x
+
+sum a.num: []a a
+sum t => xs = xs.reduce((+) t.zero)
+```
+
+Default value
+```
+join: []string string=" " string="" string
+join ary glue alt = ary
+| [] = alt
+| _ = ary.join(glue)
+```
+
+Variable arguments
+```
+trace: any+ io
+trace argv+ = print(argv.map(x => x.string).join(" "))
+
+printf: fmt args* io
+printf fmt args* = print(fmt.format(args))
+```
+
+Named arguments
+```
+copy from:string to:string io
+copy from to = io.fs.copy(from to)
+# error   <= copy("" "")
+# ok      <= copy(from:"a" to:"b")
+# ok      <= copy(to:"a" from:"b")
+```
+
+Named optional arguments
+```
+estimate: decimal tax:decimal service:decimal=0 decimal
+estimate: price tax service = (price + service) * (1 + tax)
+# error <= estimate(109)
+# error <= estimate(109 0.1)
+# 110   <= estimate(109 tax:0.1)
+# 121   <= estimate(109 tax:0.1 service:10)
+```
+
+Type specialization
+```
+boolify a: a bool
+boolify v
+| string = v.size > 0
+| array  = v.size > 0
+| dict   = v.size > 0
+| int    = v != 0
+| float  = v != 0 && v.between(float.min float.max)
+| _      = fail("compile error")
+```
+
+Struct
+```
+vector2:
+  x int
+  y int
+  show v = `($v.x,$v.y)`
+
+dict k v: kvs [k,v]
+```
+
+Enum
+```
+abc| a b c
+cupon|
+  zero
+  prize name string, price int
+  show c =
+  | zero = "zero"
+  | prize = `$c.name $c.price`
+
+either l r: | left l | right r
+```
+
+Type class
+```
+addable t::
+  zero: t
+  +: t t t
+
+vector1:
+  x int
+
+vector1.addable:
+  zero = vector1(0)
+  + l r = vector1(l.x + r.x)
+```
+
+
+
+
+
+## 4. Namespace
+
+Define name space
+```
+- math: _
+pi = p
+
+- private
+p = 3.141592653589793
+```
+
+Use name space
+```
+- main: io math
+
+main = io.print(math.pi)
+```
+
+
+
+
+
+## 5. Buildin
+
+Reserved words
+types
+- bool, true, false
+- int, float, string
+- seq, array, set, dict, tuple, func
+- opt, nil, do, try, error
+- any, void
+- i8, i16, i32, i64
+- u8, u16, u32, u64
+- f8, f16, f32, f64
+- b8, b16, b32, b64
+methods
+- trace
+values
+- this
+- io, eff
+
+Binary operators order
+```
+* // / %                # number (high)
++ -                     # number (low)
+> >= < <=  == !=        # comparision (high)
+|| && | &               # comparision (low)
+:= += /= *= /= %= .= <- # effect
+```
+
+All single symbols
+
+```
+--- single ----------------------------
+_    # ignore
+"    # string
+`    # string with variables evaluation
+#    # comment
+,    # no effect, just for readability
+\    # escape for \r \n \t
+()   # grouping
+
+--- not decided yet -------------------
+~    # -
+$    # -
+?    # -
+!    # -
+@    # -
+&    # -
+^    # -
+'    # char?
+[]   # array?
+{}   # dictionary?
+```
+
+Buildin
+# int
+- hex
+- base int int
+# string
+- size
+- slice
+- replace
+- int
+# bool
+- if
+- int
+# bytes
+to a: opt(a)
+# array
+- size
+- has
+- slice
+- map
+- keep
+- sort
+# map
+- keys
+- values
+- size
+# any
+- string
+- bytes
+# opt a
+- or a: opt(a) a a
+# err a
+# io a
+# failable: opt, err, io
+- then a b: failable(a) (a b) failable(b)
