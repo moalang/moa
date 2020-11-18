@@ -3,30 +3,49 @@ compile src =
   defines <- parse(tokens)
   generate(defines)
 
+pos:
+  line int
+  column int
+
 token|
-  int string
-  bool string
-  string sring
-  id string
-  symbol string
-  indent string
+  share(string pos)
+  int
+  bool
+  string
+  id
+  symbol
+  indent
   br
 
+type|
+  any
+  int
+  string
+  bool
+  array type
+  user:
+    name string
+    generics []type
+
 node|
+  share(type pos)
   int int
   string string
-  stmt: []node
+  bool bool
+  array []node
+  stmt []node
+  ref string
   op2:
     op string
-    left ast
-    right ast
+    left node
+    right node
   lambda:
     name string
     args []string
     body node
   call:
-    self ast
-    argv []ast
+    self node
+    args []node
   struct:
     name string
     generics []string
@@ -35,6 +54,24 @@ node|
     name string
     generics []string
     tags []define
+
+inference []string,node node opt(node)
+inference scope node = ask(node):
+  ask node =
+  | .int = node(.type = .int)
+  | .string = node(type: .string)
+  | .stmt = node.last.then(ask)
+  | .op2 = ask(node.left)
+  | .lambda = ask(node.body)
+  | .ref = find(node.name)
+  | .method = ask(self)
+  | .struct = node(type: .user(node.name node.generics))
+  | .enum = node(type: .user(node.name node.generics))
+  | type.any
+  user name generics =
+    types <- generics.map(find)
+    type.user(name types)
+  find name = scope.find(_ s = s.name == name).then(ask).fail("not found $name")
 
 define:
   name string
