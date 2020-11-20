@@ -32,9 +32,8 @@ function tokenize(source) {
     remaining = remaining.replace(/^[ \t]+/, '')
     return some('open1', '(') ||
       some('close1', ')') ||
-      some('arrow', '=>') ||
+      some('op2', '+ - * % / => , . : || | && &') ||
       some('func', '=') ||
-      some('op2', '+ - * % / , . : || | && &') ||
       some('bool', 'true false') ||
       match('num', /^(\d+(?:\.\d+)?)/) ||
       match('str', /^"[^"]*"/) ||
@@ -156,7 +155,7 @@ function parse(tokens) {
     case 'open1':
       return parseOpen1()
     default:
-      throw err('Invalid close tag', token)
+      throw err('Invalid close tag', token, index)
     }
   }
   const parseStmt = (token) => {
@@ -194,12 +193,15 @@ function run(source) {
   try {
     actual = exec(js + "\nmain()")
   } catch (e) {
-    error = e
+    error = e.message
   }
   return { source, tokens, nodes, js, actual, error }
 }
 
 function exec(src) {
+  const _ = {}
+  const int = n => n
+  const string = s => s
   function list(...args) {
     return args
   }
@@ -219,16 +221,42 @@ function exec(src) {
     }
     return d
   }
-  function _enum(...args) {
+  function __new(keys, vals) {
+    if (keys.length != vals.length) throw "BUG"
     let d = {}
-    for (let arg of args) {
-      for (let k of Object.keys(arg)) {
-        d[k] = arg[k]
-      }
+    for (let i=0; i<keys.length; ++i) {
+      d[keys[i]] = vals[i]
     }
     return d
   }
-  const _ = {}
+  function _enum(...args) {
+    if (args.length == 1 && typeof(args[0]) === 'function') {
+      const f = args[0]
+      const s = f()
+      for (const k of Object.keys(s)) {
+        const v = s[k]
+        if (v === undefined) {
+          s[k] = a => __new([k], [a])
+        }
+      }
+      return s
+    } else {
+      let d = {}
+      for (let arg of args) {
+        for (let k of Object.keys(arg)) {
+          const v = arg[k]
+          if (v === int || v === string) {
+            d[k] = a => __new([k], [a])
+          } else if (typeof(v) === "object") {
+            d[k] = (...argv) => __new([k], [__new(Object.keys(v), argv)])
+          } else {
+            d[k] = v
+          }
+        }
+      }
+      return d
+    }
+  }
   return eval(src)
 }
 
@@ -267,20 +295,13 @@ function run_test() {
   eq({a:1, b:2}, 'struct(a:1 b:2)')
   eq(2, 'struct(a:1 b:2).b')
   // enum
-  //eq({}, '_enum(none:_ some:_).none')
+  eq({}, '_enum(a => struct(none:_ some:a)).none')
+  eq({some:1}, '_enum(a => struct(none:_ some:a)).some(1)')
+  eq({v1:1}, '_enum(v1:int v2:struct(x:int y:int)).v1(1)')
+  eq({v2:{x:1,y:2}}, '_enum(v1:int v2:struct(x:int y:int)).v2(1 2)')
+  // branch
   // buildin
 /*
-  -- exp(8)
-  test "1" "ab enum:\n  a\n  b\nab.a\n| a = 1\n| b = 2"
-  test "2" "ab enum:\n  a\n  b\nab.b\n| a = 1\n| b = 2"
-  -- container(5)
-  test "1" "[1 2](0)"
-  test "5" "[1 2+3](1)"
-  test "5" "[1, 2+3](1)"
-  test "5" "[1, 2+3].n1"
-  test "1" "s class: n int, m int\ns(1 2).n"
-  test "3" "ab enum:\n  a x int\n  b y int\nab.a(3).x"
-  test "4" "ab enum:\n  a x int\n  b y int\nab.b(4).y"
   -- error(2)
   test "error: divide by zero" "1 / 0"
   test "2" "1 / 0 | 2"
