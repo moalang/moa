@@ -32,20 +32,13 @@ function tokenize(source) {
     remaining = remaining.replace(/^[ \t]+/, '')
     return some('open1', '(') ||
       some('close1', ')') ||
-      some('open2', '[') ||
-      some('close2', ']') ||
-      some('open3', '{') ||
-      some('close3', '}') ||
       some('arrow', '=>') ||
-      some('branch', '\n|') ||
       some('func', '=') ||
-      some('as', ':') ||
       some('op2', '+ - * % / , || | && &') ||
       some('bool', 'true false') ||
       match('num', /^(\d+(?:\.\d+)?)/) ||
       match('str', /^"[^"]*"/) ||
-      match('id', /^[a-z_][a-zA-Z0-9_]*/) ||
-      match('br', /^[\r\n]([ \t\r\n])*/, _ => '\n')
+      match('id', /^[a-z_][a-zA-Z0-9_]*/)
   }
   let tokens = []
   while (true) {
@@ -69,8 +62,8 @@ function parse(tokens) {
     if (index < len) {
       const token = tokens[index]
       assert(expectTag || token.tag !== expectTag, expectTag, token)
-      if (['open1', 'open2', 'open3'].includes(token.tag)) { ++nest }
-      if (['close1', 'close2', 'close3'].includes(token.tag)) { --nest }
+      if (token.tag === 'open1') { ++nest }
+      if (token.tag === 'close1') { --nest }
       ++index
       return token
     } else {
@@ -96,22 +89,26 @@ function parse(tokens) {
     return vals
   }
   const parseExp = (token) => {
-    return parseIfCall(parseOp2(token))
+    return parseCall(parseOp2(token))
   }
   const parseOp2 = (token) => {
     const l = parseValue(token)
     if (look().tag === 'op2') {
       const op2 = consume('op2').val
       const r = parseOp2(consume())
-      return l + op2 + r
+      if (op2 === ',') {
+        return '[' + l + ',' + r + ']'
+      } else {
+        return l + op2 + r
+      }
     } else {
       return l
     }
   }
-  const parseIfCall = (node) => {
+  const parseCall = (node) => {
     if (look().tag === 'open1') {
       consume('open1')
-      return parseIfCall(node + parseArguments())
+      return parseCall(node + parseArguments())
     } else {
       return node
     }
@@ -128,26 +125,6 @@ function parse(tokens) {
       args.push(exp)
     }
     return '(' + args.join(', ') + ')'
-  }
-  const parseIfBranch = (node) => {
-    const tag = look().tag
-    if (tag === 'branch') {
-      let conds = []
-      while (look().tag === 'branch') {
-        consume('branch')
-        const cond = parseValue(consume())
-        consume()
-        const exp = parseOp2(consume())
-        if (cond === '_') {
-          conds.push('return ' + exp)
-        } else {
-          conds.push('if (__branch === ' + cond + ') return ' + exp)
-        }
-      }
-      return '(function(__branch){\n  ' + conds.join('\n  ') + '\n})(' + node + ')'
-    } else {
-      return node
-    }
   }
   const parseOpen1 = () => {
     const vals = untilClose('close1')
@@ -170,27 +147,6 @@ function parse(tokens) {
       return '[' + vals.join(', ') + ']'
     }
   }
-  const parseOpen2 = () => {
-    const vals = untilClose('close2')
-    return '[' + vals.join(', ').replace(', ]', '') + ']'
-  }
-  const parseOpen3 = () => {
-    const vals = untilClose('close3')
-    const len = vals.length
-    if (len >= 2 && vals[1] == ':') {
-      let kvs = []
-      for (let i=0; i<len; i+=3) {
-        kvs.push(vals[i]+':'+vals[i+2])
-      }
-      return '({' + kvs.join(',') + '})'
-    } else {
-      let kvs = []
-      for (let i=0; i<len; i+=2) {
-        kvs.push(vals[i]+':'+vals[i+1])
-      }
-      return '({' + kvs.join(',') + '})'
-    }
-  }
   const parseValue = (token) => {
     switch (token.tag) {
     case 'num':
@@ -198,16 +154,10 @@ function parse(tokens) {
     case 'str':
       return token.val
     case 'id':
-      return parseIfCall(token.val)
+      return parseCall(token.val)
     case 'open1':
-      return parseIfCall(parseOpen1())
-    case 'open2':
-      return parseIfCall(parseOpen2())
-    case 'open3':
-      return parseIfCall(parseOpen3())
-    case 'close1':
-    case 'close2':
-    case 'close3':
+      return parseCall(parseOpen1())
+    default:
       throw err('Invalid close tag', token)
     }
   }
@@ -218,7 +168,7 @@ function parse(tokens) {
     const args = take(t => t.tag === 'id')
     consume('func')
 
-    const body = parseIfBranch(parseExp(consume()))
+    const body = parseExp(consume())
     return 'function ' + name + '(' + args.join(',') + ') { return ' + body + ' }'
   }
   const parseTop = parseStmt
@@ -272,27 +222,13 @@ function run_test() {
   eq(1.2, "1.2")
   eq("hi", "\"hi\"")
   eq(true, "true")
-  // container
-  eq([1, 2, 3], "[1 2 3]")
-  eq([1, 2], "(1 2)")
-  eq({1: 1, a: 2}, "(1:1 a:2)") // struct
-  eq({1: 1, a: 2}, "{1 1 a 2}") // dictionary(any any)
-  eq({x: 1, y: 2}, "{x:1 y:2}") // dictionary(stirng any)
-  // closure
-  eq(3, "(a,b => a + b)(1 2)")
+  eq([1,2], "1,2")
+  eq(1, "(a=>a)(1)")
   // exp
   eq(5, "2 + 3")
   eq(-1, "2 - 3")
   eq(6, "2 * 3")
   eq(2, "6 / 3")
-  // branch
-  eq(1, "1\n| 1 = 1\n| 2 = 2")
-  eq(2, "2\n| 1 = 1\n| 2 = 2")
-  eq(3, "3\n| 1 = 1\n| _ = 3")
-  // effect (omit)
-  // function
-  eq(2, "inc(1)", "inc a = a + 1")
-  eq(6, "add(1 2 + 3)", "add a b = a + b")
   // enum
   // struct (TBD)
   // buildin (TBD)
