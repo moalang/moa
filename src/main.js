@@ -34,7 +34,7 @@ function tokenize(source) {
       some('close1', ')') ||
       some('arrow', '=>') ||
       some('func', '=') ||
-      some('op2', '+ - * % / , || | && &') ||
+      some('op2', '+ - * % / , . : || | && &') ||
       some('bool', 'true false') ||
       match('num', /^(\d+(?:\.\d+)?)/) ||
       match('str', /^"[^"]*"/) ||
@@ -89,15 +89,14 @@ function parse(tokens) {
     return vals
   }
   const parseExp = (token) => {
-    return parseCall(parseOp2(token))
-  }
-  const parseOp2 = (token) => {
-    const l = parseValue(token)
+    const l = parseCall(parseValue(token))
     if (look().tag === 'op2') {
       const op2 = consume('op2').val
-      const r = parseOp2(consume())
+      const r = parseCall(parseExp(consume()))
       if (op2 === ',') {
         return '[' + l + ',' + r + ']'
+      } else if (op2 === ':') {
+        return '{' + l + ':' + r + '}'
       } else {
         return l + op2 + r
       }
@@ -121,8 +120,7 @@ function parse(tokens) {
       if (baseNest === nest && token.tag === 'close1') {
         break
       }
-      const exp = parseOp2(token)
-      args.push(exp)
+      args.push(parseExp(token))
     }
     return '(' + args.join(', ') + ')'
   }
@@ -154,9 +152,9 @@ function parse(tokens) {
     case 'str':
       return token.val
     case 'id':
-      return parseCall(token.val)
+      return token.val
     case 'open1':
-      return parseCall(parseOpen1())
+      return parseOpen1()
     default:
       throw err('Invalid close tag', token)
     }
@@ -194,11 +192,44 @@ function run(source) {
   let actual = null
   let error = null
   try {
-    actual = eval(js + "\nmain()")
+    actual = exec(js + "\nmain()")
   } catch (e) {
     error = e
   }
   return { source, tokens, nodes, js, actual, error }
+}
+
+function exec(src) {
+  function list(...args) {
+    return args
+  }
+  function dict(...args) {
+    let d = {}
+    for (let i=0; i<args.length; i+=2) {
+      d[args[i]] = args[i+1]
+    }
+    return d
+  }
+  function struct(...args) {
+    let d = {}
+    for (let arg of args) {
+      for (let k of Object.keys(arg)) {
+        d[k] = arg[k]
+      }
+    }
+    return d
+  }
+  function _enum(...args) {
+    let d = {}
+    for (let arg of args) {
+      for (let k of Object.keys(arg)) {
+        d[k] = arg[k]
+      }
+    }
+    return d
+  }
+  const _ = {}
+  return eval(src)
 }
 
 function run_test() {
@@ -224,14 +255,20 @@ function run_test() {
   eq(true, "true")
   eq([1,2], "1,2")
   eq(1, "(a=>a)(1)")
+  // container
+  eq([1,2], 'list(1 2)')
+  eq({1:2, 3:4}, 'dict(1 2 3 4)')
   // exp
   eq(5, "2 + 3")
   eq(-1, "2 - 3")
   eq(6, "2 * 3")
   eq(2, "6 / 3")
+  // struct
+  eq({a:1, b:2}, 'struct(a:1 b:2)')
+  eq(2, 'struct(a:1 b:2).b')
   // enum
-  // struct (TBD)
-  // buildin (TBD)
+  //eq({}, '_enum(none:_ some:_).none')
+  // buildin
 /*
   -- exp(8)
   test "1" "ab enum:\n  a\n  b\nab.a\n| a = 1\n| b = 2"
