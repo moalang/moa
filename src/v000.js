@@ -265,6 +265,14 @@ function exec(src) {
     }
     return args[args.length-1]
   }
+  function _case(v, ...args) {
+    for (let i=0; i<args.length; i+=2) {
+      if (v == args[i]) {
+        return args[i+1]
+      }
+    }
+    return args[args.length-1]
+  }
   return eval(src)
 }
 
@@ -312,6 +320,10 @@ function run_test() {
   eq(2, '_if(false 1 2)')
   eq(2, '_if(false 1 true 2 3)')
   eq(3, '_if(false 1 false 2 3)')
+  eq(1, '_case(1 1 1 2 2 3 3 _ 9)')
+  eq(2, '_case(2 1 1 2 2 3 3 _ 9)')
+  eq(3, '_case(3 1 1 2 2 3 3 _ 9)')
+  eq(9, '_case(4 1 1 2 2 3 3 _ 9)')
   // buildin
 /*
   -- error(2)
