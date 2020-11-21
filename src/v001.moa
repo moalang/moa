@@ -1,105 +1,52 @@
-compile src =
+compile src = do(
   tokens <- tokenize(src)
   defines <- parse(tokens)
-  generate(defines)
+  generate(defines))
 
-pos:
-  line int
-  column int
+define: struct(name:string node:node)
 
-token|
-  share(string pos)
-  int
-  bool
-  string
-  id
-  symbol
-  indent
-  br
+token: enum(
+  int:string
+  bool:string
+  string:string
+  id:string
+  symbol:string)
 
-type|
-  any
-  int
-  string
-  bool
-  array type
-  user:
-    name string
-    generics []type
-
-node|
-  share(type pos)
-  int int
-  string string
-  bool bool
-  array []node
-  stmt []node
-  ref string
-  op2:
-    op string
-    left node
-    right node
-  lambda:
-    name string
-    args []string
-    body node
-  call:
-    self node
-    args []node
-  struct:
-    name string
-    generics []string
-    fields []define
-  enum:
-    name string
-    generics []string
-    tags []define
-
-inference []string,node node opt(node)
-inference scope node = ask(node):
-  ask node =
-  | .int = node(.type = .int)
-  | .string = node(type: .string)
-  | .stmt = node.last.then(ask)
-  | .op2 = ask(node.left)
-  | .lambda = ask(node.body)
-  | .ref = find(node.name)
-  | .method = ask(self)
-  | .struct = node(type: .user(node.name node.generics))
-  | .enum = node(type: .user(node.name node.generics))
-  | type.any
-  user name generics =
-    types <- generics.map(find)
-    type.user(name types)
-  find name = scope.find(_ s = s.name == name).then(ask).fail("not found $name")
-
-define:
-  name string
-  node node
+node: enum(
+  int:int
+  string:string
+  bool:bool
+  id:string
+  list:string
+  struct:list(define)
+  enum:list(define)
+  lambda:struct(
+    name:string
+    args:list(string)
+    body:node)
+  op2:struct(
+    op:string
+    left:node
+    right:node)
+  call: struct(
+    self:node
+    args:list(node)))
 
 mark = ": |".split(" ")
 op2 = "+ - * / > >= < <= == != || && := <-".split(" ")
 op2u = ":= <-".split(" ")
 
-tokenize src = top:
-  pos 0
-  top =
-    tokens <- many1([t_br t_indent t_int t_bool t_string t_id t_symbol].first)
-    assert(pos == src.size)
-    tokens.append(token.br)
-  t_br = many1(line).and(token.br)
-  t_indent = many1(eq("  ")).then(token.indent)
-  t_int = many1(any("0123456789".array)).then(token.int)
-  t_bool = many1(any(["true" "false"])).then(_ s = token.bool(s))
+tokenize src = do(
+  pos <- var(0)
+  top
+  top = many1(list(t_br t_indent t_int t_bool t_string t_id t_symbol).first)
+  t_int = many1(some("0123456789".array)).then(token.int)
+  t_bool = many1(some(["true" "false"])).then(_ s = token.bool(s))
   t_string = between(eq("\"") eq("\"") many(satisfy(_ c = c != "\"").then(token.string)))
-  t_id = many1(any("abcdefghijklmnopqrstuvwxyz_[]".array)).then(token.id)
-  t_symbol = many1(any(mark ++ op2 ++ op2u)).then(token.symbol)
-  line = many(eq(" ")).then(any("\r\n".array)
-  any ary = ary.first(eq)
-  eq s = (src.slice(pos -1) == s).then(go):
-    go =
-      pos += s.size
-      s
+  t_id = many1(some("abcdefghijklmnopqrstuvwxyz_[]".array)).then(token.id)
+  t_symbol = many1(some(mark ++ op2 ++ op2u)).then(token.symbol)
+  some ary = ary.first(eq)
+  eq s = (src.slice(pos - 1) == s).then(do(pos+=s.size s)))
 
 parse tokens = top:
   pos 0
@@ -151,7 +98,7 @@ parse tokens = top:
 
 generate defines = ...
 
-- private
+# private
 many1 f =
   c <- f
   cs <- many(f)

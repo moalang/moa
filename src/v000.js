@@ -257,6 +257,14 @@ function exec(src) {
       return d
     }
   }
+  function _if(...args) {
+    for (let i=1; i<args.length; i+=2) {
+      if (args[i-1]) {
+        return args[i]
+      }
+    }
+    return args[args.length-1]
+  }
   return eval(src)
 }
 
@@ -300,6 +308,10 @@ function run_test() {
   eq({v1:1}, '_enum(v1:int v2:struct(x:int y:int)).v1(1)')
   eq({v2:{x:1,y:2}}, '_enum(v1:int v2:struct(x:int y:int)).v2(1 2)')
   // branch
+  eq(1, '_if(true 1 2)')
+  eq(2, '_if(false 1 2)')
+  eq(2, '_if(false 1 true 2 3)')
+  eq(3, '_if(false 1 false 2 3)')
   // buildin
 /*
   -- error(2)
