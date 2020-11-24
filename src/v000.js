@@ -214,46 +214,53 @@ function exec(src) {
   }
   function struct(...args) {
     let d = {}
-    for (let arg of args) {
-      for (let k of Object.keys(arg)) {
+    for (const arg of args) {
+      for (const k of Object.keys(arg)) {
         d[k] = arg[k]
       }
     }
     return d
   }
   function __new(keys, vals) {
-    if (keys.length != vals.length) throw "BUG"
-    let d = {}
-    for (let i=0; i<keys.length; ++i) {
-      d[keys[i]] = vals[i]
-    }
-    return d
+    let o = {}
+    keys.forEach((key,i) => {
+      o[key] = vals[i]
+    })
+    return o
   }
-  function _enum(...args) {
-    if (args.length == 1 && typeof(args[0]) === 'function') {
-      const f = args[0]
+  function _enum(...tags) {
+    function enumBody(i, o) {
+      function match(...funcs) {
+        return funcs[i](o)
+      }
+      return {match}
+    }
+    if (tags.length == 1 && typeof(tags[0]) === 'function') {
+      const f = tags[0]
       const s = f()
-      for (const k of Object.keys(s)) {
+      Object.keys(s).forEach((k,i) => {
         const v = s[k]
         if (v === undefined) {
-          s[k] = a => __new([k], [a])
+          s[k] = a => enumBody(i, a)
+        } else {
+          s[k] = enumBody(i, v)
         }
-      }
+      })
       return s
     } else {
       let d = {}
-      for (let arg of args) {
-        for (let k of Object.keys(arg)) {
-          const v = arg[k]
+      tags.forEach((tag,i) => {
+        for (const k of Object.keys(tag)) {
+          const v = tag[k]
           if (v === int || v === string) {
-            d[k] = a => __new([k], [a])
+            d[k] = a => enumBody(i, a)
           } else if (typeof(v) === "object") {
-            d[k] = (...argv) => __new([k], [__new(Object.keys(v), argv)])
+            d[k] = (...argv) => enumBody(i, __new(Object.keys(v), argv))
           } else {
-            d[k] = v
+            d[k] = enumBody(i, v)
           }
         }
-      }
+      })
       return d
     }
   }
@@ -272,6 +279,9 @@ function exec(src) {
       }
     }
     return args[args.length-1]
+  }
+  function _do(...args) {
+    return args[args.length - 1]
   }
   return eval(src)
 }
@@ -311,10 +321,11 @@ function run_test() {
   eq({a:1, b:2}, 'struct(a:1 b:2)')
   eq(2, 'struct(a:1 b:2).b')
   // enum
-  eq({}, '_enum(a => struct(none:_ some:a)).none')
-  eq({some:1}, '_enum(a => struct(none:_ some:a)).some(1)')
-  eq({v1:1}, '_enum(v1:int v2:struct(x:int y:int)).v1(1)')
-  eq({v2:{x:1,y:2}}, '_enum(v1:int v2:struct(x:int y:int)).v2(1 2)')
+  eq(1, '_enum(a:int).a(1).match(a=>a)')
+  eq({}, '_enum(a => struct(none:_ some:a)).none.match(a=>a b=>b)')
+  eq(2, '_enum(a => struct(none:_ some:a)).some(2).match(a=>a b=>b)')
+  eq(1, '_enum(v1:int v2:struct(x:int y:int)).v1(1).match(v1=>v1 v2=>v2.x+v2.y)')
+  eq(3, '_enum(v1:int v2:struct(x:int y:int)).v2(1 2).match(v1=>v1 v2=>v2.x+v2.y)')
   // branch
   eq(1, '_if(true 1 2)')
   eq(2, '_if(false 1 2)')
@@ -324,6 +335,10 @@ function run_test() {
   eq(2, '_case(2 1 1 2 2 3 3 _ 9)')
   eq(3, '_case(3 1 1 2 2 3 3 _ 9)')
   eq(9, '_case(4 1 1 2 2 3 3 _ 9)')
+  // statement
+  eq(1, '_do(1)')
+  eq(2, '_do(1 2)')
+  eq(3, '_do(1 2 3)')
   // buildin
 /*
   -- error(2)
