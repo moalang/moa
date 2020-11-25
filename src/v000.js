@@ -3,9 +3,12 @@ const put = s => process.stdout.write(s)
 const puts = (...args) => console.log(...args)
 const debug = (...args) => console.log(...args)
 const assert = (cond, obj) => { if (!cond) { console.trace('Assert: ', obj) } }
-const newToken = (tag, val) => ({tag, val})
 const reserved = ['enum', 'if', 'do', 'case', 'var']
-
+const newToken = (tag, val) => ({tag, val})
+const newLiteral = val => ({tag: 'literal', val})
+const newOp2 = (op2,lhs,rhs) => ({tag: 'op2', val:{op2,lhs,rhs}})
+const newCall = (node, argv) => ({tag: 'call', val:{node,argv}})
+const newDefine = (id, node) => ({tag: 'define', val:{id,node}})
 
 function escapeReservedWord(val) {
   return reserved.includes(val) ? '_' + val : val
@@ -101,15 +104,7 @@ function parse(tokens) {
     if (look().tag === 'op2') {
       const op2 = consume('op2').val
       const r = parseCall(parseExp(consume()))
-      if (op2 === ',') {
-        return '[' + l + ',' + r + ']'
-      } else if (op2 === '<-') {
-        return l + ' = ' + r
-      } else if (op2 === ':') {
-        return '{' + l + ':' + r + '}'
-      } else {
-        return l + op2 + r
-      }
+      return newOp2(op2, l, r)
     } else {
       return l
     }
@@ -117,12 +112,12 @@ function parse(tokens) {
   const parseCall = (node) => {
     if (look().tag === 'open1') {
       consume('open1')
-      return parseCall(node + parseArguments())
+      return parseCall(newCall(node, readArguments()))
     } else {
       return node
     }
   }
-  const parseArguments = () => {
+  const readArguments = () => {
     const baseNest = nest - 1
     const args = []
     while (true) {
@@ -132,27 +127,27 @@ function parse(tokens) {
       }
       args.push(parseExp(token))
     }
-    return '(' + args.join(', ') + ')'
+    return args
   }
   const parseOpen1 = () => {
     const vals = untilClose('close1')
     if (vals.length === 0) {
-      return undefined
+      throw err('Empty ()')
     } else if (vals.length === 1) {
-      return vals[0]
+      return newLiteral(vals[0])
     } else {
-      const border = vals.findIndex(val => val == '=>')
-      if (border >= 0) {
-        let args = vals.slice(0, border)
-        let body = vals.slice(border + 1)
-        return '((' + args.join('') + ') => ' + body.join('') + ')'
+      const arrowPos = vals.findIndex(val => val == '=>')
+      if (arrowPos >= 0) {
+        let args = vals.slice(0, arrowPos)
+        let body = vals.slice(arrowPos + 1)
+        return newLiteral('((' + args.join('') + ') => ' + body.join('') + ')')
       }
     }
 
     if (vals[1] === ':') {
-      return '({' + vals.join(', ').replace(/, :, /g, ':') + '})'
+      return newLiteral('({' + vals.join(', ').replace(/, :, /g, ':') + '})')
     } else {
-      return '[' + vals.join(', ') + ']'
+      return newLiteral('[' + vals.join(', ') + ']')
     }
   }
   const parseValue = (token) => {
@@ -160,9 +155,9 @@ function parse(tokens) {
     case 'num':
     case 'bool':
     case 'str':
-      return token.val
+      return newLiteral(token.val)
     case 'id':
-      return token.val
+      return newLiteral(token.val)
     case 'open1':
       return parseOpen1()
     default:
@@ -177,8 +172,7 @@ function parse(tokens) {
     consume('func')
 
     const body = parseExp(consume())
-    return 'const ' + name + ' = ' + body
-    //return 'function ' + name + '(' + args.join(',') + ') { return ' + body + ' }'
+    return newDefine(name, body)
   }
   const parseTop = parseDefine
 
@@ -194,12 +188,39 @@ function parse(tokens) {
     const node = parseTop(token)
     nodes.push(node)
   }
+  return nodes
+}
+
+function generate(nodes) {
+  function gen({tag,val}) {
+    switch (tag) {
+      case 'literal': return val
+      case 'call': return gen(val.node) + (val.argv ? '(' + val.argv.map(gen).join(',') + ')' : '')
+      case 'define': return 'const ' + val.id + ' = ' + gen(val.node)
+      case 'op2':
+        const op2 = val.op2
+        const lhs = gen(val.lhs)
+        const rhs = gen(val.rhs)
+        switch (op2) {
+          case ',': return '[' + lhs + ',' + rhs + ']'
+          case '<-': return lhs + ' = ' + rhs
+          case ':': return '{' + lhs + ':' + rhs + '}'
+          default: return lhs + op2 + rhs
+        }
+    }
+  }
+  const defines = []
+  for (const node of nodes) {
+    assert(node.tag === 'define', node)
+    defines.push(gen(node))
+  }
+  return defines.join('\n')
 }
 
 function run(source) {
   const tokens = tokenize(source)
   const nodes = parse(tokens)
-  const js = nodes.join("\n")
+  const js = generate(nodes)
   let actual = null
   let error = null
   try {
