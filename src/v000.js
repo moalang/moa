@@ -4,25 +4,30 @@ const puts = (...args) => console.log(...args)
 const debug = (...args) => console.log(...args)
 const assert = (cond, obj) => { if (!cond) { console.trace('Assert: ', obj) } }
 const newToken = (tag, val) => ({tag, val})
+const reserved = ['enum', 'if', 'do', 'case']
 
+
+function escapeReservedWord(val) {
+  return reserved.includes(val) ? '_' + val : val
+}
 
 function tokenize(source) {
   // source helpers
   let remaining = source
-  const advance = n => { remaining = remaining.slice(n) }
+  const moveForward = n => { remaining = remaining.slice(n) }
   const match = (tag, r, f) => {
     const m = remaining.match(r)
     if (m) {
-      advance(m[0].length)
+      moveForward(m[0].length)
       const v = m[1] || m[0]
       const val = f ? f(v, m) : v
-      return newToken(tag, val)
+      return newToken(tag, escapeReservedWord(val))
     }
   }
   const some = (tag, str) => {
     for (const val of str.split(' ')) {
       if (remaining.startsWith(val)) {
-        advance(val.length)
+        moveForward(val.length)
         return newToken(tag, val)
       }
     }
@@ -36,6 +41,7 @@ function tokenize(source) {
       some('op2', '+ - * % / => , . : || | && &') ||
       some('func', '=') ||
       some('bool', 'true false') ||
+      match('comment', /^#[^\r\n]*/) ||
       match('num', /^(\d+(?:\.\d+)?)/) ||
       match('str', /^"[^"]*"/) ||
       match('id', /^[a-z_][a-zA-Z0-9_]*/)
@@ -44,7 +50,9 @@ function tokenize(source) {
   while (true) {
     const token = readToken()
     if (token) {
-      tokens.push(token)
+      if (token.tag !== 'comment') {
+        tokens.push(token)
+      }
     } else {
       assert(!remaining, {token, remaining, source , tokens})
       return tokens
@@ -339,24 +347,24 @@ function unitTests() {
     t.eq({a:1, b:2}, 'struct(a:1 b:2)')
     t.eq(2, 'struct(a:1 b:2).b')
     // enum
-    t.eq(1, '_enum(a:int).a(1).match(a=>a)')
-    t.eq({}, '_enum(a => struct(none:_ some:a)).none.match(a=>a b=>b)')
-    t.eq(2, '_enum(a => struct(none:_ some:a)).some(2).match(a=>a b=>b)')
-    t.eq(1, '_enum(v1:int v2:struct(x:int y:int)).v1(1).match(v1=>v1 v2=>v2.x+v2.y)')
-    t.eq(3, '_enum(v1:int v2:struct(x:int y:int)).v2(1 2).match(v1=>v1 v2=>v2.x+v2.y)')
+    t.eq(1, 'enum(a:int).a(1).match(a=>a)')
+    t.eq({}, 'enum(a => struct(none:_ some:a)).none.match(a=>a b=>b)')
+    t.eq(2, 'enum(a => struct(none:_ some:a)).some(2).match(a=>a b=>b)')
+    t.eq(1, 'enum(v1:int v2:struct(x:int y:int)).v1(1).match(v1=>v1 v2=>v2.x+v2.y)')
+    t.eq(3, 'enum(v1:int v2:struct(x:int y:int)).v2(1 2).match(v1=>v1 v2=>v2.x+v2.y)')
     // branch
-    t.eq(1, '_if(true 1 2)')
-    t.eq(2, '_if(false 1 2)')
-    t.eq(2, '_if(false 1 true 2 3)')
-    t.eq(3, '_if(false 1 false 2 3)')
-    t.eq(1, '_case(1 1 1 2 2 3 3 _ 9)')
-    t.eq(2, '_case(2 1 1 2 2 3 3 _ 9)')
-    t.eq(3, '_case(3 1 1 2 2 3 3 _ 9)')
-    t.eq(9, '_case(4 1 1 2 2 3 3 _ 9)')
+    t.eq(1, 'if(true 1 2)')
+    t.eq(2, 'if(false 1 2)')
+    t.eq(2, 'if(false 1 true 2 3)')
+    t.eq(3, 'if(false 1 false 2 3)')
+    t.eq(1, 'case(1 1 1 2 2 3 3 _ 9)')
+    t.eq(2, 'case(2 1 1 2 2 3 3 _ 9)')
+    t.eq(3, 'case(3 1 1 2 2 3 3 _ 9)')
+    t.eq(9, 'case(4 1 1 2 2 3 3 _ 9)')
     // statement
-    t.eq(1, '_do(1)')
-    t.eq(2, '_do(1 2)')
-    t.eq(3, '_do(1 2 3)')
+    t.eq(1, 'do(1)')
+    t.eq(2, 'do(1 2)')
+    t.eq(3, 'do(1 2 3)')
     // definition
     t.eq(3, 'a+b', 'a=1', 'b=2')
     // buildin

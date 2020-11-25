@@ -1,1 +1,8 @@
 compile = src => src
+#tokenize = src => do(
+#  pos <- var(0)
+#  top
+#  top = t_int)
+#token = enum(
+#  num:string
+#  op2:string)
