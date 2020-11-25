@@ -4,7 +4,7 @@ const puts = (...args) => console.log(...args)
 const debug = (...args) => console.log(...args)
 const assert = (cond, obj) => { if (!cond) { console.trace('Assert: ', obj) } }
 const newToken = (tag, val) => ({tag, val})
-const reserved = ['enum', 'if', 'do', 'case']
+const reserved = ['enum', 'if', 'do', 'case', 'var']
 
 
 function escapeReservedWord(val) {
@@ -38,7 +38,7 @@ function tokenize(source) {
     remaining = remaining.replace(/^[ \n\r\t]+/, '')
     return some('open1', '(') ||
       some('close1', ')') ||
-      some('op2', '+ - * % / => , . : || | && &') ||
+      some('op2', '+= -= *= /= := + - * % / => <- , . : || | && &') ||
       some('func', '=') ||
       some('bool', 'true false') ||
       match('comment', /^#[^\r\n]*/) ||
@@ -103,6 +103,8 @@ function parse(tokens) {
       const r = parseCall(parseExp(consume()))
       if (op2 === ',') {
         return '[' + l + ',' + r + ']'
+      } else if (op2 === '<-') {
+        return l + ' = ' + r
       } else if (op2 === ':') {
         return '{' + l + ':' + r + '}'
       } else {
@@ -274,6 +276,9 @@ function exec(src) {
       return d
     }
   }
+  function _var(v) {
+    return v
+  }
   function _if(...args) {
     for (let i=1; i<args.length; i+=2) {
       if (args[i-1]) {
@@ -365,6 +370,8 @@ function unitTests() {
     t.eq(1, 'do(1)')
     t.eq(2, 'do(1 2)')
     t.eq(3, 'do(1 2 3)')
+    t.eq(0, 'do(n <- var(0) n)')
+    t.eq(1, 'do(n <- var(0) n+=1 n)')
     // definition
     t.eq(3, 'a+b', 'a=1', 'b=2')
     // buildin
