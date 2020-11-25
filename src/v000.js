@@ -1,7 +1,8 @@
 const str = o => JSON.stringify(o)
 const put = s => process.stdout.write(s)
 const puts = (...args) => console.log(...args)
-const assert = (cond, ...args) => { if (!cond) { console.trace('Assert: ', args) } }
+const debug = (...args) => console.log(...args)
+const assert = (cond, obj) => { if (!cond) { console.trace('Assert: ', obj) } }
 const newToken = (tag, val) => ({tag, val})
 
 
@@ -29,7 +30,7 @@ function tokenize(source) {
 
   // tokenize
   const readToken = () => {
-    remaining = remaining.replace(/^[ \t]+/, '')
+    remaining = remaining.replace(/^[ \n\r\t]+/, '')
     return some('open1', '(') ||
       some('close1', ')') ||
       some('op2', '+ - * % / => , . : || | && &') ||
@@ -45,7 +46,7 @@ function tokenize(source) {
     if (token) {
       tokens.push(token)
     } else {
-      assert(!remaining, token, remaining, source , '=>', tokens)
+      assert(!remaining, {token, remaining, source , tokens})
       return tokens
     }
   }
@@ -60,7 +61,7 @@ function parse(tokens) {
   const consume = (expectTag) => {
     if (index < len) {
       const token = tokens[index]
-      assert(expectTag || token.tag !== expectTag, expectTag, token)
+      assert(expectTag || token.tag !== expectTag, {expectTag, token})
       if (token.tag === 'open1') { ++nest }
       if (token.tag === 'close1') { --nest }
       ++index
@@ -158,7 +159,7 @@ function parse(tokens) {
       throw err('Invalid close tag', token, index)
     }
   }
-  const parseStmt = (token) => {
+  const parseDefine = (token) => {
     assert(token.tag === 'id')
 
     const name = token.val
@@ -166,9 +167,10 @@ function parse(tokens) {
     consume('func')
 
     const body = parseExp(consume())
-    return 'function ' + name + '(' + args.join(',') + ') { return ' + body + ' }'
+    return 'const ' + name + ' = ' + body
+    //return 'function ' + name + '(' + args.join(',') + ') { return ' + body + ' }'
   }
-  const parseTop = parseStmt
+  const parseTop = parseDefine
 
   let nodes = []
   while (true) {
@@ -191,7 +193,7 @@ function run(source) {
   let actual = null
   let error = null
   try {
-    actual = exec(js + "\nmain()")
+    actual = exec(js + "\nmain")
   } catch (e) {
     error = e.message
   }
@@ -286,12 +288,12 @@ function exec(src) {
   return eval(src)
 }
 
-function run_test() {
+function tester(callback) {
   let errors = []
   function test(...args) {
-    const [f, expect, source, ...funcs] = args
-    const extra = funcs.map(x => "\n" + x).join()
-    const result = run("main = " + source + extra)
+    let [f, expect, source, ...funcs] = args
+    funcs.push('main = ' + source)
+    const result = run(funcs.join("\n"))
     if (str(expect) === str(f(result))) {
       put(".")
     } else {
@@ -302,55 +304,7 @@ function run_test() {
   }
   const eq = (...args) => test(x => x.actual, ...args)
 
-  // primitives
-  eq(1, "1")
-  eq(1.2, "1.2")
-  eq("hi", "\"hi\"")
-  eq(true, "true")
-  eq([1,2], "1,2")
-  eq(1, "(a=>a)(1)")
-  // container
-  eq([1,2], 'list(1 2)')
-  eq({1:2, 3:4}, 'dict(1 2 3 4)')
-  // exp
-  eq(5, "2 + 3")
-  eq(-1, "2 - 3")
-  eq(6, "2 * 3")
-  eq(2, "6 / 3")
-  // struct
-  eq({a:1, b:2}, 'struct(a:1 b:2)')
-  eq(2, 'struct(a:1 b:2).b')
-  // enum
-  eq(1, '_enum(a:int).a(1).match(a=>a)')
-  eq({}, '_enum(a => struct(none:_ some:a)).none.match(a=>a b=>b)')
-  eq(2, '_enum(a => struct(none:_ some:a)).some(2).match(a=>a b=>b)')
-  eq(1, '_enum(v1:int v2:struct(x:int y:int)).v1(1).match(v1=>v1 v2=>v2.x+v2.y)')
-  eq(3, '_enum(v1:int v2:struct(x:int y:int)).v2(1 2).match(v1=>v1 v2=>v2.x+v2.y)')
-  // branch
-  eq(1, '_if(true 1 2)')
-  eq(2, '_if(false 1 2)')
-  eq(2, '_if(false 1 true 2 3)')
-  eq(3, '_if(false 1 false 2 3)')
-  eq(1, '_case(1 1 1 2 2 3 3 _ 9)')
-  eq(2, '_case(2 1 1 2 2 3 3 _ 9)')
-  eq(3, '_case(3 1 1 2 2 3 3 _ 9)')
-  eq(9, '_case(4 1 1 2 2 3 3 _ 9)')
-  // statement
-  eq(1, '_do(1)')
-  eq(2, '_do(1 2)')
-  eq(3, '_do(1 2 3)')
-  // buildin
-/*
-  -- error(2)
-  test "error: divide by zero" "1 / 0"
-  test "2" "1 / 0 | 2"
-  -- built-in
-  test "1" "\"01\".to_i"
-  test "1,2,3" "[1 2 3].map(x -> x.to_s).join(\",\")"
-  -- bugs
-  test "1" "id x = x\nid1 x = id(x)\nid1(1)"
-  putStrLn "done"
-*/
+  callback({eq})
 
   puts(errors.length === 0 ? "ok" : "FAILED")
   for (const e of errors) {
@@ -364,9 +318,73 @@ function run_test() {
   return errors.length
 }
 
+function unitTests() {
+  tester(t => {
+    // primitives
+    t.eq(1, "1")
+    t.eq(1.2, "1.2")
+    t.eq("hi", "\"hi\"")
+    t.eq(true, "true")
+    t.eq([1,2], "1,2")
+    t.eq(1, "(a=>a)(1)")
+    // container
+    t.eq([1,2], 'list(1 2)')
+    t.eq({1:2, 3:4}, 'dict(1 2 3 4)')
+    // exp
+    t.eq(5, "2 + 3")
+    t.eq(-1, "2 - 3")
+    t.eq(6, "2 * 3")
+    t.eq(2, "6 / 3")
+    // struct
+    t.eq({a:1, b:2}, 'struct(a:1 b:2)')
+    t.eq(2, 'struct(a:1 b:2).b')
+    // enum
+    t.eq(1, '_enum(a:int).a(1).match(a=>a)')
+    t.eq({}, '_enum(a => struct(none:_ some:a)).none.match(a=>a b=>b)')
+    t.eq(2, '_enum(a => struct(none:_ some:a)).some(2).match(a=>a b=>b)')
+    t.eq(1, '_enum(v1:int v2:struct(x:int y:int)).v1(1).match(v1=>v1 v2=>v2.x+v2.y)')
+    t.eq(3, '_enum(v1:int v2:struct(x:int y:int)).v2(1 2).match(v1=>v1 v2=>v2.x+v2.y)')
+    // branch
+    t.eq(1, '_if(true 1 2)')
+    t.eq(2, '_if(false 1 2)')
+    t.eq(2, '_if(false 1 true 2 3)')
+    t.eq(3, '_if(false 1 false 2 3)')
+    t.eq(1, '_case(1 1 1 2 2 3 3 _ 9)')
+    t.eq(2, '_case(2 1 1 2 2 3 3 _ 9)')
+    t.eq(3, '_case(3 1 1 2 2 3 3 _ 9)')
+    t.eq(9, '_case(4 1 1 2 2 3 3 _ 9)')
+    // statement
+    t.eq(1, '_do(1)')
+    t.eq(2, '_do(1 2)')
+    t.eq(3, '_do(1 2 3)')
+    // definition
+    t.eq(3, 'a+b', 'a=1', 'b=2')
+    // buildin
+  /*
+    -- error(2)
+    test "error: divide by zero" "1 / 0"
+    test "2" "1 / 0 | 2"
+    -- built-in
+    test "1" "\"01\".to_i"
+    test "1,2,3" "[1 2 3].map(x -> x.to_s).join(\",\")"
+    -- bugs
+    test "1" "id x = x\nid1 x = id(x)\nid1(1)"
+    putStrLn "done"
+  */
+  })
+}
+
+function integrationTests() {
+  const fs = require('fs')
+  const src = fs.readFileSync('v001.moa', 'utf8')
+  tester(t => {
+    t.eq(1, "compile(1)", src)
+  })
+}
+
 function main(command) {
   if (command === "test") {
-    process.exit(run_test())
+    process.exit(unitTests() + integrationTests())
   } else {
     var input = require('fs').readFileSync('/dev/stdin', 'utf8');
     puts(input)
