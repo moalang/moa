@@ -1,8 +1,13 @@
 compile = src => src
 tokenize = src => do(
+# many = f,acc => f().or(acc)
+# many = f => many0
+# many1 = f => do(c <- f cs <- many(f) cs.prepend(c))
+# any = ary => satisfy(c => ary.includes(c))
+# t_int = many1(any("0123456789").map(x=>x.int))
+# top = t_int
   pos <- var(0)
-  top
-  top: t_int)
+  top)
 token = enum(
   num:string
   op2:string)
