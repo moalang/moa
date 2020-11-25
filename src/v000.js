@@ -4,7 +4,6 @@ const puts = (...args) => console.log(...args)
 const debug = (...args) => console.log(...args)
 const assert = (cond, obj) => { if (!cond) { console.trace('Assert: ', obj) } }
 const reserved = ['enum', 'if', 'do', 'case', 'var']
-const newToken = (tag, val) => ({tag, val})
 const newLiteral = val => ({tag: 'literal', val})
 const newOp2 = (op2,lhs,rhs) => ({tag: 'op2', val:{op2,lhs,rhs}})
 const newCall = (node, argv) => ({tag: 'call', val:{node,argv}})
@@ -17,7 +16,20 @@ function escapeReservedWord(val) {
 function tokenize(source) {
   // source helpers
   let remaining = source
-  const moveForward = n => { remaining = remaining.slice(n) }
+  let line = 1
+  let column = 1
+  const newToken = (tag, val) => ({tag, val, line, column})
+  const moveForward = n => {
+    for (const c of remaining.slice(0, n)) {
+      if (c === '\n') {
+          line+=1
+          column=1
+      } else {
+        column++
+      }
+    }
+    remaining = remaining.slice(n)
+  }
   const match = (tag, r, f) => {
     const m = remaining.match(r)
     if (m) {
@@ -36,9 +48,8 @@ function tokenize(source) {
     }
   }
 
-  // tokenize
   const readToken = () => {
-    remaining = remaining.replace(/^[ \n\r\t]+/, '')
+    moveForward(remaining.match(/^[ \n\r\t]*/)[0].length)
     return some('open1', '(') ||
       some('close1', ')') ||
       some('op2', '+= -= *= /= := + - * % / => <- , . : || | && &') ||
