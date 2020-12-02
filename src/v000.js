@@ -3,7 +3,7 @@ const put = s => process.stdout.write(s)
 const puts = (...args) => console.log(...args)
 const debug = (...args) => console.log(...args)
 const assert = (cond, obj) => { if (!cond) { console.trace('Assert: ', obj) } }
-const reserved = ['enum', 'if', 'do', 'case', 'var']
+const reserved = ['if', 'do', 'case', 'var']
 
 function escapeReservedWord(val) {
   return reserved.includes(val) ? '_' + val : val
@@ -48,13 +48,16 @@ function tokenize(source) {
     moveForward(remaining.match(/^[ \n\r\t]*/)[0].length)
     return some('open1', '(') ||
       some('close1', ')') ||
-      some('op2', '+= -= *= /= := + - * % / => <- , . : || | && &') ||
+      some('open2', '[') ||
+      some('close2', ']') ||
+      some('op2', '+= -= *= /= := + - * % / => <- . || | && &') ||
       some('func', '=') ||
       some('bool', 'true false') ||
       match('comment', /^#[^\r\n]*/) ||
       match('num', /^(\d+(?:\.\d+)?)/) ||
       match('str', /^"[^"]*"/) ||
-      match('id', /^[a-z_][a-zA-Z0-9_]*/)
+      match('group', /^[a-z_][a-z[A-Z0-9_]*(?:, *[a-z_][a-z[A-Z0-9_]*)+/) ||
+      match('id', /^[a-zA-Z_][a-zA-Z0-9_]*/)
   }
   let tokens = []
   while (true) {
@@ -78,7 +81,10 @@ function parse(tokens) {
   const newCall = (node, argv) => ({tag: 'call', val:{node,argv}})
   const newDefine = (id, node) => ({tag: 'define', val:{id,node}})
   const len = tokens.length
-  const err = (...args) => Error(JSON.stringify(args))
+  const err = (...args) => {
+    console.error(args, {remaining: tokens.slice(index)})
+    return Error(JSON.stringify(args))
+  }
   const look = () => index < len ? tokens[index] : {}
   const consume = (expectTag) => {
     if (index < len) {
@@ -86,6 +92,8 @@ function parse(tokens) {
       assert(expectTag || token.tag !== expectTag, {expectTag, token})
       if (token.tag === 'open1') { ++nest }
       if (token.tag === 'close1') { --nest }
+      if (token.tag === 'open2') { ++nest }
+      if (token.tag === 'close2') { --nest }
       ++index
       return token
     } else {
@@ -145,7 +153,12 @@ function parse(tokens) {
     if (vals.length === 0) {
       throw err('Empty ()')
     } else if (vals.length === 1) {
-      return newLiteral(vals[0])
+      // TODO: remove this check
+      if (vals[0].includes(",")) {
+        return newLiteral("{" + vals[0] + "}")
+      } else {
+        return newLiteral(vals[0])
+      }
     } else {
       const arrowPos = vals.findIndex(val => val == '=>')
       if (arrowPos >= 0) {
@@ -154,12 +167,10 @@ function parse(tokens) {
         return newLiteral('((' + args.join('') + ') => ' + body.join('') + ')')
       }
     }
-
-    if (vals[1] === ':') {
-      return newLiteral('({' + vals.join(', ').replace(/, :, /g, ':') + '})')
-    } else {
-      return newLiteral('[' + vals.join(', ') + ']')
-    }
+  }
+  const parseOpen2 = () => {
+    const vals = untilClose('close2')
+    return newLiteral("[" + vals.join(",") + "]")
   }
   const parseValue = (token) => {
     switch (token.tag) {
@@ -169,10 +180,14 @@ function parse(tokens) {
       return newLiteral(token.val)
     case 'id':
       return newLiteral(token.val)
+    case 'group':
+      return newLiteral('{' + token.val + '}')
     case 'open1':
       return parseOpen1()
+    case 'open2':
+      return parseOpen2()
     default:
-      throw err('Invalid close tag', token, index)
+      throw err('Invalid close tag', token.tag, index)
     }
   }
   const parseDefine = (token) => {
@@ -213,9 +228,7 @@ function generate(nodes) {
         const lhs = gen(val.lhs)
         const rhs = gen(val.rhs)
         switch (op2) {
-          case ',': return '[' + lhs + ',' + rhs + ']'
           case '<-': return lhs + ' = ' + rhs
-          case ':': return '{' + lhs + ':' + rhs + '}'
           default: return lhs + op2 + rhs
         }
     }
@@ -248,57 +261,12 @@ function exec(src) {
   const string = s => s
   const list = (...x) => x
   const _var = v => v
-  function struct(...args) {
-    let d = {}
-    for (const arg of args) {
-      for (const k of Object.keys(arg)) {
-        d[k] = arg[k]
-      }
-    }
-    return d
-  }
   function __new(keys, vals) {
     let o = {}
     keys.forEach((key,i) => {
       o[key] = vals[i]
     })
     return o
-  }
-  function _enum(...tags) {
-    function enumBody(i, o) {
-      function match(...funcs) {
-        return funcs[i](o)
-      }
-      return {match}
-    }
-    if (tags.length == 1 && typeof(tags[0]) === 'function') {
-      const f = tags[0]
-      const s = f()
-      Object.keys(s).forEach((k,i) => {
-        const v = s[k]
-        if (v === undefined) {
-          s[k] = a => enumBody(i, a)
-        } else {
-          s[k] = enumBody(i, v)
-        }
-      })
-      return s
-    } else {
-      let d = {}
-      tags.forEach((tag,i) => {
-        for (const k of Object.keys(tag)) {
-          const v = tag[k]
-          if (v === int || v === string) {
-            d[k] = a => enumBody(i, a)
-          } else if (typeof(v) === "object") {
-            d[k] = (...argv) => enumBody(i, __new(Object.keys(v), argv))
-          } else {
-            d[k] = enumBody(i, v)
-          }
-        }
-      })
-      return d
-    }
   }
   function _if(...args) {
     for (let i=1; i<args.length; i+=2) {
@@ -342,12 +310,15 @@ function tester(callback) {
 
   puts(errors.length === 0 ? "ok" : "FAILED")
   for (const e of errors) {
-    puts("source: " + e.source)
     puts("expect: " + str(e.expect))
     puts("actual: " + str(e.actual))
+    puts("source: " + e.source)
     puts("stdout: " + str(e.stdout))
     puts("error : " + str(e.error))
     puts("js    : " + str(e.js))
+    console.log("tokens:", e.tokens)
+    put("nodes: ")
+    console.dir(e.nodes, {depth: null})
   }
   return errors.length
 }
@@ -359,24 +330,17 @@ function unitTests() {
     t.eq(1.2, "1.2")
     t.eq("hi", "\"hi\"")
     t.eq(true, "true")
-    t.eq([1,2], "1,2")
     t.eq(1, "(a=>a)(1)")
     // container
-    t.eq([1,2], 'list(1 2)')
+    t.eq([1,2], '[1 2]')
     // exp
     t.eq(5, "2 + 3")
     t.eq(-1, "2 - 3")
     t.eq(6, "2 * 3")
     t.eq(2, "6 / 3")
     // struct
-    t.eq({a:1, b:2}, 'struct(a:1 b:2)')
-    t.eq(2, 'struct(a:1 b:2).b')
-    // enum
-    t.eq(1, 'enum(a:int).a(1).match(a=>a)')
-    t.eq({}, 'enum(a => struct(none:_ some:a)).none.match(a=>a b=>b)')
-    t.eq(2, 'enum(a => struct(none:_ some:a)).some(2).match(a=>a b=>b)')
-    t.eq(1, 'enum(v1:int v2:struct(x:int y:int)).v1(1).match(v1=>v1 v2=>v2.x+v2.y)')
-    t.eq(3, 'enum(v1:int v2:struct(x:int y:int)).v2(1 2).match(v1=>v1 v2=>v2.x+v2.y)')
+    t.eq({a:1, b:2}, 'a,b', 'a=1', 'b=2')
+    t.eq(2, '(a,b).b', 'a=1', 'b=2')
     // branch
     t.eq(1, 'if(true 1 2)')
     t.eq(2, 'if(false 1 2)')
