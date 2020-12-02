@@ -1,0 +1,53 @@
+token = {tag val line column}
+tokenize = src => do(
+  pos := 0
+  line := 1
+  column := 1
+  new = tag => val => token(tag val line column)
+  new_id = new("id")
+  new_val = new("val")
+  new_sym = new("sym")
+  new_com = new("com")
+  new_space = new("space")
+  part = n => src.slice(pos pos+n.size)
+  consume = s => do(
+    pos+=s.size
+    s.each(c => if(c == "\n"
+      column = 1; line += 1
+      column += 1))
+    s)
+  try = cond,s => if(cond consume(s) nil)
+  satisfy = f => part(1) -> c; try(f(c) c)
+  eq = s => part(s.size) -> ss; try(s==ss s)
+  ne = s => part(s.size) -> ss; try(s!=ss s)
+  between = l,r,c => eq(l); c->v; eq(r); v
+  select = s => many1(satisfy(c => s.contains(c)))
+  s_num = "0123456789"
+  s_az = "abcdefghijklmnopqrstuvwxyz"
+  s_az09 = s_az . s_num
+  t_id = new_id $ select(s_az) -> c; many1(select(s_az09)) -> cs; cs.prepend(c).join("")
+  t_val = new_val $ selct(
+      many1(select(num))
+      many1(between("\"" "\"" many(ne("\"")))))
+  t_sym = new_sym $ select("+ - * / += -= *= /= := : = && || > >= < <= ( )".split(" "))
+  t_com = new_com $ eq("#"); many(ne("\n"))
+  t_space = new_space $ many(select(" \n"))
+  many(selct(t_id t_val t_sym t_com t_space)).flatten)
+
+# id      # [a-zA-Z_][a-zA-Z0-9_]*
+# call    # id(a b c)
+# type    # id{a b c} == a,b,c=>a,b,c
+# literal # string or number
+# op      # + - * / += -= *= /= := < <= > >= == != =
+line := 1
+column := 1
+token = tag,val => data{tag val line column}
+ast = enum{int string op2 call}
+
+id = x => x
+op2 = o => case(o.op
+  "+" l + r
+  "-" l - r
+  l = eval(o.lhs)
+  r = eval(o.rhs))
+eval = ast => switch(ast id id op2 call)

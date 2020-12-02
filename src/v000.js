@@ -4,10 +4,6 @@ const puts = (...args) => console.log(...args)
 const debug = (...args) => console.log(...args)
 const assert = (cond, obj) => { if (!cond) { console.trace('Assert: ', obj) } }
 const reserved = ['enum', 'if', 'do', 'case', 'var']
-const newLiteral = val => ({tag: 'literal', val})
-const newOp2 = (op2,lhs,rhs) => ({tag: 'op2', val:{op2,lhs,rhs}})
-const newCall = (node, argv) => ({tag: 'call', val:{node,argv}})
-const newDefine = (id, node) => ({tag: 'define', val:{id,node}})
 
 function escapeReservedWord(val) {
   return reserved.includes(val) ? '_' + val : val
@@ -77,6 +73,10 @@ function tokenize(source) {
 function parse(tokens) {
   let index = 0
   let nest = 0
+  const newLiteral = val => ({tag: 'literal', val})
+  const newOp2 = (op2,lhs,rhs) => ({tag: 'op2', val:{op2,lhs,rhs}})
+  const newCall = (node, argv) => ({tag: 'call', val:{node,argv}})
+  const newDefine = (id, node) => ({tag: 'define', val:{id,node}})
   const len = tokens.length
   const err = (...args) => Error(JSON.stringify(args))
   const look = () => index < len ? tokens[index] : {}
@@ -246,16 +246,8 @@ function exec(src) {
   const _ = {}
   const int = n => n
   const string = s => s
-  function list(...args) {
-    return args
-  }
-  function dict(...args) {
-    let d = {}
-    for (let i=0; i<args.length; i+=2) {
-      d[args[i]] = args[i+1]
-    }
-    return d
-  }
+  const list = (...x) => x
+  const _var = v => v
   function struct(...args) {
     let d = {}
     for (const arg of args) {
@@ -307,9 +299,6 @@ function exec(src) {
       })
       return d
     }
-  }
-  function _var(v) {
-    return v
   }
   function _if(...args) {
     for (let i=1; i<args.length; i+=2) {
@@ -374,7 +363,6 @@ function unitTests() {
     t.eq(1, "(a=>a)(1)")
     // container
     t.eq([1,2], 'list(1 2)')
-    t.eq({1:2, 3:4}, 'dict(1 2 3 4)')
     // exp
     t.eq(5, "2 + 3")
     t.eq(-1, "2 - 3")
