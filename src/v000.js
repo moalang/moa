@@ -53,10 +53,11 @@ function tokenize(source) {
       some('op2', '+= -= *= /= := + - * % / => <- . || | && &') ||
       some('func', '=') ||
       some('bool', 'true false') ||
+      match('struct', /^[a-zA-Z_][a-zA-Z0-9_]*: *[^\n]+/) ||
       match('comment', /^#[^\r\n]*/) ||
       match('num', /^(\d+(?:\.\d+)?)/) ||
       match('str', /^"[^"]*"/) ||
-      match('group', /^[a-z_][a-z[A-Z0-9_]*(?:, *[a-z_][a-z[A-Z0-9_]*)+/) ||
+      match('group', /^[a-z_][a-zA-Z0-9_]*(?:, *[a-z_][a-z[A-Z0-9_]*)+/) ||
       match('id', /^[a-zA-Z_][a-zA-Z0-9_]*/)
   }
   let tokens = []
@@ -191,14 +192,22 @@ function parse(tokens) {
     }
   }
   const parseDefine = (token) => {
-    assert(token.tag === 'id')
+    if (token.tag === 'struct') {
+      const [name, line] = token.val.split(':', 2)
+      const fields = line.split(',').map(x => x.trim().split(' ')[0]).join(',')
+      const constructor = '((' + fields + ') => ({' + fields + '}))'
+      return newDefine(name, newLiteral(constructor))
 
-    const name = token.val
-    const args = take(t => t.tag === 'id')
-    consume('func')
+    } else {
+      assert(token.tag === 'id')
 
-    const body = parseExp(consume())
-    return newDefine(name, body)
+      const name = token.val
+      const args = take(t => t.tag === 'id')
+      consume('func')
+
+      const body = parseExp(consume())
+      return newDefine(name, body)
+    }
   }
   const parseTop = parseDefine
 
@@ -339,8 +348,9 @@ function unitTests() {
     t.eq(6, "2 * 3")
     t.eq(2, "6 / 3")
     // struct
-    t.eq({a:1, b:2}, 'a,b', 'a=1', 'b=2')
-    t.eq(2, '(a,b).b', 'a=1', 'b=2')
+    t.eq({a:1, b:2}, 'ab(1 2)', 'ab: a int, b int')
+    t.eq(2, 'ab(1 2).b', 'ab: a int, b int')
+    // enum
     // branch
     t.eq(1, 'if(true 1 2)')
     t.eq(2, 'if(false 1 2)')
