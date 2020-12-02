@@ -1,14 +1,17 @@
-token = {tag val line column}
+compile src = do(
+  tokens <- tokenize(src)
+  nodes <- parse(tokens)
+  generate(nodes))
+
 tokenize = src => do(
   pos := 0
   line := 1
   column := 1
-  new = tag => val => token(tag val line column)
+  new = tag,val => tag,val,line,column
   new_id = new("id")
   new_val = new("val")
   new_sym = new("sym")
-  new_com = new("com")
-  new_space = new("space")
+  new_ignore = new("ignore")
   part = n => src.slice(pos pos+n.size)
   consume = s => do(
     pos+=s.size
@@ -29,25 +32,37 @@ tokenize = src => do(
   t_val = new_val $ selct(
       many1(select(num))
       many1(between("\"" "\"" many(ne("\"")))))
-  t_sym = new_sym $ select("+ - * / += -= *= /= := : = && || > >= < <= ( )".split(" "))
-  t_com = new_com $ eq("#"); many(ne("\n"))
-  t_space = new_space $ many(select(" \n"))
-  many(selct(t_id t_val t_sym t_com t_space)).flatten)
+  t_sym = new_sym $ select("+ - * / += -= *= /= := : = && || > >= < <= ( ) ,".split(" "))
+  t_com = new_ignore $ eq("#"); many(ne("\n"))
+  t_space = new_ignore $ many(select(" \n"))
+  many(selct(t_id t_val t_sym t_com t_space)).flatten.filter(t => t.tag != "ignore"))
 
-# id      # [a-zA-Z_][a-zA-Z0-9_]*
-# call    # id(a b c)
-# type    # id{a b c} == a,b,c=>a,b,c
-# literal # string or number
-# op      # + - * / += -= *= /= := < <= > >= == != =
-line := 1
-column := 1
-token = tag,val => data{tag val line column}
-ast = enum{int string op2 call}
+parse tokens = do(
+  pos := 0
+  nodes := []
+  new_node = tag,val => tag,val
+  new_val = val => new_node("val" val)
+  new_call = self,argv => new_node("call" self,argv)
+  new_op2 = op,lhs,rhs => new_node("op2" op,lhs,rhs)
+  new_group = nodes => new_node("group" nodes)
+  new_call = node => new_node("call" node)
+  new_parentheses = node => new_node("parentheses" node)
+  read_tokens = do(
+    token <- tokens[pos]
+    case(token.tag
+      "val" new_val(token.val)
+      "id" if(next.val == "(" new_call(token.val read_argv new_val(token.val)))
+      "sym" new_op2("")
+    )
+  read_tokens))
 
-id = x => x
-op2 = o => case(o.op
-  "+" l + r
-  "-" l - r
-  l = eval(o.lhs)
-  r = eval(o.rhs))
-eval = ast => switch(ast id id op2 call)
+generate nodes = nodes.map(gen).join(",\n")
+gen node = case(node.tag
+  "parentheses" "(" + gen(tag.val) + ")"
+  "val" tag.val
+  "call" tag.val + "(" + generate(tag.argv).join(",") + ")"
+  "op2" op2(tag.val))
+op2 v = case(v.op
+  "=>" "((" + v.lhs + ") => " + gen(v.rhs) + ")"
+  ":=" "let " + gen(v.lhs) + "=" gen(v.rhs)
+  _ gen(v.lhs) + v.op + gen(v.rhs))
