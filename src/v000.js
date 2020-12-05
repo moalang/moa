@@ -53,7 +53,7 @@ function tokenize(source) {
       some('op2', '+= -= *= /= := + - * % / => <- . || | && &') ||
       some('func', '=') ||
       some('bool', 'true false') ||
-      match('struct', /^[a-zA-Z_][a-zA-Z0-9_]*: *[^\n]+/) ||
+      match('type', /^[a-zA-Z_][a-zA-Z0-9_]*:\|? *[^\n]+/) ||
       match('comment', /^#[^\r\n]*/) ||
       match('num', /^(\d+(?:\.\d+)?)/) ||
       match('str', /^"[^"]*"/) ||
@@ -192,11 +192,32 @@ function parse(tokens) {
     }
   }
   const parseDefine = (token) => {
-    if (token.tag === 'struct') {
-      const [name, line] = token.val.split(':', 2)
-      const fields = line.split(',').map(x => x.trim().split(' ')[0]).join(',')
-      const constructor = '((' + fields + ') => ({' + fields + '}))'
-      return newDefine(name, newLiteral(constructor))
+    if (token.tag === 'type') {
+      const pos = token.val.indexOf(':')
+      const name = token.val.slice(0, pos).trim()
+      const line = token.val.slice(pos + 1).trim()
+      const isEnum = token.val.includes(':|')
+      if (isEnum) {
+        function parseEnumBody(def) {
+          if (def.includes(':')) {
+            const [tag, struct] = def.split(':')
+            const fields = struct.split(',').map(x => x.trim().split(' ')[0]).join(',')
+            const constructor = '((' + fields + ') => ({' + fields + '}))'
+            return tag + ':' + constructor
+          } else {
+            const [name, _] = def.trim().split(' ')
+            const constructor = "(val => ({tag:'" + name + "', val}))"
+            return name + ':' +  constructor
+          }
+        }
+        const [_, ...tags] = line.split('|').map(x => x.trim())
+        const body = '{' + tags.map(parseEnumBody).join(',') + '}'
+        return newDefine(name, newLiteral(body))
+      } else {
+        const fields = line.split(',').map(x => x.trim().split(' ')[0]).join(',')
+        const constructor = '((' + fields + ') => ({' + fields + '}))'
+        return newDefine(name, newLiteral(constructor))
+      }
 
     } else {
       assert(token.tag === 'id')
@@ -351,6 +372,7 @@ function unitTests() {
     t.eq({a:1, b:2}, 'ab(1 2)', 'ab: a int, b int')
     t.eq(2, 'ab(1 2).b', 'ab: a int, b int')
     // enum
+    t.eq({tag:'int', val:1}, 'ast.int(1)', 'ast:| int int | op2: op string, lhs ast, rhs ast')
     // branch
     t.eq(1, 'if(true 1 2)')
     t.eq(2, 'if(false 1 2)')
