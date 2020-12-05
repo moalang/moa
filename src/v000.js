@@ -198,21 +198,21 @@ function parse(tokens) {
       const line = token.val.slice(pos + 1).trim()
       const isEnum = token.val.includes(':|')
       if (isEnum) {
-        function parseEnumBody(def) {
+        function enumToKV(def, index) {
+          const makeNew = (tag, args, fields) => '((' + args + ") => ({tag:'" + tag + "', index: " + (index - 1) + ', ' + fields + '}))'
           if (def.includes(':')) {
             const [tag, struct] = def.split(':')
-            const fields = struct.split(',').map(x => x.trim().split(' ')[0]).join(',')
-            const constructor = '((' + fields + ') => ({' + fields + '}))'
-            return tag + ':' + constructor
+            const args = struct.split(',').map(x => x.trim().split(' ')[0]).join(',')
+            return tag + ':' + makeNew(tag, args, 'val:{' + args + '}')
           } else {
-            const [name, _] = def.trim().split(' ')
-            const constructor = "(val => ({tag:'" + name + "', val}))"
-            return name + ':' +  constructor
+            const [tag, _] = def.trim().split(' ')
+            return tag + ':' + makeNew(tag, 'val', 'val')
           }
         }
-        const [_, ...tags] = line.split('|').map(x => x.trim())
-        const body = '{' + tags.map(parseEnumBody).join(',') + '}'
-        return newDefine(name, newLiteral(body))
+        const [_, ...tags] = line.split('|').map(x => x.trim()).map(enumToKV)
+        const branch = '(x,...branches) => branches[x.index](x.val)'
+        const func = 'Object.assign(' + branch + ', {' + tags.join(',') + '})'
+        return newDefine(name, newLiteral(func))
       } else {
         const fields = line.split(',').map(x => x.trim().split(' ')[0]).join(',')
         const constructor = '((' + fields + ') => ({' + fields + '}))'
@@ -372,7 +372,8 @@ function unitTests() {
     t.eq({a:1, b:2}, 'ab(1 2)', 'ab: a int, b int')
     t.eq(2, 'ab(1 2).b', 'ab: a int, b int')
     // enum
-    t.eq({tag:'int', val:1}, 'ast.int(1)', 'ast:| int int | op2: op string, lhs ast, rhs ast')
+    t.eq(1, 'ast(ast.int(1) v=>v _)', 'ast:| int int | op2: op string, lhs ast, rhs ast')
+    t.eq(2, 'ast(ast.op2("+" 1 2) _ o=>o.rhs)', 'ast:| int int | op2: op string, lhs ast, rhs ast')
     // branch
     t.eq(1, 'if(true 1 2)')
     t.eq(2, 'if(false 1 2)')
