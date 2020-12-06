@@ -1,1 +1,4 @@
 compile = src => src
+tokenize src => src
+token: tag string, val string
+ast:| literal string | op2: op string, lhs ast, rhs ast | call: self ast, args [ast]

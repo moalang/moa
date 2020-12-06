@@ -259,6 +259,7 @@ function generate(nodes) {
         const rhs = gen(val.rhs)
         switch (op2) {
           case '<-': return lhs + ' = ' + rhs
+          case ':=': return lhs + ' = ' + rhs
           default: return lhs + op2 + rhs
         }
     }
@@ -387,8 +388,8 @@ function unitTests() {
     t.eq(1, 'do(1)')
     t.eq(2, 'do(1 2)')
     t.eq(3, 'do(1 2 3)')
-    t.eq(0, 'do(n <- var(0) n)')
-    t.eq(1, 'do(n <- var(0) n+=1 n)')
+    t.eq(0, 'do(n := 0 n)')
+    t.eq(1, 'do(n := 0 n+=1 n)')
     // definition
     t.eq(3, 'a+b', 'a=1', 'b=2')
     // buildin
