@@ -35,8 +35,8 @@ function tokenize(source) {
       return newToken(tag, escapeReservedWord(val))
     }
   }
-  const some = (tag, str) => {
-    for (const val of str.split(' ')) {
+  const some = (tag, s) => {
+    for (const val of s.split(' ')) {
       if (remaining.startsWith(val)) {
         moveForward(val.length)
         return newToken(tag, val)
@@ -125,6 +125,11 @@ function parse(tokens) {
       const op2 = consume('op2').val
       const r = parseCall(parseExp(consume()))
       return newOp2(op2, l, r)
+    } else if (look().tag === 'func') {
+      consume('func')
+      const body = parseExp(consume())
+      assert(l.tag === 'literal')
+      return newDefine(l.val, body)
     } else {
       return l
     }
@@ -248,10 +253,21 @@ function parse(tokens) {
 }
 
 function generate(nodes) {
+  function isFunc(x) {
+    return x.tag === 'define' || (x.tag === 'op2' && x.val.op2 === ':=')
+  }
   function gen({tag,val}) {
     switch (tag) {
       case 'literal': return val
-      case 'call': return gen(val.node) + (val.argv ? '(' + val.argv.map(gen).join(',') + ')' : '')
+      case 'call':
+        const funcs = val.argv.filter(x => isFunc(x))
+        const argv = val.argv.filter(x => !isFunc(x))
+        const call = gen(val.node) + (argv ? '(' + argv.map(gen).join(',') + ')' : '')
+        if (funcs.length === 0) {
+          return call
+        } else {
+          return '(function() { ' + funcs.map(gen).join(';') + '; return ' + call + '})()'
+        }
       case 'define': return 'const ' + val.id + ' = ' + gen(val.node)
       case 'op2':
         const op2 = val.op2
@@ -259,7 +275,11 @@ function generate(nodes) {
         const rhs = gen(val.rhs)
         switch (op2) {
           case '<-': return lhs + ' = ' + rhs
-          case ':=': return lhs + ' = ' + rhs
+          case ':=': return 'const ' + lhs + ' = new _eff(' + rhs + ')'
+          case '+=':
+          case '-=':
+          case '*=':
+          case '/=': return lhs + ".eff('" + op2 + "', " + rhs + ')'
           default: return lhs + op2 + rhs
         }
     }
@@ -316,8 +336,27 @@ function exec(src) {
     return args[args.length-1]
   }
   function _do(...args) {
-    return args[args.length - 1]
+    let ret
+    for (const arg of args) {
+      ret = typeof(arg) === 'function' ? arg() : arg
+    }
+    return ret.valueOf()
   }
+  function _eff(val) {
+    this.val = val
+  }
+  _eff.prototype.eff = function(op, rhs) {
+    switch(op) {
+      case '+=': return () => this.val += rhs
+      case '-=': return () => this.val -= rhs
+      case '*=': return () => this.val *= rhs
+      case '/=': return () => this.val /= rhs
+    }
+  }
+  _eff.prototype.valueOf = function() {
+    return this.val
+  }
+  _eff.prototype.isEff = true
   return eval(src)
 }
 
@@ -390,6 +429,7 @@ function unitTests() {
     t.eq(3, 'do(1 2 3)')
     t.eq(0, 'do(n := 0 n)')
     t.eq(1, 'do(n := 0 n+=1 n)')
+    t.eq(2, 'do(n := 0 f=n+=1 f f n)')
     // definition
     t.eq(3, 'a+b', 'a=1', 'b=2')
     // buildin
