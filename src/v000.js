@@ -187,7 +187,7 @@ function generate(nodes) {
     const vals = argv.filter(x => !x.def)
     if (funcs.length > 0) {
       const def = funcs.map(gen).join("\n")
-      return '(function() {\n' + def + '\nreturn ' + f(vals) + '}'
+      return '(function() {\n' + def + '\nreturn ' + f(vals) + '})()'
     } else {
       return f(vals)
     }
@@ -231,6 +231,8 @@ function generate(nodes) {
         } else {
           return gen(node.argv[0]) + node.code + gen(node.argv[1])
         }
+      } else if (node.eff) {
+        return id(node.argv[0]) + '.eff("' + node.code + '",' + gen(node.argv[1]) + ')'
       } else {
         if (node.argv) {
           return local(node.argv, vals => id(node) + (vals ? '(' + vals.map(gen).join(',') + ')' : ''))
@@ -248,17 +250,6 @@ function generate(nodes) {
 
 function exec(src) {
   const _ = {}
-  const int = n => n
-  const string = s => s
-  const list = (...x) => x
-  const _var = v => v
-  function __new(keys, vals) {
-    let o = {}
-    keys.forEach((key,i) => {
-      o[key] = vals[i]
-    })
-    return o
-  }
   function _if(...args) {
     for (let i=1; i<args.length; i+=2) {
       if (args[i-1]) {
@@ -266,17 +257,6 @@ function exec(src) {
       }
     }
     return args[args.length-1]
-  }
-  function _case(v, ...args) {
-    for (let i=0; i<args.length; i+=2) {
-      if (v == args[i]) {
-        return args[i+1]
-      }
-    }
-    return args[args.length-1]
-  }
-  function _list(...args) {
-    return args
   }
   function _do(...args) {
     let ret
@@ -365,19 +345,15 @@ function unitTests() {
     t.eq(2, 'if(false 1 2)')
     t.eq(2, 'if(false 1 true 2 3)')
     t.eq(3, 'if(false 1 false 2 3)')
-    t.eq(1, 'case(1 1 1 2 2 3 3 _ 9)')
-    t.eq(2, 'case(2 1 1 2 2 3 3 _ 9)')
-    t.eq(3, 'case(3 1 1 2 2 3 3 _ 9)')
-    t.eq(9, 'case(4 1 1 2 2 3 3 _ 9)')
     // statement
     t.eq(1, 'do(1)')
     t.eq(2, 'do(1 2)')
     t.eq(3, 'do(1 2 3)')
-//    t.eq(0, 'do(n := 0 n)')
-//    t.eq(1, 'do(n := 0 n+=1 n)')
-//    t.eq(2, 'do(n := 0 f=n+=1 f f n)')
-//    // definition
-//    t.eq(3, 'a+b', 'a=1', 'b=2')
+    t.eq(0, 'do(n := 0 n)')
+    t.eq(1, 'do(n := 0 n+=1 n)')
+    t.eq(2, 'do(n := 0 f=n+=1 f f n)')
+    // definition
+    t.eq(3, 'a+b', 'a=1', 'b=2')
     // buildin
   /*
     -- error(2)
