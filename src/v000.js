@@ -1,7 +1,6 @@
 const str = o => JSON.stringify(o)
 const put = s => process.stdout.write(s)
 const puts = (...args) => console.log(...args)
-const debug = (...args) => console.log(...args)
 const assert = (cond, obj) => { if (!cond) { console.trace('Assert: ', obj) } }
 const reserved = ['if', 'do', 'case', 'var']
 
@@ -57,7 +56,6 @@ function tokenize(source) {
       match('comment', /^#[^\r\n]*/) ||
       match('num', /^(\d+(?:\.\d+)?)/) ||
       match('str', /^"[^"]*"/) ||
-      match('group', /^[a-z_][a-zA-Z0-9_]*(?:, *[a-z_][a-z[A-Z0-9_]*)+/) ||
       match('id', /^[a-zA-Z_][a-zA-Z0-9_]*/)
   }
   let tokens = []
@@ -81,6 +79,8 @@ function parse(tokens) {
   const newOp2 = (op2,lhs,rhs) => ({tag: 'op2', val:{op2,lhs,rhs}})
   const newCall = (node, argv) => ({tag: 'call', val:{node,argv}})
   const newDefine = (id, node) => ({tag: 'define', val:{id,node}})
+  const newList = (val) => ({tag: 'list', val})
+  const newParentheses = (val) => ({tag: 'parentheses', val})
   const len = tokens.length
   const err = (...args) => {
     console.error(args, {remaining: tokens.slice(index)})
@@ -114,10 +114,16 @@ function parse(tokens) {
     }
   }
   const untilClose = (tag) => {
-    const base = nest
-    const vals = take(t => !(base === nest && t.tag === tag))
-    consume(tag)
-    return vals
+    const base = nest - 1
+    let vals = []
+    while (true) {
+      const t = consume()
+      if (t.tag === tag && base === nest) {
+        return vals
+      } else {
+        vals.push(parseExp(t))
+      }
+    }
   }
   const parseExp = (token) => {
     const l = parseCall(parseValue(token))
@@ -156,27 +162,15 @@ function parse(tokens) {
   }
   const parseOpen1 = () => {
     const vals = untilClose('close1')
-    if (vals.length === 0) {
-      throw err('Empty ()')
-    } else if (vals.length === 1) {
-      // TODO: remove this check
-      if (vals[0].includes(",")) {
-        return newLiteral("{" + vals[0] + "}")
-      } else {
-        return newLiteral(vals[0])
-      }
+    if (vals.length === 1) {
+      return newParentheses(vals[0])
     } else {
-      const arrowPos = vals.findIndex(val => val == '=>')
-      if (arrowPos >= 0) {
-        let args = vals.slice(0, arrowPos)
-        let body = vals.slice(arrowPos + 1)
-        return newLiteral('((' + args.join('') + ') => ' + body.join('') + ')')
-      }
+      assert(false, vals)
     }
   }
   const parseOpen2 = () => {
     const vals = untilClose('close2')
-    return newLiteral("[" + vals.join(",") + "]")
+    return newList(vals)
   }
   const parseValue = (token) => {
     switch (token.tag) {
@@ -186,12 +180,14 @@ function parse(tokens) {
       return newLiteral(token.val)
     case 'id':
       return newLiteral(token.val)
-    case 'group':
-      return newLiteral('{' + token.val + '}')
     case 'open1':
       return parseOpen1()
     case 'open2':
       return parseOpen2()
+    case 'close1':
+      return newLiteral(')')
+    case 'close2':
+      return newLiteral(']')
     default:
       throw err('Invalid close tag', token.tag, index)
     }
@@ -256,9 +252,12 @@ function generate(nodes) {
   function isFunc(x) {
     return x.tag === 'define' || (x.tag === 'op2' && x.val.op2 === ':=')
   }
-  function gen({tag,val}) {
+  function gen(node) {
+    const {tag,val} = node
     switch (tag) {
       case 'literal': return val
+      case 'parentheses': return '(' + gen(val) + ')'
+      case 'list': return '[' + val.map(gen).join(',') + ']'
       case 'call':
         const funcs = val.argv.filter(x => isFunc(x))
         const argv = val.argv.filter(x => !isFunc(x))
@@ -274,6 +273,7 @@ function generate(nodes) {
         const lhs = gen(val.lhs)
         const rhs = gen(val.rhs)
         switch (op2) {
+          case '=>': return '(' + lhs + ' => ' + rhs + ')'
           case '<-': return lhs + ' = ' + rhs
           case ':=': return 'const ' + lhs + ' = new _eff(' + rhs + ')'
           case '+=':
@@ -295,7 +295,13 @@ function generate(nodes) {
 function run(source) {
   const tokens = tokenize(source)
   const nodes = parse(tokens)
-  const js = generate(nodes)
+  let js
+  try {
+    js = generate(nodes)
+  } catch (e) {
+    console.trace(e)
+    return { source, tokens, nodes, js:"-", undefined, error: e.message }
+  }
   let actual = null
   let error = null
   try {
@@ -408,6 +414,10 @@ function unitTests() {
     t.eq(-1, "2 - 3")
     t.eq(6, "2 * 3")
     t.eq(2, "6 / 3")
+    t.eq(14, "2 + 3 * 4")
+    t.eq(20, "(2 + 3) * 4")
+    t.eq(10, "2 * 3 + 4")
+    t.eq(14, "2 * (3 + 4)")
     // struct
     t.eq({a:1, b:2}, 'ab(1 2)', 'ab: a int, b int')
     t.eq(2, 'ab(1 2).b', 'ab: a int, b int')
