@@ -75,17 +75,12 @@ function tokenize(source) {
 function parse(tokens) {
   let index = 0
   let nest = 0
-  const newLiteral = val => ({tag: 'literal', val})
+  const newLiteral = (val) => ({tag: 'literal', val})
   const newOp2 = (op2,lhs,rhs) => ({tag: 'op2', val:{op2,lhs,rhs}})
   const newCall = (node, argv) => ({tag: 'call', val:{node,argv}})
   const newDefine = (id, node) => ({tag: 'define', val:{id,node}})
-  const newList = (val) => ({tag: 'list', val})
   const newParentheses = (val) => ({tag: 'parentheses', val})
   const len = tokens.length
-  const err = (...args) => {
-    console.error(args, {remaining: tokens.slice(index)})
-    return Error(JSON.stringify(args))
-  }
   const look = () => index < len ? tokens[index] : {}
   const consume = (expectTag) => {
     if (index < len) {
@@ -98,7 +93,7 @@ function parse(tokens) {
       ++index
       return token
     } else {
-      throw err('EOT', tokens)
+      assert(false, tokens)
     }
   }
   const take = f => {
@@ -170,7 +165,7 @@ function parse(tokens) {
   }
   const parseOpen2 = () => {
     const vals = untilClose('close2')
-    return newList(vals)
+    return newCall(({tag:'literal', val:'_list'}), vals)
   }
   const parseValue = (token) => {
     switch (token.tag) {
@@ -189,7 +184,7 @@ function parse(tokens) {
     case 'close2':
       return newLiteral(']')
     default:
-      throw err('Invalid close tag', token.tag, index)
+      assert(false, 'Invalid close tag', token.tag, index)
     }
   }
   const parseDefine = (token) => {
@@ -257,7 +252,6 @@ function generate(nodes) {
     switch (tag) {
       case 'literal': return val
       case 'parentheses': return '(' + gen(val) + ')'
-      case 'list': return '[' + val.map(gen).join(',') + ']'
       case 'call':
         const funcs = val.argv.filter(x => isFunc(x))
         const argv = val.argv.filter(x => !isFunc(x))
@@ -340,6 +334,9 @@ function exec(src) {
       }
     }
     return args[args.length-1]
+  }
+  function _list(...args) {
+    return args
   }
   function _do(...args) {
     let ret
