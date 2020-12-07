@@ -192,19 +192,19 @@ function generate(nodes) {
       return f(vals)
     }
   }
-  function enumField(fields, index) {
-    const [head, ...items] = fields
-    const tag = 'f.' + head.code + ' = '
-    if (items.length === 0) {
-      return tag + index
-    } else if (items.length === 1) {
-      return tag + '(val=>({val, _index:' + index + '}))'
-    } else {
-      const ids = items.filter((_,index) => index % 3 === 1).map(id).join(',')
-      return tag + '((' + ids + ') => ({val:{' + ids + '}, _index:' + index + '}))'
-    }
-  }
   function enumFields(tags) {
+    function enumField(fields, index) {
+      const [head, ...items] = fields
+      const tag = 'f.' + head.code + ' = '
+      if (items.length === 0) {
+        return tag + index
+      } else if (items.length === 1) {
+        return tag + '(val=>({val, _index:' + index + '}))'
+      } else {
+        const ids = items.filter((_,index) => index % 3 === 1).map(id).join(',')
+        return tag + '((' + ids + ') => ({val:{' + ids + '}, _index:' + index + '}))'
+      }
+    }
     const init = tags.map(enumField).join('\n  ')
     return '(function(){\n  const f = (x,...args) => args[x._index](x.val)\n  ' + init + '\nreturn f })()'
   }
@@ -334,12 +334,14 @@ function unitTests() {
     t.eq(20, "(2 + 3) * 4")
     t.eq(10, "2 * 3 + 4")
     t.eq(14, "2 * (3 + 4)")
+    // definition
+    t.eq(3, 'a+b', 'a=1', 'b=2')
     // struct
     t.eq({a:1, b:2}, 'ab(1 2)', 'ab: a int, b int')
     t.eq(2, 'ab(1 2).b', 'ab: a int, b int')
     // enum
     t.eq(1, 'ast(ast.int(1) v=>v _)', 'ast:| int int | op2: op string, lhs ast, rhs ast')
-    t.eq(2, 'ast(ast.op2("+" 1 2) _ o=>o.rhs)', 'ast:| int int | op2: op string, lhs ast, rhs ast')
+    t.eq(3, 'ast(ast.op2("+" 1 2) _ o=>o.lhs+o.rhs)', 'ast:| int int | op2: op string, lhs ast, rhs ast')
     // branch
     t.eq(1, 'if(true 1 2)')
     t.eq(2, 'if(false 1 2)')
@@ -352,8 +354,6 @@ function unitTests() {
     t.eq(0, 'do(n := 0 n)')
     t.eq(1, 'do(n := 0 n+=1 n)')
     t.eq(2, 'do(n := 0 f=n+=1 f f n)')
-    // definition
-    t.eq(3, 'a+b', 'a=1', 'b=2')
     // buildin
   /*
     -- error(2)
