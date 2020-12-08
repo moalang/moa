@@ -337,8 +337,8 @@ function unitTests() {
     // definition
     t.eq(3, 'a+b', 'a=1', 'b=2')
     // struct
-    t.eq({a:1, b:2}, 'ab(1 2)', 'ab: a int, b int')
-    t.eq(2, 'ab(1 2).b', 'ab: a int, b int')
+    t.eq({a:1, b:[]}, 'ab(1 [])', 'ab: a int, b []int')
+    t.eq([2,3], 'ab(1 [2 3]).b', 'ab: a int, b []int')
     // enum
     t.eq(1, 'ast(ast.int(1) v=>v _)', 'ast:| int int | op2: op string, lhs ast, rhs ast')
     t.eq(3, 'ast(ast.op2("+" 1 2) _ o=>o.lhs+o.rhs)', 'ast:| int int | op2: op string, lhs ast, rhs ast')
@@ -370,9 +370,6 @@ function unitTests() {
 }
 
 function integrationTests() {
-  puts('SKIP integrationTests')
-  return 0
-
   const fs = require('fs')
   const src = fs.readFileSync('v001.moa', 'utf8')
   tester(t => {

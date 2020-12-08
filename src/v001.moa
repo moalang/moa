@@ -1,8 +1,7 @@
 token: tag string, val string
-ast:| literal string | op2: op string, lhs ast, rhs ast | call: self ast, args [ast]
+ast:| literal string | op2: op string, lhs ast, rhs ast | call: self ast, args []ast
 
 compile = src => src
-tokenize src => do(
-  pos := 0
-  src
-  )
+tokenize = src => do(
+  n := 0
+  src)
