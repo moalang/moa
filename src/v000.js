@@ -33,7 +33,7 @@ function run(source) {
     tokens = tokenize(source)
     nodes = parse(tokens,source)
     js = generate(nodes,source)
-    actual = exec(js + "\nmain")
+    actual = exec(js + "\nmain").valueOf()
   } catch(e) {
     error = e.message
   }
@@ -265,22 +265,38 @@ function exec(src) {
     for (const arg of args) {
       ret = typeof(arg) === 'function' ? arg() : arg
     }
-    return ret.valueOf()
+    return ret
   }
   function _div(lhs, rhs) {
     if (rhs === 0) {
-      return new error('error: divide by zero', lhs, rhs)
+      return error('divide by zero', lhs, rhs)
     }
     return lhs / rhs
   }
   function _eff(val) {
     this.val = val
   }
-  function error(message, ...args) {
-    this.message = message.toString()
-    this.args = args
+  function error(...args) {
+    function f(message, ...args) {
+      this.message = message.toString()
+      this.args = args
+      try {
+        throw new Error()
+      } catch (e) {
+        this.id = e.stack
+      }
+    }
+    f.prototype.valueOf = function() {
+      return 'error: ' + this.message
+    }
+    f.prototype.alt = function(v) {
+      return v
+    }
+    f.prototype.catch = function(expect, alt) {
+      return expect.id === this.id ? alt : this
+    }
+    return new f(...args)
   }
-  error.prototype.valueOf = function() { return this.message }
   _eff.prototype.eff = function(op, rhs) {
     switch(op) {
       case '+=': return () => this.val += rhs
@@ -295,6 +311,16 @@ function exec(src) {
     return this.val
   }
   _eff.prototype.isEff = true
+
+  // WARN: global pollution
+  Object.prototype.alt = function() {
+    return this
+  }
+  Object.prototype.catch = function() {
+    return this
+  }
+
+  // evaluate source in sandbox
   return eval(src)
 }
 
@@ -312,7 +338,7 @@ function tester(callback) {
       errors.push(result)
     }
   }
-  const eq = (...args) => test(x => x.actual.valueOf(), ...args)
+  const eq = (...args) => test(x => x.actual, ...args)
 
   callback({eq})
 
@@ -369,10 +395,14 @@ function unitTests() {
     t.eq(0, 'do(n := 0 n)')
     t.eq(1, 'do(n := 0 n+=1 n)')
     t.eq(2, 'do(n := 0 f=n+=1 f f n)')
-    // buildin
+    // error handling
     t.eq("error: divide by zero", "1 / 0")
+    t.eq("error: nil", "nil", 'nil = error("nil")')
+    t.eq("error: nil", "do(nil)", 'nil = error("nil")')
+    t.eq(1, "do(nil).alt(1)", 'nil = error("nil")')
+    t.eq(2, "do(2).alt(1)")
+    t.eq(2, "b.catch(a 1).catch(b 2)", 'a = error("msg")', 'b = error("msg")')
   /*
-    test "2" "1 / 0 | 2"
     -- built-in
     test "1" "\"01\".to_i"
     test "1,2,3" "[1 2 3].map(x -> x.to_s).join(\",\")"
