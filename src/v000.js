@@ -3,7 +3,7 @@ const put = s => process.stdout.write(s)
 const puts = (...args) => console.log(...args)
 const title = (t, ...args) => { put(t); debug(...args) }
 const debug = (...args) => console.dir(args.length===1 ? args[0] : args, {depth: null})
-const escape = x => ['if', 'do', 'case', 'var'].includes(x) ? '_' + x : x
+const escape = x => ['if', 'do'].includes(x) ? '_' + x : x
 const any = (x,...xs) => xs.some(v => v === x)
 
 function assert(cond, ...objs) {
@@ -73,7 +73,7 @@ function tokenize(source) {
                 null
     token[tag] = true
     if (!token.ignore) {
-      if (token.code === '(' && (prev.id || [')', ']'].includes(prev.code))) {
+      if (token.code === '(' && (prev.id || any(prev.code, ')', ']'))) {
         token.call = true
       }
       tokens.push(token)
@@ -88,7 +88,6 @@ function parse(tokens,source) {
   const eot = ({code:'',column:0,line:0,eot:true})
   const consume = () => tokens[pos++] || eot
   const look = () => tokens[pos] || eot
-  let nodes = []
   function readLine(token) {
     const line = token.line
     const vals = []
@@ -171,6 +170,8 @@ function parse(tokens,source) {
 
     return token
   }
+
+  let nodes = []
   while (pos < tokens.length) {
     nodes.push(read())
   }
@@ -219,28 +220,23 @@ function generate(nodes) {
         const ids = fields.join(',')
         return 'const ' + name + ' = ((' + ids + ') => ({' + ids + '}))'
       } else if (node.code === ':|') {
-        const [name,...tags] = node.argv
-        return 'const ' + id(name) + ' = ' + enumFields(tags)
+        return 'const ' + id(node.argv[0]) + ' = ' + enumFields(node.argv.slice(1))
       } else if (node.code == '=') {
         return 'const ' + id(node.argv[0]) + ' = ' + gen(node.argv[1])
       } else if (node.code == ':=') {
         return 'let ' + id(node.argv[0]) + ' = new _eff(' + gen(node.argv[1]) + ')'
+      } else if (node.op2 && node.code === '=>') {
+        return '((' + gen(node.argv[0]) + ') => ' + gen(node.argv[1]) + ')'
+      } else if (node.op2 && node.code === '/') {
+        return '_div(' + gen(node.argv[0]) + ',' + gen(node.argv[1]) + ')'
       } else if (node.op2) {
-        if (node.code === '=>') {
-          return '((' + gen(node.argv[0]) + ') => ' + gen(node.argv[1]) + ')'
-        } else if (node.code === '/') {
-          return '_div(' + gen(node.argv[0]) + ',' + gen(node.argv[1]) + ')'
-        } else {
-          return gen(node.argv[0]) + node.code + gen(node.argv[1])
-        }
+        return gen(node.argv[0]) + node.code + gen(node.argv[1])
       } else if (node.eff) {
         return id(node.argv[0]) + '.eff("' + node.code + '",' + gen(node.argv[1]) + ')'
+      } else if (node.argv) {
+        return local(node.argv, vals => id(node) + (vals ? '(' + vals.map(gen).join(',') + ')' : ''))
       } else {
-        if (node.argv) {
-          return local(node.argv, vals => id(node) + (vals ? '(' + vals.map(gen).join(',') + ')' : ''))
-        } else {
-          return node.code
-        }
+        return node.code
       }
     } catch (e) {
       console.error(e, node)
