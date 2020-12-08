@@ -313,12 +313,10 @@ function exec(src) {
   _eff.prototype.isEff = true
 
   // WARN: global pollution
-  Object.prototype.alt = function() {
-    return this
-  }
-  Object.prototype.catch = function() {
-    return this
-  }
+  Object.prototype.alt = function() { return this }
+  Object.prototype.catch = function() { return this }
+  String.prototype.__defineGetter__('int', function() { return parseInt(this) })
+  Number.prototype.__defineGetter__('string', function() { return this.toString() })
 
   // evaluate source in sandbox
   return eval(src)
@@ -402,14 +400,9 @@ function unitTests() {
     t.eq(1, "do(nil).alt(1)", 'nil = error("nil")')
     t.eq(2, "do(2).alt(1)")
     t.eq(2, "b.catch(a 1).catch(b 2)", 'a = error("msg")', 'b = error("msg")')
-  /*
-    -- built-in
-    test "1" "\"01\".to_i"
-    test "1,2,3" "[1 2 3].map(x -> x.to_s).join(\",\")"
-    -- bugs
-    test "1" "id x = x\nid1 x = id(x)\nid1(1)"
-    putStrLn "done"
-  */
+    // built-in
+    t.eq(11, '"11".int')
+    t.eq('1,2', '[1 2].map(x => x.string).join(",")')
   })
 }
 
