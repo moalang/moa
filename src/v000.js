@@ -41,7 +41,7 @@ function run(source) {
 }
 
 function tokenize(source) {
-  const codes = source.match(/(\s+|\d+(?:\.\d+)?|[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)*|"[^\"]*"|[+\-*/:]=|:\||=>|<-|(?:\|\|)|&&|[,\.+\-*/:=()\[\]\|]|#[^\n]*)/g)
+  const codes = source.match(/(\s+|\d+(?:\.\d+)?|[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)*(?:,[a-zA-Z_]\w*)*|"[^\"]*"|[+\-*/:=><]=|[><]|=>|\+\+|:\||<-|(?:\|\|)|&&|[,\.+\-*/:=()\[\]\|]|#[^\n]*)/g)
   const src = str(source)
   const dst = str(codes.join(""))
   assert(src == dst, src, dst)
@@ -66,8 +66,8 @@ function tokenize(source) {
                 any(c, ' ', '#', '\n') ? 'ignore' :
                 any(code, 'true', 'false') ? 'bool' :
                 any(c, '(', ')', '[', ']') ? 'group' :
-                any(code, '+', '-', '*', '/', ',', '.', '=>', '||', '&&') ? 'op2' :
-                any(code, '+=', '-=', '*=', '/=') ? 'eff' :
+                any(code, '+', '-', '*', '/', ',', '.', '=>', '||', '&&', '==', '++') ? 'op2' :
+                any(code, '+=', '-=', '*=', '/=', '<-') ? 'eff' :
                 any(code, '=', ':=') ? 'def' :
                 any(code, ':', ':|') ? 'type' :
                 null
@@ -229,6 +229,8 @@ function generate(nodes) {
         return '((' + gen(node.argv[0]) + ') => ' + gen(node.argv[1]) + ')'
       } else if (node.op2 && node.code === '/') {
         return '_div(' + gen(node.argv[0]) + ',' + gen(node.argv[1]) + ')'
+      } else if (node.op2 && node.code === '++') {
+        return gen(node.argv[0]) + '.concat(' + gen(node.argv[1]) + ')'
       } else if (node.op2) {
         return gen(node.argv[0]) + node.code + gen(node.argv[1])
       } else if (node.eff) {
@@ -298,9 +300,8 @@ function exec(src) {
       case '+=': return () => this.val += rhs
       case '-=': return () => this.val -= rhs
       case '*=': return () => this.val *= rhs
-      case '/=': return () => {
-        return this.val = _div(this.val, rhs)
-      }
+      case '/=': return () => this.val = _div(this.val, rhs)
+      case '<-': return () => this.val = _do(rhs)
     }
   }
   _eff.prototype.valueOf = function() {
@@ -313,6 +314,7 @@ function exec(src) {
   Object.prototype.catch = function() { return this }
   String.prototype.__defineGetter__('int', function() { return parseInt(this) })
   Number.prototype.__defineGetter__('string', function() { return this.toString() })
+  Array.prototype.__defineGetter__('len', function() { return this.length })
 
   // evaluate source in sandbox
   return eval(src)
@@ -358,6 +360,7 @@ function unitTests() {
     t.eq("hi", "\"hi\"")
     t.eq(true, "true")
     t.eq(1, "f(1)", 'f = a => a')
+    t.eq(3, "f(1 2)", 'f = a,b=>a+b')
     // container
     t.eq([1,2], '[1 2]')
     // exp
@@ -399,6 +402,8 @@ function unitTests() {
     // built-in
     t.eq(11, '"11".int')
     t.eq('1,2', '[1 2].map(x => x.string).join(",")')
+    t.eq(2, '[1 2].len')
+    //t.eq([1,2], '[1]++[2]')
   })
 }
 
