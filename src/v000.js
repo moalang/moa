@@ -228,6 +228,8 @@ function generate(nodes) {
       } else if (node.op2) {
         if (node.code === '=>') {
           return '((' + gen(node.argv[0]) + ') => ' + gen(node.argv[1]) + ')'
+        } else if (node.code === '/') {
+          return '_div(' + gen(node.argv[0]) + ',' + gen(node.argv[1]) + ')'
         } else {
           return gen(node.argv[0]) + node.code + gen(node.argv[1])
         }
@@ -265,15 +267,28 @@ function exec(src) {
     }
     return ret.valueOf()
   }
+  function _div(lhs, rhs) {
+    if (rhs === 0) {
+      return new error('error: divide by zero', lhs, rhs)
+    }
+    return lhs / rhs
+  }
   function _eff(val) {
     this.val = val
   }
+  function error(message, ...args) {
+    this.message = message.toString()
+    this.args = args
+  }
+  error.prototype.valueOf = function() { return this.message }
   _eff.prototype.eff = function(op, rhs) {
     switch(op) {
       case '+=': return () => this.val += rhs
       case '-=': return () => this.val -= rhs
       case '*=': return () => this.val *= rhs
-      case '/=': return () => this.val /= rhs
+      case '/=': return () => {
+        return this.val = _div(this.val, rhs)
+      }
     }
   }
   _eff.prototype.valueOf = function() {
@@ -297,7 +312,7 @@ function tester(callback) {
       errors.push(result)
     }
   }
-  const eq = (...args) => test(x => x.actual, ...args)
+  const eq = (...args) => test(x => x.actual.valueOf(), ...args)
 
   callback({eq})
 
@@ -355,9 +370,8 @@ function unitTests() {
     t.eq(1, 'do(n := 0 n+=1 n)')
     t.eq(2, 'do(n := 0 f=n+=1 f f n)')
     // buildin
+    t.eq("error: divide by zero", "1 / 0")
   /*
-    -- error(2)
-    test "error: divide by zero" "1 / 0"
     test "2" "1 / 0 | 2"
     -- built-in
     test "1" "\"01\".to_i"
