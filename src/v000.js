@@ -23,7 +23,7 @@ function assert(cond, ...objs) {
       puts(line + ': ' + ' '.repeat(column-1) + '^')
     }
     debug(...objs)
-    throw e
+    process.exit(1)
   }
 }
 
@@ -36,132 +36,95 @@ function run(source) {
     actual = exec(js + "\nmain").valueOf()
   } catch(e) {
     error = e.message
+    console.error('Faield: ' + js, e)
   }
   return { source, tokens, nodes, js, actual, error }
 }
 
-function tokenize(source) {
-  const codes = source.match(/(\s+|\d+(?:\.\d+)?|[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)*(?:,[a-zA-Z_]\w*)*|"[^\"]*"|[+\-*/:=><]=|[><]|=>|\+\+|:\||<-|(?:\|\|)|&&|[,\.+\-*/:=()\[\]\|]|#[^\n]*)/g)
-  const src = str(source)
-  const dst = str(codes.join(""))
-  assert(src == dst, src, dst)
-  let line = 1
-  let column = 1
-  let prev = {}
-  let tokens = []
-  for (const code of codes) {
-    const c = code[0]
-    let token = ({code,column,line})
-    for (const c of code) {
-      if (c === '\n') {
-        line++
-        column=1
-      } else {
-        column++
-      }
+function tokenize(src) {
+  const sentinel = {tag:null, code:null}
+  const check = (tag,m) => m ? ({tag, code: typeof(m) === 'string' ? m : m[0]}) : null
+  const match = (p,tag,r) => check(tag, p.match(r))
+  const some = (p,tag,s) => check(tag, s.split(' ').find(w => p.startsWith(w)))
+  const eat = p => match(p, 'num', /^[0-9]+(\.[0-9]+)?/) ||
+    match(p, 'id', /^[A-Za-z_][A-Za-z0-9_]*([\.,][A-Za-z_][A-Za-z0-9_]*)*/) ||
+    match(p, 'str', /^"[^"]*?"/) ||
+    match(p, 'ignore', /^[ #\n]+/) ||
+    match(p, 'type', /^:\|? .+/) ||
+    some(p, 'group', '[ ] ( )') ||
+    some(p, 'eff', '+= -= *= /= <-') ||
+    some(p, 'op2', '|| && == != >= <= ++ => > < + - * / , .') ||
+    some(p, 'def', ':= =') ||
+    sentinel
+
+  let pos=0, codes=[], tokens=[]
+  while (pos < src.length) {
+    const p = src.slice(pos)
+    const {tag, code} = eat(p)
+    assert(code, {pos, p})
+    const token = {code,tag,pos}
+    pos += code.length
+    token[tag] = 1
+    const prev = tokens.slice(-1)[0] || {}
+    if (code === '(' && (prev.id || any(prev.code, ')', ']'))) {
+      token.call = true
     }
-    const tag = ('a' <= c && c <= 'z') ? 'id' :
-                ('0' <= c && c <= '9') ? 'num' :
-                (c === '"') ? 'str' :
-                any(c, ' ', '#', '\n') ? 'ignore' :
-                any(code, 'true', 'false') ? 'bool' :
-                any(c, '(', ')', '[', ']') ? 'group' :
-                any(code, '+', '-', '*', '/', ',', '.', '=>', '||', '&&', '==', '++') ? 'op2' :
-                any(code, '+=', '-=', '*=', '/=', '<-') ? 'eff' :
-                any(code, '=', ':=') ? 'def' :
-                any(code, ':', ':|') ? 'type' :
-                null
-    token[tag] = true
-    if (!token.ignore) {
-      if (token.code === '(' && (prev.id || any(prev.code, ')', ']'))) {
-        token.call = true
-      }
+    if (tag !== 'ignore') {
       tokens.push(token)
     }
-    prev = token
+    codes.push(code)
   }
+
+  const dst = codes.join("")
+  assert(src === dst, src, dst)
   return tokens
 }
 
-function parse(tokens,source) {
+function parse(tokens, source) {
   let pos = 0
-  const eot = ({code:'',column:0,line:0,eot:true})
+  const eot = ({code:'',eot:1})
   const consume = () => tokens[pos++] || eot
   const look = () => tokens[pos] || eot
-  function readLine(token) {
-    const line = token.line
-    const vals = []
-    while (true) {
-      const val = consume()
-      if (val.line !== line) {
-        pos--
-        return vals
-      }
-      vals.push(val)
-    }
-  }
   function until(code) {
     const vals = []
     while (true) {
       const val = read()
       assert(!val.eot, ({source,code,pos,val,vals,tokens}))
+      vals.push(val)
       if (val.code === code) {
         return vals
       }
-      vals.push(val)
     }
-  }
-  function split(tokens, code) {
-    const all = []
-    let parts = []
-    for (const token of tokens) {
-      if (token.code === code) {
-        if (parts.length > 0) {
-          all.push(parts)
-          parts = []
-        }
-      } else {
-        parts.push(token)
-      }
-    }
-    if (parts.length > 0) {
-      all.push(parts)
-    }
-    return all
   }
   function read() {
     let token = consume()
-    if (token.eot) {
+    if (token.eot || any(token.code, ']', ')')) {
       return token
+    }
+    if (look().type) {
+      assert(token.id, token)
+      const type = consume()
+      type.argv = [token]
+      return type
     }
 
     if (token.code === '(') {
-      const exps = until(')')
-      assert(exps.length === 1, exps)
-      token.argv = exps
+      token.argv = until(')')
     } else if (token.code === '[') {
       token.argv = until(']')
-      return token
-    } else if (token.group) {
-      return token
-    } else if (token.id) {
-      if (look().call) {
-        consume()
-        token.argv = until(')')
-      } else if (look().type) {
-        const [sym, ...tokens] = readLine(token)
-        if (sym.code === ':') {
-          sym.argv = [token].concat(tokens.filter((_,index) => index % 3 == 0))
-        } else if (sym.code === ':|') {
-          sym.argv = [token].concat(split(tokens, '|'))
-        } else {
-          assert(false, sym)
-        }
-        return sym
-      }
+    } else if (token.id && look().call) {
+      const open = consume()
+      token.argv = [open].concat(until(')'))
     }
 
-    while (look().op2 || look().eff || look().def) {
+    if (look().def) {
+      const sym = consume()
+      const rhs = read()
+      sym.argv = [token, rhs]
+      token = sym
+    }
+
+    while (look().op2 || look().eff) {
       const sym = consume()
       const rhs = read()
       sym.argv = [token, rhs]
@@ -175,6 +138,19 @@ function parse(tokens,source) {
   while (pos < tokens.length) {
     nodes.push(read())
   }
+
+  const src = tokens.map(t => t.code).join('  ')
+  const tags = tokens.map(t => t.tag + '(' + t.code + ')').join(' ')
+  const composedTokens = []
+  const q = nodes.slice()
+  while (q.length) {
+    const node = q.pop()
+    composedTokens.push(node)
+    q.push(...(node.argv || []))
+  }
+  const dst = composedTokens.sort((a,b) => a.pos - b.pos).map(t => t.code).join('  ')
+  assert(src === dst, {src,dst,tags})
+
   return nodes
 }
 
@@ -184,6 +160,9 @@ function generate(nodes) {
     return escape(node.code)
   }
   function local(argv,f) {
+    assert(argv[0].call, argv)
+    assert(argv.slice(-1)[0].code === ')', argv)
+    argv = argv.slice(1, -1)
     const funcs = argv.filter(x => x.def)
     const vals = argv.filter(x => !x.def)
     if (funcs.length > 0) {
@@ -193,34 +172,15 @@ function generate(nodes) {
       return f(vals)
     }
   }
-  function enumFields(tags) {
-    function enumField(fields, index) {
-      const [head, ...items] = fields
-      const tag = 'f.' + head.code + ' = '
-      if (items.length === 0) {
-        return tag + index
-      } else if (items.length === 1) {
-        return tag + '(val=>({val, _index:' + index + '}))'
-      } else {
-        const ids = items.filter((_,index) => index % 3 === 1).map(id).join(',')
-        return tag + '((' + ids + ') => ({val:{' + ids + '}, _index:' + index + '}))'
-      }
-    }
-    const init = tags.map(enumField).join('\n  ')
-    return '(function(){\n  const f = (x,...args) => args[x._index](x.val)\n  ' + init + '\nreturn f })()'
-  }
   function gen(node) {
     try {
       if (node.code === '[') {
-        return '[' + node.argv.map(gen).join(',') + ']'
+        return '[' + node.argv.slice(0, -1).map(gen).join(',') + ']'
       } else if (node.code === '(') {
+        assert(node.argv.length === 2, node)
         return '(' + gen(node.argv[0]) + ')'
-      } else if (node.code === ':') {
-        const [name,...fields] = node.argv.map(id)
-        const ids = fields.join(',')
-        return 'const ' + name + ' = ((' + ids + ') => ({' + ids + '}))'
-      } else if (node.code === ':|') {
-        return 'const ' + id(node.argv[0]) + ' = ' + enumFields(node.argv.slice(1))
+      } else if (node.type) {
+        return 'const ' + id(node.argv[0]) + ' = _type(' + str(node.code) + ')'
       } else if (node.code == '=') {
         return 'const ' + id(node.argv[0]) + ' = ' + gen(node.argv[1])
       } else if (node.code == ':=') {
@@ -271,9 +231,6 @@ function exec(src) {
     }
     return lhs / rhs
   }
-  function _eff(val) {
-    this.val = val
-  }
   function error(...args) {
     function f(message, ...args) {
       this.message = message.toString()
@@ -294,6 +251,35 @@ function exec(src) {
       return expect.id === this.id ? alt : this
     }
     return new f(...args)
+  }
+  function _type(line) {
+    if (line.startsWith(': ')) {
+      const keys = line.slice(1).split(',').map(x => x.trim().split(' ')[0])
+      return (...vals) => keys.reduce((o,k,i) => ({...o, [k]: vals[i]}), {})
+    } else if (line.startsWith(':| ')) {
+      const f = (x,...args) => args[x.index](x.val)
+      const fields = line.slice(2).split('|').map(f => f.trim())
+      for (const [index, field] of fields.entries()) {
+        if (field.match(/^\w+$/)) {
+          f[field] = {index}
+        } else if (field.match(/^\w+ \w+/)) {
+          const tag = field.split(' ')[0]
+          f[tag] = val => ({index,val})
+        } else if (field.includes(':')) {
+          const [tag, names] = field.split(': ')
+          const keys = names.split(',').map(x => x.trim().split(' ')[0])
+          f[tag] = (...vals) => ({index, val:keys.reduce((o,k,i) => ({...o, [k]: vals[i]}), {})})
+        } else {
+          assert(false, line)
+        }
+      }
+      return f
+    } else {
+      assert(false, line)
+    }
+  }
+  function _eff(val) {
+    this.val = val
   }
   _eff.prototype.eff = function(op, rhs) {
     switch(op) {
@@ -375,8 +361,8 @@ function unitTests() {
     // definition
     t.eq(3, 'a+b', 'a=1', 'b=2')
     // struct
-    t.eq({a:1, b:[]}, 'ab(1 [])', 'ab: a int, b []int')
-    t.eq([2,3], 'ab(1 [2 3]).b', 'ab: a int, b []int')
+    t.eq({a:1, b:[]}, 'ab(1 [])', 'ab: a int, b [int]')
+    t.eq([2,3], 'ab(1 [2 3]).b', 'ab: a int, b [int]')
     // enum
     t.eq(1, 'ast(ast.int(1) v=>v _)', 'ast:| int int | op2: op string, lhs ast, rhs ast')
     t.eq(3, 'ast(ast.op2("+" 1 2) _ o=>o.lhs+o.rhs)', 'ast:| int int | op2: op string, lhs ast, rhs ast')
@@ -403,7 +389,7 @@ function unitTests() {
     t.eq(11, '"11".int')
     t.eq('1,2', '[1 2].map(x => x.string).join(",")')
     t.eq(2, '[1 2].len')
-    //t.eq([1,2], '[1]++[2]')
+    t.eq([1,2], '[1]++[2]')
   })
 }
 
