@@ -31,8 +31,8 @@ function run(source) {
   let tokens, nodes, js, actual, error
   try {
     tokens = tokenize(source)
-    nodes = parse(tokens,source)
-    js = generate(nodes,source)
+    nodes = parse(tokens, source)
+    js = generate(nodes, source)
     actual = exec(js + "\nmain").valueOf()
   } catch(e) {
     error = e.message
@@ -42,42 +42,35 @@ function run(source) {
 }
 
 function tokenize(src) {
-  const sentinel = {tag:null, code:null}
-  const check = (tag,m) => m ? ({tag, code: typeof(m) === 'string' ? m : m[0]}) : null
-  const match = (p,tag,r) => check(tag, p.match(r))
-  const some = (p,tag,s) => check(tag, s.split(' ').find(w => p.startsWith(w)))
+  const check = (pos,tag,m) => m ? ({tag, pos, code: typeof(m) === 'string' ? m : m[0]}) : null
+  const match = (p,tag,r) => check(p, tag, src.slice(p).match(r))
+  const some = (p,tag,s) => check(p, tag, s.split(' ').find(w => src.slice(p).startsWith(w)))
   const eat = p => match(p, 'num', /^[0-9]+(\.[0-9]+)?/) ||
-    match(p, 'id', /^[A-Za-z_][A-Za-z0-9_]*([\.,][A-Za-z_][A-Za-z0-9_]*)*/) ||
+    match(p, 'id', /^[A-Za-z_][A-Za-z0-9_]*(,[A-Za-z_][A-Za-z0-9_]*)*/) ||
     match(p, 'str', /^"[^"]*?"/) ||
     match(p, 'ignore', /^[ #\n]+/) ||
     match(p, 'type', /^:\|? .+/) ||
     some(p, 'group', '[ ] ( )') ||
     some(p, 'eff', '+= -= *= /= <-') ||
     some(p, 'op2', '|| && == != >= <= ++ => > < + - * / , .') ||
-    some(p, 'def', ':= =') ||
-    sentinel
+    some(p, 'def', ':= =')
 
-  let pos=0, codes=[], tokens=[]
+  let pos=0, tokens=[]
   while (pos < src.length) {
-    const p = src.slice(pos)
-    const {tag, code} = eat(p)
-    assert(code, {pos, p})
-    const token = {code,tag,pos}
-    pos += code.length
-    token[tag] = 1
+    const token = eat(pos)
+    assert(token, pos)
+    pos += token.code.length
+    token[token.tag] = 1
     const prev = tokens.slice(-1)[0] || {}
-    if (code === '(' && (prev.id || any(prev.code, ')', ']'))) {
+    if (token.code === '(' && (prev.id || any(prev.code, ')', ']'))) {
       token.call = true
     }
-    if (tag !== 'ignore') {
-      tokens.push(token)
-    }
-    codes.push(code)
+    tokens.push(token)
   }
 
-  const dst = codes.join("")
+  const dst = tokens.map(t => t.code).join("")
   assert(src === dst, src, dst)
-  return tokens
+  return tokens.filter(t => !t.ignore)
 }
 
 function parse(tokens, source) {
