@@ -5,17 +5,17 @@ compile = src => src
 tokenize = src => do(parse_top
   index := 0
   miss = error("miss")
-  consume = l => do(
-    index+=l
-    src.slice(index-l index+0))
-  satisfy = f => if(index >= src.len
-    miss
-    f(src.slice(index+0 index+1))
-    consume(1)
-    miss)
-  equal = s => if(s == src.slice(index index+s.len)
-    consume(s.len)
-    miss)
+  satisfy = f => do(
+    n <- index
+    c <- src.slice(n n+1)
+    miss.unless(f(c))
+    index += 1
+    c)
+  equal = s => do(
+    n <- index
+    miss.unless(s == src.slice(n n+s.len))
+    index += s.len
+    s)
   _many = f,acc => do(
     c <- f
     acc.push(c)
