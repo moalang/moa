@@ -1,7 +1,7 @@
 const str = o => JSON.stringify(o)
 const put = s => process.stdout.write(s)
 const puts = (...args) => console.log(...args)
-const title = (t, ...args) => { put(t); debug(...args) }
+const title = (t, ...args) => { put(t); puts(...args) }
 const debug = (...args) => console.dir(args.length===1 ? args[0] : args, {depth: null})
 const escape = x => ['if', 'do'].includes(x) ? '_' + x : x
 const any = (x,...xs) => xs.some(v => v === x)
@@ -45,7 +45,6 @@ function run(source) {
     js = generate(nodes, source)
     actual = exec(js)
   } catch(e) {
-    printStack(e)
     error = e.message
   }
   return { source, tokens, nodes, js, actual, error }
@@ -383,7 +382,6 @@ function exec(src) {
 }
 
 function tester(callback) {
-  let errors = []
   function test(...args) {
     let [f, expect, source, ...funcs] = args
     funcs.push('main = ' + source)
@@ -391,28 +389,20 @@ function tester(callback) {
     if (str(expect) === str(f(result))) {
       put(".")
     } else {
-      put("x")
-      result.expect = expect
-      errors.push(result)
+      title("expect: ", result.expect)
+      title("actual: ", result.actual)
+      title("source: ", result.source)
+      title("stdout: ", result.stdout)
+      title("error : ", result.error)
+      title("js    : ", result.js)
+      process.exit(2)
     }
   }
   const eq = (...args) => test(x => x.actual, ...args)
 
   callback({eq})
 
-  puts(errors.length === 0 ? "ok" : "FAILED")
-  for (const e of errors) {
-    puts("--")
-    title("expect: ", e.expect)
-    title("actual: ", e.actual)
-    title("source: ", e.source)
-    title("stdout: ", e.stdout)
-    title("error : ", e.error)
-    title("js    : ", e.js)
-    //title("nodes : ", e.nodes)
-    //title("tokens: ", e.tokens)
-  }
-  return errors.length
+  puts("ok")
 }
 
 function unitTests() {
@@ -481,7 +471,8 @@ function integrationTests() {
 
 function main(command) {
   if (command === "test") {
-    process.exit(unitTests() + integrationTests())
+    unitTests()
+    integrationTests()
   } else {
     var input = require('fs').readFileSync('/dev/stdin', 'utf8');
     puts(input)
