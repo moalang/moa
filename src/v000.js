@@ -14,16 +14,22 @@ function assert(cond, ...objs) {
     throw new Error()
   } catch (e) {
     const fs = require('fs')
-    const src = fs.readFileSync('v000.js', 'utf8').split('\n')
-    const rows = e.stack.split('\n').map(x => x.match(/(\d+):(\d+)/)).filter(x=>x)
+    const src = fs.readFileSync('v000.js', 'utf8')
     puts('Assertion failed')
-    for (const row of rows.slice(1,6)) {
-      const [_,line,column] = row
-      puts(line + ': ' + src[line-1])
-      puts(line + ': ' + ' '.repeat(column-1) + '^')
-    }
+    puts(e.message)
+    printStack(e.stack.split('\n'), src)
     debug(...objs)
     process.exit(1)
+  }
+}
+
+function printStack(stacks, src) {
+  const lines = src.split('\n')
+  const rows = stacks.map(x => x.match(/.+:(\d+):(\d+)/)).filter(x=>x)
+  for (const row of rows.slice(0,5)) {
+    const [_,line,column] = row
+    puts(line + ': ' + lines[line-1])
+    puts(line + ': ' + ' '.repeat(column-1) + '^')
   }
 }
 
@@ -36,7 +42,6 @@ function run(source) {
     actual = exec(js)
   } catch(e) {
     error = e.message
-    console.error('Faield: ' + js, e)
   }
   return { source, tokens, nodes, js, actual, error }
 }
@@ -260,7 +265,7 @@ function exec(src) {
       case '<-': return () => this.val = _do(rhs)
     }
   }
-  _eff.prototype.valueOf = function() {
+  _eff.prototype.unwrap = function() {
     return this.val
   }
   _eff.prototype.isEff = true
@@ -280,10 +285,12 @@ function exec(src) {
   }
 
   // WARN: global pollution
+  Object.prototype.unwrap = function() { return this }
   String.prototype.__defineGetter__('int', function() { return parseInt(this) })
+  String.prototype.__defineGetter__('len', function() { return this.length })
+  String.prototype.char = function(n) { return this[n.unwrap()] }
   Number.prototype.__defineGetter__('string', function() { return this.toString() })
   Array.prototype.__defineGetter__('len', function() { return this.length })
-  Function.prototype.valueOf = function() { return this.unwrap() }
   Function.prototype.unwrap = function() {
     let f = this
     while (typeof(f) === 'function') {
@@ -300,28 +307,39 @@ function exec(src) {
       return _lazy(v)
     }
   }
-  function _top(f) {
-    const ret = f.unwrap().valueOf()
-    return ret.eid ? 'error: ' + ret.message : ret
-  }
   function _op2(op, lhs, rhs) {
     return _lazy(() => {
-      lhs = lhs.valueOf()
-      rhs = rhs.valueOf()
+      lhs = lhs.unwrap()
+      rhs = rhs.unwrap()
       switch (op) {
         case '+' : return _lazy(lhs + rhs)
         case '-' : return _lazy(lhs - rhs)
         case '*' : return _lazy(lhs * rhs)
-        case '/' : return rhs === 0 ? error('divide by zero', lhs, rhs) : _lazy(lhs / rhs)
+        case '/' : return rhs == 0 ? error('divide by zero', lhs, rhs) : _lazy(lhs / rhs)
         case '++' : return _lazy(lhs.concat(rhs))
         default:
           assert(false, {op,lhs,rhs})
       }
     })
   }
+  function _top(f) {
+    const ret = f.unwrap().unwrap()
+    return ret.eid ? 'error: ' + ret.message : ret
+  }
 
   // evaluate source in sandbox
-  return eval(src + '\n_top(main)')
+  const js = src + '\n_top(main)'
+  try {
+    return eval(js)
+  } catch (e) {
+    puts(e.message)
+    printStack(e.stack.split('\n').filter(x => x.includes('<anonymous>:')), js)
+    const lines = js.split('\n')
+    for (const [index, line] of lines.entries()) {
+      puts((index+1).toString().padStart(3, ' ') + ':', line)
+    }
+    throw e
+  }
 }
 
 function tester(callback) {
@@ -415,7 +433,8 @@ function integrationTests() {
   const fs = require('fs')
   const src = fs.readFileSync('v001.moa', 'utf8')
   tester(t => {
-    t.eq(1, "compile(1)", src)
+    t.eq(1, 'compile(1)', src)
+    t.eq(1, 'tokenize("1")', src)
   })
 }
 
