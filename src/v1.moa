@@ -46,5 +46,5 @@ tokenize = src => do(parse_top
       op <- read_op()
       rhs <- parse_op2()
       ast.op2(op lhs rhs)).catch(miss lhs))
-  parse_unit = parse_id.catch(miss parse_num.catch(miss parse_str))
+  parse_unit = miss.any([parse_id parse_num parse_str])
   parse_top = parse_op2)

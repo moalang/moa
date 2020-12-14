@@ -68,13 +68,18 @@ function error(message, args) {
     err.valueOf = () => err
     err.if = cond => cond ? err : 'error_if_pass'
     err.unless = cond => !cond ? err : 'error_unless_pass'
-    err.first = (ary,f) => {
+    err.first = (ary,f) => err.any(ary.map(f))
+    err.any = ary => {
       return () => {
         for (const a of ary) {
-          const v = f(a).valueOf()
-          if (!v.eid) {
+          const v = a.valueOf()
+          if (v.eid) {
+            if (v.eid === eid) {
+              continue
+            }
             return v
           }
+          return v
         }
         return err
       }
