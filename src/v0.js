@@ -7,7 +7,8 @@ const debug = (...args) => console.dir(args.length===1 ? args[0] : args, {depth:
 const escape = x => ['if', 'do'].includes(x) ? '_' + x : x
 const any = (x,...xs) => xs.some(v => v === x)
 const fs = require('fs')
-const selfLines = fs.readFileSync('v000.js', 'utf8').split('\n')
+const selfLines = fs.readFileSync('v0.js', 'utf8').split('\n')
+const vm = fs.readFileSync('vm.js', 'utf8')
 
 function assert(cond, ...objs) {
   if (cond) {
@@ -233,137 +234,8 @@ function generate(nodes) {
 }
 
 function exec(src) {
-  const _ = {}
-  function _if(...args) {
-    assert(args.length % 2 === 1, args)
-    for (let i=1; i<args.length; i+=2) {
-      if (args[i-1].valueOf()) {
-        return args[i].valueOf()
-      }
-    }
-    return args[args.length-1]
-  }
-  function _div(lhs, rhs) {
-    if (rhs === 0) {
-      return error('divide by zero', lhs, rhs)
-    }
-    return lhs / rhs
-  }
-  function _type(line) {
-    if (line.startsWith(': ')) {
-      const keys = line.slice(1).split(',').map(x => x.trim().split(' ')[0])
-      return (...vals) => keys.reduce((o,k,i) => ({...o, [k]: vals[i]}), {})
-    } else if (line.startsWith(':| ')) {
-      const f = (x,...args) => args[x.index](x.val)
-      const fields = line.slice(2).split('|').map(f => f.trim())
-      for (const [index, field] of fields.entries()) {
-        if (field.match(/^\w+$/)) {
-          f[field] = {index}
-        } else if (field.match(/^\w+ \w+/)) {
-          const tag = field.split(' ')[0]
-          f[tag] = val => ({index,val})
-        } else if (field.includes(':')) {
-          const [tag, names] = field.split(': ')
-          const keys = names.split(',').map(x => x.trim().split(' ')[0])
-          f[tag] = (...vals) => ({index, val:keys.reduce((o,k,i) => ({...o, [k]: vals[i]}), {})})
-        } else {
-          assert(false, line)
-        }
-      }
-      return f
-    } else {
-      assert(false, line)
-    }
-  }
-  function _var(val) {
-    this.val = val
-  }
-  _var.prototype.eff = function(op, rhs) {
-    rhs = rhs.valueOf()
-    switch(op) {
-      case '+=': return () => this.val += rhs
-      case '-=': return () => this.val -= rhs
-      case '*=': return () => this.val *= rhs
-      case '/=': return () => this.val = _div(this.val, rhs)
-      default:
-        assert(false, {op, lhs: this, rhs})
-    }
-  }
-  _var.prototype.valueOf = function() {
-    return this.val
-  }
-  _var.prototype.isEff = true
-  function error(message, args) {
-    try {
-      throw new Error()
-    } catch (e) {
-      const eid = e.stack
-      const obj = {message, args, eid}
-      obj.catch = (target,alt) => target.valueOf().eid === eid ? alt : obj
-      obj.valueOf = () => obj
-      obj.if = cond => cond ? obj : 'error_if_pass'
-      obj.unless = cond => !cond ? obj : 'error_unless_pass'
-      return obj
-    }
-  }
-
-  // WARN: global pollution
-  Object.prototype.catch = function() { return this }
-  String.prototype.__defineGetter__('int', function() { return parseInt(this) })
-  String.prototype.__defineGetter__('len', function() { return this.length })
-  Number.prototype.__defineGetter__('string', function() { return this.toString() })
-  Array.prototype.__defineGetter__('len', function() { return this.length })
-  Function.prototype.valueOf = function() {
-    let f = this
-    while (typeof(f) === 'function') {
-      f = f()
-    }
-    return f
-  }
-  Function.prototype.catch = function (e, alt) {
-    e = e.valueOf()
-    const f = this
-    return (...args) => {
-      const ret = f(...args).valueOf()
-      const v = ret.eid === e.eid ? alt : ret
-      return v
-    }
-  }
-  function _bind(obj, f) {
-    obj = obj.valueOf()
-    if (obj.eid) {
-      return obj
-    }
-    return f(obj)
-  }
-  function _op2(op, lhs, rhs) {
-    lhs = lhs.valueOf()
-    rhs = rhs.valueOf()
-    switch (op) {
-      case '+' : return lhs + rhs
-      case '-' : return lhs - rhs
-      case '*' : return lhs * rhs
-      case '/' : return _div(lhs, rhs)
-      case '++' : return lhs.concat(rhs)
-      case '==' : return lhs === rhs
-      case '!=' : return lhs !== rhs
-      case '<=' : return lhs <= rhs
-      case '>=' : return lhs >= rhs
-      case '&&' : return lhs && rhs
-      case '||' : return lhs || rhs
-      case '<' : return lhs < rhs
-      case '>' : return lhs > rhs
-      default:
-        assert(false, {op,lhs,rhs})
-    }
-  }
-  function _top(obj) {
-    obj = obj.valueOf()
-    return obj.eid ? 'error: ' + obj.message : obj
-  }
-
   // evaluate source in sandbox
-  const js = src + '\n_top(main)'
+  const js = vm + "\n" + src + '\n_top(main)'
   try {
     return eval(js)
   } catch (e) {
@@ -459,13 +331,13 @@ function unitTests() {
 
 function integrationTests() {
   const fs = require('fs')
-  const src = fs.readFileSync('v001.moa', 'utf8')
+  const src = fs.readFileSync('v1.moa', 'utf8')
   tester(t => {
     t.eq(1, 'compile(1)', src)
     t.eq('error: miss', 'tokenize("")', src)
     t.eq('id', 'do(t <- tokenize("id") t.val)', src)
-    //t.eq('str', 'do(t <- tokenize("\\"str\\"") t.val)', src)
-    //t.eq(123, 'do(t <- tokenize("123") t.val)', src)
+    t.eq('str', 'do(t <- tokenize("\\"str\\"") t.val)', src)
+    t.eq(123, 'do(t <- tokenize("123") t.val)', src)
   })
 }
 
@@ -474,8 +346,12 @@ function main(command) {
     unitTests()
     integrationTests()
   } else {
-    var input = require('fs').readFileSync('/dev/stdin', 'utf8');
-    puts(input)
+    var source = require('fs').readFileSync('/dev/stdin', 'utf8');
+    const tokens = tokenize(source)
+    const nodes = parse(tokens, source)
+    const js = generate(nodes, source)
+    const main = "const _in = require('fs').readFileSync('/dev/stdin', 'utf8');" + 'console.log(compile(_in))'
+    puts(vm + "\n" + js + "\n" + main)
   }
 }
 
