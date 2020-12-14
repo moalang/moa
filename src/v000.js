@@ -46,7 +46,7 @@ function tokenize(src) {
   const match = (p,tag,r) => check(p, tag, src.slice(p).match(r))
   const some = (p,tag,s) => check(p, tag, s.split(' ').find(w => src.slice(p).startsWith(w)))
   const eat = p => match(p, 'num', /^[0-9]+(\.[0-9]+)?/) ||
-    match(p, 'id', /^[A-Za-z_][A-Za-z0-9_]*(,[A-Za-z_][A-Za-z0-9_]*)*/) ||
+    match(p, 'id', /^[A-Za-z_][A-Za-z0-9_]*([\.,][A-Za-z_][A-Za-z0-9_]*)*/) ||
     match(p, 'str', /^"[^"]*?"/) ||
     match(p, 'ignore', /^[ #\n]+/) ||
     match(p, 'type', /^:\|? .+/) ||
@@ -180,12 +180,10 @@ function generate(nodes) {
         return 'let ' + id(node.argv[0]) + ' = new _eff(' + gen(node.argv[1]) + ')'
       } else if (node.op2 && node.code === '=>') {
         return '((' + gen(node.argv[0]) + ') => ' + gen(node.argv[1]) + ')'
-      } else if (node.op2 && node.code === '/') {
-        return '_div(' + gen(node.argv[0]) + ',' + gen(node.argv[1]) + ')'
-      } else if (node.op2 && node.code === '++') {
-        return gen(node.argv[0]) + '.concat(' + gen(node.argv[1]) + ')'
+      } else if (node.op2 && node.code === '.') {
+        return gen(node.argv[0]) + '.' + gen(node.argv[1])
       } else if (node.op2) {
-        return gen(node.argv[0]) + node.code + gen(node.argv[1])
+        return '_op2("' + node.code + '",' + gen(node.argv[0]) + ',' + gen(node.argv[1]) + ')'
       } else if (node.eff) {
         return id(node.argv[0]) + '.eff("' + node.code + '",' + gen(node.argv[1]) + ')'
       } else if (node.argv) {
@@ -275,7 +273,8 @@ function exec(src) {
     } catch (e) {
       const eid = e.stack
       const obj = {message, args, eid}
-      obj.catch = (target,alt) => target.valueOf().eid === eid ? alt : obj
+      obj.catch = (target,alt) => target.unwrap().eid === eid ? alt : obj
+      obj.unwrap = () => obj
       return obj
     }
   }
@@ -284,7 +283,8 @@ function exec(src) {
   String.prototype.__defineGetter__('int', function() { return parseInt(this) })
   Number.prototype.__defineGetter__('string', function() { return this.toString() })
   Array.prototype.__defineGetter__('len', function() { return this.length })
-  Function.prototype.valueOf = function() {
+  Function.prototype.valueOf = function() { return this.unwrap() }
+  Function.prototype.unwrap = function() {
     let f = this
     while (typeof(f) === 'function') {
       f = f()
@@ -292,17 +292,32 @@ function exec(src) {
     return f
   }
   Function.prototype.catch = function (e, alt) {
-    e = e.valueOf()
+    e = e.unwrap()
     const f = this
     return (...args) => {
-      const ret = f(...args).valueOf()
+      const ret = f(...args).unwrap()
       const v = ret.eid === e.eid ? alt : ret
       return _lazy(v)
     }
   }
   function _top(f) {
-    const ret = f.valueOf().valueOf()
+    const ret = f.unwrap().valueOf()
     return ret.eid ? 'error: ' + ret.message : ret
+  }
+  function _op2(op, lhs, rhs) {
+    return _lazy(() => {
+      lhs = lhs.valueOf()
+      rhs = rhs.valueOf()
+      switch (op) {
+        case '+' : return _lazy(lhs + rhs)
+        case '-' : return _lazy(lhs - rhs)
+        case '*' : return _lazy(lhs * rhs)
+        case '/' : return rhs === 0 ? error('divide by zero', lhs, rhs) : _lazy(lhs / rhs)
+        case '++' : return _lazy(lhs.concat(rhs))
+        default:
+          assert(false, {op,lhs,rhs})
+      }
+    })
   }
 
   // evaluate source in sandbox
@@ -329,14 +344,15 @@ function tester(callback) {
 
   puts(errors.length === 0 ? "ok" : "FAILED")
   for (const e of errors) {
+    puts("--")
     title("expect: ", e.expect)
     title("actual: ", e.actual)
     title("source: ", e.source)
     title("stdout: ", e.stdout)
     title("error : ", e.error)
     title("js    : ", e.js)
-    title("nodes : ", e.nodes)
-    title("tokens: ", e.tokens)
+    //title("nodes : ", e.nodes)
+    //title("tokens: ", e.tokens)
   }
   return errors.length
 }
@@ -357,9 +373,9 @@ function unitTests() {
     t.eq(-1, "2 - 3")
     t.eq(6, "2 * 3")
     t.eq(2, "6 / 3")
-    t.eq(14, "2 + 3 * 4")
+    t.eq(14, "2 + (3 * 4)")
     t.eq(20, "(2 + 3) * 4")
-    t.eq(10, "2 * 3 + 4")
+    t.eq(10, "(2 * 3) + 4")
     t.eq(14, "2 * (3 + 4)")
     // definition
     t.eq(3, 'a+b', 'a=1', 'b=2')
