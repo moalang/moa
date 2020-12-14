@@ -2,18 +2,21 @@ token: tag string, val string
 ast:| literal string | op2: op string, lhs ast, rhs ast | call: self ast, args []ast
 
 compile = src => src
-tokenize = src => 1
-fff = do(
-  n := 0
+tokenize = src => do(
+  index := 0
   miss = error("miss")
-  consume = s,f => if(f(s) do(n+=s.len s) miss)
-  satisfy = f => consume(src.char(n) f)
-  equal = s => consume(src.slice(n n+s.len) x=>s==s)
+  consume = l => do(index+=l src.slice(index-l index+0))
+  satisfy = f => if(index >= src.len miss f(src.slice(index+0 index+1)) consume(1) miss)
+  equal = s => if(s == src.slice(index index+s.len) consume(s.len) miss)
   _many = f,acc => do(c <- f acc.push(c) _many(f acc)).catch(miss acc)
   many = f => _many(f [])
   many1 = f => do(
     c <- f
     cs <- many(f)
     [c] ++ cs)
-  id = many1(satisfy(c => "a" <= c && c <= "z"))
-  src)
+  id = do(
+    cs <- many1(satisfy(c => ("a" <= c) && (c <= "z")))
+    cs.join(""))
+
+  parse_top = id
+  parse_top)

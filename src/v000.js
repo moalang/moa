@@ -5,6 +5,8 @@ const title = (t, ...args) => { put(t); debug(...args) }
 const debug = (...args) => console.dir(args.length===1 ? args[0] : args, {depth: null})
 const escape = x => ['if', 'do'].includes(x) ? '_' + x : x
 const any = (x,...xs) => xs.some(v => v === x)
+const fs = require('fs')
+const selfLines = fs.readFileSync('v000.js', 'utf8').split('\n')
 
 function assert(cond, ...objs) {
   if (cond) {
@@ -13,22 +15,24 @@ function assert(cond, ...objs) {
   try {
     throw new Error()
   } catch (e) {
-    const fs = require('fs')
-    const src = fs.readFileSync('v000.js', 'utf8')
     puts('Assertion failed')
-    puts(e.message)
-    printStack(e.stack.split('\n'), src)
+    printStack(e, '')
     debug(...objs)
     process.exit(1)
   }
 }
 
-function printStack(stacks, src) {
-  const lines = src.split('\n')
-  const rows = stacks.map(x => x.match(/.+:(\d+):(\d+)/)).filter(x=>x)
-  for (const row of rows.slice(0,5)) {
-    const [_,line,column] = row
-    puts(line + ': ' + lines[line-1])
+function printStack(e, js) {
+  js = js ? js : selfLines
+  const rows = e.stack.split('\n').map(x => x.match(/.+:(\d+):(\d+)/)).filter(x=>x)
+  puts(e.message)
+  for (const row of rows.slice(0,10)) {
+    const [str,line,column] = row
+    if (str.includes('<anonymous>')) {
+      puts(line + ': ' + js[line-1])
+    } else {
+      puts(line + ': ' + selfLines[line-1])
+    }
     puts(line + ': ' + ' '.repeat(column-1) + '^')
   }
 }
@@ -41,6 +45,7 @@ function run(source) {
     js = generate(nodes, source)
     actual = exec(js)
   } catch(e) {
+    printStack(e)
     error = e.message
   }
   return { source, tokens, nodes, js, actual, error }
@@ -229,10 +234,15 @@ function generate(nodes) {
 
 function exec(src) {
   const _ = {}
+  function _dot(v, obj) {
+    assert(v !== undefined, obj)
+    return v
+  }
   function _if(...args) {
+    assert(args.length % 2 === 1, args)
     for (let i=1; i<args.length; i+=2) {
-      if (args[i-1]) {
-        return args[i]
+      if (args[i-1].valueOf()) {
+        return args[i].valueOf()
       }
     }
     return args[args.length-1]
@@ -273,6 +283,7 @@ function exec(src) {
     this.val = val
   }
   _eff.prototype.eff = function(op, rhs) {
+    rhs = rhs.valueOf()
     switch(op) {
       case '+=': return () => this.val += rhs
       case '-=': return () => this.val -= rhs
@@ -281,12 +292,12 @@ function exec(src) {
       case '<-': return () => this.val = _do(rhs)
     }
   }
-  _eff.prototype.unwrap = function() {
+  _eff.prototype.valueOf = function() {
     return this.val
   }
   _eff.prototype.isEff = true
   function _lazy(exp) {
-    return typeof(exp) === 'function' ? exp : () => exp
+    return (...args) => (typeof(exp) === 'function' ? () => exp(...args) : () => exp)
   }
   function error(message, args) {
     try {
@@ -294,20 +305,19 @@ function exec(src) {
     } catch (e) {
       const eid = e.stack
       const obj = {message, args, eid}
-      obj.catch = (target,alt) => target.unwrap().eid === eid ? alt : obj
-      obj.unwrap = () => obj
+      obj.catch = (target,alt) => target.valueOf().eid === eid ? alt : obj
+      obj.valueOf = () => obj
       return obj
     }
   }
 
   // WARN: global pollution
-  Object.prototype.unwrap = function() { return this }
   String.prototype.__defineGetter__('int', function() { return parseInt(this) })
   String.prototype.__defineGetter__('len', function() { return this.length })
-  String.prototype.char = function(n) { return this[n.unwrap()] }
+  String.prototype.char = function(n, f) { n = n.valueOf(); return n >= this.length ? error('out of index') : f(this[n]) }
   Number.prototype.__defineGetter__('string', function() { return this.toString() })
   Array.prototype.__defineGetter__('len', function() { return this.length })
-  Function.prototype.unwrap = function() {
+  Function.prototype.valueOf = function() {
     let f = this
     while (typeof(f) === 'function') {
       f = f()
@@ -315,17 +325,17 @@ function exec(src) {
     return f
   }
   Function.prototype.catch = function (e, alt) {
-    e = e.unwrap()
+    e = e.valueOf()
     const f = this
     return (...args) => {
-      const ret = f(...args).unwrap()
+      const ret = f(...args).valueOf()
       const v = ret.eid === e.eid ? alt : ret
       return _lazy(v)
     }
   }
   function _bind(obj, f) {
     return _lazy(() => {
-      const ret = obj.unwrap()
+      const ret = obj.valueOf()
       if (ret.eid) {
         return ret
       }
@@ -334,21 +344,27 @@ function exec(src) {
   }
   function _op2(op, lhs, rhs) {
     return _lazy(() => {
-      lhs = lhs.unwrap()
-      rhs = rhs.unwrap()
+      lhs = lhs.valueOf()
+      rhs = rhs.valueOf()
       switch (op) {
         case '+' : return _lazy(lhs + rhs)
         case '-' : return _lazy(lhs - rhs)
         case '*' : return _lazy(lhs * rhs)
         case '/' : return rhs == 0 ? error('divide by zero', lhs, rhs) : _lazy(lhs / rhs)
         case '++' : return _lazy(lhs.concat(rhs))
+        case '<=' : return _lazy(lhs <= rhs)
+        case '>=' : return _lazy(lhs >= rhs)
+        case '&&' : return _lazy(lhs && rhs)
+        case '||' : return _lazy(lhs || rhs)
+        case '<' : return _lazy(lhs < rhs)
+        case '>' : return _lazy(lhs > rhs)
         default:
           assert(false, {op,lhs,rhs})
       }
     })
   }
   function _top(f) {
-    const ret = f.unwrap().unwrap()
+    const ret = f.valueOf()
     return ret.eid ? 'error: ' + ret.message : ret
   }
 
@@ -357,9 +373,8 @@ function exec(src) {
   try {
     return eval(js)
   } catch (e) {
-    puts(e.message)
-    printStack(e.stack.split('\n').filter(x => x.includes('<anonymous>:')), js)
     const lines = js.split('\n')
+    printStack(e, lines)
     for (const [index, line] of lines.entries()) {
       puts((index+1).toString().padStart(3, ' ') + ':', line)
     }
@@ -459,7 +474,8 @@ function integrationTests() {
   const src = fs.readFileSync('v001.moa', 'utf8')
   tester(t => {
     t.eq(1, 'compile(1)', src)
-    t.eq(1, 'tokenize("1")', src)
+    t.eq('error: miss', 'tokenize("")', src)
+    t.eq('hi', 'tokenize("hi")', src)
   })
 }
 
