@@ -33,7 +33,7 @@ function run(source) {
     tokens = tokenize(source)
     nodes = parse(tokens, source)
     js = generate(nodes, source)
-    actual = exec(js + "\nmain").valueOf()
+    actual = exec(js)
   } catch(e) {
     error = e.message
     console.error('Faield: ' + js, e)
@@ -175,7 +175,7 @@ function generate(nodes) {
       } else if (node.type) {
         return 'const ' + id(node.argv[0]) + ' = _type(' + str(node.code) + ')'
       } else if (node.code == '=') {
-        return 'const ' + id(node.argv[0]) + ' = ' + gen(node.argv[1])
+        return 'const ' + id(node.argv[0]) + ' = _lazy(' + gen(node.argv[1]) + ')'
       } else if (node.code == ':=') {
         return 'let ' + id(node.argv[0]) + ' = new _eff(' + gen(node.argv[1]) + ')'
       } else if (node.op2 && node.code === '=>') {
@@ -224,27 +224,6 @@ function exec(src) {
     }
     return lhs / rhs
   }
-  function error(...args) {
-    function f(message, ...args) {
-      this.message = message.toString()
-      this.args = args
-      try {
-        throw new Error()
-      } catch (e) {
-        this.id = e.stack
-      }
-    }
-    f.prototype.valueOf = function() {
-      return 'error: ' + this.message
-    }
-    f.prototype.alt = function(v) {
-      return v
-    }
-    f.prototype.catch = function(expect, alt) {
-      return expect.id === this.id ? alt : this
-    }
-    return new f(...args)
-  }
   function _type(line) {
     if (line.startsWith(': ')) {
       const keys = line.slice(1).split(',').map(x => x.trim().split(' ')[0])
@@ -287,16 +266,47 @@ function exec(src) {
     return this.val
   }
   _eff.prototype.isEff = true
+  function _lazy(exp) {
+    return typeof(exp) === 'function' ? exp : () => exp
+  }
+  function error(message, args) {
+    try {
+      throw new Error()
+    } catch (e) {
+      const eid = e.stack
+      const obj = {message, args, eid}
+      obj.catch = (target,alt) => target.valueOf().eid === eid ? alt : obj
+      return obj
+    }
+  }
 
   // WARN: global pollution
-  Object.prototype.alt = function() { return this }
-  Object.prototype.catch = function() { return this }
   String.prototype.__defineGetter__('int', function() { return parseInt(this) })
   Number.prototype.__defineGetter__('string', function() { return this.toString() })
   Array.prototype.__defineGetter__('len', function() { return this.length })
+  Function.prototype.valueOf = function() {
+    let f = this
+    while (typeof(f) === 'function') {
+      f = f()
+    }
+    return f
+  }
+  Function.prototype.catch = function (e, alt) {
+    e = e.valueOf()
+    const f = this
+    return (...args) => {
+      const ret = f(...args).valueOf()
+      const v = ret.eid === e.eid ? alt : ret
+      return _lazy(v)
+    }
+  }
+  function _top(f) {
+    const ret = f.valueOf().valueOf()
+    return ret.eid ? 'error: ' + ret.message : ret
+  }
 
   // evaluate source in sandbox
-  return eval(src)
+  return eval(src + '\n_top(main)')
 }
 
 function tester(callback) {
@@ -375,8 +385,7 @@ function unitTests() {
     t.eq("error: divide by zero", "1 / 0")
     t.eq("error: nil", "nil", 'nil = error("nil")')
     t.eq("error: nil", "do(nil)", 'nil = error("nil")')
-    t.eq(1, "do(nil).alt(1)", 'nil = error("nil")')
-    t.eq(2, "do(2).alt(1)")
+    t.eq(1, "do(nil).catch(nil 1)", 'nil = error("nil")')
     t.eq(2, "b.catch(a 1).catch(b 2)", 'a = error("msg")', 'b = error("msg")')
     // built-in
     t.eq(11, '"11".int')
