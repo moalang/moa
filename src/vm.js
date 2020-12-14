@@ -63,12 +63,23 @@ function error(message, args) {
     throw new Error()
   } catch (e) {
     const eid = e.stack
-    const obj = {message, args, eid}
-    obj.catch = (target,alt) => target.valueOf().eid === eid ? alt : obj
-    obj.valueOf = () => obj
-    obj.if = cond => cond ? obj : 'error_if_pass'
-    obj.unless = cond => !cond ? obj : 'error_unless_pass'
-    return obj
+    const err = {message, args, eid}
+    err.catch = (target,alt) => target.valueOf().eid === eid ? alt : err
+    err.valueOf = () => err
+    err.if = cond => cond ? err : 'error_if_pass'
+    err.unless = cond => !cond ? err : 'error_unless_pass'
+    err.first = (ary,f) => {
+      return () => {
+        for (const a of ary) {
+          const v = f(a).valueOf()
+          if (!v.eid) {
+            return v
+          }
+        }
+        return err
+      }
+    }
+    return err
   }
 }
 function _bind(obj, f) {

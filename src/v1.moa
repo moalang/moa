@@ -3,6 +3,7 @@ ast:| id string | int int | str string | op2: op string, lhs ast, rhs ast | call
 compile = src => src
 tokenize = src => do(parse_top
   index := 0
+
   miss = error("miss")
   satisfy = f => do(
     n <- index
@@ -24,6 +25,10 @@ tokenize = src => do(parse_top
     c <- f
     cs <- many(f)
     [c] ++ cs)
+  any = ary => miss.first(ary equal)
+
+  read_op = any("== != <= >= ++ += -= *= /= + - * / .".split(" "))
+
   parse_id = do(
     cs <- many1(satisfy(c => ("a" <= c) && (c <= "z")))
     ast.id(cs.join("")))
@@ -35,7 +40,6 @@ tokenize = src => do(parse_top
     cs <- many1(satisfy(c => c!= "\""))
     equal("\"")
     ast.str(cs.join("")))
-  read_op = equal("+")
   parse_op2 = do(
     lhs <- parse_unit
     do(
