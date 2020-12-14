@@ -56,7 +56,7 @@ function tokenize(src) {
   const some = (p,tag,s) => check(p, tag, s.split(' ').find(w => src.slice(p).startsWith(w)))
   const eat = p => match(p, 'num', /^[0-9]+(\.[0-9]+)?/) ||
     match(p, 'id', /^[A-Za-z_][A-Za-z0-9_]*([\.,][A-Za-z_][A-Za-z0-9_]*)*/) ||
-    match(p, 'str', /^"[^"]*?"/) ||
+    match(p, 'str', /^"(?:(?:\\")|[^"])*"/) ||
     match(p, 'ignore', /^[ #\n]+/) ||
     match(p, 'type', /^:\|? .+/) ||
     some(p, 'group', '[ ] ( )') ||
@@ -350,6 +350,8 @@ function exec(src) {
         case '*' : return _lazy(lhs * rhs)
         case '/' : return _lazy(_div(lhs, rhs))
         case '++' : return _lazy(lhs.concat(rhs))
+        case '==' : return _lazy(lhs === rhs)
+        case '!=' : return _lazy(lhs !== rhs)
         case '<=' : return _lazy(lhs <= rhs)
         case '>=' : return _lazy(lhs >= rhs)
         case '&&' : return _lazy(lhs && rhs)
@@ -388,7 +390,7 @@ function tester(callback) {
     if (str(expect) === str(f(result))) {
       put(".")
     } else {
-      title("expect: ", result.expect)
+      title("expect: ", str(expect))
       title("actual: ", result.actual)
       title("source: ", result.source)
       title("stdout: ", result.stdout)
@@ -410,6 +412,7 @@ function unitTests() {
     t.eq(1, "1")
     t.eq(1.2, "1.2")
     t.eq("hi", "\"hi\"")
+    t.eq('hi"world', '"hi\\"world"')
     t.eq(true, "true")
     t.eq(1, "f(1)", 'f = a => a')
     t.eq(3, "f(1 2)", 'f = a,b=>a+b')
@@ -464,7 +467,9 @@ function integrationTests() {
   tester(t => {
     t.eq(1, 'compile(1)', src)
     t.eq('error: miss', 'tokenize("")', src)
-    t.eq('hi', 'tokenize("hi")', src)
+    t.eq('id', 'do(t <- tokenize("id") t.val)', src)
+    t.eq('str', 'do(t <- tokenize("\\"str\\"") t.val)', src)
+    t.eq(123, 'do(t <- tokenize("123") t.val)', src)
   })
 }
 

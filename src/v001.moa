@@ -5,18 +5,38 @@ compile = src => src
 tokenize = src => do(
   index := 0
   miss = error("miss")
-  consume = l => do(index+=l src.slice(index-l index+0))
-  satisfy = f => if(index >= src.len miss f(src.slice(index+0 index+1)) consume(1) miss)
-  equal = s => if(s == src.slice(index index+s.len) consume(s.len) miss)
-  _many = f,acc => do(c <- f acc.push(c) _many(f acc)).catch(miss acc)
+  consume = l => do(
+    index+=l
+    src.slice(index-l index+0))
+  satisfy = f => if(index >= src.len
+    miss
+    f(src.slice(index+0 index+1))
+    consume(1)
+    miss)
+  equal = s => if(s == src.slice(index index+s.len)
+    consume(s.len)
+    miss)
+  _many = f,acc => do(
+    c <- f
+    acc.push(c)
+    _many(f acc)).catch(miss acc)
   many = f => _many(f [])
   many1 = f => do(
     c <- f
     cs <- many(f)
     [c] ++ cs)
-  id = do(
+  parse_id = do(
     cs <- many1(satisfy(c => ("a" <= c) && (c <= "z")))
-    cs.join(""))
+    token("id" cs.join("")))
+  parse_num = do(
+    cs <- many1(satisfy(c => ("0" <= c) && (c <= "9")))
+    token("num" cs.join("").int))
+  parse_str = do(
+    equal("\"")
+    cs <- many1(satisfy(c => c!= "\""))
+    equal("\"")
+    token("str" cs.join("")))
 
-  parse_top = id
+  parse_unit = parse_id.catch(miss parse_num.catch(miss parse_str))
+  parse_top = parse_unit
   parse_top)
