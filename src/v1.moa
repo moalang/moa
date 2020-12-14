@@ -26,6 +26,11 @@ tokenize = src => do(parse_top
     cs <- many(f)
     [c] ++ cs)
   any = ary => miss.first(ary equal)
+  between = l,r,c => do(
+    equal(l)
+    v <- c
+    equal(r)
+    v)
 
   read_op = any("== != <= >= ++ += -= *= /= + - * / .".split(" "))
 
@@ -36,9 +41,7 @@ tokenize = src => do(parse_top
     cs <- many1(satisfy(c => ("0" <= c) && (c <= "9")))
     ast.int(cs.join("").int))
   parse_str = do(
-    equal("\"")
-    cs <- many1(satisfy(c => c!= "\""))
-    equal("\"")
+    cs <- between("\"" "\"" many1(satisfy(c => c!= "\"")))
     ast.str(cs.join("")))
   parse_op2 = do(
     lhs <- parse_unit
@@ -46,5 +49,6 @@ tokenize = src => do(parse_top
       op <- read_op()
       rhs <- parse_op2()
       ast.op2(op lhs rhs)).catch(miss lhs))
-  parse_unit = miss.any([parse_id parse_num parse_str])
+  parse_group = do(between("(" ")" parse_op2))
+  parse_unit = miss.any([parse_group parse_id parse_num parse_str])
   parse_top = parse_op2)
