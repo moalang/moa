@@ -71,29 +71,6 @@ function error(message, args) {
     return obj
   }
 }
-
-// WARN: global pollution
-Object.prototype.catch = function() { return this }
-String.prototype.__defineGetter__('int', function() { return parseInt(this) })
-String.prototype.__defineGetter__('len', function() { return this.length })
-Number.prototype.__defineGetter__('string', function() { return this.toString() })
-Array.prototype.__defineGetter__('len', function() { return this.length })
-Function.prototype.valueOf = function() {
-  let f = this
-  while (typeof(f) === 'function') {
-    f = f()
-  }
-  return f
-}
-Function.prototype.catch = function (e, alt) {
-  e = e.valueOf()
-  const f = this
-  return (...args) => {
-    const ret = f(...args).valueOf()
-    const v = ret.eid === e.eid ? alt : ret
-    return v
-  }
-}
 function _bind(obj, f) {
   obj = obj.valueOf()
   if (obj.eid) {
@@ -125,4 +102,27 @@ function _op2(op, lhs, rhs) {
 function _top(obj) {
   obj = obj.valueOf()
   return obj.eid ? 'error: ' + obj.message : obj
+}
+
+// WARN: global pollution
+Object.prototype.catch = function() { return this }
+String.prototype.__defineGetter__('int', function() { return parseInt(this) })
+String.prototype.__defineGetter__('len', function() { return this.length })
+Number.prototype.__defineGetter__('string', function() { return this.toString() })
+Array.prototype.__defineGetter__('len', function() { return this.length })
+Function.prototype.valueOf = function() {
+  let f = this
+  while (typeof(f) === 'function') {
+    f = f()
+  }
+  return f
+}
+Function.prototype.catch = function (e, alt) {
+  e = e.valueOf()
+  const f = this
+  return (...args) => {
+    const ret = f(...args).valueOf()
+    const v = ret.eid === e.eid ? alt : ret
+    return v
+  }
 }
