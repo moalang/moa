@@ -1,7 +1,20 @@
 ast:| id string | int int | str string | op2: op string, lhs ast, rhs ast | call: self ast, args []ast
 
-compile = src => src
-tokenize = src => do(parse_top
+run = src => do(
+  js <- compile(src)
+  eval(js))
+
+compile = src => do(
+  t <- parse(src)
+  js = a => ast(a
+    id => id
+    int => int.string
+    str => str
+    op2 => js(op2.lhs) ++ op2.op ++ js(op2.rhs)
+    call => "null")
+  js(t))
+
+parse = src => do(parse_top
   index := 0
 
   miss = error("miss")
