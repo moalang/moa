@@ -1,5 +1,4 @@
-token: tag string, val string
-ast:| literal string | op2: op string, lhs ast, rhs ast | call: self ast, args []ast
+ast:| id string | int int | str string | op2: op string, lhs ast, rhs ast | call: self ast, args []ast
 
 compile = src => src
 tokenize = src => do(parse_top
@@ -27,14 +26,21 @@ tokenize = src => do(parse_top
     [c] ++ cs)
   parse_id = do(
     cs <- many1(satisfy(c => ("a" <= c) && (c <= "z")))
-    token("id" cs.join("")))
+    ast.id(cs.join("")))
   parse_num = do(
     cs <- many1(satisfy(c => ("0" <= c) && (c <= "9")))
-    token("num" cs.join("").int))
+    ast.int(cs.join("").int))
   parse_str = do(
     equal("\"")
     cs <- many1(satisfy(c => c!= "\""))
     equal("\"")
-    token("str" cs.join("")))
+    ast.str(cs.join("")))
+  read_op = equal("+")
+  parse_op2 = do(
+    lhs <- parse_unit
+    do(
+      op <- read_op()
+      rhs <- parse_op2()
+      ast.op2(op lhs rhs)).catch(miss lhs))
   parse_unit = parse_id.catch(miss parse_num.catch(miss parse_str))
-  parse_top = parse_unit)
+  parse_top = parse_op2)

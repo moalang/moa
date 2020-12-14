@@ -338,6 +338,7 @@ function integrationTests() {
     t.eq('id', 'do(t <- tokenize("id") t.val)', src)
     t.eq('str', 'do(t <- tokenize("\\"str\\"") t.val)', src)
     t.eq(123, 'do(t <- tokenize("123") t.val)', src)
+    t.eq(['+', 1, 2], 'do(t <- tokenize("1+2") [t.val.op t.val.lhs.val t.val.rhs.val])', src)
   })
 }
 
