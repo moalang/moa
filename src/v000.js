@@ -313,7 +313,6 @@ function exec(src) {
   // WARN: global pollution
   String.prototype.__defineGetter__('int', function() { return parseInt(this) })
   String.prototype.__defineGetter__('len', function() { return this.length })
-  String.prototype.char = function(n, f) { n = n.valueOf(); return n >= this.length ? error('out of index') : f(this[n]) }
   Number.prototype.__defineGetter__('string', function() { return this.toString() })
   Array.prototype.__defineGetter__('len', function() { return this.length })
   Function.prototype.valueOf = function() {
@@ -349,7 +348,7 @@ function exec(src) {
         case '+' : return _lazy(lhs + rhs)
         case '-' : return _lazy(lhs - rhs)
         case '*' : return _lazy(lhs * rhs)
-        case '/' : return rhs == 0 ? error('divide by zero', lhs, rhs) : _lazy(lhs / rhs)
+        case '/' : return _lazy(_div(lhs, rhs))
         case '++' : return _lazy(lhs.concat(rhs))
         case '<=' : return _lazy(lhs <= rhs)
         case '>=' : return _lazy(lhs >= rhs)
