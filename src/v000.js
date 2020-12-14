@@ -56,8 +56,8 @@ function tokenize(src) {
     match(p, 'ignore', /^[ #\n]+/) ||
     match(p, 'type', /^:\|? .+/) ||
     some(p, 'group', '[ ] ( )') ||
-    some(p, 'eff', '+= -= *= /= <-') ||
-    some(p, 'op2', '|| && == != >= <= ++ => > < + - * / , .') ||
+    some(p, 'eff', '+= -= *= /=') ||
+    some(p, 'op2', '|| && == != >= <= ++ => <- > < + - * / , .') ||
     some(p, 'def', ':= =')
 
   let pos=0, tokens=[]
@@ -157,17 +157,40 @@ function generate(nodes) {
     assert(node.id, node)
     return escape(node.code)
   }
-  function local(argv,f) {
-    assert(argv[0].call, argv)
-    assert(argv.slice(-1)[0].code === ')', argv)
-    argv = argv.slice(1, -1)
-    const funcs = argv.filter(x => x.def)
+  function local(node,f) {
+    assert(node.argv[0].call, node.argv)
+    assert(node.argv.slice(-1)[0].code === ')', node.argv)
+    const argv = node.argv.slice(1, -1)
+    const funcs = argv.filter(x => x.def).map(gen)
     const vals = argv.filter(x => !x.def)
+
+    if (node.code === 'do') {
+      const rec = body => {
+        const val = vals.shift()
+        if (val && val.code === '<-') {
+          const arg = id(val.argv[0])
+          return '_bind(' + gen(val.argv[1]) + ', ' + arg + ' => ' + rec(arg) + ')'
+        } else if(val) {
+          const arg = '_b'
+          return '_bind(' + gen(val) + ', ' +  arg + ' => ' + rec(arg) + ')'
+        } else {
+          return body
+        }
+      }
+
+      const body = rec('undefined')
+      if (funcs.length > 0) {
+        return '(function() {\n' + funcs.join("\n") + '\nreturn ' + body + '})()'
+      } else {
+        return body
+      }
+    }
+
+    const body = id(node) + (vals ? '(' + vals.map(gen).join(',') + ')' : '')
     if (funcs.length > 0) {
-      const def = funcs.map(gen).join("\n")
-      return '(function() {\n' + def + '\nreturn ' + f(vals) + '})()'
+      return '(function() {\n' + funcs.join("\n") + '\nreturn ' + body + '})()'
     } else {
-      return f(vals)
+      return body
     }
   }
   function gen(node) {
@@ -192,7 +215,7 @@ function generate(nodes) {
       } else if (node.eff) {
         return id(node.argv[0]) + '.eff("' + node.code + '",' + gen(node.argv[1]) + ')'
       } else if (node.argv) {
-        return local(node.argv, vals => id(node) + (vals ? '(' + vals.map(gen).join(',') + ')' : ''))
+        return local(node)
       } else {
         return node.code
       }
@@ -213,13 +236,6 @@ function exec(src) {
       }
     }
     return args[args.length-1]
-  }
-  function _do(...args) {
-    let ret
-    for (const arg of args) {
-      ret = typeof(arg) === 'function' ? arg() : arg
-    }
-    return ret
   }
   function _div(lhs, rhs) {
     if (rhs === 0) {
@@ -306,6 +322,15 @@ function exec(src) {
       const v = ret.eid === e.eid ? alt : ret
       return _lazy(v)
     }
+  }
+  function _bind(obj, f) {
+    return _lazy(() => {
+      const ret = obj.unwrap()
+      if (ret.eid) {
+        return ret
+      }
+      return f(ret)
+    })
   }
   function _op2(op, lhs, rhs) {
     return _lazy(() => {
