@@ -1,4 +1,4 @@
-ast:| id string | int int | str string | op2: op string, lhs ast, rhs ast | call: self ast, args []ast
+ast:| id string | int string | str string | op2: op string, lhs ast, rhs ast | call: self ast, args []ast
 
 run = src => do(
   js <- compile(src)
@@ -8,7 +8,7 @@ compile = src => do(
   t <- parse(src)
   js = a => ast(a
     id => id
-    int => int.string
+    int => int
     str => "\"" ++ str ++ "\""
     op2 => "_op2(\"" ++ op2.op ++ "\", " ++ js(op2.lhs) ++ "," ++ js(op2.rhs) ++ ")"
     call => "null")
@@ -45,26 +45,21 @@ parse = src => do(parse_top
     equal(r)
     v)
 
-  skip = f => do(many(any(" \t\r\n".split(""))) f)
+  skip = f => many(any(" \t\r\n".split(""))).then(f)
   read_op = skip(any("== != <= >= ++ += -= *= /= + - * / .".split(" ")))
-  read_num = skip(many1(satisfy(c => ("0" <= c) && (c <= "9"))))
-  read_str = skip(between("\"" "\"" many1(satisfy(c => c!= "\""))))
+  read_id = skip(many1(satisfy(c => ("a" <= c) && (c <= "z")))).then(cs => cs.join(""))
+  read_num = skip(many1(satisfy(c => ("0" <= c) && (c <= "9")))).then(cs => cs.join(""))
+  read_str = skip(between("\"" "\"" many1(satisfy(c => c!= "\"")))).then(cs => cs.join(""))
 
-  parse_id = do(
-    cs <- many1(satisfy(c => ("a" <= c) && (c <= "z")))
-    ast.id(cs.join("")))
-  parse_num = do(
-    cs <- read_num
-    ast.int(cs.join("").int))
-  parse_str = do(
-    cs <- read_str
-    ast.str(cs.join("")))
+  parse_id = read_id.then(ast.id)
+  parse_num = read_num.then(ast.int)
+  parse_str = read_str.then(ast.str)
   parse_op2 = do(
     lhs <- parse_unit
     do(
       op <- read_op
       rhs <- parse_op2
       ast.op2(op lhs rhs)).catch(miss lhs))
-  parse_group = do(between("(" ")" parse_op2))
+  parse_group = between("(" ")" parse_op2)
   parse_unit = miss.any([parse_group parse_id parse_num parse_str])
   parse_top = parse_op2)

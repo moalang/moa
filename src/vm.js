@@ -123,6 +123,7 @@ function _top(obj) {
 
 // WARN: global pollution
 Object.prototype.catch = function() { return this }
+Object.prototype.then = function(f) { return f(this) }
 String.prototype.__defineGetter__('int', function() { return parseInt(this) })
 String.prototype.__defineGetter__('len', function() { return this.length })
 Number.prototype.__defineGetter__('string', function() { return this.toString() })
@@ -141,5 +142,12 @@ Function.prototype.catch = function (e, alt) {
     const ret = f(...args).valueOf()
     const v = ret.eid === e.eid ? alt : ret
     return v
+  }
+}
+Function.prototype.then = function (f) {
+  const g = this
+  return (...args) => {
+    const ret = g(...args).valueOf()
+    return ret.eid ? ret : f(ret)
   }
 }

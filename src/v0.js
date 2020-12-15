@@ -228,7 +228,6 @@ function tester(callback) {
       title("expect: ", str(expect))
       title("actual: ", str(actual))
       title("source: ", source)
-      title("error : ", error)
       for (const [i, line] of result.js.split('\n').entries()) {
         puts((i+1).toString().padStart(3, ' ') + ':', line)
       }
@@ -305,8 +304,8 @@ function integrationTests() {
     t.eq('error: miss', 'parse("")', src)
     t.eq('id', 'do(t <- parse("id") t.val)', src)
     t.eq('str', 'do(t <- parse("\\"str\\"") t.val)', src)
-    t.eq(123, 'do(t <- parse("123") t.val)', src)
-    t.eq(['+', 1, 2], 'do(t <- parse("1+2") [t.val.op t.val.lhs.val t.val.rhs.val])', src)
+    t.eq('123', 'do(t <- parse("123") t.val)', src)
+    t.eq(['+', '1', '2'], 'do(t <- parse("1+2") [t.val.op t.val.lhs.val t.val.rhs.val])', src)
     t.eq('*', 'do(t <- parse("(1+2)*3") t.val.op)', src)
     t.eq('+', 'do(t <- parse("1+(2*3)") t.val.op)', src)
   })
