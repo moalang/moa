@@ -253,11 +253,12 @@ function tester(callback) {
     let [f, expect, source, ...funcs] = args
     funcs.push('main = ' + source)
     const result = run(funcs.join("\n"))
-    if (str(expect) === str(f(result))) {
+    const actual = f(result)
+    if (str(expect) === str(actual)) {
       put(".")
     } else {
       title("expect: ", str(expect))
-      title("actual: ", result.actual)
+      title("actual: ", str(actual))
       title("source: ", result.source)
       title("stdout: ", result.stdout)
       title("error : ", result.error)
@@ -334,7 +335,9 @@ function integrationTests() {
   const src = fs.readFileSync('v1.moa', 'utf8')
   tester(t => {
     t.eq(1, 'run("1")', src)
-    t.eq("a", 'compile("\\"a\\"")', src)
+    t.eq(9, 'run("(1 + 2) * 3")', src)
+    t.eq('hi', 'run("\\\"hi\\\"")', src)
+    t.eq('hi', 'run("  \\\"h\\\"  ++ \\\"i\\\"  ")', src)
     t.eq('error: miss', 'parse("")', src)
     t.eq('id', 'do(t <- parse("id") t.val)', src)
     t.eq('str', 'do(t <- parse("\\"str\\"") t.val)', src)

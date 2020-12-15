@@ -9,8 +9,8 @@ compile = src => do(
   js = a => ast(a
     id => id
     int => int.string
-    str => str
-    op2 => js(op2.lhs) ++ op2.op ++ js(op2.rhs)
+    str => "\"" ++ str ++ "\""
+    op2 => "_op2(\"" ++ op2.op ++ "\", " ++ js(op2.lhs) ++ "," ++ js(op2.rhs) ++ ")"
     call => "null")
   js(t))
 
@@ -45,22 +45,25 @@ parse = src => do(parse_top
     equal(r)
     v)
 
-  read_op = any("== != <= >= ++ += -= *= /= + - * / .".split(" "))
+  skip = f => do(many(any(" \t\r\n".split(""))) f)
+  read_op = skip(any("== != <= >= ++ += -= *= /= + - * / .".split(" ")))
+  read_num = skip(many1(satisfy(c => ("0" <= c) && (c <= "9"))))
+  read_str = skip(between("\"" "\"" many1(satisfy(c => c!= "\""))))
 
   parse_id = do(
     cs <- many1(satisfy(c => ("a" <= c) && (c <= "z")))
     ast.id(cs.join("")))
   parse_num = do(
-    cs <- many1(satisfy(c => ("0" <= c) && (c <= "9")))
+    cs <- read_num
     ast.int(cs.join("").int))
   parse_str = do(
-    cs <- between("\"" "\"" many1(satisfy(c => c!= "\"")))
+    cs <- read_str
     ast.str(cs.join("")))
   parse_op2 = do(
     lhs <- parse_unit
     do(
-      op <- read_op()
-      rhs <- parse_op2()
+      op <- read_op
+      rhs <- parse_op2
       ast.op2(op lhs rhs)).catch(miss lhs))
   parse_group = do(between("(" ")" parse_op2))
   parse_unit = miss.any([parse_group parse_id parse_num parse_str])
