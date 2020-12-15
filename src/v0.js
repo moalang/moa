@@ -39,19 +39,6 @@ function printStack(e, js) {
   }
 }
 
-function run(source) {
-  let tokens, nodes, js, actual, error
-  try {
-    tokens = tokenize(source)
-    nodes = parse(tokens, source)
-    js = generate(nodes, source)
-    actual = exec(js)
-  } catch(e) {
-    error = e.message
-  }
-  return { source, tokens, nodes, js, actual, error }
-}
-
 function tokenize(src) {
   const check = (pos,tag,m) => m ? ({tag, pos, code: typeof(m) === 'string' ? m : m[0]}) : null
   const match = (p,tag,r) => check(p, tag, src.slice(p).match(r))
@@ -244,34 +231,33 @@ function exec(src) {
     for (const [index, line] of lines.entries()) {
       puts((index+1).toString().padStart(3, ' ') + ':', line)
     }
+    process.exit(2)
     throw e
   }
 }
 
 function tester(callback) {
-  function test(...args) {
-    let [f, expect, source, ...funcs] = args
+  function eq(expect, source, ...funcs) {
     funcs.push('main = ' + source)
-    const result = run(funcs.join("\n"))
-    const actual = f(result)
+    const src = funcs.join("\n")
+    const tokens = tokenize(src)
+    const nodes = parse(tokens, src)
+    const js = generate(nodes, src)
+    const actual = exec(js)
     if (str(expect) === str(actual)) {
       put(".")
     } else {
       title("expect: ", str(expect))
       title("actual: ", str(actual))
-      title("source: ", result.source)
-      title("stdout: ", result.stdout)
-      title("error : ", result.error)
+      title("source: ", source)
+      title("error : ", error)
       for (const [i, line] of result.js.split('\n').entries()) {
         puts((i+1).toString().padStart(3, ' ') + ':', line)
       }
-      process.exit(2)
+      process.exit(3)
     }
   }
-  const eq = (...args) => test(x => x.actual, ...args)
-
   callback({eq})
-
   puts("ok")
 }
 
