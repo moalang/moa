@@ -59,10 +59,6 @@ function tokenize(src) {
     assert(token, pos)
     pos += token.code.length
     token[token.tag] = 1
-    const prev = tokens.slice(-1)[0] || {}
-    if (token.code === '(' && (prev.id || any(prev.code, ')', ']'))) {
-      token.call = true
-    }
     tokens.push(token)
   }
 
@@ -103,7 +99,7 @@ function parse(tokens, source) {
       token.argv = until(')')
     } else if (token.code === '[') {
       token.argv = until(']')
-    } else if (token.id && look().call) {
+    } else if (token.id && look().code === '(' && look().pos === token.pos + token.code.length) {
       const open = consume()
       token.argv = [open].concat(until(')'))
     }
@@ -151,7 +147,7 @@ function generate(nodes) {
     return escape(node.code)
   }
   function local(node,f) {
-    assert(node.argv[0].call, node.argv)
+    assert(node.argv[0].code === '(', node.argv)
     assert(node.argv.slice(-1)[0].code === ')', node.argv)
     const argv = node.argv.slice(1, -1)
     const funcs = argv.filter(x => x.def).map(gen)
