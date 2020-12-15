@@ -1,10 +1,8 @@
 const str = o => JSON.stringify(o)
 const put = s => process.stdout.write(s)
 const puts = (...args) => console.log(...args)
-const trace = (...args) => { console.log(...args); return true }
 const title = (t, ...args) => { put(t); puts(...args) }
 const debug = (...args) => console.dir(args.length===1 ? args[0] : args, {depth: null})
-const any = (x,...xs) => xs.some(v => v === x)
 const fs = require('fs')
 const selfLines = fs.readFileSync('v0.js', 'utf8').split('\n')
 const vm = fs.readFileSync('vm.js', 'utf8')
@@ -84,7 +82,7 @@ function parse(tokens, source) {
   }
   function read() {
     let token = consume()
-    if (token.eot || any(token.code, ']', ')')) {
+    if (token.eot || token.code === ']' || token.code === ')') {
       return token
     }
     if (look().type) {
@@ -171,33 +169,30 @@ function generate(nodes) {
     }
   }
   function gen(node) {
-    try {
-      if (node.code === '[') {
-        return '[' + node.array.map(gen).join(',') + ']'
-      } else if (node.code === '(') {
-        return '(' + gen(node.body) + ')'
-      } else if (node.type) {
-        return 'const ' + node.name + ' = _type(' + str(node.code) + ')'
-      } else if (node.code == '=') {
-        return 'const ' + node.name + ' = ' + gen(node.body)
-      } else if (node.code == ':=') {
-        return 'let ' + node.name + ' = new _var(' + gen(node.body) + ')'
-      } else if (node.op2 && node.code === '=>') {
-        return '((' + gen(node.lhs) + ') => ' + gen(node.rhs) + ')'
-      } else if (node.op2 && node.code === '.') {
-        return gen(node.lhs) + '.' + gen(node.rhs)
-      } else if (node.op2) {
-        return '_op2("' + node.code + '",' + gen(node.lhs) + ',' + gen(node.rhs) + ')'
-      } else if (node.eff) {
-        return node.name + '.eff("' + node.code + '",' + gen(node.rhs) + ')'
-      } else if (node.args) {
-        return call(node)
-      } else {
-        return node.code
-      }
-    } catch (e) {
-      console.error(e, node)
-      throw e
+    if (node.code === '[') {
+      return '[' + node.array.map(gen).join(',') + ']'
+    } else if (node.code === '(') {
+      return '(' + gen(node.body) + ')'
+    } else if (node.type) {
+      return 'const ' + node.name + ' = _type(' + str(node.code) + ')'
+    } else if (node.code == '=') {
+      return 'const ' + node.name + ' = ' + gen(node.body)
+    } else if (node.code == ':=') {
+      return 'let ' + node.name + ' = new _var(' + gen(node.body) + ')'
+    } else if (node.op2 && node.code === '=>') {
+      return '((' + gen(node.lhs) + ') => ' + gen(node.rhs) + ')'
+    } else if (node.op2 && node.code === '.') {
+      return gen(node.lhs) + '.' + gen(node.rhs)
+    } else if (node.op2) {
+      return '_op2("' + node.code + '",' + gen(node.lhs) + ',' + gen(node.rhs) + ')'
+    } else if (node.eff) {
+      return node.name + '.eff("' + node.code + '",' + gen(node.rhs) + ')'
+    } else if (node.args) {
+      return call(node)
+    } else if (node.num || node.str || node.id) {
+      return node.code
+    } else {
+      assert(false, node)
     }
   }
   return nodes.map(gen).join("\n")
