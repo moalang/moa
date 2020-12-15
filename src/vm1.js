@@ -1,6 +1,4 @@
 function _operator(op, lhs, rhs) {
-  lhs = lhs.valueOf()
-  rhs = rhs.valueOf()
   switch (op) {
     case '+' : return lhs + rhs
     case '-' : return lhs - rhs

@@ -1,4 +1,4 @@
-ast:| id string | int string | str string | op2: op string, lhs ast, rhs ast | call: self ast, args []ast
+ast:| id string | int string | str string | op2: op string, lhs ast, rhs ast | def: name string, body ast | bind: left ast, right ast | call: self ast, args []ast
 
 compile = src => do(
   t <- parse(src)
@@ -7,6 +7,8 @@ compile = src => do(
     int => int
     str => "\"" ++ str ++ "\""
     op2 => "_operator(\"" ++ op2.op ++ "\", " ++ js(op2.lhs) ++ "," ++ js(op2.rhs) ++ ")"
+    def => "const " ++ def.name ++ " = " ++ js(def.body)
+    bind => js(bind.left) + "\n" + js(bind.right)
     call => "null")
   js(t))
 
@@ -58,4 +60,15 @@ parse = src => do(parse_top
       ast.op2(op lhs rhs)).catch(miss lhs))
   parse_group = between("(" ")" parse_op2)
   parse_unit = miss.any([parse_group parse_id parse_num parse_str])
-  parse_top = parse_op2)
+  parse_def = do(
+    name <- read_id
+    skip(equal("="))
+    body <- parse_op2
+    ast.def(name body))
+  parse_line = miss.any([parse_op2 parse_def])
+  parse_bind = do(
+    left <- parse_line
+    do(
+      right <- parse_line
+      ast.bind(left right)).catch(miss left))
+  parse_top = parse_bind)

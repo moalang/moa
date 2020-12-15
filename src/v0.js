@@ -71,11 +71,11 @@ function parse(tokens, source) {
   const eot = ({code:'',eot:1})
   const consume = () => tokens[pos++] || eot
   const look = () => tokens[pos] || eot
-  function until(code) {
+  function until(token, code) {
     const vals = []
     while (true) {
       const val = read()
-      assert(!val.eot, ({source,code,pos,val,vals,tokens}))
+      assert(!val.eot, ({pos:token.pos,source,code,pos,val,vals,tokens}))
       vals.push(val)
       if (val.code === code) {
         return vals
@@ -95,14 +95,14 @@ function parse(tokens, source) {
     }
 
     if (token.code === '(') {
-      const tokens = until(')')
+      const tokens = until(token, ')')
       assert(tokens.length === 2, tokens)
       token.body = tokens[0]
     } else if (token.code === '[') {
-      token.array = until(']').slice(0, -1)
+      token.array = until(token, ']').slice(0, -1)
     } else if (token.id && look().code === '(' && look().pos === token.pos + token.code.length) {
       consume()
-      token.args = until(')').slice(0, -1)
+      token.args = until(token, ')').slice(0, -1)
       token.name = token.code
     }
 
@@ -217,8 +217,7 @@ function exec(js) {
 }
 
 function tester(callback) {
-  function test(f, expect, source, ...funcs) {
-    funcs.push('main = ' + source)
+  function test(f, expect, ...funcs) {
     const src = funcs.join("\n")
     const tokens = tokenize(src)
     const nodes = parse(tokens, src)
@@ -231,19 +230,32 @@ function tester(callback) {
       title("expect: ", str(expect))
       title("actual: ", str(actual))
       title("output: ", output)
-      title("source: ", source)
+      puts("javascript:")
       for (const [i, line] of js.split('\n').entries()) {
         puts((i+1).toString().padStart(3, ' ') + ':', line)
       }
+      puts("source:")
+      puts(src)
       process.exit(3)
     }
   }
-  function eq(...args) {
-    return test(x => x, ...args)
+  function eq(expect, source, ...funcs) {
+    funcs.push('main = ' + source)
+    return test(x => x, expect, ...funcs)
   }
   function eq2(expect, source, ...funcs) {
-    funcs.push(moa)
-    return test(x => Function(vm1 + "return " + x)(), expect, 'compile(' + str(source) + ')', ...funcs)
+    const src = funcs.concat([source]).join("\n")
+    const ret = s => 'return ' + (s.startsWith('error: ') ? str(s) : s)
+    const run = s => {
+      s = s.replace(/(.+)$/, ret)
+      try {
+        return Function(s)()
+      } catch (e) {
+        debug(src, s)
+        throw e
+      }
+    }
+    return test(x => run(vm1 + x), expect, moa, 'main = compile(' + str(src) + ')')
   }
   callback({eq,eq2})
   puts("ok")
@@ -310,6 +322,7 @@ function integrationTests() {
     t.eq2(9, '(1 + 2) * 3')
     t.eq2('hi', '"hi"')
     t.eq2('hi', ' "h" ++ "i" ')
+    //t.eq2(3, 'a+b', 'a=1', 'b=2')
   })
 }
 
