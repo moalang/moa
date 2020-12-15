@@ -1,5 +1,4 @@
-const trace = (...args) => { console.log(...args); return true }
-function _op2(op, lhs, rhs) {
+function _operator(op, lhs, rhs) {
   lhs = lhs.valueOf()
   rhs = rhs.valueOf()
   switch (op) {

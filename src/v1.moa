@@ -6,7 +6,7 @@ compile = src => do(
     id => id
     int => int
     str => "\"" ++ str ++ "\""
-    op2 => "_op2(\"" ++ op2.op ++ "\", " ++ js(op2.lhs) ++ "," ++ js(op2.rhs) ++ ")"
+    op2 => "_operator(\"" ++ op2.op ++ "\", " ++ js(op2.lhs) ++ "," ++ js(op2.rhs) ++ ")"
     call => "null")
   js(t))
 
