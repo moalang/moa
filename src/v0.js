@@ -5,7 +5,9 @@ const title = (t, ...args) => { put(t); puts(...args) }
 const debug = (...args) => console.dir(args.length===1 ? args[0] : args, {depth: null})
 const fs = require('fs')
 const selfLines = fs.readFileSync('v0.js', 'utf8').split('\n')
-const vm = fs.readFileSync('vm.js', 'utf8')
+const vm1 = fs.readFileSync('vm1.js', 'utf8') + "\n"
+const vm0 = fs.readFileSync('vm0.js', 'utf8') + "\n"
+const moa = fs.readFileSync('v1.moa', 'utf8') + "\n"
 
 function assert(cond, ...objs) {
   if (cond) {
@@ -198,9 +200,9 @@ function generate(nodes) {
   return nodes.map(gen).join("\n")
 }
 
-function exec(src) {
+function exec(js) {
   // evaluate source in sandbox
-  const js = vm + "\n" + src + '\n_top(main)'
+  js = vm0 + js + '\n_top(main)'
   try {
     return eval(js)
   } catch (e) {
@@ -215,26 +217,35 @@ function exec(src) {
 }
 
 function tester(callback) {
-  function eq(expect, source, ...funcs) {
+  function test(f, expect, source, ...funcs) {
     funcs.push('main = ' + source)
     const src = funcs.join("\n")
     const tokens = tokenize(src)
     const nodes = parse(tokens, src)
     const js = generate(nodes, src)
-    const actual = exec(js)
+    const output = exec(js)
+    const actual = f(output)
     if (str(expect) === str(actual)) {
       put(".")
     } else {
       title("expect: ", str(expect))
       title("actual: ", str(actual))
+      title("output: ", output)
       title("source: ", source)
-      for (const [i, line] of result.js.split('\n').entries()) {
+      for (const [i, line] of js.split('\n').entries()) {
         puts((i+1).toString().padStart(3, ' ') + ':', line)
       }
       process.exit(3)
     }
   }
-  callback({eq})
+  function eq(...args) {
+    return test(x => x, ...args)
+  }
+  function eq2(expect, source, ...funcs) {
+    funcs.push(moa)
+    return test(x => Function(vm1 + "return " + x)(), expect, 'compile(' + str(source) + ')', ...funcs)
+  }
+  callback({eq,eq2})
   puts("ok")
 }
 
@@ -294,20 +305,11 @@ function unitTests() {
 }
 
 function integrationTests() {
-  const fs = require('fs')
-  const src = fs.readFileSync('v1.moa', 'utf8')
   tester(t => {
-    t.eq(1, 'run("1")', src)
-    t.eq(9, 'run("(1 + 2) * 3")', src)
-    t.eq('hi', 'run("\\\"hi\\\"")', src)
-    t.eq('hi', 'run("  \\\"h\\\"  ++ \\\"i\\\"  ")', src)
-    t.eq('error: miss', 'parse("")', src)
-    t.eq('id', 'do(t <- parse("id") t.val)', src)
-    t.eq('str', 'do(t <- parse("\\"str\\"") t.val)', src)
-    t.eq('123', 'do(t <- parse("123") t.val)', src)
-    t.eq(['+', '1', '2'], 'do(t <- parse("1+2") [t.val.op t.val.lhs.val t.val.rhs.val])', src)
-    t.eq('*', 'do(t <- parse("(1+2)*3") t.val.op)', src)
-    t.eq('+', 'do(t <- parse("1+(2*3)") t.val.op)', src)
+    t.eq2(1, '1')
+    t.eq2(9, '(1 + 2) * 3')
+    t.eq2('hi', '"hi"')
+    t.eq2('hi', ' "h" ++ "i" ')
   })
 }
 

@@ -1,9 +1,5 @@
 ast:| id string | int string | str string | op2: op string, lhs ast, rhs ast | call: self ast, args []ast
 
-run = src => do(
-  js <- compile(src)
-  eval(js))
-
 compile = src => do(
   t <- parse(src)
   js = a => ast(a
