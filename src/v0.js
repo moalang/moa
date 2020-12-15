@@ -91,30 +91,36 @@ function parse(tokens, source) {
     if (look().type) {
       assert(token.id, token)
       const type = consume()
-      type.argv = [token]
+      type.name = token.code
       return type
     }
 
     if (token.code === '(') {
-      token.argv = until(')')
+      const tokens = until(')')
+      assert(tokens.length === 2, tokens)
+      token.body = tokens[0]
     } else if (token.code === '[') {
-      token.argv = until(']')
+      token.array = until(']').slice(0, -1)
     } else if (token.id && look().code === '(' && look().pos === token.pos + token.code.length) {
-      const open = consume()
-      token.argv = [open].concat(until(')'))
+      consume()
+      token.args = until(')').slice(0, -1)
     }
 
     if (look().def) {
       const sym = consume()
       const rhs = read()
-      sym.argv = [token, rhs]
+      sym.name = token.code
+      sym.body = rhs
       token = sym
     }
 
     while (look().op2 || look().eff) {
       const sym = consume()
-      const rhs = read()
-      sym.argv = [token, rhs]
+      sym.lhs = token
+      sym.rhs = read()
+      if (sym.eff) {
+        sym.name = token.code
+      }
       token = sym
     }
 
@@ -126,18 +132,6 @@ function parse(tokens, source) {
     nodes.push(read())
   }
 
-  const src = tokens.map(t => t.code).join('  ')
-  const tags = tokens.map(t => t.tag + '(' + t.code + ')').join(' ')
-  const composedTokens = []
-  const q = nodes.slice()
-  while (q.length) {
-    const node = q.pop()
-    composedTokens.push(node)
-    q.push(...(node.argv || []))
-  }
-  const dst = composedTokens.sort((a,b) => a.pos - b.pos).map(t => t.code).join('  ')
-  assert(src === dst, {src,dst,tags})
-
   return nodes
 }
 
@@ -147,18 +141,15 @@ function generate(nodes) {
     return escape(node.code)
   }
   function local(node,f) {
-    assert(node.argv[0].code === '(', node.argv)
-    assert(node.argv.slice(-1)[0].code === ')', node.argv)
-    const argv = node.argv.slice(1, -1)
-    const funcs = argv.filter(x => x.def).map(gen)
-    const vals = argv.filter(x => !x.def)
+    const funcs = node.args.filter(x => x.def).map(gen)
+    const vals = node.args.filter(x => !x.def)
 
     if (node.code === 'do') {
       const rec = body => {
         const val = vals.shift()
         if (val && val.code === '<-') {
-          const arg = id(val.argv[0])
-          return '_bind(' + gen(val.argv[1]) + ', ' + arg + ' => ' + rec(arg) + ')'
+          const arg = id(val.lhs)
+          return '_bind(' + gen(val.rhs) + ', ' + arg + ' => ' + rec(arg) + ')'
         } else if(val) {
           const arg = '_b'
           return '_bind(' + gen(val) + ', ' +  arg + ' => ' + rec(arg) + ')'
@@ -185,25 +176,24 @@ function generate(nodes) {
   function gen(node) {
     try {
       if (node.code === '[') {
-        return '[' + node.argv.slice(0, -1).map(gen).join(',') + ']'
+        return '[' + node.array.map(gen).join(',') + ']'
       } else if (node.code === '(') {
-        assert(node.argv.length === 2, node)
-        return '(' + gen(node.argv[0]) + ')'
+        return '(' + gen(node.body) + ')'
       } else if (node.type) {
-        return 'const ' + id(node.argv[0]) + ' = _type(' + str(node.code) + ')'
+        return 'const ' + node.name + ' = _type(' + str(node.code) + ')'
       } else if (node.code == '=') {
-        return 'const ' + id(node.argv[0]) + ' = ' + gen(node.argv[1])
+        return 'const ' + node.name + ' = ' + gen(node.body)
       } else if (node.code == ':=') {
-        return 'let ' + id(node.argv[0]) + ' = new _var(' + gen(node.argv[1]) + ')'
+        return 'let ' + node.name + ' = new _var(' + gen(node.body) + ')'
       } else if (node.op2 && node.code === '=>') {
-        return '((' + gen(node.argv[0]) + ') => ' + gen(node.argv[1]) + ')'
+        return '((' + gen(node.lhs) + ') => ' + gen(node.rhs) + ')'
       } else if (node.op2 && node.code === '.') {
-        return gen(node.argv[0]) + '.' + gen(node.argv[1])
+        return gen(node.lhs) + '.' + gen(node.rhs)
       } else if (node.op2) {
-        return '_op2("' + node.code + '",' + gen(node.argv[0]) + ',' + gen(node.argv[1]) + ')'
+        return '_op2("' + node.code + '",' + gen(node.lhs) + ',' + gen(node.rhs) + ')'
       } else if (node.eff) {
-        return id(node.argv[0]) + '.eff("' + node.code + '",' + gen(node.argv[1]) + ')'
-      } else if (node.argv) {
+        return node.name + '.eff("' + node.code + '",' + gen(node.rhs) + ')'
+      } else if (node.args) {
         return local(node)
       } else {
         return node.code
