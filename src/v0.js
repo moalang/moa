@@ -4,7 +4,6 @@ const puts = (...args) => console.log(...args)
 const trace = (...args) => { console.log(...args); return true }
 const title = (t, ...args) => { put(t); puts(...args) }
 const debug = (...args) => console.dir(args.length===1 ? args[0] : args, {depth: null})
-const escape = x => ['if', 'do'].includes(x) ? '_' + x : x
 const any = (x,...xs) => xs.some(v => v === x)
 const fs = require('fs')
 const selfLines = fs.readFileSync('v0.js', 'utf8').split('\n')
@@ -104,6 +103,7 @@ function parse(tokens, source) {
     } else if (token.id && look().code === '(' && look().pos === token.pos + token.code.length) {
       consume()
       token.args = until(')').slice(0, -1)
+      token.name = token.code
     }
 
     if (look().def) {
@@ -118,7 +118,7 @@ function parse(tokens, source) {
       const sym = consume()
       sym.lhs = token
       sym.rhs = read()
-      if (sym.eff) {
+      if (sym.eff || sym.code === '<-') {
         sym.name = token.code
       }
       token = sym
@@ -136,11 +136,7 @@ function parse(tokens, source) {
 }
 
 function generate(nodes) {
-  function id(node) {
-    assert(node.id, node)
-    return escape(node.code)
-  }
-  function local(node,f) {
+  function call(node,f) {
     const funcs = node.args.filter(x => x.def).map(gen)
     const vals = node.args.filter(x => !x.def)
 
@@ -148,7 +144,7 @@ function generate(nodes) {
       const rec = body => {
         const val = vals.shift()
         if (val && val.code === '<-') {
-          const arg = id(val.lhs)
+          const arg = val.name
           return '_bind(' + gen(val.rhs) + ', ' + arg + ' => ' + rec(arg) + ')'
         } else if(val) {
           const arg = '_b'
@@ -166,7 +162,8 @@ function generate(nodes) {
       }
     }
 
-    const body = id(node) + (vals ? '(' + vals.map(gen).join(',') + ')' : '')
+    const name = node.name === 'if' ? '_if' : node.name
+    const body = name + (vals ? '(' + vals.map(gen).join(',') + ')' : '')
     if (funcs.length > 0) {
       return '(function() {\n' + funcs.join("\n") + '\nreturn ' + body + '})()'
     } else {
@@ -194,7 +191,7 @@ function generate(nodes) {
       } else if (node.eff) {
         return node.name + '.eff("' + node.code + '",' + gen(node.rhs) + ')'
       } else if (node.args) {
-        return local(node)
+        return call(node)
       } else {
         return node.code
       }
