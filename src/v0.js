@@ -318,6 +318,7 @@ function unitTests() {
 
 function integrationTests() {
   tester(t => {
+    t.eq2(1, 'do(1)')
     t.eq2(1, '1')
     t.eq2(1, '(1)')
     t.eq2(9, '(1 + 2) * 3')
