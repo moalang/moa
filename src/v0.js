@@ -244,14 +244,14 @@ function tester(callback) {
     return test(x => x, expect, ...funcs)
   }
   function eq2(expect, source, ...funcs) {
-    const src = funcs.concat([source]).join("\n")
+    const src = funcs.concat(["main = " + source]).join("\n")
     const ret = s => 'return ' + (s.startsWith('error: ') ? str(s) : s)
-    const run = s => {
-      s = s.replace(/(.+)$/, ret)
+    const run = js => {
+      js += "\nreturn main"
       try {
-        return Function(s)()
+        return Function(js)()
       } catch (e) {
-        debug(src, s)
+        debug({src, js})
         throw e
       }
     }
@@ -319,10 +319,12 @@ function unitTests() {
 function integrationTests() {
   tester(t => {
     t.eq2(1, '1')
+    t.eq2(1, '(1)')
     t.eq2(9, '(1 + 2) * 3')
+    t.eq2(7, '1 + (2 * 3)')
     t.eq2('hi', '"hi"')
     t.eq2('hi', ' "h" ++ "i" ')
-    //t.eq2(3, 'a+b', 'a=1', 'b=2')
+    t.eq2(3, 'a+b', 'a=1', 'b=2')
   })
 }
 

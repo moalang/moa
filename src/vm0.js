@@ -1,5 +1,5 @@
 const _ = {}
-const trace = (...args) => { console.log(...args); return true }
+const trace = (...args) => { console.dir(...args, {depth: null}); return true }
 function _if(...args) {
   assert(args.length % 2 === 1, args)
   for (let i=1; i<args.length; i+=2) {
