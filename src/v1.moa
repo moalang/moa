@@ -1,8 +1,9 @@
 ast:| id string | int string | str string | op2: op string, lhs ast, rhs ast | def: name string, body ast | call: self ast, args []ast
 
 compile = src => do(
-  op2 = o => if(o.op == ":="
-    "let " ++ js(o.lhs) ++ " = new _eff(" ++ js(o.rhs) ++ ")"
+  op2 = o => if(
+    (o.op == ":=") "let " ++ js(o.lhs) ++ " = new _eff(" ++ js(o.rhs) ++ ")"
+    (o.op == "=>") "(" ++ js(o.lhs) ++ " => (" ++ js(o.rhs) ++ "))"
     "_operator(\"" ++ o.op ++ "\", " ++ js(o.lhs) ++ "," ++ js(o.rhs) ++ ")")
   call = c => if(js(c.self) == "do"
     c.args.map(js).join("  \n")
@@ -49,7 +50,7 @@ parse = src => do(parse_top
     v)
 
   skip = f => many(any(" \t\r\n".split(""))).then(f)
-  read_op = skip(any("== != <= >= ++ += -= *= /= := + - * / .".split(" ")))
+  read_op = skip(any("== != <= >= => ++ += -= *= /= := + - * / .".split(" ")))
   read_id = skip(many1(satisfy(c => ("a" <= c) && (c <= "z")))).then(cs => cs.join(""))
   read_num = skip(many1(satisfy(c => ("0" <= c) && (c <= "9")))).then(cs => cs.join(""))
   read_str = skip(between("\"" "\"" many1(satisfy(c => c!= "\"")))).then(cs => cs.join(""))
