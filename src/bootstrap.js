@@ -4,10 +4,10 @@ const puts = (...args) => console.log(...args)
 const title = (t, ...args) => { put(t); puts(...args) }
 const debug = (...args) => console.dir(args.length===1 ? args[0] : args, {depth: null})
 const fs = require('fs')
-const selfLines = fs.readFileSync('v0.js', 'utf8').split('\n')
+const selfLines = fs.readFileSync('bootstrap.js', 'utf8').split('\n')
 const vm1 = fs.readFileSync('vm1.js', 'utf8') + "\n"
 const vm0 = fs.readFileSync('vm0.js', 'utf8') + "\n"
-const moa = fs.readFileSync('v1.moa', 'utf8') + "\n"
+const mini_moa = fs.readFileSync('mini_moa.moa', 'utf8') + "\n"
 
 function assert(cond, ...objs) {
   if (cond) {
@@ -255,7 +255,7 @@ function tester(callback) {
         throw e
       }
     }
-    return test(x => run(vm1 + x), expect, moa, 'main = compile(' + str(src) + ')')
+    return test(x => run(vm1 + x), expect, mini_moa, 'main = compile(' + str(src) + ')')
   }
   callback({eq,eq2})
   puts("ok")
