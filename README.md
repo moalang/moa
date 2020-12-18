@@ -12,7 +12,7 @@ Table of contents
 
 
 
-## 1. Hello world
+## 1. Getting started
 
 Set up
 ```
@@ -24,6 +24,7 @@ export PATH=$PATH:~/moa/bin
 Make a project
 ```
 # moa new
+├README.md
 ├test
 │ └test.moa
 └src
@@ -60,57 +61,86 @@ main =
 
 
 
-## 2. Syntax
-```
-root: def (br def)*
-def:
-| "- " ref : ref+ # define namespace
-| "- " ref        # use namespace
-| ref+ ":" type+  # signature
-| ref+ ":" iattr+ # struct
-| ref+ ":" itag+  # enum
-| func
-func: id arg* "=" body
-attr: id type
-tag : ref (attr ("," attr)*)?
-ifunc: indent func
-iattr: indent attr
-itag: indent tag
-body:
-| stmt
-| exp helper?
-stmt: (indent exp)+
-helper: : iattr* ifunc+
-exp: formula branch?
-branch: (indent "|" unit " -> " exp)* # pattern match
-formula:
-| unit op2 formula # op2    : v + 1
-| ref op2u formula # update : n += 1
-| unit
-unit:
-| value
-| id ("." id | "(" formula* ")")*
-| "(" exp ")"
-| "(" id+ => body ")" # lambda : (x y => x + y)
-| "(" unit+ ")"       # tuple  : (1 n)
-| "(" kv+ ")"         # struct : (name="value" age=30+7)
+## 2. Basic
 
-value:
-| int    # 1
-| float  # 1.0
-| string # "hi"
-| bool   # true
-kv  : id ":" formula
-id  : [a-z0-9_]+
-ref : id (. id)*
-type: ref ("(" ref+ ")")?
-op2 : [; + - * / % & | << >> + - > >= < <=  == != || &&]
-op2u: [= := += /= *= /= %=]
-indent: "\n  "
-br: "\n  "
+Primitives
+```
+true # bool
+1    # int 64bit signed integer
+1.0  # real 64bit
+"hi" # string utf8
 ```
 
-## 3. Buildin
+Container
+```
+[1 2 3] # list
+```
+
+Expression
+```
+1 + (2 * 3)
+```
+
+Types
+```
+person struct:
+  name string
+  age int
+
+bool enum:
+  true
+  false
+
+dict struct k v:
+  values []k,v
+
+may enum l r:
+  left l
+  right r
+  both:
+    left l
+    right r
+
+try may(string):
+  tokenize
+  parser
+```
+
+Function
+```
+pi = 3
+inc x = x + 1
+add x y = x + y
+main = do:
+  print (inc pi) (add 1 2)
+```
+
+Branch
+```
+cond1 -> "true"
+a > b -> "true"
+"false"
+```
+
+Effect
+```
+value <- calculate 1
+func value
+```
+
+
+
+## 3. Syntax
+```
+top: unit (op2 top)
+unit: group | num | id | str
+group: "(" top* ")" | "[" top* "]" | "{" top+ "}"
+num: [0-9]+ (.[0-9]+)?
+id: [A-Za-z_][A-Za-z0-9_]
+str: '"' [^"] '"'
+```
+
+## 4. Buildin
 
 Reserved words
 types
@@ -125,18 +155,15 @@ types
 - b8, b16, b32, b64
 methods
 - trace
-values
-- this
-- io, eff
 
 Binary operators order
 ```
-* // / %                # number (high)
-+ -                     # number (low)
-> >= < <=  == !=        # comparision (high)
-|| && | &               # comparision (low)
-:= += /= *= /= %= .= <- # effect
-,                       # no effect, just for readability
+* // / %         # number (high)
++ -              # number (low)
+> >= < <=  == != # comparision (high)
+|| && | &        # comparision (low)
+:= :             # define
++= -= *= /= %= = # effect
 ```
 
 ### IO
@@ -144,58 +171,55 @@ Binary operators order
 Standard input, output and error
 ```
 main =
-  line <- io.readline
-  line.empty
-  | true = io.puts(line)
-  | false = io.warn(line)
+  line = io.readline
+  line.empty.if(io.puts(line) io.warn(line))
 ```
 
 File system
 ```
 main =
-  files <- io.fs.ls("/tmp").filter(.is_file)
-  contents <- files.map(file => file.read)
+  files = io.fs.ls("/tmp").filter(.is_file)
+  contents = files.map(file => file.read)
 ```
 
 TCP
 ```
-main = io.tcp.listen("127.0.0.1:8080" _handle):
-_handle from =
-  target <- from.readline
-  to <- io.tcp.connect(target)
-  from.bidirectional(to)
+main =
+  handle packet =
+    target = from.readline
+    to = io.tcp.connect(target)
+    from.bidirectional(to)
+  io.tcp.listen("127.0.0.1:8080" handle)
 ```
 
 UDP
 ```
-main = io.udp.bind("127.0.0.1:1234" _handle):
-_handle packet =
-  target <- packet.string.lines.first
-  io.udp.sendto(target packet)
+main:
+  handle packet =
+    target = packet.string.lines.first
+    io.udp.sendto(target packet)
+  io.udp.bind("127.0.0.1:1234")
 ```
 
 Async and Cancel
 ```
 main =
-  t <- io.async(io.sleep(10))
+  t = io.async(io.sleep(10))
   io.sleep(1)
-  t.done
-  | _
-  | t.cancel
   t.done.else(t.cancel)
 ```
 
 Random
 ```
 main =
-  n <- io.random.int(1 3)
+  n = io.random.int(1 3)
   io.exit(n)
 ```
 
 Time
 ```
 main =
-  now <- io.now
+  now = io.now
   io.print(now)
 ```
 
@@ -203,7 +227,7 @@ main =
 
 
 
-## 4. Appendix
+## 5. Appendix
 
 Design of Moa language
 - List bounds check
