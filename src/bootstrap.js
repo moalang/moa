@@ -18,7 +18,7 @@ function tokenize(src) {
   const match = (p,tag,r) => consume(p, tag, src.slice(p).match(r))
   const some = (p,tag,s) => consume(p, tag, s.split(' ').find(w => src.slice(p).startsWith(w)))
   const eat = p =>
-    match(p, 'func', /^[A-Za-z_][A-Za-z0-9_]*( +[A-Za-z_][A-Za-z0-9_]*)* *=/) ||
+    match(p, 'func', /^[A-Za-z_][A-Za-z0-9_]*( +[A-Za-z_][A-Za-z0-9_]*)* = /) ||
     match(p, 'type', /^[A-Za-z_][A-Za-z0-9_]*( +[A-Za-z_][A-Za-z0-9_]*)*:(\n  .+)+/) ||
     match(p, 'num', /^[0-9]+(\.[0-9]+)?/) ||
     match(p, 'id', /^[A-Za-z_][A-Za-z0-9_]*(,[A-Za-z_][A-Za-z0-9_]*)*/) ||
@@ -79,7 +79,7 @@ function parse(tokens) {
       case 'ra':
       case 'rp': return token
       case 'func':
-        const ids = token.code.split(' ').slice(0, -1)
+        const ids = token.code.replace('=', '').split(/ +/).slice(0, -1)
         token.name = ids[0]
         token.argv = ids.slice(1)
         token.body = parseTop()
@@ -107,6 +107,9 @@ function parse(tokens) {
       ++pos
       next.lhs = token
       next.rhs = parseTop()
+      if (next.code === '=>') {
+        next.args = token.tag === 'lp' ? token.items.map(x => x.code).join(',') : token.code
+      }
       return parseLeft(next)
     } else if (next.tag === 'prop') {
       ++pos
@@ -144,15 +147,30 @@ function generate(defs) {
       const ids = token.lines.map(x => x.split(' ')[0]).join(',')
       return '(' + ids + ') => ({' + ids + '})'
     } else if (token.type === 'enum') {
+      const defs = ['(x, ...args) => args[x.tag](x.val)']
+      for (const [tag, line] of token.lines.entries()) {
+        const at = line.indexOf(' ')
+        const id = line.slice(0, at)
+        if (id.endsWith(':')) {
+          const ids = line.slice(at).trim().split(/ *, */).map(x => x.split(' ')[0].trim()).join(',')
+          defs.push(token.name + '.' + id.slice(0, -1) + ' = (' + ids + ') => ({val:{' + ids + '},tag:' + tag + '})')
+        } else {
+          defs.push(token.name + '.' + id + ' = val => ({val,tag:' + tag + '})')
+        }
+      }
+      return defs.join('\n')
     } else {
       throw new Error('genType ' + str(token))
     }
+  }
+  function genFunc(token) {
+    return (token.argv.length > 0 ? '(' + token.argv.join(',') + ') => ' : '') + gen(token.body)
   }
   function gen(token) {
     switch (token.tag) {
       case 'num':
       case 'str': return token.code
-      case 'func': return 'const ' + token.name + ' = (' + token.argv.join(',') + ') => ' + gen(token.body)
+      case 'func': return 'const ' + token.name + ' = ' + genFunc(token)
       case 'type': return 'const ' + token.name + ' = ' + genType(token)
       case 'id': return token.code + genCall(token.argv)
       case 'la': return '[' + token.ary.map(gen).join(',') + ']'
@@ -161,6 +179,7 @@ function generate(defs) {
       case 'op2':
         switch (token.code) {
           case '=': return 'const ' + gen(token.lhs) + token.code + gen(token.rhs)
+          case '=>': return '((' + token.args + ') => ' + gen(token.rhs) + ')'
           default: return gen(token.lhs) + token.code + gen(token.rhs)
         }
       default: throw new Error('gen ' + str(token))
@@ -189,7 +208,7 @@ function testAll() {
   function eq(expect, main, ...funcs) {
     const src = funcs.map(x => x + '\n').join('') + 'main = ' + main
     const info = compile(src)
-    const js = info.js + '\nreturn main()'
+    const js = info.js + '\nreturn main'
     const actual = evalInSandbox(js)
     if (str(expect) === str(actual)) {
       put('.')
@@ -219,9 +238,12 @@ function testAll() {
 
   // type
   eq({a:1, b:true}, 'ab(1 true)', 'ab struct:\n  a int\n  b bool')
+  eq(1, 'ast(ast.int(1) x=>x y=>y)', 'ast enum:\n  int int\n  add: lhs ast, rhs ast')
+  eq(3, 'eval(ast.add(ast.int(1) ast.int(2)))', 'eval a = ast(a x=>x y=>eval(y.lhs)+eval(y.rhs))', 'ast enum:\n  int int\n  add: lhs ast, rhs ast')
 
   // function
   eq(3, 'add(1 2)', 'add a b = a + b')
+  eq(3, 'add(1 2)', 'add = (a b) => a + b')
 
   // check spaces handling
   eq(1, ' 1 ')
