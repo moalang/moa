@@ -91,6 +91,23 @@ function parse(tokens) {
         token.argv = names.slice(1, -1)
         token.type = names.slice(-1)[0].replace(':', '')
         token.lines = lines.slice(1)
+        if (token.type === 'struct') {
+          token.fields = lines.slice(1).map(x => x.split(' ')[0]).join(',')
+        } else if (token.type === 'enum') {
+          token.enums = lines.slice(1).map(line => {
+            const at = line.indexOf(' ')
+            let id = line.slice(0, at)
+            if (id.endsWith(':')) {
+              id = id.slice(0, -1)
+              const fields = line.slice(at).trim().split(/ *, */).map(x => x.split(' ')[0].trim()).join(',')
+              return {id, fields}
+            } else {
+              return {id}
+            }
+          })
+        } else {
+          throw new Error('genType ' + str(token))
+        }
         return token
       case 'id': token.argv = parseCall(); return token
       case 'la': token.ary = until(']'); return token
@@ -144,23 +161,17 @@ function generate(defs) {
   }
   function genType(token) {
     if (token.type === 'struct') {
-      const ids = token.lines.map(x => x.split(' ')[0]).join(',')
-      return '(' + ids + ') => ({' + ids + '})'
+      return '(' + token.fields + ') => ({' + token.fields + '})'
     } else if (token.type === 'enum') {
-      const defs = ['(x, ...args) => args[x.tag](x.val)']
-      for (const [tag, line] of token.lines.entries()) {
-        const at = line.indexOf(' ')
-        const id = line.slice(0, at)
-        if (id.endsWith(':')) {
-          const ids = line.slice(at).trim().split(/ *, */).map(x => x.split(' ')[0].trim()).join(',')
-          defs.push(token.name + '.' + id.slice(0, -1) + ' = (' + ids + ') => ({val:{' + ids + '},tag:' + tag + '})')
+      const defs = ['(x, ...args) => args[x.index](x.val)']
+      for (const [index, item] of token.enums.entries()) {
+        if (item.fields) {
+          defs.push(token.name + '.' + item.id + ' = (' + item.fields + ') => ({val:{' + item.fields + '},index:' + index + '})')
         } else {
-          defs.push(token.name + '.' + id + ' = val => ({val,tag:' + tag + '})')
+          defs.push(token.name + '.' + item.id + ' = val => ({val,index:' + index + '})')
         }
       }
       return defs.join('\n')
-    } else {
-      throw new Error('genType ' + str(token))
     }
   }
   function genFunc(token) {
