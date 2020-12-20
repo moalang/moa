@@ -9,9 +9,7 @@ function put(s, ...args) {
   }
 }
 function puts(...args) {
-  for (const arg of args) {
-    console.dir(arg, {depth: null})
-  }
+  console.dir(args, {depth: null})
 }
 
 // compiler
@@ -51,82 +49,103 @@ function tokenize(src) {
 }
 function parse(tokens) {
   const nodes = []
+  const eot = {tag: 'EOT', code: ''}
   let pos = 0
   function info() {
     return ' at=' + pos + ' tokens=' + str(tokens) + ' nodes=' + str(nodes)
   }
-  function nextTag() {
-    return (tokens[pos] || {tag: 'EOT'}).tag
-  }
   function until(end) {
     const ary = []
     let t
-    while ((t = eat()).code !== end) {
+    while (pos < tokens.length && (t = parseTop()) && t.code !== end) {
       ary.push(t)
     }
     return ary
   }
-  function eatArgv(token) {
-    return nextTag() === 'lp' ? until(')') : []
+  function parseCall() {
+    if (pos >= tokens.length) { return [] }
+    return tokens[pos].tag === 'lp' ? until(')') : []
   }
-  function eat() {
+  function parseTop() {
+    return parseLeft(parseUnit())
+  }
+  function parseUnit() {
     const token = tokens[pos++]
-    switch (nextTag()) {
-      case 'op2':
-        const op2 = eat()
-        op2.lhs = token
-        op2.rhs = eat()
-        return op2
-
-      case 'prop':
-        const prop = eat()
-        prop.target = nodes[node.length - 1]
-        prop.argv = eatArgv()
-        return prop
-
-     default:
-       switch (token.tag) {
-         case 'num': return token
-         case 'str': return token
-         case 'ra': return token
-         case 'rp': return token
-         case 'op2': return token
-         case 'id': token.argv = eatArgv(); return token
-         case 'la': token.ary = until(']'); return token
-         case 'lp': token.items = until(')'); return token
-         default:
-           throw new Error('Unexpected tag ' + str(token) + info())
-       }
+    switch (token.tag) {
+      case 'num':
+      case 'str':
+      case 'ra':
+      case 'rp': return token
+      case 'id': token.argv = parseCall(); return token
+      case 'la': token.ary = until(']'); return token
+      case 'lp': token.items = until(')'); return token
+      default:
+        throw new Error('Unexpected tag ' + str(token) + info())
     }
   }
+  function parseLeft(token) {
+    if (pos >= tokens.length) { return token }
+    if (token.tag === 'rp' || token.tag === 'ra') { return token }
+    const next = tokens[pos]
+    if (next.tag === 'op2') {
+      ++pos
+      next.lhs = token
+      next.rhs = parseTop()
+      return parseLeft(next)
+    } else if (next.tag === 'prop') {
+      ++pos
+      next.target = token
+      next.argv = parseCall()
+      return parseLeft(next)
+    } else {
+      return token
+    }
+  }
+  let next
   while (pos < tokens.length) {
-    const node = eat()
+    let node = parseTop()
     if (!node) { throw new Error('failed to parse at=' + pos + ' tokens=' + str(tokens)) }
     nodes.push(node)
   }
+
+  for (const node of nodes) {
+    if (node.tag === 'op2' && (!node.lhs || !node.rhs)) { throw new Error('Invalid ' + str(node)) }
+    if (node.tag === 'prop' && (!node.target || !node.argv)) { throw new Error('Invalid ' + str(node)) }
+    if (node.tag === 'la' && (!node.ary)) { throw new Error('Invalid ' + str(node)) }
+    if (node.tag === 'lp' && (!node.items)) { throw new Error('Invalid ' + str(node)) }
+    if (node.tag === 'ra') { throw new Error('Invalid ' + str(node)) }
+    if (node.tag === 'rp') { throw new Error('Invalid ' + str(node)) }
+  }
+
   return nodes
 }
-function generate(token) {
+function generate(defs) {
   function genCall(argv) {
-    return argv.length === 0 ? '' : '(' + argv.map(generate).join(',') + ')'
+    return argv.length === 0 ? '' : '(' + argv.map(gen).join(',') + ')'
   }
-  switch (token.tag) {
-    case 'id':
-    case 'num':
-    case 'str': return token.code
-    case 'la': return '[' + token.ary.map(generate).join(',') + ']'
-    case 'lp': return '(' + token.items.map(generate).join(',') + ')'
-    case 'op2': return generate(token.lhs) + token.code + generate(token.rhs)
-    case 'prop': return generate(token.target) + genCall(prop.argv)
-    default:
-      throw new Error('Bug ' + str(token))
+  function gen(token) {
+    switch (token.tag) {
+      case 'id':
+      case 'num':
+      case 'str': return token.code
+      case 'la': return '[' + token.ary.map(gen).join(',') + ']'
+      case 'lp': return '(' + token.items.map(gen).join('') + ')'
+      case 'prop': return gen(token.target) + genCall(prop.argv)
+      case 'op2':
+        switch (token.code) {
+          case '=': return 'const ' + gen(token.lhs) + token.code + gen(token.rhs)
+          default: return gen(token.lhs) + token.code + gen(token.rhs)
+        }
+      default: throw new Error('gen ' + str(token))
+    }
   }
+  return defs.map(gen).join("\n")
 }
 function compile(src) {
   const tokens = tokenize(src)
   const defs = parse(tokens)
-  const js = defs.map(generate).join('\n')
-  return js
+  const js = generate(defs)
+  return {tokens,defs,js}
 }
 function evalInSandbox(js) {
   try {
@@ -142,7 +161,8 @@ function evalInSandbox(js) {
 function testAll() {
   function eq(expect, main) {
     const src = 'main = ' + main
-    const js = compile(src) + '\nreturn main.valueOf()'
+    const info = compile(src)
+    const js = info.js + '\nreturn main.valueOf()'
     const actual = evalInSandbox(js)
     if (str(expect) === str(actual)) {
       put('.')
@@ -150,7 +170,9 @@ function testAll() {
       console.error('Failed')
       put('expect: ', expect)
       put('actual: ', actual)
-      put('js: ', js)
+      put('src   : ', src)
+      put('js    : ', info.js)
+      put('defs  : '); puts(...info.defs)
       process.exit(1)
     }
   }
@@ -162,19 +184,20 @@ function testAll() {
   eq([], '[]')
   eq([1, 2, 3], '[1 2 3]')
 
-  // check parenthese handling
-  eq(1, '(1)')
+  // expression
+  eq(3, '1+2')
+  eq(9, '(1 + 2) * 3')
 
   // check spaces handling
   eq(1, ' 1 ')
 
-  puts('ok')
+  console.log('ok')
 }
 function compileStdin() {
   const src = require('fs').readFileSync('/dev/stdin', 'utf8')
   const tokens = tokenize(src)
   const defs = parse(tokens)
-  const js = defs.map(compile).join('\n')
+  const js = compile(defs).js
   console.log(js)
 }
 function main() {
