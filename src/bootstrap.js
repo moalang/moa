@@ -19,6 +19,7 @@ function tokenize(src) {
   const some = (p,tag,s) => consume(p, tag, s.split(' ').find(w => src.slice(p).startsWith(w)))
   const eat = p =>
     match(p, 'func', /^[A-Za-z_][A-Za-z0-9_]*( +[A-Za-z_][A-Za-z0-9_]*)* *=/) ||
+    match(p, 'type', /^[A-Za-z_][A-Za-z0-9_]*( +[A-Za-z_][A-Za-z0-9_]*)*:(\n  .+)+/) ||
     match(p, 'num', /^[0-9]+(\.[0-9]+)?/) ||
     match(p, 'id', /^[A-Za-z_][A-Za-z0-9_]*(,[A-Za-z_][A-Za-z0-9_]*)*/) ||
     match(p, 'str', /^"(?:(?:\\")|[^"])*"/) ||
@@ -83,6 +84,14 @@ function parse(tokens) {
         token.argv = ids.slice(1)
         token.body = parseTop()
         return token
+      case 'type':
+        const lines = token.code.split('\n').map(x => x.trim()).filter(x => x)
+        const names = lines[0].split(' ')
+        token.name = names[0]
+        token.argv = names.slice(1, -1)
+        token.type = names.slice(-1)[0].replace(':', '')
+        token.lines = lines.slice(1)
+        return token
       case 'id': token.argv = parseCall(); return token
       case 'la': token.ary = until(']'); return token
       case 'lp': token.items = until(')'); return token
@@ -130,15 +139,25 @@ function generate(defs) {
   function genCall(argv) {
     return argv.length === 0 ? '' : '(' + argv.map(gen).join(',') + ')'
   }
+  function genType(token) {
+    if (token.type === 'struct') {
+      const ids = token.lines.map(x => x.split(' ')[0]).join(',')
+      return '(' + ids + ') => ({' + ids + '})'
+    } else if (token.type === 'enum') {
+    } else {
+      throw new Error('genType ' + str(token))
+    }
+  }
   function gen(token) {
     switch (token.tag) {
       case 'num':
       case 'str': return token.code
       case 'func': return 'const ' + token.name + ' = (' + token.argv.join(',') + ') => ' + gen(token.body)
+      case 'type': return 'const ' + token.name + ' = ' + genType(token)
       case 'id': return token.code + genCall(token.argv)
       case 'la': return '[' + token.ary.map(gen).join(',') + ']'
       case 'lp': return '(' + token.items.map(gen).join('') + ')'
-      case 'prop': return gen(token.target) + genCall(token.argv)
+      case 'prop': return gen(token.target) + token.code + genCall(token.argv)
       case 'op2':
         switch (token.code) {
           case '=': return 'const ' + gen(token.lhs) + token.code + gen(token.rhs)
@@ -197,6 +216,9 @@ function testAll() {
   eq(7, '1 + 2 * 3')
   eq(9, '(1 + 2) * 3')
   eq(5, '1 * (2 + 3)')
+
+  // type
+  eq({a:1, b:true}, 'ab(1 true)', 'ab struct:\n  a int\n  b bool')
 
   // function
   eq(3, 'add(1 2)', 'add a b = a + b')
