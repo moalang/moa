@@ -18,6 +18,7 @@ function tokenize(src) {
   const match = (p,tag,r) => consume(p, tag, src.slice(p).match(r))
   const some = (p,tag,s) => consume(p, tag, s.split(' ').find(w => src.slice(p).startsWith(w)))
   const eat = p =>
+    match(p, 'func', /^[A-Za-z_][A-Za-z0-9_]*( +[A-Za-z_][A-Za-z0-9_]*)* *=/) ||
     match(p, 'num', /^[0-9]+(\.[0-9]+)?/) ||
     match(p, 'id', /^[A-Za-z_][A-Za-z0-9_]*(,[A-Za-z_][A-Za-z0-9_]*)*/) ||
     match(p, 'str', /^"(?:(?:\\")|[^"])*"/) ||
@@ -27,7 +28,7 @@ function tokenize(src) {
     some(p, 'ra', ']') ||
     some(p, 'lp', '(') ||
     some(p, 'rp', ')') ||
-    some(p, 'op2', '+= -= *= /= || && == != >= <= ++ => := = : <- > < + - * /')
+    some(p, 'op2', '+= -= *= /= || && == != >= <= ++ => := : <- > < + - * /')
 
   let indent = 0
   let pos=0, tokens=[]
@@ -64,7 +65,7 @@ function parse(tokens) {
   }
   function parseCall() {
     if (pos >= tokens.length) { return [] }
-    return tokens[pos].tag === 'lp' ? until(')') : []
+    return tokens[pos].tag === 'lp' ? (++pos, until(')')) : []
   }
   function parseTop() {
     return parseLeft(parseUnit())
@@ -76,6 +77,12 @@ function parse(tokens) {
       case 'str':
       case 'ra':
       case 'rp': return token
+      case 'func':
+        const ids = token.code.split(' ').slice(0, -1)
+        token.name = ids[0]
+        token.argv = ids.slice(1)
+        token.body = parseTop()
+        return token
       case 'id': token.argv = parseCall(); return token
       case 'la': token.ary = until(']'); return token
       case 'lp': token.items = until(')'); return token
@@ -125,12 +132,13 @@ function generate(defs) {
   }
   function gen(token) {
     switch (token.tag) {
-      case 'id':
       case 'num':
       case 'str': return token.code
+      case 'func': return 'const ' + token.name + ' = (' + token.argv.join(',') + ') => ' + gen(token.body)
+      case 'id': return token.code + genCall(token.argv)
       case 'la': return '[' + token.ary.map(gen).join(',') + ']'
       case 'lp': return '(' + token.items.map(gen).join('') + ')'
-      case 'prop': return gen(token.target) + genCall(prop.argv)
+      case 'prop': return gen(token.target) + genCall(token.argv)
       case 'op2':
         switch (token.code) {
           case '=': return 'const ' + gen(token.lhs) + token.code + gen(token.rhs)
@@ -159,10 +167,10 @@ function evalInSandbox(js) {
   }
 }
 function testAll() {
-  function eq(expect, main) {
-    const src = 'main = ' + main
+  function eq(expect, main, ...funcs) {
+    const src = funcs.map(x => x + '\n').join('') + 'main = ' + main
     const info = compile(src)
-    const js = info.js + '\nreturn main.valueOf()'
+    const js = info.js + '\nreturn main()'
     const actual = evalInSandbox(js)
     if (str(expect) === str(actual)) {
       put('.')
@@ -186,7 +194,12 @@ function testAll() {
 
   // expression
   eq(3, '1+2')
+  eq(7, '1 + 2 * 3')
   eq(9, '(1 + 2) * 3')
+  eq(5, '1 * (2 + 3)')
+
+  // function
+  eq(3, 'add(1 2)', 'add a b = a + b')
 
   // check spaces handling
   eq(1, ' 1 ')
