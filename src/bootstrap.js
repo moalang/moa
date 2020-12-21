@@ -29,7 +29,7 @@ function tokenize(src) {
     some(p, 'ra', ']') ||
     some(p, 'lp', '(') ||
     some(p, 'rp', ')') ||
-    some(p, 'op2', '+= -= *= /= || && == != >= <= ++ => := : <- > < + - * /')
+    some(p, 'op2', '+= -= *= /= || && == != >= <= ++ => := : <- -> > < + - * /')
 
   let indent = 0
   let pos=0, tokens=[]
@@ -127,6 +127,9 @@ function parse(tokens) {
       if (next.code === '=>') {
         next.args = token.tag === 'lp' ? token.items.map(x => x.code).join(',') : token.code
       }
+      if (next.code === '->') {
+        next.else = parseTop()
+      }
       return parseLeft(next)
     } else if (next.tag === 'prop') {
       ++pos
@@ -191,6 +194,7 @@ function generate(defs) {
         switch (token.code) {
           case '=': return 'const ' + gen(token.lhs) + token.code + gen(token.rhs)
           case '=>': return '((' + token.args + ') => ' + gen(token.rhs) + ')'
+          case '->': return gen(token.lhs) + ' ? ' + gen(token.rhs) + ' : ' + gen(token.else)
           default: return gen(token.lhs) + token.code + gen(token.rhs)
         }
       default: throw new Error('gen ' + str(token))
@@ -255,6 +259,11 @@ function testAll() {
   // function
   eq(3, 'add(1 2)', 'add a b = a + b')
   eq(3, 'add(1 2)', 'add = (a b) => a + b')
+
+  // branch
+  eq(1, 'a -> b\n  c', 'a = true', 'b = 1', 'c = 2')
+  eq(2, 'a -> b\n  c', 'a = false', 'b = 1', 'c = 2')
+  eq(2, 'a -> b\n  c -> d\n  e', 'a = false', 'b = 1', 'c = true', 'd = 2', 'e = 3')
 
   // check spaces handling
   eq(1, ' 1 ')
