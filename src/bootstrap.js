@@ -11,6 +11,9 @@ function put(s, ...args) {
 function puts(...args) {
   console.dir(args, {depth: null})
 }
+function copy(obj) {
+  return JSON.parse(JSON.stringify(obj))
+}
 
 // compiler
 function tokenize(src) {
@@ -18,7 +21,7 @@ function tokenize(src) {
   const match = (p,tag,r) => consume(p, tag, src.slice(p).match(r))
   const some = (p,tag,s) => consume(p, tag, s.split(' ').find(w => src.slice(p).startsWith(w)))
   const eat = p =>
-    match(p, 'func', /^[A-Za-z_][A-Za-z0-9_]*( +[A-Za-z_][A-Za-z0-9_]*)* = /) ||
+    match(p, 'func', /^[A-Za-z_][A-Za-z0-9_]*( +[A-Za-z_][A-Za-z0-9_]*)* +=/) ||
     match(p, 'type', /^[A-Za-z_][A-Za-z0-9_]*( +[A-Za-z_][A-Za-z0-9_]*)*:(\n  .+)+/) ||
     match(p, 'num', /^[0-9]+(\.[0-9]+)?/) ||
     match(p, 'id', /^[A-Za-z_][A-Za-z0-9_]*(,[A-Za-z_][A-Za-z0-9_]*)*/) ||
@@ -37,8 +40,11 @@ function tokenize(src) {
     const token = eat(pos)
     if (!token) { throw new Error('tokenize at ' + pos) }
     if (token.tag === 'spaces' && token.code.includes('\n')) {
-      indent = token.code.split('\n').slice(-1)[0].length
-      if (indent % 2 != 0) { throw new Error('invalid indent=' + indent + ' at ' + token.pos) }
+      const last = token.code.split('\n').slice(-1)[0]
+      if (!last.includes('#')) {
+        indent = last.length
+        if (indent % 2 != 0) { throw new Error('invalid indent=' + indent + ' at ' + token.pos) }
+      }
     }
     token.indent = indent
     pos += token.code.length
@@ -56,20 +62,26 @@ function parse(tokens) {
   function info() {
     return ' at=' + pos + ' tokens=' + str(tokens) + ' nodes=' + str(nodes)
   }
-  function until(end) {
+  function until(f) {
     const ary = []
     let t
-    while (pos < tokens.length && (t = parseTop()) && t.code !== end) {
+    while (pos < tokens.length && f(t = parseTop())) {
       ary.push(t)
     }
     return ary
   }
   function parseCall() {
     if (pos >= tokens.length) { return [] }
-    return tokens[pos].tag === 'lp' ? (++pos, until(')')) : []
+    return tokens[pos].tag === 'lp' ? (++pos, until(t => t.tag !== 'rp')) : []
   }
   function parseTop() {
     return parseLeft(parseUnit())
+  }
+  function parseIndent(t1, t2) {
+    if (t1.indent < t2.indent) {
+      t2.lines = [copy(t2)].concat(until(t => t.indent >= t2.indent))
+    }
+    return t2
   }
   function parseUnit() {
     const token = tokens[pos++]
@@ -82,7 +94,7 @@ function parse(tokens) {
         const ids = token.code.replace('=', '').split(/ +/).slice(0, -1)
         token.name = ids[0]
         token.argv = ids.slice(1)
-        token.body = parseTop()
+        token.body = parseIndent(token, parseTop())
         return token
       case 'type':
         const lines = token.code.split('\n').map(x => x.trim()).filter(x => x)
@@ -90,7 +102,6 @@ function parse(tokens) {
         token.name = names[0]
         token.argv = names.slice(1, -1)
         token.type = names.slice(-1)[0].replace(':', '')
-        token.lines = lines.slice(1)
         if (token.type === 'struct') {
           token.fields = lines.slice(1).map(x => x.split(' ')[0]).join(',')
         } else if (token.type === 'enum') {
@@ -110,8 +121,8 @@ function parse(tokens) {
         }
         return token
       case 'id': token.argv = parseCall(); return token
-      case 'la': token.ary = until(']'); return token
-      case 'lp': token.items = until(')'); return token
+      case 'la': token.ary = until(t => t.tag !== 'ra'); return token
+      case 'lp': token.items = until(t => t.tag !== 'rp'); return token
       default:
         throw new Error('Unexpected tag ' + str(token) + info())
     }
@@ -180,7 +191,17 @@ function generate(defs) {
   function genFunc(token) {
     return (token.argv.length > 0 ? '(' + token.argv.join(',') + ') => ' : '') + gen(token.body)
   }
+  function genLine(token) {
+    return gen(token)
+  }
+  function genLines(lines) {
+    const body = lines.map(genLine).map((line, i) => (i===lines.length-1) ? 'return ' + line : line).join('\n  ')
+    return '(function () {\n  ' + body + '\n})()'
+  }
   function gen(token) {
+    if (token.lines) {
+      return genLines(token.lines)
+    }
     switch (token.tag) {
       case 'num':
       case 'str': return token.code
@@ -193,6 +214,7 @@ function generate(defs) {
       case 'op2':
         switch (token.code) {
           case '=': return 'const ' + gen(token.lhs) + token.code + gen(token.rhs)
+          case ':=': return 'let ' + gen(token.lhs) + ' = ' + gen(token.rhs)
           case '=>': return '((' + token.args + ') => ' + gen(token.rhs) + ')'
           case '->': return gen(token.lhs) + ' ? ' + gen(token.rhs) + ' : ' + gen(token.else)
           default: return gen(token.lhs) + token.code + gen(token.rhs)
@@ -265,8 +287,12 @@ function testAll() {
   eq(2, 'a -> b\n  c', 'a = false', 'b = 1', 'c = 2')
   eq(2, 'a -> b\n  c -> d\n  e', 'a = false', 'b = 1', 'c = true', 'd = 2', 'e = 3')
 
-  // check spaces handling
+  // effect
+  eq(1, '\n  count := 0\n  count += 1\n  count')
+
+  // spiteful tests
   eq(1, ' 1 ')
+  eq(1, ' ( ( ( 1 ) ) ) ')
 
   console.log('ok')
 }
