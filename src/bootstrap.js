@@ -14,19 +14,13 @@ function puts(...args) {
 function copy(obj) {
   return JSON.parse(JSON.stringify(obj))
 }
-function zip(a, b) {
-  const c = []
-  const len = a.length < b.length ? a.length : b.length
-  for (let i=0; i<len; ++i) {
-    c.push([a[i], b[i]])
-  }
-  return c
-}
-function dict(keys, vals) {
+function dict(kvs) {
   const d = {}
-  if (keys.length !== vals.length) { throw new Error('dict ' + str({keys,vals})) }
-  for (let i=0; i<keys.length; ++i) {
-    d[keys[i]] = vals[i]
+  for (const [k,v,..._] of kvs) {
+    if (k in d) {
+      throw new Error('Duplicated key=' + k + str(kvs))
+    }
+    d[k] = v
   }
   return d
 }
@@ -118,24 +112,22 @@ function parse(tokens) {
         token.body = parseIndent(token, parseTop())
         return token
       case 'struct':
-        const fields = token.code.split('\n').map(x => x.trim()).filter(x => x)
-        token.name = fields[0].split(' ')[0]
-        token.fields = fields.slice(1).map(x => x.split(' ')[0]).join(',')
-        token.type = fields.slice(1).map(x => x.split(' ')[1]).join(',')
+        const [name, ...fields] = token.code.split('\n').map(x => x.trim()).filter(x => x)
+        token.name = name.split(' ')[0]
+        token.struct = dict(fields.map(x => x.split(' ')))
         return token
       case 'enum':
         const tags = token.code.split('\n').map(x => x.trim()).filter(x => x)
         token.name = tags[0].split(' ')[0]
-        token.enums = tags.slice(1).map(line => {
+        token.enum = tags.slice(1).map(line => {
           const at = line.indexOf(' ')
           let id = line.slice(0, at)
           if (id.endsWith(':')) {
             id = id.slice(0, -1)
-            const fields = line.slice(at).trim().split(/ *, */).map(x => x.split(' ')[0].trim()).join(',')
-            const types = line.slice(at).trim().split(/ *, */).map(x => x.split(' ')[1].trim()).join(',')
-            return {id, fields, types}
+            const struct = dict(line.slice(at).trim().split(/ *, */).map(x => x.split(' ').map(y => y.trim())))
+            return {id, struct}
           } else {
-            return {id}
+            return {id, alias: line.slice(at)}
           }
         })
         return token
@@ -193,13 +185,15 @@ function generate(defs) {
     return argv.length === 0 ? '' : '(' + argv.map(gen).join(',') + ')'
   }
   function genStruct(token) {
-    return '(' + token.fields + ') => ({' + token.fields + '})'
+    const fields = Object.keys(token.struct).join(',')
+    return '(' + fields + ') => ({' + fields + '})'
   }
   function genEnum(token) {
     const defs = ['(x, ...args) => args[x.index](x.val)']
-    for (const [index, item] of token.enums.entries()) {
-      if (item.fields) {
-        defs.push(token.name + '.' + item.id + ' = (' + item.fields + ') => ({val:{' + item.fields + '},index:' + index + '})')
+    for (const [index, item] of token.enum.entries()) {
+      if (item.struct) {
+        const fields = Object.keys(item.struct).join(',')
+        defs.push(token.name + '.' + item.id + ' = (' + fields + ') => ({val:{' + fields + '},index:' + index + '})')
       } else {
         defs.push(token.name + '.' + item.id + ' = val => ({val,index:' + index + '})')
       }
@@ -287,7 +281,7 @@ function infer(defs,tokens) {
   }
   function makeEnum(token) {
     const d = {}
-    for (const tag of token.enums) {
+    for (const tag of token.enum) {
       d[tag.id] = tag.fields ? makeStruct(tag) : tag.id
     }
   }
