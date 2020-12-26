@@ -9,10 +9,20 @@ function put(s, ...args) {
   }
 }
 function puts(...args) {
-  console.dir(args, {depth: null})
+  for (const arg of args) {
+    console.dir(arg, {depth: null})
+  }
 }
 function copy(obj) {
   return JSON.parse(JSON.stringify(obj))
+}
+function zip(keys, vals) {
+  const len = Math.min(keys.length, vals.length)
+  const ary = []
+  for (let i=0; i<len; ++i) {
+    ary.push([keys[i], vals[i]])
+  }
+  return ary
 }
 function dict(kvs) {
   const d = {}
@@ -21,6 +31,15 @@ function dict(kvs) {
       throw new Error('Duplicated key=' + k + str(kvs))
     }
     d[k] = v
+  }
+  return d
+}
+function dig(d, ...args) {
+  for (const arg of args) {
+    d = d[arg]
+    if (d === undefined) {
+      return undefined
+    }
   }
   return d
 }
@@ -82,8 +101,8 @@ function parse(tokens) {
     return ary
   }
   function parseCall(token) {
+    token.name = token.code.replace('.', '').replace('(', '')
     if (token.code.endsWith('(')) {
-      token.code = token.code.slice(0, -1)
       token.argv = until(t => t.tag !== 'rp')
     } else {
       token.argv = []
@@ -101,8 +120,8 @@ function parse(tokens) {
   function parseUnit() {
     const token = tokens[pos++]
     switch (token.tag) {
-      case 'num':
-      case 'str':
+      case 'num': token.val = token.code; return token
+      case 'str': token.val = token.code.slice(1,-1); return token
       case 'ra':
       case 'rp': return token
       case 'func':
@@ -144,12 +163,13 @@ function parse(tokens) {
     const next = tokens[pos]
     if (next.tag === 'op2') {
       ++pos
+      next.op = next.code
       next.lhs = token
       next.rhs = parseTop()
-      if (next.code === '=>') {
-        next.args = token.tag === 'lp' ? token.items.map(x => x.code).join(',') : token.code
+      if (next.op === '=>') {
+        next.args = token.tag === 'lp' ? token.items.map(x => x.name).join(',') : token.name
       }
-      if (next.code === '->') {
+      if (next.op === '->') {
         next.else = parseTop()
       }
       return parseLeft(next)
@@ -181,6 +201,12 @@ function parse(tokens) {
   return nodes
 }
 function generate(defs) {
+  const embeddedProps = {
+    'num': {string: 'toString()'}
+  }
+  const embeddedFuncs = {
+    'str': {int: 'parseInt'}
+  }
   function genCall(argv) {
     return argv.length === 0 ? '' : '(' + argv.map(gen).join(',') + ')'
   }
@@ -210,130 +236,70 @@ function generate(defs) {
     const body = lines.map(genLine).map((line, i) => (i===lines.length-1) ? 'return ' + line : line).join('\n  ')
     return '(function () {\n  ' + body + '\n})()'
   }
+  function genProp(token) {
+    const prop = dig(embeddedProps, token.target.type, token.name)
+    if (prop) {
+      return wrapIfNum(gen(token.target)) + '.' + prop + genCall(token.argv)
+    }
+    const func = dig(embeddedFuncs, token.target.type, token.name)
+    if (func) {
+      return func + genCall([token.target].concat(token.argv))
+    }
+    return wrapIfNum(gen(token.target)) + '.' + token.name + genCall(token.argv)
+  }
+  function wrapIfNum(s) {
+    return parseInt(s).toString() === s ? '(' + s + ')' : s
+  }
   function gen(token) {
     if (token.lines) {
       return genLines(token.lines)
     }
     switch (token.tag) {
-      case 'num':
-      case 'str': return token.code
+      case 'num': return token.val
+      case 'str': return '"' + token.val + '"'
       case 'func': return 'const ' + token.name + ' = ' + genFunc(token)
       case 'struct': return 'const ' + token.name + ' = ' + genStruct(token)
       case 'enum': return 'const ' + token.name + ' = ' + genEnum(token)
-      case 'id': return token.code + genCall(token.argv)
+      case 'id': return token.name + genCall(token.argv)
       case 'la': return '[' + token.ary.map(gen).join(',') + ']'
       case 'lp': return '(' + token.items.map(gen).join('') + ')'
-      case 'prop': return gen(token.target) + token.code + genCall(token.argv)
+      case 'prop': return genProp(token)
       case 'op2':
-        switch (token.code) {
-          case '=': return 'const ' + gen(token.lhs) + token.code + gen(token.rhs)
+        switch (token.op) {
+          case '=': return 'const ' + gen(token.lhs) + token.op + gen(token.rhs)
           case ':=': return 'let ' + gen(token.lhs) + ' = ' + gen(token.rhs)
           case '=>': return '((' + token.args + ') => ' + gen(token.rhs) + ')'
           case '->': return gen(token.lhs) + ' ? ' + gen(token.rhs) + ' : ' + gen(token.else)
-          default: return gen(token.lhs) + token.code + gen(token.rhs)
+          default: return gen(token.lhs) + token.op + gen(token.rhs)
         }
       default: throw new Error('gen ' + str(token))
     }
   }
   return defs.map(gen).join("\n")
 }
-function infer(defs,tokens) {
-  return
-  const d = {}
-  const types = {
-    'num': {},
-    'str': {},
-  }
-  for (const def of defs) {
-    if (def.tag !== 'func' && def.tag !== 'struct' && def.tag !== 'enum') { throw new Error('infer ' + str(def)) }
-    d[def.name] = def
-  }
-  function inferCall(token) {
-    if (token.code === 'true' || token.code === 'false') { return 'true' }
-    token.argv.map(inferAssign)
-    const t = d[token.code]
-    if (!t) { throw new Error('inferCall ' + str({token,d})) }
-    return inferAssign(t)
-  }
-  function inferArray(token) {
-    if (token.ary.length === 0) {
-      return 'array'
-    } else {
-      return token.ary.map(inferAssign)[0]
-    }
-  }
-  function inferProp(token) {
-    token.argv.map(inferAssign)
-    const target = token.target
-    inferAssign(target)
-    const name = target.type
-    const type = types[name]
-    const prop = type && type[token.code]
-    if (!type || !prop) { throw new Error('inferProp ' + str({target,name,type,prop})) }
-    return prop
-  }
-  function makeStruct(token) {
-    const d = {}
-    for (const field of token.fields) {
-      d[field] = field
-    }
-    return d
-  }
-  function makeEnum(token) {
-    const d = {}
-    for (const tag of token.enum) {
-      d[tag.id] = tag.fields ? makeStruct(tag) : tag.id
-    }
+function infer(defs, src, tokens) {
+  const tenv = {
+    'num': {'string': 'string'},
   }
   function inferType(token) {
     switch (token.tag) {
-      case 'num':
-      case 'str': return token.type = token.tag
-      case 'func': return inferAssign(token.body)
-      case 'struct': return types[token.name] = makeStruct(token)
-      case 'enum': return types[token.name] = makeEnum(token)
-      case 'id': return inferCall(token)
-      case 'la': return inferArray(token)
-      case 'lp': return token.items.map(inferAssign)[0]
-      case 'prop': return inferProp(token)
-      case 'op2':
-        switch (token.code) {
-          case '=':
-          case ':=': return token.lhs.type = inferAssign(token.rhs)
-          case '->': return token.lhs.type =  'bool', inferAssign(token.rhs), inferAssign(token.else)
-          case '+':
-          case '-':
-          case '*': inferAssign(token.lhs); inferAssign(token.rhs); return 'num'
-          case '>':
-          case '<':
-          case '>=':
-          case '<=':
-          case '==':
-          case '!=': inferAssign(token.lhs); inferAssign(token.rhs); return 'bool'
-          case '=>': return args => env.local(args, token.argv, token.body)
-          default: throw new Error('inferType ' + str(token))
-        }
-      default: throw new Error('inferType ' + str(token))
+      case 'str':
+      case 'num': return token.tag
+      case 'prop':
+        const tname = inferAssign(token.target)
+        return tenv[tname]
+      //default: throw new Error('inferType ' + str(token))
     }
   }
   function inferAssign(token) {
     return token.type = inferType(token)
   }
-  inferAssign(d.main)
-  assertInfer(tokens)
-}
-function assertInfer(tokens) {
-  const ts = tokens.filter(t => t.tag !== 'ra' && t.tag !== 'rp')
-  for (const t of ts) {
-    if (!t.type) {
-      throw new Error('assertInfer ' + str({t,ts}))
-    }
-  }
+  inferAssign(defs.filter(x => x.name === 'main')[0].body)
 }
 function compile(src) {
   const tokens = tokenize(src)
-  const defs = parse(tokens)
-  infer(defs)
+  let defs = parse(tokens)
+  infer(defs, src, tokens)
   const js = generate(defs)
   return {tokens,defs,js}
 }
@@ -396,6 +362,10 @@ function testAll() {
 
   // effect
   eq(1, '\n  count := 0\n  count += 1\n  count')
+
+  // infer
+  eq('1', '1.string')
+  eq(1, '"1".int')
 
   // spiteful tests
   eq(1, ' 1 ')
