@@ -285,16 +285,28 @@ function infer(defs, src, tokens) {
     switch (token.tag) {
       case 'str':
       case 'num': return token.tag
+      case 'id':
+        return tenv[token.name]
       case 'prop':
-        const tname = inferAssign(token.target)
+        const tname = unify(token.target)
         return tenv[tname]
       //default: throw new Error('inferType ' + str(token))
     }
   }
-  function inferAssign(token) {
-    return token.type = inferType(token)
+  function unify(token) {
+    if (token.type) {
+      if (token.type !== inferType(token)) { throw new Error('unify failed ' + str(token)) }
+      return token.type
+    } else {
+      return token.type = inferType(token)
+    }
   }
-  inferAssign(defs.filter(x => x.name === 'main')[0].body)
+  for (const def of defs) {
+    if (def.tag === 'func' && def.argv.length === 0) {
+      tenv[def.name] = unify(def.body)
+    }
+  }
+  unify(defs.filter(x => x.name === 'main')[0].body)
 }
 function compile(src) {
   const tokens = tokenize(src)
@@ -363,9 +375,10 @@ function testAll() {
   // effect
   eq(1, '\n  count := 0\n  count += 1\n  count')
 
-  // infer
+  // type inference
   eq('1', '1.string')
   eq(1, '"1".int')
+  eq('1', 'a.string', 'a = 1')
 
   // spiteful tests
   eq(1, ' 1 ')
