@@ -79,6 +79,7 @@ Container
 Expression
 ```
 1 + (2 * 3)
+(a b) => a + b
 ```
 
 Types
@@ -91,17 +92,7 @@ bool enum:
   true
   false
 
-dict struct k v:
-  values []k,v
-
-may enum l r:
-  left l
-  right r
-  both:
-    left l
-    right r
-
-try may(string):
+parser try(string):
   tokenize
   parser
 ```
@@ -111,21 +102,24 @@ Function
 pi = 3
 inc x = x + 1
 add x y = x + y
-main = do:
+main = io:
   print (inc pi) (add 1 2)
 ```
 
 Branch
 ```
-cond1 -> "true"
-a > b -> "true"
-"false"
+gcd a b =
+  a > b  -> gcd b a
+  a == 0 -> b
+  gcd (b / a) a
 ```
 
 Effect
 ```
-value <- calculate 1
-func value
+acc := 0
+count <- calculate 1
+acc += count
+acc
 ```
 
 
