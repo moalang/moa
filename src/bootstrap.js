@@ -221,16 +221,16 @@ function generate(defs) {
     return '(' + fields + ') => ({' + fields + '})'
   }
   function genEnum(token) {
-    const defs = ['(x, ...args) => args[x.index](x.val)']
+    const enums = []
     for (const [index, item] of token.enum.entries()) {
       if (item.struct) {
         const fields = Object.keys(item.struct).join(',')
-        defs.push(token.name + '.' + item.id + ' = (' + fields + ') => ({val:{' + fields + '},index:' + index + '})')
+        enums[index] = item.id + ': (' + fields + ') => ({switch: (...args) => args[' + index + ']({' + fields + '})})'
       } else {
-        defs.push(token.name + '.' + item.id + ' = val => ({val,index:' + index + '})')
+        enums[index] = item.id + ': (v) => ({switch: (...args) => args[' + index + '](v)})'
       }
     }
-    return defs.join('\n')
+    return '{\n  ' + enums.join(',\n  ') + '\n}'
   }
   function genFunc(token) {
     return (token.argv.length > 0 ? '(' + token.argv.join(',') + ') => ' : '') + gen(token.body)
@@ -366,17 +366,18 @@ function testAll() {
 
   // type
   eq({a:1, b:true}, 'ab(1 true)', 'ab struct:\n  a int\n  b bool')
-  eq(1, 'ast(ast.int(1) x=>x y=>y)', 'ast enum:\n  int int\n  add: lhs ast, rhs ast')
-  eq(3, 'eval(ast.add(ast.int(1) ast.int(2)))', 'eval a = ast(a x=>x y=>eval(y.lhs)+eval(y.rhs))', 'ast enum:\n  int int\n  add: lhs ast, rhs ast')
+  eq(1, 'ast.int(1).switch(x=>x y=>y)', 'ast enum:\n  int int\n  add: lhs ast, rhs ast')
+  eq(3, 'eval(ast.add(ast.int(1) ast.int(2)))', 'eval a = a.switch(x=>x y=>eval(y.lhs)+eval(y.rhs))', 'ast enum:\n  int int\n  add: lhs ast, rhs ast')
 
   // function
   eq(3, 'add(1 2)', 'add a b = a + b')
   eq(3, 'add(1 2)', 'add = (a b) => a + b')
 
   // branch
-  eq(1, 'a -> b\n  _ -> c', 'a = true', 'b = 1', 'c = 2')
+  eq(1, 'a -> b\n  c', 'a = true', 'b = 1', 'c = 2')
+  eq(2, 'a -> b\n  c', 'a = false', 'b = 1', 'c = 2')
   eq(2, 'a -> b\n  _ -> c', 'a = false', 'b = 1', 'c = 2')
-  eq(2, 'a -> b\n  c -> d\n  _ -> e', 'a = false', 'b = 1', 'c = true', 'd = 2', 'e = 3')
+  eq(2, 'a -> b\n  c -> d\n  e', 'a = false', 'b = 1', 'c = true', 'd = 2', 'e = 3')
 
   // effect
   eq(1, '\n  count := 0\n  count += 1\n  count')
