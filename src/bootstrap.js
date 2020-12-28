@@ -103,7 +103,7 @@ function parse(tokens) {
     return ary
   }
   function parseCall(token) {
-    token.name = token.code.replace('.', '').replace('(', '')
+    token.name = escape(token.code.replace('(', '')).replace('.', '')
     if (token.code.endsWith('(')) {
       token.argv = until(t => t.tag !== 'rp')
     } else {
@@ -171,13 +171,6 @@ function parse(tokens) {
       if (next.op === '=>') {
         next.args = token.tag === 'lp' ? token.items.map(x => x.name).join(',') : token.name
       }
-      if (next.op === '->') {
-        if (token.code === '_') {
-          return parseLeft(next.rhs)
-        } else {
-          next.else = parseTop()
-        }
-      }
       return parseLeft(next)
     } else if (next.tag === 'prop') {
       ++pos
@@ -242,6 +235,13 @@ function generate(defs) {
     const body = lines.map(genLine).map((line, i) => (i===lines.length-1) ? 'return ' + line : line).join('\n  ')
     return '(function () {\n  ' + body + '\n})()'
   }
+  function genId(token) {
+    if (token.name === 'if') {
+      return token.argv.filter(t => t.code === '->').map(x => gen(x.lhs) + '?' + gen(x.rhs) + ':').join(' ') + gen(token.argv.slice(-1)[0])
+    } else {
+      return token.name + genCall(token.argv)
+    }
+  }
   function genProp(token) {
     const prop = dig(embeddedProps, token.target.type, token.name)
     if (prop) {
@@ -266,7 +266,7 @@ function generate(defs) {
       case 'func': return 'const ' + token.name + ' = ' + genFunc(token)
       case 'struct': return 'const ' + token.name + ' = ' + genStruct(token)
       case 'enum': return 'const ' + token.name + ' = ' + genEnum(token)
-      case 'id': return token.name + genCall(token.argv)
+      case 'id': return genId(token)
       case 'la': return '[' + token.ary.map(gen).join(',') + ']'
       case 'lp': return '(' + token.items.map(gen).join('') + ')'
       case 'prop': return genProp(token)
@@ -275,7 +275,7 @@ function generate(defs) {
           case '=': return 'const ' + gen(token.lhs) + token.op + gen(token.rhs)
           case ':=': return 'let ' + gen(token.lhs) + ' = ' + gen(token.rhs)
           case '=>': return '((' + token.args + ') => ' + gen(token.rhs) + ')'
-          case '->': return gen(token.lhs) + ' ? ' + gen(token.rhs) + ' : ' + gen(token.else)
+          case '->': throw new Error('gen -> ' + str(token))
           default: return gen(token.lhs) + token.op + gen(token.rhs)
         }
       default: throw new Error('gen ' + str(token))
@@ -374,10 +374,9 @@ function testAll() {
   eq(3, 'add(1 2)', 'add = (a b) => a + b')
 
   // branch
-  eq(1, 'a -> b\n  c', 'a = true', 'b = 1', 'c = 2')
-  eq(2, 'a -> b\n  c', 'a = false', 'b = 1', 'c = 2')
-  eq(2, 'a -> b\n  _ -> c', 'a = false', 'b = 1', 'c = 2')
-  eq(2, 'a -> b\n  c -> d\n  e', 'a = false', 'b = 1', 'c = true', 'd = 2', 'e = 3')
+  eq(1, 'if(a -> b\n  c)', 'a = true', 'b = 1', 'c = 2')
+  eq(2, 'if(a -> b\n  c)', 'a = false', 'b = 1', 'c = 2')
+  eq(2, 'if(a -> b\n  c -> d\n  e)', 'a = false', 'b = 1', 'c = true', 'd = 2', 'e = 3')
 
   // effect
   eq(1, '\n  count := 0\n  count += 1\n  count')
