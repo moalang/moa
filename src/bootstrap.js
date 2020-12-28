@@ -172,7 +172,11 @@ function parse(tokens) {
         next.args = token.tag === 'lp' ? token.items.map(x => x.name).join(',') : token.name
       }
       if (next.op === '->') {
-        next.else = parseTop()
+        if (token.code === '_') {
+          return parseLeft(next.rhs)
+        } else {
+          next.else = parseTop()
+        }
       }
       return parseLeft(next)
     } else if (next.tag === 'prop') {
@@ -370,9 +374,9 @@ function testAll() {
   eq(3, 'add(1 2)', 'add = (a b) => a + b')
 
   // branch
-  eq(1, 'a -> b\n  c', 'a = true', 'b = 1', 'c = 2')
-  eq(2, 'a -> b\n  c', 'a = false', 'b = 1', 'c = 2')
-  eq(2, 'a -> b\n  c -> d\n  e', 'a = false', 'b = 1', 'c = true', 'd = 2', 'e = 3')
+  eq(1, 'a -> b\n  _ -> c', 'a = true', 'b = 1', 'c = 2')
+  eq(2, 'a -> b\n  _ -> c', 'a = false', 'b = 1', 'c = 2')
+  eq(2, 'a -> b\n  c -> d\n  _ -> e', 'a = false', 'b = 1', 'c = true', 'd = 2', 'e = 3')
 
   // effect
   eq(1, '\n  count := 0\n  count += 1\n  count')
