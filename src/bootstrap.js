@@ -1,3 +1,5 @@
+'use strict'
+
 // utils
 function str(obj) {
   return JSON.stringify(obj, null, 2)
