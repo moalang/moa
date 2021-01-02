@@ -288,31 +288,46 @@ function infer(defs, src, tokens) {
     'num': {'string': 'string'},
   }
   function inferType(token) {
+    return token.type = _inferType(token)
+  }
+  function _inferType(token) {
     switch (token.tag) {
       case 'str':
       case 'num': return token.tag
-      case 'id':
-        return tenv[token.name]
-      case 'prop':
-        const tname = unify(token.target)
-        return tenv[tname]
-      //default: throw new Error('inferType ' + str(token))
+      case 'id': return tenv[token.name]
+      case 'prop': return tenv[inferType(token.target)]
+      case 'lp': return token.items.map(inferType)[0]
+      case 'la': return token.ary.map(inferType)[0] || 'tvar'
+      case 'op2':
+        switch (token.op) {
+          case '+':
+          case '-':
+          case '*':
+          case ':=': return unify(token.lhs, token.rhs)
+          case '=>': return inferType(token.rhs)
+          default:
+            throw new Error('inferType op2 ' + str(token))
+        }
+      default:
+        throw new Error('inferType ' + str(token))
     }
   }
-  function unify(token) {
-    if (token.type) {
-      if (token.type !== inferType(token)) { throw new Error('unify failed ' + str(token)) }
-      return token.type
+  function unify(t1, t2) {
+    if (t1 == t2) {
+      return t1
+    } else if ((t1 && !t2) || (!t1 && t2)) {
+      return t1 || t2
     } else {
-      return token.type = inferType(token)
+      return unify(inferType(t1), inferType(t2))
+      throw new Error('unify failed ' + str(t1) + ' and ' + str(t2))
     }
   }
   for (const def of defs) {
     if (def.tag === 'func' && def.argv.length === 0) {
-      tenv[def.name] = unify(def.body)
+      tenv[def.name] = inferType(def.body)
     }
   }
-  unify(defs.filter(x => x.name === 'main')[0].body)
+  inferType(defs.filter(x => x.name === 'main')[0].body)
 }
 function compile(src) {
   const tokens = tokenize(src)
