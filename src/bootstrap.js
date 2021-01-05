@@ -288,7 +288,13 @@ function infer(defs, src, tokens) {
     'num': {'string': 'string'},
   }
   function inferType(token) {
-    return token.type = _inferType(token)
+    if (!token.type) {
+      token.type = _inferType(token)
+    }
+    return token.type
+  }
+  function tarray(type) {
+    return type ? '[]' + type : '[]'
   }
   function _inferType(token) {
     switch (token.tag) {
@@ -297,14 +303,14 @@ function infer(defs, src, tokens) {
       case 'id': return tenv[token.name]
       case 'prop': return tenv[inferType(token.target)]
       case 'lp': return token.items.map(inferType)[0]
-      case 'la': return token.ary.map(inferType)[0] || 'tvar'
+      case 'la': return tarray(token.ary.map(inferType)[0])
       case 'op2':
         switch (token.op) {
           case '+':
           case '-':
           case '*':
-          case ':=': return unify(token.lhs, token.rhs)
-          case '=>': return inferType(token.rhs)
+          case ':=': return token.lhs.type = inferType(token.rhs)
+          case '=>': return 'func'
           default:
             throw new Error('inferType op2 ' + str(token))
         }
@@ -312,14 +318,12 @@ function infer(defs, src, tokens) {
         throw new Error('inferType ' + str(token))
     }
   }
-  function unify(t1, t2) {
-    if (t1 == t2) {
-      return t1
-    } else if ((t1 && !t2) || (!t1 && t2)) {
-      return t1 || t2
+  function same(...tokens) {
+    const type = tokens.map(inferType)[0]
+    if (tokens.every(token => token.type === type)) {
+      return type
     } else {
-      return unify(inferType(t1), inferType(t2))
-      throw new Error('unify failed ' + str(t1) + ' and ' + str(t2))
+      throw new Error('Types should be same ' + str(tokens) + ' in ' + src)
     }
   }
   for (const def of defs) {
@@ -400,6 +404,7 @@ function testAll() {
   eq('1', '1.string')
   eq(1, '"1".int')
   eq('1', 'a.string', 'a = 1')
+  eq('2', '(a + 1).string', 'a = 1')
 
   // spiteful tests
   eq(1, ' 1 ')
