@@ -275,6 +275,7 @@ function generate(defs) {
           case '=': return 'const ' + gen(token.lhs) + token.op + gen(token.rhs)
           case ':=': return 'let ' + gen(token.lhs) + ' = ' + gen(token.rhs)
           case '=>': return '((' + token.args + ') => ' + gen(token.rhs) + ')'
+          case '++': return gen(token.lhs) + '.concat(' + gen(token.rhs) + ')'
           case '->': throw new Error('gen -> ' + str(token))
           default: return gen(token.lhs) + token.op + gen(token.rhs)
         }
@@ -285,7 +286,23 @@ function generate(defs) {
 }
 function infer(defs, src, tokens) {
   const tenv = {
-    'num': {'string': 'string'},
+    'num': {'string': 'str'},
+    'str': {'int': 'num'},
+  }
+  function lookup(token) {
+    if (token.name === 'true' || token.name === 'false') { return 'bool' }
+    if (token.name === 'if') { return inferType(token.argv[0].rhs) }
+    const type = tenv[token.name]
+    if (!type) { throw new Error('Type does not found ' + token.name + ' token=' + str(token) + ' with ' + str(tenv)) }
+    return type
+  }
+  function prop(token, prop) {
+    const type = inferType(token.target)
+    const obj = typeof type === 'string' ? tenv[type] : type
+    if (!obj) { throw new Error('Type does not found ' + str(token) + ' with ' + str(tenv)) }
+    const ptype = obj[prop]
+    if (!ptype) { throw new Error('Property does not found ' + str(token) + ' with ' + str(tenv)) }
+    return ptype
   }
   function inferType(token) {
     if (!token.type) {
@@ -300,8 +317,8 @@ function infer(defs, src, tokens) {
     switch (token.tag) {
       case 'str':
       case 'num': return token.tag
-      case 'id': return tenv[token.name]
-      case 'prop': return tenv[inferType(token.target)]
+      case 'id': return lookup(token)
+      case 'prop': return prop(token, token.name)
       case 'lp': return token.items.map(inferType)[0]
       case 'la': return tarray(token.ary.map(inferType)[0])
       case 'op2':
@@ -311,6 +328,7 @@ function infer(defs, src, tokens) {
           case '*':
           case ':=': return token.lhs.type = inferType(token.rhs)
           case '=>': return 'func'
+          case '++': return same(token.lhs, token.rhs)
           default:
             throw new Error('inferType op2 ' + str(token))
         }
@@ -327,8 +345,12 @@ function infer(defs, src, tokens) {
     }
   }
   for (const def of defs) {
-    if (def.tag === 'func' && def.argv.length === 0) {
-      tenv[def.name] = inferType(def.body)
+    if (def.tag === 'func') {
+      tenv[def.name] = def.argv.length === 0 ? inferType(def.body) : 'func'
+    } else if (def.tag === 'struct') {
+      tenv[def.name] = def.struct
+    } else if (def.tag === 'enum') {
+      tenv[def.name] = dict(def.enum.map(x => [x.id, {switch: '=>'}]))
     }
   }
   inferType(defs.filter(x => x.name === 'main')[0].body)
@@ -364,7 +386,7 @@ function testAll() {
       put('expect: ', expect)
       put('actual: ', actual)
       put('src   : ', src)
-      put('js    : ', info.js)
+      put('js    : ', '\n  ' + info.js.replace(/\n/g, '\n  '))
       put('defs  : '); puts(...info.defs)
       process.exit(1)
     }
@@ -405,6 +427,7 @@ function testAll() {
   eq(1, '"1".int')
   eq('1', 'a.string', 'a = 1')
   eq('2', '(a + 1).string', 'a = 1')
+  eq('4c', '(a + b + 1).string ++ c', 'a = 1', 'b = 2', 'c = "c"')
 
   // spiteful tests
   eq(1, ' 1 ')
