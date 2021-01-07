@@ -36,6 +36,13 @@ function dict(kvs) {
   }
   return d
 }
+function dict2(list) {
+  const d = {}
+  for (let i=1; i<list.length; i+=2) {
+    d[list[i-1]] = list[i]
+  }
+  return d
+}
 function dig(d, ...args) {
   for (const arg of args) {
     d = d[arg]
@@ -53,8 +60,8 @@ function tokenize(src) {
   const some = (p,tag,s) => consume(p, tag, s.split(' ').find(w => src.slice(p).startsWith(w)))
   const eat = p =>
     match(p, 'func', /^[A-Za-z_][A-Za-z0-9_]*( +[A-Za-z_][A-Za-z0-9_]*)* +=/) ||
-    match(p, 'enum', /^[A-Za-z_][A-Za-z0-9_]* enum:(\n  .+)+/) ||
-    match(p, 'struct', /^[A-Za-z_][A-Za-z0-9_]* struct:(\n  .+)+/) ||
+    match(p, 'struct', /^[A-Z][A-Za-z0-9_]:(\n  [a-z].*)+/) ||
+    match(p, 'enums', /^[A-Z][A-Za-z0-9_]:(\n  [A-Z].*)+/) ||
     match(p, 'num', /^[0-9]+(\.[0-9]+)?/) ||
     match(p, 'id', /^[A-Za-z_][A-Za-z0-9_]*(,[A-Za-z_][A-Za-z0-9_]*)*\(?/) ||
     match(p, 'str', /^"(?:(?:\\")|[^"])*"/) ||
@@ -64,13 +71,13 @@ function tokenize(src) {
     some(p, 'ra', ']') ||
     some(p, 'lp', '(') ||
     some(p, 'rp', ')') ||
-    some(p, 'op2', '+= -= *= /= || && == != >= <= ++ => := : <- -> > < + - * /')
+    some(p, 'op2', '+= -= *= /= || && == != >= <= ++ => := : <- -> > < + - * / |')
 
   let indent = 0
   let pos=0, tokens=[]
   while (pos < src.length) {
     const token = eat(pos)
-    if (!token) { throw new Error('tokenize at ' + pos) }
+    if (!token) { throw new Error('tokenize at ' + pos + '\n' + src) }
     if (token.tag === 'spaces' && token.code.includes('\n')) {
       const last = token.code.split('\n').slice(-1)[0]
       if (!last.includes('#')) {
@@ -132,31 +139,26 @@ function parse(tokens) {
         token.argv = ids.slice(1)
         token.body = parseIndent(token, parseTop())
         return token
-      case 'struct':
-        const [name, ...fields] = token.code.split('\n').map(x => x.trim()).filter(x => x)
-        token.name = name.split(' ')[0]
-        token.struct = dict(fields.map(x => x.split(' ')))
-        return token
-      case 'enum':
-        const tags = token.code.split('\n').map(x => x.trim()).filter(x => x)
-        token.name = tags[0].split(' ')[0]
-        token.enum = tags.slice(1).map(line => {
-          const at = line.indexOf(' ')
-          let id = line.slice(0, at)
-          if (id.endsWith(':')) {
-            id = id.slice(0, -1)
-            const struct = dict(line.slice(at).trim().split(/ *, */).map(x => x.split(' ').map(y => y.trim())))
-            return {id, struct}
+      case 'enums':
+        const [ename, ...fields] = token.code.split('\n').map(x => x.trim()).filter(x => x)
+        token.name = ename.replace(':', '')
+        token.enums = fields.map(field => {
+          const [id, ...bodies] = field.split(/ *[,:] */)
+          if (bodies.length === 0) {
+            return {id, alias: bodies[0]}
           } else {
-            return {id, alias: line.slice(at)}
+            return {id, struct: dict2(bodies)}
           }
         })
+      case 'struct':
+        const [sname, ...struct] = token.code.split('\n').map(x => x.trim()).filter(x => x)
+        token.name = sname.replace(':', '')
+        token.struct = struct.map(x => x.split(' '))
         return token
       case 'id': parseCall(token); return token
       case 'la': token.ary = until(t => t.tag !== 'ra'); return token
       case 'lp': token.items = until(t => t.tag !== 'rp'); return token
-      default:
-        throw new Error('Unexpected tag ' + str(token) + info())
+      default: throw new Error('Unexpected tag ' + str(token) + info())
     }
   }
   function parseLeft(token) {
@@ -210,20 +212,12 @@ function generate(defs) {
     return argv.length === 0 ? '' : '(' + argv.map(gen).join(',') + ')'
   }
   function genStruct(token) {
-    const fields = Object.keys(token.struct).join(',')
-    return '(' + fields + ') => ({' + fields + '})'
+    const fields = token.struct.map(x => x[0])
+    return 'const ' + token.name + ' = (' + fields + ') => ({' + fields + '})'
   }
   function genEnum(token) {
-    const enums = []
-    for (const [index, item] of token.enum.entries()) {
-      if (item.struct) {
-        const fields = Object.keys(item.struct).join(',')
-        enums[index] = item.id + ': (' + fields + ') => ({switch: (...args) => args[' + index + ']({' + fields + '})})'
-      } else {
-        enums[index] = item.id + ': (v) => ({switch: (...args) => args[' + index + '](v)})'
-      }
-    }
-    return '{\n  ' + enums.join(',\n  ') + '\n}'
+    return token.enums.map(x => x[0]).enums.map(x => 'const ' + x[0] + ' = x => x') +
+      '\nconst ' + token.name + ' = {' + names.join(',') + '}'
   }
   function genFunc(token) {
     return (token.argv.length > 0 ? '(' + token.argv.join(',') + ') => ' : '') + gen(token.body)
@@ -236,11 +230,29 @@ function generate(defs) {
     return '(function () {\n  ' + body + '\n})()'
   }
   function genId(token) {
-    if (token.name === 'if') {
+    if (token.name === 'True' || token.name === 'False') {
+      return token.name.toLowerCase()
+    } else if (token.name === 'if') {
       return token.argv.filter(t => t.code === '->').map(x => gen(x.lhs) + '?' + gen(x.rhs) + ':').join(' ') + gen(token.argv.slice(-1)[0])
     } else {
       return token.name + genCall(token.argv)
     }
+  }
+  function genMatch(token) {
+    const patterns = []
+    let t = token.rhs
+    while (true) {
+      if (t.rhs.op === '|') {
+        patterns.push((t.lhs.code === '_' ? 'true' : '_match === ' + gen(t.lhs)) + ' ? ' + gen(t.rhs.lhs) + ' : ')
+        t = t.rhs.rhs
+      } else {
+        patterns.push((t.lhs.code === '_' ? 'true' : '_match === ' + gen(t.lhs)) + ' ? ' + gen(t.rhs) + ' : ')
+        break
+      }
+    }
+    return '(_match => ' + patterns.join('\n') +
+      ('(()=>{throw new Error(_match)})()') +
+      ')(' +  gen(token.lhs) + ')'
   }
   function genProp(token) {
     const prop = dig(embeddedProps, token.target.type, token.name)
@@ -264,8 +276,8 @@ function generate(defs) {
       case 'num': return token.val
       case 'str': return '"' + token.val + '"'
       case 'func': return 'const ' + token.name + ' = ' + genFunc(token)
-      case 'struct': return 'const ' + token.name + ' = ' + genStruct(token)
-      case 'enum': return 'const ' + token.name + ' = ' + genEnum(token)
+      case 'struct': return genStruct(token)
+      case 'enum': return genEnum(token)
       case 'id': return genId(token)
       case 'la': return '[' + token.ary.map(gen).join(',') + ']'
       case 'lp': return '(' + token.items.map(gen).join('') + ')'
@@ -277,6 +289,7 @@ function generate(defs) {
           case '=>': return '((' + token.args + ') => ' + gen(token.rhs) + ')'
           case '++': return gen(token.lhs) + '.concat(' + gen(token.rhs) + ')'
           case '->': throw new Error('gen -> ' + str(token))
+          case '|': return genMatch(token)
           default: return gen(token.lhs) + token.op + gen(token.rhs)
         }
       default: throw new Error('gen ' + str(token))
@@ -285,23 +298,28 @@ function generate(defs) {
   return defs.map(gen).join("\n")
 }
 function infer(defs, src, tokens) {
-  const tenv = {
+  const props = {
     'num': {'string': 'str'},
     'str': {'int': 'num'},
+  }
+  const types = {
+    'True': 'Bool',
+    'False': 'Bool',
   }
   function lookup(token) {
     if (token.name === 'true' || token.name === 'false') { return 'bool' }
     if (token.name === 'if') { return inferType(token.argv[0].rhs) }
-    const type = tenv[token.name]
-    if (!type) { throw new Error('Type does not found ' + token.name + ' token=' + str(token) + ' with ' + str(tenv)) }
+    if (token.name in types) { return types[token.name] }
+    const type = props[token.name]
+    if (!type) { throw new Error('Type does not found ' + token.name + ' token=' + str(token) + ' with ' + str(props)) }
     return type
   }
   function prop(token, prop) {
     const type = inferType(token.target)
-    const obj = typeof type === 'string' ? tenv[type] : type
-    if (!obj) { throw new Error('Type does not found ' + str(token) + ' with ' + str(tenv)) }
+    const obj = typeof type === 'string' ? props[type] : type
+    if (!obj) { throw new Error('Type does not found ' + str(token) + ' with ' + str(props)) }
     const ptype = obj[prop]
-    if (!ptype) { throw new Error('Property does not found ' + str(token) + ' with ' + str(tenv)) }
+    if (!ptype) { throw new Error('Property does not found ' + str(token) + ' with ' + str(props)) }
     return ptype
   }
   function inferType(token) {
@@ -329,6 +347,8 @@ function infer(defs, src, tokens) {
           case ':=': return token.lhs.type = inferType(token.rhs)
           case '=>': return 'func'
           case '++': return same(token.lhs, token.rhs)
+          case '->': return inferType(token.rhs)
+          case '|': if (token.lhs.code !== '|') { inferType(token.lhs) }; return inferType(token.rhs)
           default:
             throw new Error('inferType op2 ' + str(token))
         }
@@ -346,11 +366,15 @@ function infer(defs, src, tokens) {
   }
   for (const def of defs) {
     if (def.tag === 'func') {
-      tenv[def.name] = def.argv.length === 0 ? inferType(def.body) : 'func'
-    } else if (def.tag === 'struct') {
-      tenv[def.name] = def.struct
-    } else if (def.tag === 'enum') {
-      tenv[def.name] = dict(def.enum.map(x => [x.id, {switch: '=>'}]))
+      types[def.name] = def.argv.length === 0 ? inferType(def.body) : 'func'
+    } else if (def.struct) {
+      types[def.name] = def.name
+      props[def.name] = dict(def.struct)
+    } else if (def.enums) {
+      type[def.name] = def.name
+      for (const [name,type] of def.enums) {
+        type[name] = name
+      }
     }
   }
   inferType(defs.filter(x => x.name === 'main')[0].body)
@@ -405,19 +429,26 @@ function testAll() {
   eq(9, '(1 + 2) * 3')
   eq(5, '1 * (2 + 3)')
 
-  // type
-  eq({a:1, b:true}, 'ab(1 true)', 'ab struct:\n  a int\n  b bool')
-  eq(1, 'ast.int(1).switch(x=>x y=>y)', 'ast enum:\n  int int\n  add: lhs ast, rhs ast')
-  eq(3, 'eval(ast.add(ast.int(1) ast.int(2)))', 'eval a = a.switch(x=>x y=>eval(y.lhs)+eval(y.rhs))', 'ast enum:\n  int int\n  add: lhs ast, rhs ast')
-
   // function
   eq(3, 'add(1 2)', 'add a b = a + b')
   eq(3, 'add(1 2)', 'add = (a b) => a + b')
 
-  // branch
+  // control flow
   eq(1, 'if(a -> b\n  c)', 'a = true', 'b = 1', 'c = 2')
   eq(2, 'if(a -> b\n  c)', 'a = false', 'b = 1', 'c = 2')
   eq(2, 'if(a -> b\n  c -> d\n  e)', 'a = false', 'b = 1', 'c = true', 'd = 2', 'e = 3')
+
+  // type
+  eq({a:1, b:true}, 'Ab(1 True)', 'Ab:\n  a Int\n  b Bool')
+  //eq(1, 'A(1)\n| A -> 1\n| B -> 2', 'AB:\n  A Int\n  B Bool')
+  //eq({a:1, b:true}, 'ab(1 true)', 'ab struct:\n  a int\n  b bool')
+  //eq(1, 'ast.int(1).switch(x=>x y=>y)', 'ast enum:\n  int int\n  add: lhs ast, rhs ast')
+
+  // pattern match
+  //eq(3, 'eval(ast.add(ast.int(1) ast.int(2)))', 'eval a = a.switch(x=>x y=>eval(y.lhs)+eval(y.rhs))', 'ast enum:\n  int int\n  add: lhs ast, rhs ast')
+  eq(10, '1\n  | 1 -> 10\n  | 2 -> 20\n  | _ -> 0')
+  eq(20, '2\n  | 1 -> 10\n  | 2 -> 20\n  | _ -> 0')
+  eq(0, '3\n  | 1 -> 10\n  | 2 -> 20\n  | _ -> 0')
 
   // effect
   eq(1, '\n  count := 0\n  count += 1\n  count')
