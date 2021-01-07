@@ -84,17 +84,29 @@ Expression
 
 Types
 ```
-person struct:
+Person:
   name string
   age int
 
-bool enum:
-  true
-  false
+Dict k v:
+  values [](k,v)
 
-parser try(string):
-  tokenize
-  parser
+Bool:
+  True
+  False
+
+Maybe a:
+  None
+  Just a
+
+Vector2:
+  x,y int
+
+Vector3:
+  +Vector2
+  z int
+
+Int = I32
 ```
 
 Function
@@ -106,12 +118,19 @@ main = io:
   print (inc pi) (add 1 2)
 ```
 
-Branch
+Control Flow
 ```
-gcd a b =
-  a > b  -> gcd b a
+gcd a b = if(
+  a > b  -> gcd(b a)
   a == 0 -> b
-  gcd (b / a) a
+  gcd((b / a) a))
+```
+
+Pattern Matching
+```
+show m = m
+| None -> "none"
+| Just(a) -> "just " ++ a.string
 ```
 
 Effect
