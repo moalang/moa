@@ -243,7 +243,7 @@ function generate(defs) {
     const patterns = []
     let t = token.rhs
     while (true) {
-      const cond = t.lhs.code === '_' ? 'true' : '__equal(_match, ' + gen(t.lhs) + ')'
+      const cond = t.lhs.code === '_' ? 'true' : '__equal(__match, ' + gen(t.lhs) + ')'
       if (t.rhs.op === '|') {
         patterns.push(cond + ' ? ' + gen(t.rhs.lhs) + ' : ')
         t = t.rhs.rhs
@@ -252,8 +252,8 @@ function generate(defs) {
         break
       }
     }
-    return '(_match =>\n  ' + patterns.join('\n  ') +
-      ('\n  (()=>{throw new Error(_match)})()') +
+    return '(__match =>\n  ' + patterns.join('\n  ') +
+      ('\n  (()=>{throw new Error(__match)})()') +
       ')(' +  gen(token.lhs) + ')'
   }
   function genProp(token) {
