@@ -1,4 +1,5 @@
 'use strict'
+const runtime = require('fs').readFileSync('runtime.js', 'utf8')
 
 // utils
 function str(obj) {
@@ -143,7 +144,7 @@ function parse(tokens) {
         const [ename, ...fields] = token.code.split('\n').map(x => x.trim()).filter(x => x)
         token.name = ename.replace(':', '')
         token.enums = fields.map(field => {
-          const [id, ...bodies] = field.split(/ *[,:] */)
+          const [id, ...bodies] = field.split(/ *[ ,:] */)
           if (bodies.length === 0) {
             return {id, alias: bodies[0]}
           } else {
@@ -216,8 +217,8 @@ function generate(defs) {
     return 'const ' + token.name + ' = (' + fields + ') => ({' + fields + '})'
   }
   function genEnum(token) {
-    return token.enums.map(x => x[0]).enums.map(x => 'const ' + x[0] + ' = x => x') +
-      '\nconst ' + token.name + ' = {' + names.join(',') + '}'
+    return token.enums.map(x => 'const ' + x.id + ' = __val => ({__val,__type:' + x.id + '})').join('\n') +
+      '\nconst ' + token.name + ' = {' + token.enums.map(x => x.id).join(',') + '}'
   }
   function genFunc(token) {
     return (token.argv.length > 0 ? '(' + token.argv.join(',') + ') => ' : '') + gen(token.body)
@@ -242,16 +243,17 @@ function generate(defs) {
     const patterns = []
     let t = token.rhs
     while (true) {
+      const cond = t.lhs.code === '_' ? 'true' : '__equal(_match, ' + gen(t.lhs) + ')'
       if (t.rhs.op === '|') {
-        patterns.push((t.lhs.code === '_' ? 'true' : '_match === ' + gen(t.lhs)) + ' ? ' + gen(t.rhs.lhs) + ' : ')
+        patterns.push(cond + ' ? ' + gen(t.rhs.lhs) + ' : ')
         t = t.rhs.rhs
       } else {
-        patterns.push((t.lhs.code === '_' ? 'true' : '_match === ' + gen(t.lhs)) + ' ? ' + gen(t.rhs) + ' : ')
+        patterns.push(cond + ' ? ' + gen(t.rhs) + ' : ')
         break
       }
     }
-    return '(_match => ' + patterns.join('\n') +
-      ('(()=>{throw new Error(_match)})()') +
+    return '(_match =>\n  ' + patterns.join('\n  ') +
+      ('\n  (()=>{throw new Error(_match)})()') +
       ')(' +  gen(token.lhs) + ')'
   }
   function genProp(token) {
@@ -277,7 +279,7 @@ function generate(defs) {
       case 'str': return '"' + token.val + '"'
       case 'func': return 'const ' + token.name + ' = ' + genFunc(token)
       case 'struct': return genStruct(token)
-      case 'enum': return genEnum(token)
+      case 'enums': return genEnum(token)
       case 'id': return genId(token)
       case 'la': return '[' + token.ary.map(gen).join(',') + ']'
       case 'lp': return '(' + token.items.map(gen).join('') + ')'
@@ -311,7 +313,9 @@ function infer(defs, src, tokens) {
     if (token.name === 'if') { return inferType(token.argv[0].rhs) }
     if (token.name in types) { return types[token.name] }
     const type = props[token.name]
-    if (!type) { throw new Error('Type does not found ' + token.name + ' token=' + str(token) + ' with ' + str(props)) }
+    if (!type) {
+      throw new Error('Type does not found ' + token.name + str({props,types}))
+    }
     return type
   }
   function prop(token, prop) {
@@ -367,14 +371,14 @@ function infer(defs, src, tokens) {
   for (const def of defs) {
     if (def.tag === 'func') {
       types[def.name] = def.argv.length === 0 ? inferType(def.body) : 'func'
+    } else if (def.enums) {
+      types[def.name] = def.name
+      for (const e of def.enums) {
+        types[e.id] = e.alias
+      }
     } else if (def.struct) {
       types[def.name] = def.name
       props[def.name] = dict(def.struct)
-    } else if (def.enums) {
-      type[def.name] = def.name
-      for (const [name,type] of def.enums) {
-        type[name] = name
-      }
     }
   }
   inferType(defs.filter(x => x.name === 'main')[0].body)
@@ -388,7 +392,7 @@ function compile(src) {
 }
 function evalInSandbox(js) {
   try {
-    return Function(js)()
+    return Function(runtime + '\n' + js)()
   } catch (e) {
     puts('Failed to evaluate')
     for (const [i, line] of js.split('\n').entries()) {
@@ -440,7 +444,8 @@ function testAll() {
 
   // type
   eq({a:1, b:true}, 'Ab(1 True)', 'Ab:\n  a Int\n  b Bool')
-  //eq(1, 'A(1)\n| A -> 1\n| B -> 2', 'AB:\n  A Int\n  B Bool')
+  eq(1, 'A(1)\n| A -> 1\n| B -> 2', 'AB:\n  A Int\n  B Bool')
+  eq(2, 'B(true)\n| A -> 1\n| B -> 2', 'AB:\n  A Int\n  B Bool')
   //eq({a:1, b:true}, 'ab(1 true)', 'ab struct:\n  a int\n  b bool')
   //eq(1, 'ast.int(1).switch(x=>x y=>y)', 'ast enum:\n  int int\n  add: lhs ast, rhs ast')
 
