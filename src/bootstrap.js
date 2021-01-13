@@ -72,7 +72,7 @@ function tokenize(src) {
     some(p, 'ra', ']') ||
     some(p, 'lp', '(') ||
     some(p, 'rp', ')') ||
-    some(p, 'op2', '+= -= *= /= || && == != >= <= ++ => := : <- -> > < + - * / |')
+    some(p, 'op2', '+= -= *= /= || && == != >= <= ++ => := : <- -> > < + - * /')
 
   let indent = 0
   let pos=0, tokens=[]
@@ -230,44 +230,31 @@ function generate(defs) {
     const body = lines.map(genLine).map((line, i) => (i===lines.length-1) ? 'return ' + line : line).join('\n  ')
     return '(function () {\n  ' + body + '\n})()'
   }
+  function genPattern(token) {
+    const c = token.lhs
+    if (c.tag === 'id' && c.name === '_') {
+      return ' true ? ' + gen(token.rhs)
+    }
+    if (c.tag === 'id' && 'A' <= c.name[0] && c.name[0] <= 'Z') {
+      const args = c.argv.map(t => t.name)
+      const wrap = js => args.length ? '(' + args.join(',') + ' => ' + js + ')(__match.__val)' : js
+      return "__match.__type === '" + c.name + "' ? " + wrap(gen(token.rhs))
+    }
+
+    return '__equal(__match, ' + gen(token.lhs) + ') ? ' + gen(token.rhs)
+  }
   function genId(token) {
     if (token.name === 'True' || token.name === 'False') {
       return token.name.toLowerCase()
     } else if (token.name === 'if') {
       return token.argv.filter(t => t.code === '->').map(x => gen(x.lhs) + '?' + gen(x.rhs) + ':').join(' ') + gen(token.argv.slice(-1)[0])
+    } else if (token.name === 'match') {
+      const [target,...conds] = token.argv
+      const body = conds.map(genPattern).join(' : ') + ' : (() => { throw new Error(__match) })()'
+      return '(__match => ' + body +')(' + gen(target) + ')'
     } else {
       return token.name + genCall(token.argv)
     }
-  }
-  function genMatch(token) {
-    const patterns = []
-    let t = token.rhs
-    while (true) {
-      if (t.lhs.tag === 'id' && 'A' <= t.lhs.name[0] && t.lhs.name[0] <= 'Z') {
-        const args = t.lhs.argv.map(x => x.name)
-        const wrap = body => args.length ? '((' + args.join(',') + ') => ' + body + ')(__match.__val)' : body
-        const cond = t.lhs.code === '_' ? 'true' : "__match.__type === '" + t.lhs.name + "'"
-        if (t.rhs.op === '|') {
-          patterns.push(cond + ' ? ' + wrap(gen(t.rhs.lhs)) + ' : ')
-          t = t.rhs.rhs
-        } else {
-          patterns.push(cond + ' ? ' + wrap(gen(t.rhs)) + ' : ')
-          break
-        }
-      } else {
-        const cond = t.lhs.code === '_' ? 'true' : '__equal(__match, ' + gen(t.lhs) + ')'
-        if (t.rhs.op === '|') {
-          patterns.push(cond + ' ? ' + gen(t.rhs.lhs) + ' : ')
-          t = t.rhs.rhs
-        } else {
-          patterns.push(cond + ' ? ' + gen(t.rhs) + ' : ')
-          break
-        }
-      }
-    }
-    return '(__match =>\n  ' + patterns.join('\n  ') +
-      ('\n  (()=>{throw new Error(__match)})()') +
-      ')(' +  gen(token.lhs) + ')'
   }
   function genProp(token) {
     const prop = dig(embeddedProps, token.target.type, token.name)
@@ -304,7 +291,6 @@ function generate(defs) {
           case '=>': return '((' + token.args + ') => ' + gen(token.rhs) + ')'
           case '++': return gen(token.lhs) + '.concat(' + gen(token.rhs) + ')'
           case '->': throw new Error('gen -> ' + str(token))
-          case '|': return genMatch(token)
           default: return gen(token.lhs) + token.op + gen(token.rhs)
         }
       default: throw new Error('gen ' + str(token))
@@ -335,6 +321,16 @@ function infer(defs, src, tokens) {
   function lookup(token) {
     if (token.name === 'true' || token.name === 'false') { return 'bool' }
     if (token.name === 'if') { return inferType(token.argv[0].rhs) }
+    if (token.name === 'match') {
+      const c = token.argv[1].lhs
+      if (c.tag === 'id' && 'A' <= c.name[0] && c.name[0] <= 'Z' && c.argv.length) {
+        const args = c.argv.map(t => t.name)
+        if (args.length !== 1) { throw new Error('Unsupported multiple capture yet') }
+        return local(args[0], types[c.name], () => inferType(token.argv[1].rhs))
+      } else {
+        return inferType(token.argv[1].rhs)
+      }
+    }
     if (token.name in types) { return types[token.name] }
     const type = props[token.name]
     if (!type) {
@@ -475,18 +471,18 @@ function testAll() {
 
   // type
   eq({a:1, b:true}, 'Ab(1 True)', 'Ab:\n  a Int\n  b Bool')
-  eq(1, 'A(1)\n| A -> 1\n| B -> 2', 'AB:\n  A Int\n  B Bool')
-  eq(2, 'B(True)\n| A -> 1\n| B -> 2', 'AB:\n  A Int\n  B Bool')
-  eq(3, 'A(3)\n| A(a) -> a\n| B(b) -> b', 'AB:\n  A Int\n  B Bool')
-  //eq(false, 'B(False)\n| A(a) -> a\n| B(b) -> b', 'AB:\n  A Int\n  B Bool')
-  //eq({a:1, b:true}, 'ab(1 true)', 'ab struct:\n  a int\n  b bool')
-  //eq(1, 'ast.int(1).switch(x=>x y=>y)', 'ast enum:\n  int int\n  add: lhs ast, rhs ast')
+  eq({ __val:1, __type: 'A'}, 'A(1)', 'Ab:\n  A Int\n  B Bool')
+  eq({ __val:true, __type: 'B'}, 'B(true)', 'Ab:\n  A Int\n  B Bool')
 
-  // pattern match
-  //eq(3, 'eval(ast.add(ast.int(1) ast.int(2)))', 'eval a = a.switch(x=>x y=>eval(y.lhs)+eval(y.rhs))', 'ast enum:\n  int int\n  add: lhs ast, rhs ast')
-  eq(10, '1\n  | 1 -> 10\n  | 2 -> 20\n  | _ -> 0')
-  eq(20, '2\n  | 1 -> 10\n  | 2 -> 20\n  | _ -> 0')
-  eq(0, '3\n  | 1 -> 10\n  | 2 -> 20\n  | _ -> 0')
+  // pattern match for enum
+  eq(1, 'match(A(1) A->1 B->2)', 'AB:\n  A Int\n  B Bool')
+  eq(2, 'match(B(True) A->1 B->2)', 'AB:\n  A Int\n  B Bool')
+  eq(3, 'match(A(3) A(a)->a B(b)->b)', 'AB:\n  A Int\n  B Bool')
+
+  // pattern match for value
+  eq(10, 'match(1 1->10 2->20 _->0)')
+  eq(20, 'match(2 1->10 2->20 _->0)')
+  eq(0, 'match(3 1->10 2->20 _->0)')
 
   // effect
   eq(1, '\n  count := 0\n  count += 1\n  count')
