@@ -372,7 +372,6 @@ function infer(defs, src, tokens) {
           case '=>': return 'func'
           case '++': return same(token.lhs, token.rhs)
           case '->': return capture(token.lhs, token.rhs)
-          case '|': if (token.lhs.code !== '|') { inferType(token.lhs) }; return inferType(token.rhs)
           default:
             throw new Error('inferType op2 ' + str(token))
         }
