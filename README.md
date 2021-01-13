@@ -128,9 +128,9 @@ gcd a b = if(
 
 Pattern Matching
 ```
-show m = m
-| None -> "none"
-| Just(a) -> "just " ++ a.string
+show m = match(m
+  None -> "none"
+  Just(a) -> "just " ++ a.string)
 ```
 
 Effect
