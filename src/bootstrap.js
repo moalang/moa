@@ -463,15 +463,15 @@ function testAll() {
   eq(3, 'add(1 2)', 'add a b = a + b')
   eq(3, 'add(1 2)', 'add = (a b) => a + b')
 
-  // control flow
-  eq(1, 'if(a -> b\n  c)', 'a = true', 'b = 1', 'c = 2')
-  eq(2, 'if(a -> b\n  c)', 'a = false', 'b = 1', 'c = 2')
-  eq(2, 'if(a -> b\n  c -> d\n  e)', 'a = false', 'b = 1', 'c = true', 'd = 2', 'e = 3')
-
   // type
   eq({a:1, b:true}, 'Ab(1 True)', 'Ab:\n  a Int\n  b Bool')
   eq({ __val:1, __type: 'A'}, 'A(1)', 'Ab:\n  A Int\n  B Bool')
   eq({ __val:true, __type: 'B'}, 'B(true)', 'Ab:\n  A Int\n  B Bool')
+
+  // control flow
+  eq(1, 'if(a -> b\n  c)', 'a = true', 'b = 1', 'c = 2')
+  eq(2, 'if(a -> b\n  c)', 'a = false', 'b = 1', 'c = 2')
+  eq(2, 'if(a -> b\n  c -> d\n  e)', 'a = false', 'b = 1', 'c = true', 'd = 2', 'e = 3')
 
   // pattern match for enum
   eq(1, 'match(A(1) A->1 B->2)', 'AB:\n  A Int\n  B Bool')
@@ -484,7 +484,7 @@ function testAll() {
   eq(0, 'match(3 1->10 2->20 _->0)')
 
   // effect
-  eq(1, '\n  count := 0\n  count += 1\n  count')
+  eq(3, '\n  count := 0\n  count += 1\n  count += 2\n  count')
 
   // type inference
   eq('1', '1.string')
