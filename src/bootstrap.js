@@ -1,5 +1,6 @@
 'use strict'
 const runtime = require('fs').readFileSync('runtime.js', 'utf8')
+const moa = require('fs').readFileSync('moa.moa', 'utf8')
 
 // utils
 function str(obj) {
@@ -221,14 +222,23 @@ function generate(defs) {
       '\nconst ' + token.name + ' = {' + token.enums.map(x => x.id).join(',') + '}'
   }
   function genFunc(token) {
-    return (token.argv.length > 0 ? '(' + token.argv.join(',') + ') => ' : '') + gen(token.body)
+    const body = gen(token.body)
+    if (token.argv.length > 0) {
+      return '(' + token.argv.join(',') + ') => ' + body
+    } else {
+      return body
+    }
   }
   function genLine(token) {
     return gen(token)
   }
   function genLines(lines) {
     const body = lines.map(genLine).map((line, i) => (i===lines.length-1) ? 'return ' + line : line).join('\n  ')
-    return '(function () {\n  ' + body + '\n})()'
+    if (lines.some(t => t.op === '<-')) {
+      return '(function () {\n  ' + body + '\n})'
+    } else {
+      return '(function () {\n  ' + body + '\n})()'
+    }
   }
   function genPattern(token) {
     const c = token.lhs
@@ -288,6 +298,7 @@ function generate(defs) {
         switch (token.op) {
           case '=': return 'const ' + gen(token.lhs) + token.op + gen(token.rhs)
           case ':=': return 'let ' + gen(token.lhs) + ' = ' + gen(token.rhs)
+          case '<-': return 'const ' + gen(token.lhs) + ' = ' + gen(token.rhs) + '()'
           case '=>': return '((' + token.args + ') => ' + gen(token.rhs) + ')'
           case '++': return gen(token.lhs) + '.concat(' + gen(token.rhs) + ')'
           case '->': throw new Error('gen -> ' + str(token))
@@ -346,6 +357,13 @@ function infer(defs, src, tokens) {
     if (!ptype) { throw new Error('Property does not found ' + str(token) + ' with ' + str(props)) }
     return ptype
   }
+  function inferEff(token) {
+    if (token.tag === 'prop' && token.target.code === 'stdin' && token.name === 'string') {
+      return 'Str'
+    } else {
+      throw new Error('inferEff ' + str(token))
+    }
+  }
   function inferType(token) {
     if (!token.type) {
       token.type = _inferType(token)
@@ -367,8 +385,9 @@ function infer(defs, src, tokens) {
         switch (token.op) {
           case '+':
           case '-':
-          case '*':
+          case '*': return same(token.lhs, token.rhs)
           case ':=': return token.lhs.type = inferType(token.rhs)
+          case '<-': return token.lhs.type = inferEff(token.rhs)
           case '=>': return 'func'
           case '++': return same(token.lhs, token.rhs)
           case '->': return capture(token.lhs, token.rhs)
@@ -428,6 +447,12 @@ function evalInSandbox(js) {
   }
 }
 function testAll() {
+  unitTests()
+  moaTests()
+
+  console.log('ok')
+}
+function unitTests() {
   function eq(expect, main, ...funcs) {
     const src = funcs.map(x => x + '\n').join('') + 'main = ' + main
     const info = compile(src)
@@ -496,8 +521,28 @@ function testAll() {
   // spiteful tests
   eq(1, ' 1 ')
   eq(1, ' ( ( ( 1 ) ) ) ')
+}
+function moaTests() {
+  const moaJs = compile(moa).js
+  function eq(expect, src) {
+    const js = [
+      'const stdin={string: () => ' + str(src) + '}',
+      moaJs,
+      'return main()'].join('\n')
+    const actual = evalInSandbox(js)
+    if (str(expect) === str(actual)) {
+      put('.')
+    } else {
+      console.error('Failed')
+      put('expect: ', expect)
+      put('actual: ', actual)
+      put('src   : ', src)
+      put('js    : ', '\n  ' + js.replace(/\n/g, '\n  '))
+      process.exit(1)
+    }
+  }
 
-  console.log('ok')
+  eq('hi', 'hi')
 }
 function compileStdin() {
   const src = require('fs').readFileSync('/dev/stdin', 'utf8')
