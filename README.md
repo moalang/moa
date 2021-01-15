@@ -184,55 +184,54 @@ Binary operators order
 Standard input, output and error
 ```
 main =
-  line = io.readline
+  line <- io.reads
   line.empty.if(io.puts(line) io.warn(line))
 ```
 
 File system
 ```
 main =
-  files = io.fs.ls("/tmp").filter(.is_file)
-  contents = files.map(file => file.read)
+  files <- io.fs.ls("/tmp").filter(.is_file)
+  contents <- files.map(file => file.read)
 ```
 
 TCP
 ```
 main =
-  handle packet =
-    target = from.readline
-    to = io.tcp.connect(target)
-    from.bidirectional(to)
+  handle socket =
+    socket.lines.each(line =>
+      socket.write(line))
   io.tcp.listen("127.0.0.1:8080" handle)
 ```
 
 UDP
 ```
 main:
-  handle packet =
-    target = packet.string.lines.first
-    io.udp.sendto(target packet)
+  handle socket =
+    target <- socket.line
+    io.udp.copy(target socket.read)
   io.udp.bind("127.0.0.1:1234")
 ```
 
 Async and Cancel
 ```
 main =
-  t = io.async(io.sleep(10))
+  t <- io.async(io.sleep(10))
   io.sleep(1)
-  t.done.else(t.cancel)
+  when(t.done t.cancel)
 ```
 
 Random
 ```
 main =
-  n = io.random.int(1 3)
+  n <- io.random(1 3)
   io.exit(n)
 ```
 
 Time
 ```
 main =
-  now = io.now
+  now <- io.now
   io.print(now)
 ```
 
