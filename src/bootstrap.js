@@ -58,17 +58,17 @@ function dig(d, ...args) {
 // compiler
 function tokenize(src) {
   const consume = (pos,tag,m) => m ? ({tag, pos, code: typeof(m) === 'string' ? m : m[0]}) : null
-  const match = (p,tag,r) => consume(p, tag, src.slice(p).match(r))
+  const reg = (p,tag,r) => consume(p, tag, src.slice(p).match(r))
   const some = (p,tag,s) => consume(p, tag, s.split(' ').find(w => src.slice(p).startsWith(w)))
   const eat = p =>
-    match(p, 'func', /^[A-Za-z_][A-Za-z0-9_]*( +[A-Za-z_][A-Za-z0-9_]*)* +=/) ||
-    match(p, 'struct', /^[A-Z][A-Za-z0-9_]:(\n  [a-z].*)+/) ||
-    match(p, 'enums', /^[A-Z][A-Za-z0-9_]:(\n  [A-Z].*)+/) ||
-    match(p, 'int', /^[0-9]+(\.[0-9]+)?/) ||
-    match(p, 'id', /^[A-Za-z_][A-Za-z0-9_]*(,[A-Za-z_][A-Za-z0-9_]*)*\(?/) ||
-    match(p, 'str', /^"(?:(?:\\")|[^"])*"/) ||
-    match(p, 'prop', /^\.[A-Za-z_][A-Za-z0-9_]*\(?/) ||
-    match(p, 'spaces', /^[ #\n]+/) ||
+    reg(p, 'func', /^[A-Za-z_][A-Za-z0-9_]*( +[A-Za-z_][A-Za-z0-9_]*)* +=/) ||
+    reg(p, 'struct', /^[A-Za-z_][A-Za-z0-9_]:(\n  [a-z].*)+/) ||
+    reg(p, 'enums', /^[A-Za-z_][A-Za-z0-9_]\|(\n  [a-z].*)+/) ||
+    reg(p, 'int', /^[0-9]+(\.[0-9]+)?/) ||
+    reg(p, 'id', /^[A-Za-z_][A-Za-z0-9_]*(,[A-Za-z_][A-Za-z0-9_]*)*\(?/) ||
+    reg(p, 'str', /^"(?:(?:\\")|[^"])*"/) ||
+    reg(p, 'prop', /^\.[A-Za-z_][A-Za-z0-9_]*\(?/) ||
+    reg(p, 'spaces', /^[ #\n]+/) ||
     some(p, 'la', '[') ||
     some(p, 'ra', ']') ||
     some(p, 'lp', '(') ||
@@ -143,7 +143,7 @@ function parse(tokens) {
         return token
       case 'enums':
         const [ename, ...fields] = token.code.split('\n').map(x => x.trim()).filter(x => x)
-        token.name = ename.replace(':', '')
+        token.name = ename.replace('|', '')
         token.enums = fields.map(field => {
           const [id, ...bodies] = field.split(/ *[ ,:] */)
           if (bodies.length === 1) {
@@ -152,6 +152,7 @@ function parse(tokens) {
             return {id, struct: dict2(bodies)}
           }
         })
+        return token
       case 'struct':
         const [sname, ...struct] = token.code.split('\n').map(x => x.trim()).filter(x => x)
         token.name = sname.replace(':', '')
@@ -205,10 +206,10 @@ function parse(tokens) {
 }
 function generate(defs) {
   const embeddedProps = {
-    'Int': {string: 'toString()'}
+    'int': {string: 'toString()'}
   }
   const embeddedFuncs = {
-    'Str': {int: 'parseInt'}
+    'str': {int: 'parseInt'}
   }
   function genCall(argv) {
     return argv.length === 0 ? '' : '(' + argv.map(gen).join(',') + ')'
@@ -240,28 +241,13 @@ function generate(defs) {
       return '(function () {\n  ' + body + '\n})()'
     }
   }
-  function genPattern(token) {
-    const c = token.lhs
-    if (c.tag === 'id' && c.name === '_') {
-      return ' true ? ' + gen(token.rhs)
-    }
-    if (c.tag === 'id' && 'A' <= c.name[0] && c.name[0] <= 'Z') {
-      const args = c.argv.map(t => t.name)
-      const wrap = js => args.length ? '(' + args.join(',') + ' => ' + js + ')(__match.__val)' : js
-      return "__match.__type === '" + c.name + "' ? " + wrap(gen(token.rhs))
-    }
-
-    return '__equal(__match, ' + gen(token.lhs) + ') ? ' + gen(token.rhs)
-  }
   function genId(token) {
     if (token.name === 'True' || token.name === 'False') {
       return token.name.toLowerCase()
     } else if (token.name === 'if') {
       return token.argv.filter(t => t.code === '->').map(x => gen(x.lhs) + '?' + gen(x.rhs) + ':').join(' ') + gen(token.argv.slice(-1)[0])
     } else if (token.name === 'match') {
-      const [target,...conds] = token.argv
-      const body = conds.map(genPattern).join(' : ') + ' : (() => { throw new Error(__match) })()'
-      return '(__match => ' + body +')(' + gen(target) + ')'
+      return '__match' + genCall(token.argv)
     } else {
       return token.name + genCall(token.argv)
     }
@@ -279,6 +265,20 @@ function generate(defs) {
   }
   function wrapIfNum(s) {
     return parseInt(s).toString() === s ? '(' + s + ')' : s
+  }
+  function genArrow(lhs, rhs) {
+    if (lhs.name === '_') {
+      return '() => ' + gen(rhs)
+    }
+    return '() => (' + gen(lhs) + ') ? ' + gen(rhs) + ' : undefined'
+  }
+  function genTypeMatch(lhs, rhs) {
+    if (lhs.tag !== 'id' || rhs.code !== '->' || rhs.lhs.tag !== 'id') {
+      throw new Error('Match Syntax Error')
+    }
+    const name = lhs.name
+    const type = rhs.lhs.name
+    return '() => ' + name + ".__type === '" + type + "' ? (" + name + '=>' + gen(rhs.rhs) + ')(' + name + '.__val) : undefined'
   }
   function gen(token) {
     if (token.lines) {
@@ -301,7 +301,8 @@ function generate(defs) {
           case '<-': return 'const ' + gen(token.lhs) + ' = ' + gen(token.rhs) + '()'
           case '=>': return '((' + token.args + ') => ' + gen(token.rhs) + ')'
           case '++': return gen(token.lhs) + '.concat(' + gen(token.rhs) + ')'
-          case '->': throw new Error('gen -> ' + str(token))
+          case ':': return genTypeMatch(token.lhs, token.rhs)
+          case '->': return genArrow(token.lhs, token.rhs)
           default: return gen(token.lhs) + token.op + gen(token.rhs)
         }
       default: throw new Error('gen ' + str(token))
@@ -311,12 +312,12 @@ function generate(defs) {
 }
 function infer(defs, src, tokens) {
   const props = {
-    'Int': {'string': 'Str'},
-    'Str': {'int': 'Int'},
+    'int': {'string': 'str'},
+    'str': {'int': 'int'},
   }
   const types = {
-    'True': 'Bool',
-    'False': 'Bool',
+    'true': 'bool',
+    'false': 'bool',
   }
   function local(k, v, f) {
     const bk = types[k]
@@ -331,17 +332,7 @@ function infer(defs, src, tokens) {
   }
   function lookup(token) {
     if (token.name === 'true' || token.name === 'false') { return 'bool' }
-    if (token.name === 'if') { return inferType(token.argv[0].rhs) }
-    if (token.name === 'match') {
-      const c = token.argv[1].lhs
-      if (c.tag === 'id' && 'A' <= c.name[0] && c.name[0] <= 'Z' && c.argv.length) {
-        const args = c.argv.map(t => t.name)
-        if (args.length !== 1) { throw new Error('Unsupported multiple capture yet') }
-        return local(args[0], types[c.name], () => inferType(token.argv[1].rhs))
-      } else {
-        return inferType(token.argv[1].rhs)
-      }
-    }
+    if (token.name === 'match') { return inferType(token.argv[0].rhs) }
     if (token.name in types) { return types[token.name] }
     const type = props[token.name]
     if (!type) {
@@ -359,7 +350,7 @@ function infer(defs, src, tokens) {
   }
   function inferEff(token) {
     if (token.tag === 'prop' && token.target.code === 'stdin' && token.name === 'string') {
-      return 'Str'
+      return 'str'
     } else {
       throw new Error('inferEff ' + str(token))
     }
@@ -375,8 +366,8 @@ function infer(defs, src, tokens) {
   }
   function _inferType(token) {
     switch (token.tag) {
-      case 'str': return 'Str'
-      case 'int': return 'Int'
+      case 'str': return 'str'
+      case 'int': return 'int'
       case 'id': return lookup(token)
       case 'prop': return prop(token, token.name)
       case 'lp': return token.items.map(inferType)[0]
@@ -489,24 +480,18 @@ function unitTests() {
   eq(3, 'add(1 2)', 'add = (a b) => a + b')
 
   // type
-  eq({a:1, b:true}, 'Ab(1 True)', 'Ab:\n  a Int\n  b Bool')
-  eq({ __val:1, __type: 'A'}, 'A(1)', 'Ab:\n  A Int\n  B Bool')
-  eq({ __val:true, __type: 'B'}, 'B(true)', 'Ab:\n  A Int\n  B Bool')
+  eq({a: 1, b: true}, 'ab(1 True)', 'ab:\n  a int\n  b bool')
+  eq({ __val: 1, __type: 'a'}, 'a(1)', 'ab|\n  a int\n  b bool')
+  eq({ __val: true, __type: 'b'}, 'b(true)', 'ab|\n  a int\n  b bool')
 
   // control flow
-  eq(1, 'if(a -> b\n  c)', 'a = true', 'b = 1', 'c = 2')
-  eq(2, 'if(a -> b\n  c)', 'a = false', 'b = 1', 'c = 2')
-  eq(2, 'if(a -> b\n  c -> d\n  e)', 'a = false', 'b = 1', 'c = true', 'd = 2', 'e = 3')
+  eq(1, 'match(a -> b\n  _ -> c)', 'a = true', 'b = 1', 'c = 2')
+  eq(2, 'match(a -> b\n  _ -> c)', 'a = false', 'b = 1', 'c = 2')
+  eq(2, 'match(a -> b\n  c -> d\n  _ -> e)', 'a = false', 'b = 1', 'c = true', 'd = 2', 'e = 3')
 
   // pattern match for enum
-  eq(1, 'match(A(1) A->1 B->2)', 'AB:\n  A Int\n  B Bool')
-  eq(2, 'match(B(True) A->1 B->2)', 'AB:\n  A Int\n  B Bool')
-  eq(3, 'match(A(3) A(a)->a B(b)->b)', 'AB:\n  A Int\n  B Bool')
-
-  // pattern match for value
-  eq(10, 'match(1 1->10 2->20 _->0)')
-  eq(20, 'match(2 1->10 2->20 _->0)')
-  eq(0, 'match(3 1->10 2->20 _->0)')
+  eq(3, 'f(a(1)) + f(a(2))', 'ab|\n  a int\n  b bool', 'f v = match(v:a->v v:b->v)')
+  eq(true, 'f(b(true))', 'ab|\n  a int\n  b bool', 'f v = match(v:a->v v:b->v)')
 
   // effect
   eq(3, '\n  count := 0\n  count += 1\n  count += 2\n  count')

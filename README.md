@@ -84,29 +84,20 @@ Expression
 
 Types
 ```
-Person:
+person:
   name string
   age int
 
-Dict k v:
+dict k v:
   values [](k,v)
 
-Bool:
-  True
-  False
+bool|
+  true
+  false
 
-Maybe a:
-  None
-  Just a
-
-Vector2:
-  x,y int
-
-Vector3:
-  +Vector2
-  z int
-
-Int = I32
+maybe a|
+  none
+  just a
 ```
 
 Function
@@ -114,31 +105,31 @@ Function
 pi = 3
 inc x = x + 1
 add x y = x + y
-main = io:
-  print (inc pi) (add 1 2)
 ```
 
 Control Flow
 ```
-gcd a b = if(
-  a > b  -> gcd(b a)
-  a == 0 -> b
-  gcd((b / a) a))
+gcd a b = match(
+  a < b  -> gcd(b a)
+  b == 0 -> a
+  _ -> gcd(b a/b))
 ```
 
 Pattern Matching
 ```
-show m = match(m
-  None -> "none"
-  Just(a) -> "just " ++ a.string)
+show m = match(
+  m:none -> "none"
+  m:just -> "just " ++ m.string)
 ```
 
 Effect
 ```
-acc := 0
-count <- calculate 1
-acc += count
-acc
+main =
+  acc := 0
+  count <- calculate 1
+  acc += count
+  print(acc)
+  acc
 ```
 
 
