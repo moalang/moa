@@ -1,3 +1,5 @@
+ast|
+  int int
 main =
-  src <- stdin.string
-  src
+  src <- io.reads
+  io.write(src)

@@ -62,8 +62,8 @@ function tokenize(src) {
   const some = (p,tag,s) => consume(p, tag, s.split(' ').find(w => src.slice(p).startsWith(w)))
   const eat = p =>
     reg(p, 'func', /^[A-Za-z_][A-Za-z0-9_]*( +[A-Za-z_][A-Za-z0-9_]*)* +=/) ||
-    reg(p, 'struct', /^[A-Za-z_][A-Za-z0-9_]:(\n  [a-z].*)+/) ||
-    reg(p, 'enums', /^[A-Za-z_][A-Za-z0-9_]\|(\n  [a-z].*)+/) ||
+    reg(p, 'struct', /^[A-Za-z_][A-Za-z0-9_]*:(\n  [a-z].*)+/) ||
+    reg(p, 'enums', /^[A-Za-z_][A-Za-z0-9_]*\|(\n  [a-z].*)+/) ||
     reg(p, 'int', /^[0-9]+(\.[0-9]+)?/) ||
     reg(p, 'id', /^[A-Za-z_][A-Za-z0-9_]*(,[A-Za-z_][A-Za-z0-9_]*)*\(?/) ||
     reg(p, 'str', /^"(?:(?:\\")|[^"])*"/) ||
@@ -253,6 +253,9 @@ function generate(defs) {
     }
   }
   function genProp(token) {
+    if (!token.target.type) {
+      throw new Error('genProp error: type is undefined ' + str(token))
+    }
     const prop = dig(embeddedProps, token.target.type, token.name)
     if (prop) {
       return wrapIfNum(gen(token.target)) + '.' + prop + genCall(token.argv)
@@ -314,10 +317,12 @@ function infer(defs, src, tokens) {
   const props = {
     'int': {'string': 'str'},
     'str': {'int': 'int'},
+    'io': {'write': 'void', 'reads': 'string'},
   }
   const types = {
     'true': 'bool',
     'false': 'bool',
+    'io': 'io',
   }
   function local(k, v, f) {
     const bk = types[k]
@@ -330,30 +335,34 @@ function infer(defs, src, tokens) {
     }
     return ret
   }
-  function lookup(token) {
+  function inferId(token) {
     if (token.name === 'true' || token.name === 'false') { return 'bool' }
-    if (token.name === 'match') { return inferType(token.argv[0].rhs) }
+    if (token.name === 'match') { return token.argv.map(x => inferType(x.rhs))[0] }
     if (token.name in types) { return types[token.name] }
     const type = props[token.name]
     if (!type) {
-      throw new Error('Type does not found ' + token.name + str({props,types}))
+      throw new Error('Id does not found ' + token.name + str({props,types}))
     }
     return type
   }
-  function prop(token, prop) {
+  function inferProp(token, prop) {
     const type = inferType(token.target)
     const obj = typeof type === 'string' ? props[type] : type
-    if (!obj) { throw new Error('Type does not found ' + str(token) + ' with ' + str(props)) }
+    if (!obj) { throw new Error('Prop does not found ' + str(token) + ' with ' + str(props)) }
     const ptype = obj[prop]
     if (!ptype) { throw new Error('Property does not found ' + str(token) + ' with ' + str(props)) }
     return ptype
   }
   function inferEff(token) {
-    if (token.tag === 'prop' && token.target.code === 'stdin' && token.name === 'string') {
-      return 'str'
-    } else {
-      throw new Error('inferEff ' + str(token))
+    if (token.tag === 'prop' && token.target.code === 'io') {
+      token.target.type = 'io'
+      if (token.name === 'reads') {
+        return token.type = 'str'
+      } else if (token.name === 'write') {
+        return token.type = 'void'
+      }
     }
+    throw new Error('inferEff ' + str(token))
   }
   function inferType(token) {
     if (!token.type) {
@@ -364,12 +373,34 @@ function infer(defs, src, tokens) {
   function tarray(type) {
     return type ? '[]' + type : '[]'
   }
+  function inferLines(lines) {
+    if (lines.length === 0) {
+      throw new Error('inferLines Error: empty lines')
+    } else if (lines.length === 1) {
+      return inferType(lines[0])
+    } else {
+      const [token, ...rest] = lines
+      if (token.op === ':=' || token.op === '<-') {
+        token.lhs.type = inferType(token)
+        return local(token.lhs.name, token.rhs.type, () => inferLines(rest))
+      } else if (token.tag === 'func' && token.argv.length === 0) {
+        token.type = inferType(token.body)
+        return inferLines(rest)
+      } else {
+        inferType(token)
+        return inferLines(rest)
+      }
+    }
+  }
   function _inferType(token) {
+    if (token.lines) {
+      return token.type = inferLines(token.lines)
+    }
     switch (token.tag) {
       case 'str': return 'str'
       case 'int': return 'int'
-      case 'id': return lookup(token)
-      case 'prop': return prop(token, token.name)
+      case 'id': return inferId(token)
+      case 'prop': return inferProp(token, token.name)
       case 'lp': return token.items.map(inferType)[0]
       case 'la': return tarray(token.ary.map(inferType)[0])
       case 'op2':
@@ -379,6 +410,7 @@ function infer(defs, src, tokens) {
           case '*': return same(token.lhs, token.rhs)
           case ':=': return token.lhs.type = inferType(token.rhs)
           case '<-': return token.lhs.type = inferEff(token.rhs)
+          case '+=': should(token.lhs, 'int'); inferType(token.rhs); return should(token.rhs, 'int')
           case '=>': return 'func'
           case '++': return same(token.lhs, token.rhs)
           case '->': return capture(token.lhs, token.rhs)
@@ -395,6 +427,12 @@ function infer(defs, src, tokens) {
     } else {
       return inferType(rhs)
     }
+  }
+  function should(token, type) {
+    if (token.type && token.type !== type) {
+      throw new Error('unexpected ' + type + ' != ' + str(token))
+    }
+    return token.type = type
   }
   function same(...tokens) {
     const type = tokens.map(inferType)[0]
@@ -511,9 +549,11 @@ function moaTests() {
   const moaJs = compile(moa).js
   function eq(expect, src) {
     const js = [
-      'const stdin={string: () => ' + str(src) + '}',
+      'let __stdout=""',
+      'const io={reads: () => ' + str(src) + ', write: s=>__stdout+=s}',
       moaJs,
-      'return main()'].join('\n')
+      'main()',
+      'return __stdout'].join('\n')
     const actual = evalInSandbox(js)
     if (str(expect) === str(actual)) {
       put('.')
@@ -527,7 +567,7 @@ function moaTests() {
     }
   }
 
-  eq('hi', 'hi')
+  eq('1', '1')
 }
 function compileStdin() {
   const src = require('fs').readFileSync('/dev/stdin', 'utf8')
