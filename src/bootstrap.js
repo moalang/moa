@@ -239,7 +239,7 @@ function parse(tokens) {
     if (node.tag === 'ra') { throw new Error('Invalid ' + str({node,tokens})) }
     if (node.tag === 'rp') { throw new Error('Invalid ' + str({node,tokens})) }
   }
-  const tnames = tokens.filter(t => ['func', 'struct', 'enums'].includes(t.tag)).map(t => t.name).join(' ')
+  const tnames = tokens.filter(t => ['func', 'struct', 'enums'].includes(t.tag) && t.indent === 0).map(t => t.name).join(' ')
   const nnames = nodes.map(t => t.name).join(' ')
   if (tnames !== nnames) {
     throw new Error('Lack of information after parsing:\n- expect: ' + tnames + '\n- actual: ' + nnames)
@@ -291,6 +291,8 @@ function generate(defs) {
       return token.argv.filter(t => t.code === '->').map(x => gen(x.lhs) + '?' + gen(x.rhs) + ':').join(' ') + gen(token.argv.slice(-1)[0])
     } else if (token.name === 'match') {
       return '__match' + genCall(token.argv)
+    } else if (token.name === 'trace') {
+      return 'console.log' + genCall(token.argv)
     } else {
       return token.name + genCall(token.argv)
     }
@@ -366,6 +368,7 @@ function infer(defs, src, tokens) {
     'true': 'bool',
     'false': 'bool',
     'io': 'io',
+    'trace': 'void',
   }
   function local(k, v, f) {
     const bk = types[k]
@@ -447,6 +450,7 @@ function infer(defs, src, tokens) {
           case '+':
           case '-':
           case '*': return same(token.lhs, token.rhs)
+          case '=':
           case ':=': return token.lhs.type = inferType(token.rhs)
           case '<-': return token.lhs.type = inferEff(token.rhs)
           case '+=': should(token.lhs, 'int'); inferType(token.rhs); return should(token.rhs, 'int')
