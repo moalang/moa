@@ -27,10 +27,11 @@ syn match Number / [0-9]\+\(\.[0-9]\+\)\?/
 syn keyword Boolean true false
 
 "*Identifier     o 変数名
-syn match Function  /^ *[a-zA-Z0-9_]\+\%([^#\n]*=\)\@=/
+syn match Function /^[a-zA-Z0-9_]\+/
+"syn match Function  /  *[a-zA-Z0-9_]\+\%([^#\n]*=\)\@=/
 "syn match Function  /^ *[a-zA-Z0-9_]\+\%([^#\n]*=[ \n]\)\@=/
 "syn match Function /^ *[a-zA-Z0-9_\.]\+\%([^=#]*[:|]\)\@=/
-syn match Type /:[a-zA-Z0-9_\.]\+/
+"syn match Type /:[a-zA-Z0-9_\.]\+/
 "syn region vlBlock start=/:$/ end=/\n[^a-zA-Z]/ contains=vlMember
 "syn match vlMember /^[ \t]\+[a-zA-Z_0-9]\+[ \n]/ contained
 "hi def link vlMember Identifier
