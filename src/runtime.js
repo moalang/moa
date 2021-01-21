@@ -9,5 +9,13 @@ function __match(...matchers) {
       return ret
     }
   }
-  throw new Error('Match Error')
+  throw new Error('Match Error ' + JSON.stringify(matchers))
+}
+function __stringInt(m) {
+  const i = parseInt(m)
+  if (isNaN(i)) {
+    return new Error('string.int: ' + m.toString() + ' is not a number')
+  } else {
+    return i
+  }
 }

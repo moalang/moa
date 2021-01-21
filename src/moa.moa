@@ -1,5 +1,6 @@
 ast|
-  int int
+  aint int
+
 main =
   src <- io.reads
   io.write(src)

@@ -54,10 +54,36 @@ function dig(d, ...args) {
   }
   return d
 }
-
 // compiler
 function tokenize(src) {
-  const consume = (pos,tag,m) => m ? ({tag, pos, code: typeof(m) === 'string' ? m : m[0]}) : null
+  const lines = src.split('\n')
+  function Token(tag,pos,code) {
+    this.tag = tag
+    this.pos = pos
+    this.code = code
+  }
+  function Liner() {
+    this.line = 1
+    this.column = 1
+  }
+  Liner.prototype.mark = function(fragment) {
+    const srcLine = lines[this.line-1]
+    const col = this.column - 1
+    const left = srcLine.slice(0, col)
+    const mid = srcLine.slice(col, col + fragment.length)
+    const right = srcLine.slice(col + fragment.length)
+    return this.line + ': ' + left + '「' + mid + '」' + right
+  }
+  Liner.prototype.forward = function(fragment) {
+    const tokenLines = fragment.split('\n')
+    if (tokenLines.length === 1) {
+      this.column += fragment.length
+    } else {
+      this.line += tokenLines.length - 1
+      this.column = tokenLines[tokenLines.length-1].length + 1
+    }
+  }
+  const consume = (pos,tag,m) => m ? new Token(tag, pos, typeof(m) === 'string' ? m : m[0]) : null
   const reg = (p,tag,r) => consume(p, tag, src.slice(p).match(r))
   const some = (p,tag,s) => consume(p, tag, s.split(' ').find(w => src.slice(p).startsWith(w)))
   const eat = p =>
@@ -75,8 +101,10 @@ function tokenize(src) {
     some(p, 'rp', ')') ||
     some(p, 'op2', '+= -= *= /= || && == != >= <= ++ => := : <- -> > < + - * /')
 
+  const liner = new Liner()
   let indent = 0
-  let pos=0, tokens=[]
+  let pos = 0
+  let tokens=[]
   while (pos < src.length) {
     const token = eat(pos)
     if (!token) { throw new Error('tokenize at ' + pos + '\n' + src) }
@@ -89,6 +117,8 @@ function tokenize(src) {
     }
     token.indent = indent
     pos += token.code.length
+    token.line = liner.mark(token.code)
+    liner.forward(token.code)
     tokens.push(token)
   }
 
@@ -124,7 +154,15 @@ function parse(tokens) {
   }
   function parseIndent(t1, t2) {
     if (t1.indent < t2.indent) {
-      t2.lines = [copy(t2)].concat(until(t => t.indent >= t2.indent))
+      const lines = [copy(t2)]
+      while (pos < tokens.length) {
+        if (tokens[pos].indent >= t2.indent) {
+          lines.push(parseTop())
+        } else {
+          break
+        }
+      }
+      t2.lines = lines
     }
     return t2
   }
@@ -201,6 +239,11 @@ function parse(tokens) {
     if (node.tag === 'ra') { throw new Error('Invalid ' + str({node,tokens})) }
     if (node.tag === 'rp') { throw new Error('Invalid ' + str({node,tokens})) }
   }
+  const tnames = tokens.filter(t => ['func', 'struct', 'enums'].includes(t.tag)).map(t => t.name).join(' ')
+  const nnames = nodes.map(t => t.name).join(' ')
+  if (tnames !== nnames) {
+    throw new Error('Lack of information after parsing:\n- expect: ' + tnames + '\n- actual: ' + nnames)
+  }
 
   return nodes
 }
@@ -209,7 +252,7 @@ function generate(defs) {
     'int': {string: 'toString()'}
   }
   const embeddedFuncs = {
-    'str': {int: 'parseInt'}
+    'str': {int: '__stringInt'}
   }
   function genCall(argv) {
     return argv.length === 0 ? '' : '(' + argv.map(gen).join(',') + ')'
@@ -301,7 +344,7 @@ function generate(defs) {
         switch (token.op) {
           case '=': return 'const ' + gen(token.lhs) + token.op + gen(token.rhs)
           case ':=': return 'let ' + gen(token.lhs) + ' = ' + gen(token.rhs)
-          case '<-': return 'const ' + gen(token.lhs) + ' = ' + gen(token.rhs) + '()'
+          case '<-': const name = gen(token.lhs); return 'const ' + name + ' = ' + gen(token.rhs) + '(); if(' + name + '.constructor === Error) { return ' + name + ' }'
           case '=>': return '((' + token.args + ') => ' + gen(token.rhs) + ')'
           case '++': return gen(token.lhs) + '.concat(' + gen(token.rhs) + ')'
           case ':': return genTypeMatch(token.lhs, token.rhs)
@@ -338,12 +381,16 @@ function infer(defs, src, tokens) {
   function inferId(token) {
     if (token.name === 'true' || token.name === 'false') { return 'bool' }
     if (token.name === 'match') { return token.argv.map(x => inferType(x.rhs))[0] }
-    if (token.name in types) { return types[token.name] }
-    const type = props[token.name]
-    if (!type) {
-      throw new Error('Id does not found ' + token.name + str({props,types}))
+    if (token.tag === 'id' && token.name in types) { return types[token.name] }
+    if (token.tag === 'prop') {
+      const targetType = inferType(token.target)
+      const prop = props[targetType]
+      if (!prop) { throw new Error('Not found prop ' + str({token,props,types})) }
+      const methodType = prop[token.name]
+      if (!methodType) { throw new Error('Not found method ' + str({token,props,types})) }
+      return methodType
     }
-    return type
+    throw new Error('Not found ' + token.name  + ' ' + str({token,props,types}))
   }
   function inferProp(token, prop) {
     const type = inferType(token.target)
@@ -354,15 +401,7 @@ function infer(defs, src, tokens) {
     return ptype
   }
   function inferEff(token) {
-    if (token.tag === 'prop' && token.target.code === 'io') {
-      token.target.type = 'io'
-      if (token.name === 'reads') {
-        return token.type = 'str'
-      } else if (token.name === 'write') {
-        return token.type = 'void'
-      }
-    }
-    throw new Error('inferEff ' + str(token))
+    return inferId(token)
   }
   function inferType(token) {
     if (!token.type) {
