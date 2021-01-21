@@ -91,7 +91,7 @@ function tokenize(src) {
     reg(p, 'enums', /^[A-Za-z_][A-Za-z0-9_]*\|(\n  [a-z].*)+/) ||
     reg(p, 'int', /^[0-9]+(\.[0-9]+)?/) ||
     reg(p, 'id', /^[A-Za-z_][A-Za-z0-9_]*(,[A-Za-z_][A-Za-z0-9_]*)*\(?/) ||
-    reg(p, 'str', /^"(?:(?:\\")|[^"])*"/) ||
+    reg(p, 'string', /^"(?:(?:\\")|[^"])*"/) ||
     reg(p, 'prop', /^\.[A-Za-z_][A-Za-z0-9_]*\(?/) ||
     reg(p, 'spaces', /^[ \n]+/) ||
     reg(p, 'comment', /^ *#.*/) ||
@@ -170,7 +170,7 @@ function parse(tokens) {
     const token = tokens[pos++]
     switch (token.tag) {
       case 'int': token.val = token.code; return token
-      case 'str': token.val = token.code.slice(1,-1); return token
+      case 'string': token.val = token.code.slice(1,-1); return token
       case 'ra':
       case 'rp': return token
       case 'func':
@@ -252,7 +252,11 @@ function generate(defs) {
     'int': {string: 'toString()'}
   }
   const embeddedFuncs = {
-    'str': {int: '__stringInt'}
+    'string': {int: '__stringInt'}
+  }
+  const embeddedIds = {
+    match: '__match',
+    trace: 'console.log',
   }
   function genCall(argv) {
     return argv.length === 0 ? '' : '(' + argv.map(gen).join(',') + ')'
@@ -285,16 +289,10 @@ function generate(defs) {
     }
   }
   function genId(token) {
-    if (token.name === 'True' || token.name === 'False') {
-      return token.name.toLowerCase()
-    } else if (token.name === 'if') {
-      return token.argv.filter(t => t.code === '->').map(x => gen(x.lhs) + '?' + gen(x.rhs) + ':').join(' ') + gen(token.argv.slice(-1)[0])
-    } else if (token.name === 'match') {
-      return '__match' + genCall(token.argv)
-    } else if (token.name === 'trace') {
-      return 'console.log' + genCall(token.argv)
+    if (token.name === 'typeof') {
+      return "'" + token.argv[0].type + "'/* typeof " + gen(token.argv[0]) + ' */'
     } else {
-      return token.name + genCall(token.argv)
+      return (embeddedIds[token.name] || token.name) + genCall(token.argv)
     }
   }
   function genProp(token) {
@@ -334,7 +332,7 @@ function generate(defs) {
     }
     switch (token.tag) {
       case 'int': return token.val
-      case 'str': return '"' + token.val + '"'
+      case 'string': return '"' + token.val + '"'
       case 'func': return 'const ' + token.name + ' = ' + genFunc(token)
       case 'struct': return genStruct(token)
       case 'enums': return genEnum(token)
@@ -360,15 +358,16 @@ function generate(defs) {
 }
 function infer(defs, src, tokens) {
   const props = {
-    'int': {'string': 'str'},
-    'str': {'int': 'int'},
+    'int': {'string': 'string'},
+    'string': {'int': 'int'},
     'io': {'write': 'void', 'reads': 'string'},
   }
   const types = {
     'true': 'bool',
     'false': 'bool',
     'io': 'io',
-    'trace': 'void',
+    'trace': 'func',
+    'typeof': 'func',
   }
   function local(k, v, f) {
     const bk = types[k]
@@ -384,7 +383,10 @@ function infer(defs, src, tokens) {
   function inferId(token) {
     if (token.name === 'true' || token.name === 'false') { return 'bool' }
     if (token.name === 'match') { return token.argv.map(x => inferType(x.rhs))[0] }
-    if (token.tag === 'id' && token.name in types) { return types[token.name] }
+    if (token.tag === 'id' && token.name in types) {
+      token.argv.map(inferType)
+      return types[token.name]
+    }
     if (token.tag === 'prop') {
       const targetType = inferType(token.target)
       const prop = props[targetType]
@@ -422,12 +424,12 @@ function infer(defs, src, tokens) {
       return inferType(lines[0])
     } else {
       const [token, ...rest] = lines
-      if (token.op === ':=' || token.op === '<-') {
+      if ([':=', '<-'].includes(token.op)) {
         token.lhs.type = inferType(token)
         return local(token.lhs.name, token.rhs.type, () => inferLines(rest))
-      } else if (token.tag === 'func' && token.argv.length === 0) {
+      } else if (token.tag === 'func') {
         token.type = inferType(token.body)
-        return inferLines(rest)
+        return local(token.name, token.type, () => inferLines(rest))
       } else {
         inferType(token)
         return inferLines(rest)
@@ -439,7 +441,7 @@ function infer(defs, src, tokens) {
       return token.type = inferLines(token.lines)
     }
     switch (token.tag) {
-      case 'str': return 'str'
+      case 'string': return 'string'
       case 'int': return 'int'
       case 'id': return inferId(token)
       case 'prop': return inferProp(token, token.name)
@@ -508,14 +510,20 @@ function compile(src) {
   return {tokens,defs,js}
 }
 function evalInSandbox(js) {
+  const originalConsoleLog = console.log
   try {
-    return Function(runtime + '\n' + js)()
+    let stdouts = []
+    console.log = x => stdouts.push(x), undefined
+    const value = Function(runtime + '\n' + js)()
+    return {value,stdout: stdouts.join('\n')}
   } catch (e) {
     puts('Failed to evaluate')
     for (const [i, line] of js.split('\n').entries()) {
       put((1 + i).toString().padStart(3) + ':', line)
     }
-    return e
+    return {value: e, stdout: ''}
+  } finally {
+    console.log = originalConsoleLog
   }
 }
 function testAll() {
@@ -525,11 +533,17 @@ function testAll() {
   console.log('ok')
 }
 function unitTests() {
-  function eq(expect, main, ...funcs) {
+  function eq(...args) {
+    return equals(r => r.value, ...args)
+  }
+  function out(...args) {
+    return equals(r => r.stdout, ...args)
+  }
+  function equals(unwrap, expect, main, ...funcs) {
     const src = funcs.map(x => x + '\n').join('') + 'main = ' + main
     const info = compile(src)
     const js = info.js + '\nreturn main'
-    const actual = evalInSandbox(js)
+    const actual = unwrap(evalInSandbox(js))
     if (str(expect) === str(actual)) {
       put('.')
     } else {
@@ -561,7 +575,7 @@ function unitTests() {
   eq(3, 'add(1 2)', 'add = (a b) => a + b')
 
   // type
-  eq({a: 1, b: true}, 'ab(1 True)', 'ab:\n  a int\n  b bool')
+  eq({a: 1, b: true}, 'ab(1 true)', 'ab:\n  a int\n  b bool')
   eq({ __val: 1, __type: 'a'}, 'a(1)', 'ab|\n  a int\n  b bool')
   eq({ __val: true, __type: 'b'}, 'b(true)', 'ab|\n  a int\n  b bool')
 
@@ -578,11 +592,19 @@ function unitTests() {
   eq(3, '\n  count := 0\n  count += 1\n  count += 2\n  count')
 
   // type inference
-  eq('1', '1.string')
   eq(1, '"1".int')
   eq('1', 'a.string', 'a = 1')
   eq('2', '(a + 1).string', 'a = 1')
   eq('4c', '(a + b + 1).string ++ c', 'a = 1', 'b = 2', 'c = "c"')
+
+  // embedded
+  out('1', 'trace(1)')
+  out('hi', 'trace("hi")')
+  eq('1', '1.string')
+  eq('int', 'typeof(1)')
+  eq('string', 'typeof("hi")')
+  eq('int', 'typeof(f)', 'f = 1')
+  eq('func', 'typeof(f)', 'f a = a')
 
   // spiteful tests
   eq(1, ' 1 ')
@@ -597,7 +619,7 @@ function moaTests() {
       moaJs,
       'main()',
       'return __stdout'].join('\n')
-    const actual = evalInSandbox(js)
+    const actual = evalInSandbox(js).value
     if (str(expect) === str(actual)) {
       put('.')
     } else {
