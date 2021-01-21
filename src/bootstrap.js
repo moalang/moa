@@ -93,7 +93,8 @@ function tokenize(src) {
     reg(p, 'id', /^[A-Za-z_][A-Za-z0-9_]*(,[A-Za-z_][A-Za-z0-9_]*)*\(?/) ||
     reg(p, 'str', /^"(?:(?:\\")|[^"])*"/) ||
     reg(p, 'prop', /^\.[A-Za-z_][A-Za-z0-9_]*\(?/) ||
-    reg(p, 'spaces', /^[ #\n]+/) ||
+    reg(p, 'spaces', /^[ \n]+/) ||
+    reg(p, 'comment', /^ *#.*/) ||
     some(p, 'la', '[') ||
     some(p, 'ra', ']') ||
     some(p, 'lp', '(') ||
@@ -123,7 +124,7 @@ function tokenize(src) {
 
   const dst = tokens.map(t => t.code).join('')
   if (src !== dst) throw new Error('tokenize assertion: src=' + str(src) + ' dst=' + str(dst))
-  return tokens.filter(t => t.tag !== 'spaces')
+  return tokens.filter(t => t.tag !== 'spaces' && t.tag !== 'comment')
 }
 function parse(tokens) {
   const nodes = []
