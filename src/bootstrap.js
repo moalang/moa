@@ -57,9 +57,8 @@ function dig(d, ...args) {
 // compiler
 function tokenize(src) {
   const lines = src.split('\n')
-  function Token(tag,pos,code) {
+  function Token(tag,code) {
     this.tag = tag
-    this.pos = pos
     this.code = code
   }
   function Liner() {
@@ -83,9 +82,9 @@ function tokenize(src) {
       this.column = tokenLines[tokenLines.length-1].length + 1
     }
   }
-  const consume = (pos,tag,m) => m ? new Token(tag, pos, typeof(m) === 'string' ? m : m[0]) : null
-  const reg = (p,tag,r) => consume(p, tag, src.slice(p).match(r))
-  const some = (p,tag,s) => consume(p, tag, s.split(' ').find(w => src.slice(p).startsWith(w)))
+  const consume = (tag,m) => m ? new Token(tag, typeof(m) === 'string' ? m : m[0]) : null
+  const reg = (p,tag,r) => consume(tag, src.slice(p).match(r))
+  const some = (p,tag,s) => consume(tag, s.split(' ').find(w => src.slice(p).startsWith(w)))
   const eat = p =>
     reg(p, 'func', /^[A-Za-z_][A-Za-z0-9_]*( +[A-Za-z_][A-Za-z0-9_]*)* +=/) ||
     reg(p, 'struct', /^[A-Za-z_][A-Za-z0-9_]*:(\n  [a-z].*)+/) ||
@@ -112,7 +111,7 @@ function tokenize(src) {
       const last = token.code.split('\n').slice(-1)[0]
       if (!last.includes('#')) {
         indent = last.length
-        if (indent % 2 != 0) { throw new Error('invalid indent=' + indent + ' at ' + token.pos) }
+        if (indent % 2 != 0) { throw new Error('invalid indent=' + indent + ' at ' + token.line) }
       }
     }
     token.indent = indent
