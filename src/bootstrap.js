@@ -628,6 +628,10 @@ function unitTests() {
   eq('func', 'typeof(f)', 'f a = a')
   eq('int', 'typeof(g)', 'f = 1', 'g = f')
   eq('func', 'typeof(g)', 'f a = 1', 'g = f')
+  eq('int', 'typeof(match(true -> 1))')
+  eq('int', 'typeof(match(f:a -> f))', 'ab|\n  a  int\n  b  bool', 'f = a(1)')
+  eq('bool', 'typeof(match(f:a -> f))', 'ab|\n  a  int\n  b  bool', 'f = b(true)')
+  eq('string', 'typeof(match(f:a -> "a"))', 'ab|\n  a  int\n  b  bool', 'f = b(true)')
 
   // spiteful tests
   eq(1, ' 1 ')
