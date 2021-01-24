@@ -149,14 +149,11 @@ str: '"' [^"] '"'
 Reserved words
 types
 - bool, true, false
-- int, float, string
+- int, float
+- string
 - seq, array, set, dict, tuple, func
-- opt, nil, do, try, error
-- any, void
-- i8, i16, i32, i64
-- u8, u16, u32, u64
-- f8, f16, f32, f64
-- b8, b16, b32, b64
+- nil, error
+- opt, do, try
 methods
 - trace
 
@@ -176,14 +173,16 @@ Standard input, output and error
 ```
 main =
   line <- io.reads
-  line.empty.if(io.puts(line) io.warn(line))
+  when(line.empty ->
+    io.puts(line)
+    io.warn(line))
 ```
 
 File system
 ```
 main =
   files <- io.fs.ls("/tmp").filter(.is_file)
-  contents <- files.map(file => file.read)
+  files.each(f => io.write(f.reads))
 ```
 
 TCP
