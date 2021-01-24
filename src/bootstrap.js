@@ -362,22 +362,27 @@ function infer(defs, src, tokens) {
     'string': {'int': 'int'},
     'io': {'write': 'void', 'reads': 'string'},
   }
-  const types = {
+  let types = {
     'true': 'bool',
     'false': 'bool',
     'io': 'io',
-    'trace': 'func',
-    'typeof': 'func',
+    'trace': 'void',
+    'typeof': 'string',
   }
+  const funcs = {}
   function local(k, v, f) {
-    const bk = types[k]
-    types[k] = v
-    const ret = f()
-    if (bk) {
-      types[k] = bk
-    } else {
-      delete types[k]
+    return call([k], [v], f)
+  }
+  function call(keys, vals, f) {
+    if (keys.length !== vals.length) {
+      throw new Error('Length does not match: ' + str({keys,vals}))
     }
+    const backup = copy(types)
+    for (let i=0; i<keys.length; i++) {
+      types[keys[i]] = vals[i]
+    }
+    const ret = f()
+    types = backup
     return ret
   }
   function inferId(token) {
@@ -385,7 +390,22 @@ function infer(defs, src, tokens) {
     if (token.name === 'match') { return token.argv.map(x => inferType(x.rhs))[0] }
     if (token.tag === 'id' && token.name in types) {
       token.argv.map(inferType)
-      return types[token.name]
+      const type = types[token.name]
+      if (type === 'func') {
+        const argTypes = token.argv.map(t => t.type)
+        const func = funcs[token.name]
+        let argNames = func.argv
+        if (func.body.op === '=>' && func.body.lhs.items.length) {
+          argNames = argNames.concat(func.body.lhs.items.map(x=>x.name))
+        }
+        if (argNames.length > 0 && argTypes.length === 0) {
+          return 'func'
+        } else {
+          return call(argNames, argTypes, () => inferType(func.body))
+        }
+      } else {
+        return type
+      }
     }
     if (token.tag === 'prop') {
       const targetType = inferType(token.target)
@@ -409,7 +429,7 @@ function infer(defs, src, tokens) {
     return inferId(token)
   }
   function inferType(token) {
-    if (!token.type) {
+    if (!token.type || token.type === 'func') {
       token.type = _inferType(token)
     }
     return token.type
@@ -489,6 +509,7 @@ function infer(defs, src, tokens) {
   }
   for (const def of defs) {
     if (def.tag === 'func') {
+      funcs[def.name] = def
       types[def.name] = def.argv.length === 0 ? inferType(def.body) : 'func'
     } else if (def.enums) {
       types[def.name] = def.name
@@ -606,6 +627,7 @@ function unitTests() {
   eq('int', 'typeof(f)', 'f = 1')
   eq('func', 'typeof(f)', 'f a = a')
   eq('int', 'typeof(g)', 'f = 1', 'g = f')
+  eq('func', 'typeof(g)', 'f a = 1', 'g = f')
 
   // spiteful tests
   eq(1, ' 1 ')
