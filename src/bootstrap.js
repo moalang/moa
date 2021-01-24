@@ -20,14 +20,6 @@ function puts(...args) {
 function copy(obj) {
   return JSON.parse(JSON.stringify(obj))
 }
-function zip(keys, vals) {
-  const len = Math.min(keys.length, vals.length)
-  const ary = []
-  for (let i=0; i<len; ++i) {
-    ary.push([keys[i], vals[i]])
-  }
-  return ary
-}
 function dict(kvs) {
   const d = {}
   for (const [k,v,..._] of kvs) {
@@ -370,20 +362,41 @@ function infer(defs, src, tokens) {
     'typeof': 'string',
   }
   const funcs = {}
-  function local(k, v, f) {
-    return call([k], [v], f)
+  function inferType(token) {
+    if (!token.type || token.type === 'func') {
+      token.type = _inferType(token)
+    }
+    return token.type
   }
-  function call(keys, vals, f) {
-    if (keys.length !== vals.length) {
-      throw new Error('Length does not match: ' + str({keys,vals}))
+  function _inferType(token) {
+    if (token.lines) {
+      return token.type = inferLines(token.lines)
     }
-    const backup = copy(types)
-    for (let i=0; i<keys.length; i++) {
-      types[keys[i]] = vals[i]
+    switch (token.tag) {
+      case 'string': return 'string'
+      case 'int': return 'int'
+      case 'id': return inferId(token)
+      case 'prop': return inferProp(token, token.name)
+      case 'lp': return token.items.map(inferType)[0]
+      case 'la': return tarray(token.ary.map(inferType)[0])
+      case 'op2':
+        switch (token.op) {
+          case '+':
+          case '-':
+          case '++':
+          case '*': return same(token.lhs, token.rhs)
+          case '=':
+          case ':=': return token.lhs.type = inferType(token.rhs)
+          case '<-': return token.lhs.type = inferId(token.rhs)
+          case '+=': should(token.lhs, 'int'); inferType(token.rhs); return should(token.rhs, 'int')
+          case '=>': return 'func'
+          case '->': return inferMatch(token.lhs, token.rhs)
+          default:
+            throw new Error('inferType op2 ' + str(token))
+        }
+      default:
+        throw new Error('inferType ' + str(token))
     }
-    const ret = f()
-    types = backup
-    return ret
   }
   function inferId(token) {
     if (token.name === 'true' || token.name === 'false') { return 'bool' }
@@ -425,15 +438,6 @@ function infer(defs, src, tokens) {
     if (!ptype) { throw new Error('Property does not found ' + str(token) + ' with ' + str(props)) }
     return ptype
   }
-  function inferEff(token) {
-    return inferId(token)
-  }
-  function inferType(token) {
-    if (!token.type || token.type === 'func') {
-      token.type = _inferType(token)
-    }
-    return token.type
-  }
   function tarray(type) {
     return type ? '[]' + type : '[]'
   }
@@ -456,42 +460,28 @@ function infer(defs, src, tokens) {
       }
     }
   }
-  function _inferType(token) {
-    if (token.lines) {
-      return token.type = inferLines(token.lines)
-    }
-    switch (token.tag) {
-      case 'string': return 'string'
-      case 'int': return 'int'
-      case 'id': return inferId(token)
-      case 'prop': return inferProp(token, token.name)
-      case 'lp': return token.items.map(inferType)[0]
-      case 'la': return tarray(token.ary.map(inferType)[0])
-      case 'op2':
-        switch (token.op) {
-          case '+':
-          case '-':
-          case '*': return same(token.lhs, token.rhs)
-          case '=':
-          case ':=': return token.lhs.type = inferType(token.rhs)
-          case '<-': return token.lhs.type = inferEff(token.rhs)
-          case '+=': should(token.lhs, 'int'); inferType(token.rhs); return should(token.rhs, 'int')
-          case '=>': return 'func'
-          case '++': return same(token.lhs, token.rhs)
-          case '->': return capture(token.lhs, token.rhs)
-          default:
-            throw new Error('inferType op2 ' + str(token))
-        }
-      default:
-        throw new Error('inferType ' + str(token))
-    }
-  }
-  function capture(lhs, rhs) {
-    if (lhs.argv && lhs.argv[0]) {
+  function inferMatch(lhs, rhs) {
+    if (lhs.argv.length) {
       return local(lhs.argv[0].name, lhs.name, () => inferType(rhs))
     } else {
       return inferType(rhs)
     }
+  }
+
+  function local(k, v, f) {
+    return call([k], [v], f)
+  }
+  function call(keys, vals, f) {
+    if (keys.length !== vals.length) {
+      throw new Error('Length does not match: ' + str({keys,vals}))
+    }
+    const backup = copy(types)
+    for (let i=0; i<keys.length; i++) {
+      types[keys[i]] = vals[i]
+    }
+    const ret = f()
+    types = backup
+    return ret
   }
   function should(token, type) {
     if (token.type && token.type !== type) {
