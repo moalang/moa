@@ -605,6 +605,7 @@ function unitTests() {
   eq('string', 'typeof("hi")')
   eq('int', 'typeof(f)', 'f = 1')
   eq('func', 'typeof(f)', 'f a = a')
+  eq('int', 'typeof(g)', 'f = 1', 'g = f')
 
   // spiteful tests
   eq(1, ' 1 ')
