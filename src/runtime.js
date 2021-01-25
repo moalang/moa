@@ -9,15 +9,25 @@ function __match(...matchers) {
       return ret
     }
   }
-  throw new Error('Match Error ' + JSON.stringify(matchers))
+  throw new __error('Match Error ' + JSON.stringify(matchers))
 }
 function __stringInt(m) {
   return () => {
     const i = parseInt(m)
     if (isNaN(i)) {
-      return new Error('string.int: ' + m.toString() + ' is not a number')
+      return new __error('string.int: not a number ' + m.toString())
     } else {
       return i
     }
   }
+}
+function __alt(eff, a) {
+  return () => (r => r.__failed ? a : r)(eff())
+}
+function __then(eff, f) {
+  return () => (r => r.__failed ? r : f(r))(eff())
+}
+function __error(message) {
+  this.message = message
+  this.__failed = true
 }

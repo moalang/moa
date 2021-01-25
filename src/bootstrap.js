@@ -63,7 +63,7 @@ function tokenize(src) {
     const left = srcLine.slice(0, col)
     const mid = srcLine.slice(col, col + fragment.length)
     const right = srcLine.slice(col + fragment.length)
-    return this.line + ': ' + left + '「' + mid + '」' + right
+    return this.line + ': ' + left + '【' + mid + '】' + right
   }
   Liner.prototype.forward = function(fragment) {
     const tokenLines = fragment.split('\n')
@@ -241,10 +241,11 @@ function parse(tokens) {
 }
 function generate(defs) {
   const embeddedProps = {
-    'int': {string: 'toString()'}
+    'int': {string: 'toString()'},
   }
   const embeddedFuncs = {
-    'string': {int: '__stringInt'}
+    'string': {int: '__stringInt'},
+    'eff': {alt: '__alt', then: '__then'},
   }
   const embeddedIds = {
     match: '__match',
@@ -337,7 +338,7 @@ function generate(defs) {
         switch (token.op) {
           case '=': return 'const ' + gen(token.lhs) + token.op + gen(token.rhs)
           case ':=': return 'let ' + gen(token.lhs) + ' = ' + gen(token.rhs)
-          case '<-': const name = gen(token.lhs); return 'const ' + name + ' = ' + gen(token.rhs) + '(); if(' + name + '.constructor === Error) { return ' + name + ' }'
+          case '<-': const name = gen(token.lhs); return 'const ' + name + ' = ' + gen(token.rhs) + '(); if(' + name + '.__failed) { return ' + name + ' }'
           case '=>': return '((' + token.args + ') => ' + gen(token.rhs) + ')'
           case '++': return gen(token.lhs) + '.concat(' + gen(token.rhs) + ')'
           case ':': return genTypeMatch(token.lhs, token.rhs)
@@ -351,9 +352,10 @@ function generate(defs) {
 }
 function infer(defs, src, tokens) {
   const props = {
-    'int': {'string': 'string'},
-    'string': {'int': 'int'},
-    'io': {'write': 'void', 'reads': 'string'},
+    'int': {string: 'string'},
+    'string': {int: 'eff'},
+    'io': {write: 'void', reads: 'string'},
+    'eff': {alt: 'eff', then: 'eff'},
   }
   let types = {
     'true': 'bool',
@@ -432,9 +434,9 @@ function infer(defs, src, tokens) {
     const name = token.name
     const type = inferType(token.target)
     if (!type) { throw new Error('Type not infered ' + str({token})) }
-    const obj = typeof type === 'string' ? props[type] : type
-    if (!obj) { throw new Error('Prop not found ' + str({type,name,token,props})) }
-    const ptype = obj[name]
+    const prop = typeof type === 'string' ? props[type] : type
+    if (!prop) { throw new Error('Object not found ' + str({type,name,token,props})) }
+    const ptype = prop[name]
     if (!ptype) { throw new Error('Property not found ' + str({type,name,token,props})) }
     should(token, ptype)
     return ptype
@@ -572,6 +574,9 @@ function unitTests() {
   function stderr(...args) {
     return equals(r => r.stderr, ...args)
   }
+  function fail(...args) {
+    return equals(r => r.value.message, ...args)
+  }
   function equals(unwrap, expect, main, ...funcs) {
     const src = funcs.map(x => x + '\n').join('') + 'main = ' + main
     const info = compile(src)
@@ -625,6 +630,11 @@ function unitTests() {
 
   // effect
   eq(3, '\n  count := 0\n  count += 1\n  count += 2\n  count')
+  fail('string.int: not a number hi', '"hi".int')
+  eq(0, '"a".int.alt(0)')
+  eq(1, '"1".int.alt(0)')
+  eq(3, '"1".int.then((x) => x + 2)')
+  eq(0, '"a".int.then((x) => x + 2).alt(0)')
 
   // type inference
   eq(1, '"1".int')
@@ -664,13 +674,15 @@ function moaTests() {
       moaJs,
       'main()',
       'return __stdout'].join('\n')
-    const actual = evalInSandbox(js).value
+    const result = evalInSandbox(js)
+    const actual = result.value
     if (str(expect) === str(actual)) {
       put('.')
     } else {
       console.error('Failed')
       put('expect: ', expect)
       put('actual: ', actual)
+      put('result: ', result)
       put('src   : ', src)
       put('js    : ', '\n  ' + js.replace(/\n/g, '\n  '))
       process.exit(1)
