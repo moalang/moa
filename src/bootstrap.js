@@ -358,7 +358,7 @@ function infer(defs, src, tokens) {
     'true': 'bool',
     'false': 'bool',
     'io': 'io',
-    'trace': 'void',
+    'trace': 'eff',
     'typeof': 'string',
   }
   const funcs = {}
@@ -370,7 +370,8 @@ function infer(defs, src, tokens) {
   }
   function _inferType(token) {
     if (token.lines) {
-      return token.type = inferLines(token.lines)
+      inferLines(token.lines)
+      return 'eff'
     }
     switch (token.tag) {
       case 'string': return 'string'
@@ -387,7 +388,7 @@ function infer(defs, src, tokens) {
           case '*': return same(token.lhs, token.rhs)
           case '=':
           case ':=': return token.lhs.type = inferType(token.rhs)
-          case '<-': return token.lhs.type = inferId(token.rhs)
+          case '<-': token.lhs.type = inferId(token.rhs); return 'eff'
           case '+=': should(token.lhs, 'int'); inferType(token.rhs); return should(token.rhs, 'int')
           case '=>': return 'func'
           case '->': return inferMatch(token.lhs, token.rhs)
@@ -475,12 +476,22 @@ function infer(defs, src, tokens) {
     if (keys.length !== vals.length) {
       throw new Error('Length does not match: ' + str({keys,vals}))
     }
-    const backup = copy(types)
+    const backup = {}
     for (let i=0; i<keys.length; i++) {
-      types[keys[i]] = vals[i]
+      const key = keys[i]
+      if (key in types) {
+        backup[key] = types[key]
+      }
+      types[key] = vals[i]
     }
     const ret = f()
-    types = backup
+    for (const k in Object.keys(backup)) {
+      if (k in types) {
+        types[k] = backup[k]
+      } else {
+        delete types[k]
+      }
+    }
     return ret
   }
   function should(token, type) {
@@ -500,7 +511,7 @@ function infer(defs, src, tokens) {
   for (const def of defs) {
     if (def.tag === 'func') {
       funcs[def.name] = def
-      types[def.name] = def.argv.length === 0 ? inferType(def.body) : 'func'
+      types[def.name] = def.type = def.argv.length ? 'func' : inferType(def.body)
     } else if (def.enums) {
       types[def.name] = def.name
       for (const e of def.enums) {
@@ -622,6 +633,9 @@ function unitTests() {
   eq('int', 'typeof(match(f:a -> f))', 'ab|\n  a  int\n  b  bool', 'f = a(1)')
   eq('bool', 'typeof(match(f:a -> f))', 'ab|\n  a  int\n  b  bool', 'f = b(true)')
   eq('string', 'typeof(match(f:a -> "a"))', 'ab|\n  a  int\n  b  bool', 'f = b(true)')
+  eq('eff', 'typeof(f)', 'f = trace(1)')
+  eq('eff', 'typeof(f)', 'f =\n  n:=0\n  n')
+  eq('int', 'f', 'f =\n  n:=0\n  typeof(n)')
 
   // spiteful tests
   eq(1, ' 1 ')
