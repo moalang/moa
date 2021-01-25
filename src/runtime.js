@@ -12,10 +12,12 @@ function __match(...matchers) {
   throw new Error('Match Error ' + JSON.stringify(matchers))
 }
 function __stringInt(m) {
-  const i = parseInt(m)
-  if (isNaN(i)) {
-    return new Error('string.int: ' + m.toString() + ' is not a number')
-  } else {
-    return i
+  return () => {
+    const i = parseInt(m)
+    if (isNaN(i)) {
+      return new Error('string.int: ' + m.toString() + ' is not a number')
+    } else {
+      return i
+    }
   }
 }

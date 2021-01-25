@@ -249,6 +249,7 @@ function generate(defs) {
   const embeddedIds = {
     match: '__match',
     trace: 'console.log',
+    warn: 'console.warn',
   }
   function genCall(argv) {
     return argv.length === 0 ? '' : '(' + argv.map(gen).join(',') + ')'
@@ -359,6 +360,7 @@ function infer(defs, src, tokens) {
     'false': 'bool',
     'io': 'io',
     'trace': 'eff',
+    'warn': 'eff',
     'typeof': 'string',
   }
   const funcs = {}
@@ -377,7 +379,7 @@ function infer(defs, src, tokens) {
       case 'string': return 'string'
       case 'int': return 'int'
       case 'id': return inferId(token)
-      case 'prop': return inferProp(token, token.name)
+      case 'prop': return inferProp(token)
       case 'lp': return token.items.map(inferType)[0]
       case 'la': return tarray(token.ary.map(inferType)[0])
       case 'op2':
@@ -387,8 +389,8 @@ function infer(defs, src, tokens) {
           case '++':
           case '*': return same(token.lhs, token.rhs)
           case '=':
-          case ':=': return token.lhs.type = inferType(token.rhs)
-          case '<-': token.lhs.type = inferId(token.rhs); return 'eff'
+          case ':=': token.lhs.type = inferType(token.rhs); return 'eff'
+          case '<-': token.lhs.type = token.rhs.type = inferId(token.rhs); return 'eff'
           case '+=': should(token.lhs, 'int'); inferType(token.rhs); return should(token.rhs, 'int')
           case '=>': return 'func'
           case '->': return inferMatch(token.lhs, token.rhs)
@@ -422,21 +424,19 @@ function infer(defs, src, tokens) {
       }
     }
     if (token.tag === 'prop') {
-      const targetType = inferType(token.target)
-      const prop = props[targetType]
-      if (!prop) { throw new Error('Not found prop ' + str({token,props,types})) }
-      const methodType = prop[token.name]
-      if (!methodType) { throw new Error('Not found method ' + str({token,props,types})) }
-      return methodType
+      return inferProp(token)
     }
     throw new Error('Not found ' + token.name  + ' ' + str({token,props,types}))
   }
-  function inferProp(token, prop) {
+  function inferProp(token) {
+    const name = token.name
     const type = inferType(token.target)
+    if (!type) { throw new Error('Type not infered ' + str({token})) }
     const obj = typeof type === 'string' ? props[type] : type
-    if (!obj) { throw new Error('Prop does not found ' + str(token) + ' with ' + str(props)) }
-    const ptype = obj[prop]
-    if (!ptype) { throw new Error('Property does not found ' + str(token) + ' with ' + str(props)) }
+    if (!obj) { throw new Error('Prop not found ' + str({type,name,token,props})) }
+    const ptype = obj[name]
+    if (!ptype) { throw new Error('Property not found ' + str({type,name,token,props})) }
+    should(token, ptype)
     return ptype
   }
   function tarray(type) {
@@ -476,6 +476,8 @@ function infer(defs, src, tokens) {
     if (keys.length !== vals.length) {
       throw new Error('Length does not match: ' + str({keys,vals}))
     }
+    if (keys.some(x => x === undefined)) { throw new Error('Invalid keys: ' + str(keys)) }
+    if (vals.some(x => x === undefined)) { throw new Error('Invalid vals: ' + str(vals)) }
     const backup = {}
     for (let i=0; i<keys.length; i++) {
       const key = keys[i]
@@ -533,19 +535,25 @@ function compile(src) {
 }
 function evalInSandbox(js) {
   const originalConsoleLog = console.log
+  const originalConsoleWarn = console.warn
   try {
-    let stdouts = []
+    const stdouts = []
+    const stderrs = []
     console.log = x => stdouts.push(x), undefined
+    console.warn = x => stderrs.push(x), undefined
     const value = Function(runtime + '\n' + js)()
-    return {value,stdout: stdouts.join('\n')}
+    const stdout = stdouts.join('\n')
+    const stderr = stderrs.join('\n')
+    return {value,stdout,stderr}
   } catch (e) {
     puts('Failed to evaluate')
     for (const [i, line] of js.split('\n').entries()) {
       put((1 + i).toString().padStart(3) + ':', line)
     }
-    return {value: e, stdout: ''}
+    return {value: e, stdout: '', stderr: ''}
   } finally {
     console.log = originalConsoleLog
+    console.warn = originalConsoleWarn
   }
 }
 function testAll() {
@@ -558,14 +566,18 @@ function unitTests() {
   function eq(...args) {
     return equals(r => r.value, ...args)
   }
-  function out(...args) {
+  function stdout(...args) {
     return equals(r => r.stdout, ...args)
+  }
+  function stderr(...args) {
+    return equals(r => r.stderr, ...args)
   }
   function equals(unwrap, expect, main, ...funcs) {
     const src = funcs.map(x => x + '\n').join('') + 'main = ' + main
     const info = compile(src)
-    const js = info.js + '\nreturn main'
-    const actual = unwrap(evalInSandbox(js))
+    const js = info.js + "\nreturn typeof(main) === 'function' ? main() : main"
+    const result = evalInSandbox(js)
+    const actual = unwrap(result)
     if (str(expect) === str(actual)) {
       put('.')
     } else {
@@ -574,6 +586,7 @@ function unitTests() {
       put('actual: ', actual)
       put('src   : ', src)
       put('js    : ', '\n  ' + info.js.replace(/\n/g, '\n  '))
+      put('result: ', result)
       put('defs  : '); puts(...info.defs)
       process.exit(1)
     }
@@ -620,8 +633,9 @@ function unitTests() {
   eq('4c', '(a + b + 1).string ++ c', 'a = 1', 'b = 2', 'c = "c"')
 
   // embedded
-  out('1', 'trace(1)')
-  out('hi', 'trace("hi")')
+  stdout('1', 'trace(1)')
+  stdout('hi', 'trace("hi")')
+  stderr('hi', 'warn("hi")')
   eq('1', '1.string')
   eq('int', 'typeof(1)')
   eq('string', 'typeof("hi")')
@@ -669,6 +683,7 @@ function compileStdin() {
   const src = require('fs').readFileSync('/dev/stdin', 'utf8')
   const tokens = tokenize(src)
   const defs = parse(tokens)
+  infer(defs, src, tokens)
   const js = compile(defs).js
   console.log(js)
 }

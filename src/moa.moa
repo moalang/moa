@@ -1,12 +1,14 @@
 ast|
   aint int
 
-parse src = aint(src)
+parse src =
+  n <- src.int
+  aint(n)
 
 build_js a = match(a:aint -> a)
 
 main =
   src <- io.reads
-  node = parse(src)
+  node <- parse(src)
   js = build_js(node)
   io.write(js)
