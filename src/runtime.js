@@ -1,3 +1,8 @@
+// -- runtime
+let io = {
+  reads: () => '',
+  write: s => console.log(s),
+}
 function __equal(a, b) {
   // JSON.stringify is needed to compare two objects
   return a === b || JSON.stringify(a) === JSON.stringify(b)
@@ -31,3 +36,6 @@ function __error(message) {
   this.message = message
   this.__failed = true
 }
+
+
+// -- application

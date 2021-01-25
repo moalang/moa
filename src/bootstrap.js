@@ -166,18 +166,16 @@ function parse(tokens) {
       case 'ra':
       case 'rp': return token
       case 'func':
-        const ids = token.code.replace('=', '').split(/ +/).slice(0, -1)
-        token.name = ids[0]
-        token.argv = ids.slice(1)
+        [token.name, ...token.argv] = token.code.replace('=', '').split(/ +/).slice(0, -1)
         token.body = parseIndent(token, parseTop())
         return token
       case 'enums':
         const [ename, ...fields] = token.code.split('\n').map(x => x.trim()).filter(x => x)
-        token.name = ename.replace('|', '')
+        token.name = token.type = ename.replace('|', '')
         token.enums = fields.map(field => {
           const [id, ...bodies] = field.split(/ *[ ,:] */)
           if (bodies.length === 1) {
-            return {id, alias: bodies[0]}
+            return {id, type: bodies[0]}
           } else {
             return {id, struct: dict2(bodies)}
           }
@@ -185,7 +183,7 @@ function parse(tokens) {
         return token
       case 'struct':
         const [sname, ...struct] = token.code.split('\n').map(x => x.trim()).filter(x => x)
-        token.name = sname.replace(':', '')
+        token.name = token.type = sname.replace(':', '')
         token.struct = struct.map(x => x.split(' '))
         return token
       case 'id': parseCall(token); return token
@@ -271,17 +269,6 @@ function generate(defs) {
       return body
     }
   }
-  function genLine(token) {
-    return gen(token)
-  }
-  function genLines(lines) {
-    const body = lines.map(genLine).map((line, i) => (i===lines.length-1) ? 'return ' + line : line).join('\n  ')
-    if (lines.some(t => t.op === '<-')) {
-      return '(function () {\n  ' + body + '\n})'
-    } else {
-      return '(function () {\n  ' + body + '\n})()'
-    }
-  }
   function genId(token) {
     if (token.name === 'typeof') {
       return "'" + token.argv[0].type + "'/* typeof " + gen(token.argv[0]) + ' */'
@@ -322,7 +309,8 @@ function generate(defs) {
   }
   function gen(token) {
     if (token.lines) {
-      return genLines(token.lines)
+      const body = token.lines.map(gen).map((line, i) => (i===token.lines.length-1) ? 'return ' + line : line).join('\n  ')
+      return '(function () {\n  ' + body + '\n})'
     }
     switch (token.tag) {
       case 'int': return token.val
@@ -351,26 +339,23 @@ function generate(defs) {
   return defs.map(gen).join("\n")
 }
 function infer(defs, src, tokens) {
-  const props = {
-    'int': {string: 'string'},
-    'string': {int: 'eff'},
-    'io': {write: 'void', reads: 'string'},
-    'eff': {alt: 'eff', then: 'eff'},
+  function f(type, struct) {
+    struct ||= {}
+    return {type,struct}
   }
-  let types = {
-    'true': 'bool',
-    'false': 'bool',
-    'io': 'io',
-    'trace': 'eff',
-    'warn': 'eff',
-    'typeof': 'string',
+  const scope = {
+    'true': f('bool'),
+    'false': f('bool'),
+    'trace': f('eff'),
+    'warn': f('eff'),
+    'typeof': f('string'),
+    'int': f('int', {string: 'string'}),
+    'string': f('string', {int: 'eff'}),
+    'eff':f('eff', {alt: 'eff', then: 'eff'}),
+    'io': f('io', {write: 'void', reads: 'string'}),
   }
-  const funcs = {}
   function inferType(token) {
-    if (!token.type || token.type === 'func') {
-      token.type = _inferType(token)
-    }
-    return token.type
+    return token.type || (token.type = _inferType(token))
   }
   function _inferType(token) {
     if (token.lines) {
@@ -391,11 +376,11 @@ function infer(defs, src, tokens) {
           case '++':
           case '*': return same(token.lhs, token.rhs)
           case '=':
-          case ':=': token.lhs.type = inferType(token.rhs); return 'eff'
-          case '<-': token.lhs.type = token.rhs.type = inferId(token.rhs); return 'eff'
+          case ':=':
+          case '<-': token.lhs.type = inferType(token.rhs); return 'eff'
           case '+=': should(token.lhs, 'int'); inferType(token.rhs); return should(token.rhs, 'int')
           case '=>': return 'func'
-          case '->': return inferMatch(token.lhs, token.rhs)
+          case '->': return inferPatternMatch(token.lhs, token.rhs)
           default:
             throw new Error('inferType op2 ' + str(token))
         }
@@ -404,40 +389,36 @@ function infer(defs, src, tokens) {
     }
   }
   function inferId(token) {
-    if (token.name === 'true' || token.name === 'false') { return 'bool' }
-    if (token.name === 'match') { return token.argv.map(x => inferType(x.rhs))[0] }
-    if (token.tag === 'id' && token.name in types) {
+    if (token.name === 'match') {
+      return token.argv.map(x => inferType(x.rhs))[0]
+    } else if (token.tag === 'id' && token.name in scope) {
       token.argv.map(inferType)
-      const type = types[token.name]
-      if (type === 'func') {
-        const argTypes = token.argv.map(t => t.type)
-        const func = funcs[token.name]
-        let argNames = func.argv
-        if (func.body.op === '=>' && func.body.lhs.items.length) {
-          argNames = argNames.concat(func.body.lhs.items.map(x=>x.name))
-        }
-        if (argNames.length > 0 && argTypes.length === 0) {
-          return 'func'
+      const func = scope[token.name]
+      const type = func.type
+      if (!type) { throw new Error('Not infered yet ' + str({func,token})) }
+      if (type === 'func' && token.argv.length) {
+        const giveArgs = token.argv.map(t => t.type)
+        let defArgs = func.argv.concat(func.body.op === '=>' ? func.body.lhs.items.map(t => t.name) : [])
+        if (giveArgs.length !== defArgs.length) {
+          throw new Error('Arguments does not match ' + str({token}))
         } else {
-          return call(argNames, argTypes, () => inferType(func.body))
+          return call(defArgs, giveArgs, () => inferType(func.body))
         }
       } else {
         return type
       }
+    } else {
+      throw new Error('Not found ' + token.name  + ' ' + str({token}))
     }
-    if (token.tag === 'prop') {
-      return inferProp(token)
-    }
-    throw new Error('Not found ' + token.name  + ' ' + str({token,props,types}))
   }
   function inferProp(token) {
     const name = token.name
     const type = inferType(token.target)
-    if (!type) { throw new Error('Type not infered ' + str({token})) }
-    const prop = typeof type === 'string' ? props[type] : type
-    if (!prop) { throw new Error('Object not found ' + str({type,name,token,props})) }
+    if (!type) { throw new Error('Type not infered ' + str({token,scope: Object.keys(scope)})) }
+    const prop = scope[type].struct
+    if (!prop) { throw new Error('Object not found ' + str({type,name,token})) }
     const ptype = prop[name]
-    if (!ptype) { throw new Error('Property not found ' + str({type,name,token,props})) }
+    if (!ptype) { throw new Error('Property not found ' + str({type,name,token})) }
     should(token, ptype)
     return ptype
   }
@@ -463,14 +444,13 @@ function infer(defs, src, tokens) {
       }
     }
   }
-  function inferMatch(lhs, rhs) {
+  function inferPatternMatch(lhs, rhs) {
     if (lhs.argv.length) {
       return local(lhs.argv[0].name, lhs.name, () => inferType(rhs))
     } else {
       return inferType(rhs)
     }
   }
-
   function local(k, v, f) {
     return call([k], [v], f)
   }
@@ -483,17 +463,17 @@ function infer(defs, src, tokens) {
     const backup = {}
     for (let i=0; i<keys.length; i++) {
       const key = keys[i]
-      if (key in types) {
-        backup[key] = types[key]
+      if (key in scope) {
+        backup[key] = scope[key]
       }
-      types[key] = vals[i]
+      scope[key] = {type: vals[i]}
     }
     const ret = f()
     for (const k in Object.keys(backup)) {
-      if (k in types) {
-        types[k] = backup[k]
+      if (k in scope) {
+        scope[k] = backup[k]
       } else {
-        delete types[k]
+        delete scope[k]
       }
     }
     return ret
@@ -512,19 +492,16 @@ function infer(defs, src, tokens) {
       throw new Error('Types should be same ' + str(tokens) + ' in ' + src)
     }
   }
+
   for (const def of defs) {
     if (def.tag === 'func') {
-      funcs[def.name] = def
-      types[def.name] = def.type = def.argv.length ? 'func' : inferType(def.body)
+      def.type = def.argv.length ? 'func' : inferType(def.body)
     } else if (def.enums) {
-      types[def.name] = def.name
       for (const e of def.enums) {
-        types[e.id] = e.alias
+        scope[e.id] = e
       }
-    } else if (def.struct) {
-      types[def.name] = def.name
-      props[def.name] = dict(def.struct)
     }
+    scope[def.name] = def
   }
   inferType(defs.filter(x => x.name === 'main')[0].body)
 }
@@ -670,7 +647,7 @@ function moaTests() {
   function eq(expect, src) {
     const js = [
       'let __stdout=""',
-      'const io={reads: () => ' + str(src) + ', write: s=>__stdout+=s}',
+      'io={reads: () => ' + str(src) + ', write: s=>__stdout+=s}',
       moaJs,
       'main()',
       'return __stdout'].join('\n')
@@ -692,11 +669,8 @@ function moaTests() {
   eq('1', '1')
 }
 function compileStdin() {
-  const src = require('fs').readFileSync('/dev/stdin', 'utf8')
-  const tokens = tokenize(src)
-  const defs = parse(tokens)
-  infer(defs, src, tokens)
-  const js = compile(defs).js
+  const moa = require('fs').readFileSync('/dev/stdin', 'utf8')
+  const js = compile(moa).js
   console.log(js)
 }
 function main() {
