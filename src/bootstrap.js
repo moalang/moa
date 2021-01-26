@@ -311,10 +311,17 @@ function generate(defs) {
     const type = rhs.lhs.name
     return '() => ' + name + ".__type === '" + type + "' ? (" + name + '=>' + gen(rhs.rhs) + ')(' + name + '.__val) : undefined'
   }
+  function genLine(token) {
+    const js = gen(token)
+    return js + (token.tag === 'id' && token.type === 'eff' ? '()' : '')
+  }
+  function genLines(token) {
+    const body = token.lines.map(genLine).map((line, i) => (i===token.lines.length-1) ? 'return ' + line : line).join('\n  ')
+    return '(function () {\n  ' + body + '\n})'
+  }
   function gen(token) {
     if (token.lines) {
-      const body = token.lines.map(gen).map((line, i) => (i===token.lines.length-1) ? 'return ' + line : line).join('\n  ')
-      return '(function () {\n  ' + body + '\n})'
+      return genLines(token)
     }
     switch (token.tag) {
       case 'int': return token.val
@@ -611,6 +618,7 @@ function unitTests() {
 
   // effect
   eq(3, '\n  count := 0\n  count += 1\n  count += 2\n  count')
+  eq(2, 'f', 'f =\n  n := 0\n  g =\n    n += 1\n    n\n  g\n  g')
   fail('string.int: not a number hi', '"hi".int')
   eq(0, '"a".int.alt(0)')
   eq(1, '"1".int.alt(0)')
