@@ -115,7 +115,7 @@ function tokenize(src) {
   }
 
   const dst = tokens.map(t => t.code).join('')
-  if (src !== dst) throw new Error('tokenize assertion: src=' + str(src) + ' dst=' + str(dst))
+  if (src !== dst) throw new Error('tokenize assertion: src=' + str({src,dst}))
   return tokens.filter(t => t.tag !== 'spaces' && t.tag !== 'comment')
 }
 function parse(tokens) {
@@ -229,10 +229,10 @@ function parse(tokens) {
     if (node.tag === 'ra') { throw new Error('Invalid ' + str({node,tokens})) }
     if (node.tag === 'rp') { throw new Error('Invalid ' + str({node,tokens})) }
   }
-  const tnames = tokens.filter(t => ['func', 'struct', 'enums'].includes(t.tag) && t.indent === 0).map(t => t.name).join(' ')
-  const nnames = nodes.map(t => t.name).join(' ')
-  if (tnames !== nnames) {
-    throw new Error('Lack of information after parsing:\n- expect: ' + tnames + '\n- actual: ' + nnames)
+  const expect = tokens.filter(t => ['func', 'struct', 'enums'].includes(t.tag) && t.indent === 0).map(t => t.name).join(' ')
+  const actual = nodes.map(t => t.name).join(' ')
+  if (expect !== actual) {
+    throw new Error('Lack of information after parsing: ' + str({expect,actual}))
   }
 
   return nodes
