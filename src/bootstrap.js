@@ -65,6 +65,10 @@ function tokenize(src) {
     const right = srcLine.slice(col + fragment.length)
     return this.line + ': ' + left + '【' + mid + '】' + right
   }
+  Liner.prototype.mention = function(text) {
+    return '\n' + this.line + ': ' + lines[this.line-1] +
+      '\n' + ' '.repeat(this.line.toString().length + this.column + 1) + '^ ' + text
+  }
   Liner.prototype.forward = function(fragment) {
     const tokenLines = fragment.split('\n')
     if (tokenLines.length === 1) {
@@ -99,7 +103,7 @@ function tokenize(src) {
   let tokens=[]
   while (pos < src.length) {
     const token = eat(pos)
-    if (!token) { throw new Error('tokenize at ' + pos + '\n' + src) }
+    if (!token) { throw new Error(liner.mention('Tokenize failed')) }
     if (token.tag === 'spaces' && token.code.includes('\n')) {
       const last = token.code.split('\n').slice(-1)[0]
       if (!last.includes('#')) {
