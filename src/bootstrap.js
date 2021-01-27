@@ -609,8 +609,8 @@ function unitTests() {
 
   // type
   eq({a: 1, b: true}, 'ab(1 true)', 'ab:\n  a int\n  b bool')
-  eq({ __val: 1, __type: 'a'}, 'a(1)', 'ab|\n  a int\n  b bool')
-  eq({ __val: true, __type: 'b'}, 'b(true)', 'ab|\n  a int\n  b bool')
+  eq({ __val: 1, __type: 'a'}, 'a(1)', 'ab|\n  a int\n  b []int')
+  eq({ __val: [1], __type: 'b'}, 'b([1])', 'ab|\n  a int\n  b []int')
 
   // control flow
   eq(1, 'match(a -> b\n  _ -> c)', 'a = true', 'b = 1', 'c = 2')
