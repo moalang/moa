@@ -127,9 +127,6 @@ function parse(tokens) {
   const nodes = []
   const eot = {tag: 'EOT', code: ''}
   let pos = 0
-  function info() {
-    return ' at=' + pos + ' tokens=' + str(tokens) + ' nodes=' + str(nodes)
-  }
   function until(f) {
     const ary = []
     let t
@@ -194,7 +191,7 @@ function parse(tokens) {
       case 'id': parseCall(token); return token
       case 'la': [token.ary,token.ra] = until(t => t.tag !== 'ra'); return token
       case 'lp': token.items = until(t => t.tag !== 'rp')[0]; return token
-      default: throw new Error('Unexpected tag ' + str(token) + info())
+      default: throw new Error('Unexpected tag ' + str(token))
     }
   }
   function parseLeft(token) {
@@ -249,6 +246,7 @@ function generate(defs) {
   const embeddedFuncs = {
     'string': {int: '__stringInt', char: '__stringChar'},
     'eff': {alt: '__alt', then: '__then'},
+    '[]': {at: '__arrayAt'},
   }
   const embeddedIds = {
     guard: '__guard',
@@ -286,11 +284,12 @@ function generate(defs) {
     if (!token.target.type) {
       throw new Error('genProp error: type is undefined ' + str(token))
     }
-    const prop = dig(embeddedProps, token.target.type, token.name)
+    const type = token.target.type.startsWith('[]') ? '[]' : token.target.type
+    const prop = dig(embeddedProps, type, token.name)
     if (prop) {
       return wrapIfNum(gen(token.target)) + '.' + prop + genCall(token.argv)
     }
-    const func = dig(embeddedFuncs, token.target.type, token.name)
+    const func = dig(embeddedFuncs, type, token.name)
     if (func) {
       return func + genCall([token.target].concat(token.argv))
     }
@@ -371,6 +370,9 @@ function infer(defs, src, tokens) {
     'eff': f('eff', {alt: 'eff', then: 'eff'}),
     'io': f('io', {write: 'void', reads: 'string'}),
   }
+  const arrayType = t => ({
+    at: t
+  })
   function inferType(token) {
     return token.type || (token.type = _inferType(token))
   }
@@ -432,12 +434,19 @@ function infer(defs, src, tokens) {
     const name = token.name
     const type = inferType(token.target)
     if (!type) { throw new Error('Type not infered ' + str({token,scope: Object.keys(scope)})) }
-    const prop = scope[type].struct
-    if (!prop) { throw new Error('Object not found ' + str({type,name,token})) }
-    const ptype = prop[name]
-    if (!ptype) { throw new Error('Property not found ' + str({type,name,token})) }
-    should(token, ptype)
-    return ptype
+    if(type.startsWith('[]')) {
+      const etype = type.slice(2)
+      const ptype = arrayType(etype)[name]
+      should(token, ptype)
+      return ptype
+    } else {
+      const prop = scope[type].struct
+      if (!prop) { throw new Error('Object not found ' + str({type,name,token})) }
+      const ptype = prop[name]
+      if (!ptype) { throw new Error('Property not found ' + str({type,name,token})) }
+      should(token, ptype)
+      return ptype
+    }
   }
   function inferArray(token) {
     const t1 = token.ary.map(inferType)[0]
@@ -646,9 +655,18 @@ function unitTests() {
   stdout('1', 'trace(1)')
   stdout('hi', 'trace("hi")')
   stderr('hi', 'warn("hi")')
+
+  // embedded string
   eq('1', '1.string')
   eq('i', '"hi".char(1)')
   fail('out of index', '"hi".char(2)')
+
+  // embedded array
+  eq(1, '[1]int.at(0)')
+  fail('out of index', '[1]int.at(1)')
+  fail('out of index', '[1]int.at(0-1)')
+
+  // embedded effect
   eq(1, '\n  guard(true)\n  1')
   fail('guard', '\n  guard(false)\n  1')
 

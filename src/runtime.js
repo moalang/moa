@@ -30,7 +30,10 @@ function __stringInt(s) {
   }
 }
 function __stringChar(s, n) {
-  return () => n < s.length ? s.slice(n, n+1) : __error('out of index')
+  return () => 0 <= n && n < s.length ? s.slice(n, n+1) : __error('out of index')
+}
+function __arrayAt(a, n) {
+  return () => 0 <= n && n < a.length ? a[n] : __error('out of index')
 }
 function __alt(eff, a) {
   return () => (r => r.__failed ? a : r)(eff())
