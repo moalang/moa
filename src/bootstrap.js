@@ -92,6 +92,7 @@ function tokenize(src) {
     reg(p, 'spaces', /^[ \n]+/) ||
     reg(p, 'comment', /^ *#.*/) ||
     some(p, 'la', '[') ||
+    reg(p, 'ra', /\][A-Za-z_][A-Za-z0-9_]*/) ||
     some(p, 'ra', ']') ||
     some(p, 'lp', '(') ||
     some(p, 'rp', ')') ||
@@ -135,12 +136,12 @@ function parse(tokens) {
     while (pos < tokens.length && f(t = parseTop())) {
       ary.push(t)
     }
-    return ary
+    return [ary, t]
   }
   function parseCall(token) {
     token.name = escape(token.code.replace('(', '')).replace('.', '')
     if (token.code.endsWith('(')) {
-      token.argv = until(t => t.tag !== 'rp')
+      token.argv = until(t => t.tag !== 'rp')[0]
     } else {
       token.argv = []
     }
@@ -191,8 +192,8 @@ function parse(tokens) {
         token.struct = struct.map(x => x.split(' '))
         return token
       case 'id': parseCall(token); return token
-      case 'la': token.ary = until(t => t.tag !== 'ra'); return token
-      case 'lp': token.items = until(t => t.tag !== 'rp'); return token
+      case 'la': [token.ary,token.ra] = until(t => t.tag !== 'ra'); return token
+      case 'lp': token.items = until(t => t.tag !== 'rp')[0]; return token
       default: throw new Error('Unexpected tag ' + str(token) + info())
     }
   }
@@ -367,7 +368,7 @@ function infer(defs, src, tokens) {
     'guard': f('eff'),
     'int': f('int', {string: 'string'}),
     'string': f('string', {int: 'eff', char: 'string'}),
-    'eff':f('eff', {alt: 'eff', then: 'eff'}),
+    'eff': f('eff', {alt: 'eff', then: 'eff'}),
     'io': f('io', {write: 'void', reads: 'string'}),
   }
   function inferType(token) {
@@ -384,7 +385,7 @@ function infer(defs, src, tokens) {
       case 'id': return inferId(token)
       case 'prop': return inferProp(token)
       case 'lp': return token.items.map(inferType)[0]
-      case 'la': return tarray(token.ary.map(inferType)[0])
+      case 'la': return inferArray(token)
       case 'op2':
         switch (token.op) {
           case '+':
@@ -438,8 +439,12 @@ function infer(defs, src, tokens) {
     should(token, ptype)
     return ptype
   }
-  function tarray(type) {
-    return type ? '[]' + type : '[]'
+  function inferArray(token) {
+    const t1 = token.ary.map(inferType)[0]
+    const t2 = token.ra.code.slice(1)
+    const t = t1 || t2
+    if (!t) { throw new Error('Array should be typed: ' + str(token)) }
+    return '[]' + t
   }
   function inferLines(lines) {
     if (lines.length === 0) {
@@ -594,7 +599,7 @@ function unitTests() {
   eq(1, '1')
   eq(true, 'true')
   eq('a', '"a"')
-  eq([], '[]')
+  eq([], '[]int')
   eq([1, 2, 3], '[1 2 3]')
 
   // expression
@@ -635,6 +640,7 @@ function unitTests() {
   eq('1', 'a.string', 'a = 1')
   eq('2', '(a + 1).string', 'a = 1')
   eq('4c', '(a + b + 1).string ++ c', 'a = 1', 'b = 2', 'c = "c"')
+  eq('[]int', 'typeof([]int)')
 
   // embedded
   stdout('1', 'trace(1)')
