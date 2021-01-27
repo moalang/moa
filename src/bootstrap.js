@@ -246,10 +246,11 @@ function generate(defs) {
     'int': {string: 'toString()'},
   }
   const embeddedFuncs = {
-    'string': {int: '__stringInt'},
+    'string': {int: '__stringInt', char: '__stringChar'},
     'eff': {alt: '__alt', then: '__then'},
   }
   const embeddedIds = {
+    guard: '__guard',
     match: '__match',
     trace: 'console.log',
     warn: 'console.warn',
@@ -312,8 +313,11 @@ function generate(defs) {
     return '() => ' + name + ".__type === '" + type + "' ? (" + name + '=>' + gen(rhs.rhs) + ')(' + name + '.__val) : undefined'
   }
   function genLine(token) {
-    const js = gen(token)
-    return js + (token.tag === 'id' && token.type === 'eff' ? '()' : '')
+    let js = gen(token)
+    if (token.type === 'eff' && token.tag === 'id') {
+      js = '__e = ' + js + '(); if (__e.__failed) { return __e }'
+    }
+    return js
   }
   function genLines(token) {
     const body = token.lines.map(genLine).map((line, i) => (i===token.lines.length-1) ? 'return ' + line : line).join('\n  ')
@@ -360,8 +364,9 @@ function infer(defs, src, tokens) {
     'trace': f('eff'),
     'warn': f('eff'),
     'typeof': f('string'),
+    'guard': f('eff'),
     'int': f('int', {string: 'string'}),
-    'string': f('string', {int: 'eff'}),
+    'string': f('string', {int: 'eff', char: 'string'}),
     'eff':f('eff', {alt: 'eff', then: 'eff'}),
     'io': f('io', {write: 'void', reads: 'string'}),
   }
@@ -636,6 +641,12 @@ function unitTests() {
   stdout('hi', 'trace("hi")')
   stderr('hi', 'warn("hi")')
   eq('1', '1.string')
+  eq('i', '"hi".char(1)')
+  fail('out of index', '"hi".char(2)')
+  eq(1, '\n  guard(true)\n  1')
+  fail('guard', '\n  guard(false)\n  1')
+
+  // embedded typeof
   eq('int', 'typeof(1)')
   eq('string', 'typeof("hi")')
   eq('int', 'typeof(f)', 'f = 1')
