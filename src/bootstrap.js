@@ -9,6 +9,10 @@ const dump = o => console.dir(o, {depth: null})
 const copy = o => JSON.parse(JSON.stringify(o))
 const dig = (d,...args) => args.reduce((o,name) => o[name], d)
 
+// runtime for evaluate
+global.__equals = (a,b) => a === b || str(a) === str(b)
+global.__match = (a,b) => __equals(a, b)
+
 function evaluate(src) {
   // top: define+
   // define: id+ '=' body
@@ -258,14 +262,29 @@ function evaluate(src) {
     function genId(token) {
       if (token.name === 'if') {
         const l = token.argv.length
-        if (l%2!=1) { throw new Error('if have to odd number of arguments: ' + str(token)) }
+        if (l%2!=1) { throw new Error('if arguments have to odd number of arguments: ' + str(token)) }
         const argv = token.argv.map(gen)
         const exps = []
         for (let i=1; i<l; i+=2) {
-          exps.push(argv[i-1],'?',argv[i],':')
+          exps.push(argv[i-1], '?', argv[i], ':')
         }
         exps.push(argv[argv.length-1])
         return exps.join(' ')
+      } else if (token.name === 'match') {
+        const l = token.argv.length
+        if (l%2!=1) { throw new Error('match arguments have to odd number of arguments: ' + str(token)) }
+        const argv = token.argv.map(gen)
+        const exps = []
+        for (let i=2; i<l; i+=2) {
+          const cond = argv[i-1]
+          if (cond === '_' || i+1 === l) {
+            exps.push(argv[i])
+            return '(__target => ' + exps.join(' ') + ')(' + argv[0] + ')'
+          } else {
+            exps.push('__match(__target, ' + argv[i-1] + ')', '?', argv[i] , ':')
+          }
+        }
+        throw new Error('Gennerate Error for match')
       } else if (token.name === 'typeof') {
         return "'" + token.argv[0].type + "'/* typeof " + gen(token.argv[0]) + ' */'
       } else {
@@ -396,9 +415,15 @@ function runTest() {
   eq({ __val: [1], __type: 'b'}, 'b([1])', 'ab|\n  a int\n  b []int')
 
   // control flow
- eq(1, 'if(true 1 2)')
- eq(2, 'if(false 1 2)')
- eq(1, 'if(true 1 not_found)')
+  eq(1, 'if(true 1 2)')
+  eq(2, 'if(false 1 2)')
+  eq(3, 'if(false 1 false 2 3)')
+  eq(1, 'if(true 1 not_found)') // check lazy evaluation
+  eq(10, 'match(1 1 10 2 20)')
+  eq(20, 'match(2 1 10 2 20)')
+  eq(99, 'match(3 1 10 2 20 _ 99)')
+  eq(99, 'match(3 1 10 2 20 _ 99 _ 999)')
+  eq(10, 'match(1 1 10 2 not_found)') // check lazy evaluation
 
 //  // control flow
 //  eq(1, 'match(a -> b\n  _ -> c)', 'a = true', 'b = 1', 'c = 2')
