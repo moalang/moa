@@ -82,7 +82,7 @@ function tokenize(src) {
   const reg = (p,tag,r) => consume(tag, src.slice(p).match(r))
   const some = (p,tag,s) => consume(tag, s.split(' ').find(w => src.slice(p).startsWith(w)))
   const eat = p =>
-    reg(p, 'func', /^[A-Za-z_][A-Za-z0-9_]*( +[A-Za-z_][A-Za-z0-9_]*)* +=(?!>)/) ||
+    reg(p, 'func', /^[A-Za-z_][A-Za-z0-9_]*( +[A-Za-z_][A-Za-z0-9_]*)* +=(?![>=])/) ||
     reg(p, 'struct', /^[A-Za-z_][A-Za-z0-9_]*:(\n  [a-z].*)+/) ||
     reg(p, 'enums', /^[A-Za-z_][A-Za-z0-9_]*\|(\n  [a-z].*)+/) ||
     reg(p, 'int', /^[0-9]+(\.[0-9]+)?/) ||
@@ -393,7 +393,15 @@ function infer(defs, src, tokens) {
           case '+':
           case '-':
           case '++':
-          case '*': return same(token.lhs, token.rhs)
+          case '*':
+          case '||':
+          case '&&': return same(token.lhs, token.rhs)
+          case '>':
+          case '>=':
+          case '<':
+          case '<=':
+          case '!=':
+          case '==': same(token.lhs, token.rhs); return 'bool'
           case '=':
           case ':=':
           case '<-': token.lhs.type = inferType(token.rhs); return 'eff'
@@ -535,6 +543,9 @@ function infer(defs, src, tokens) {
       def.type = def.args.length ? 'func' : inferType(def.body)
     } else if (def.enums) {
       for (const e of def.enums) {
+        if (e.struct && Object.keys(e.struct).length === 0) {
+          e.type = e.id
+        }
         scope[e.id] = e
       }
     }
@@ -657,6 +668,23 @@ function unitTests() {
   eq('4c', '(a + b + 1).string ++ c', 'a = 1', 'b = 2', 'c = "c"')
   eq('[]int', 'typeof([]int)')
   eq('int', '\n  f g = g(1)\n  r = f(x => x)\n  typeof(r)')
+  eq('struct', 'typeof(struct)', 'struct:\n  a string')
+  eq('adt', 'typeof(adt)', 'adt|\n  a')
+  eq('a', 'typeof(a)', 'adt|\n  a')
+  eq('int', 'typeof(a)', 'adt|\n  a int')
+  eq('int', 'typeof(1 + 2)')
+  eq('int', 'typeof(1 - 2)')
+  eq('int', 'typeof(1 * 2)')
+  eq('bool', 'typeof(1 > 2)')
+  eq('bool', 'typeof(1 >= 2)')
+  eq('bool', 'typeof(1 < 2)')
+  eq('bool', 'typeof(1 <= 2)')
+  eq('bool', 'typeof(1 == 2)')
+  eq('bool', 'typeof(1 != 2)')
+  eq('bool', 'typeof(true == false)')
+  eq('bool', 'typeof(true != false)')
+  eq('bool', 'typeof(true && false)')
+  eq('bool', 'typeof(true || false)')
 
 
   // embedded
