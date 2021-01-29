@@ -421,7 +421,8 @@ function infer(defs, src, tokens) {
         if (args.length !== argv.length) {
           throw new Error('Arguments does not match ' + str({args,argv,token}))
         } else {
-          return call(args, argv, () => inferType(func.body))
+          const body = func.body || func.rhs
+          return call(args, argv, () => inferType(body))
         }
       } else {
         return type
@@ -466,7 +467,11 @@ function infer(defs, src, tokens) {
         token.lhs.type = inferType(token)
         return local(token.lhs.name, token.rhs, () => inferLines(rest))
       } else if (token.tag === 'func') {
-        token.type = inferType(token.body)
+        if (token.args.length) {
+          setType(token, 'func')
+        } else {
+          setType(token, inferType(token.body))
+        }
         return local(token.name, token, () => inferLines(rest))
       } else {
         inferType(token)
@@ -651,7 +656,7 @@ function unitTests() {
   eq('2', '(a + 1).string', 'a = 1')
   eq('4c', '(a + b + 1).string ++ c', 'a = 1', 'b = 2', 'c = "c"')
   eq('[]int', 'typeof([]int)')
-  //eq('int', '\n  f g = g(1)\n  r = f(x => x)\n  typeof(r)')
+  eq('int', '\n  f g = g(1)\n  r = f(x => x)\n  typeof(r)')
 
 
   // embedded
