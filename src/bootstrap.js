@@ -168,7 +168,7 @@ function parse(tokens) {
       case 'ra':
       case 'rp': return token
       case 'func':
-        [token.name, ...token.argv] = token.code.replace('=', '').split(/ +/).slice(0, -1)
+        [token.name, ...token.args] = token.code.replace('=', '').split(/ +/).slice(0, -1)
         token.body = parseIndent(token, parseTop())
         return token
       case 'enums':
@@ -204,7 +204,7 @@ function parse(tokens) {
       next.lhs = token
       next.rhs = parseTop()
       if (next.op === '=>') {
-        next.args = token.tag === 'lp' ? token.items.map(x => x.name).join(',') : token.name
+        next.args = token.tag === 'lp' ? token.items.map(x => x.name) : [token.name]
       }
       return parseLeft(next)
     } else if (next.tag === 'prop') {
@@ -267,8 +267,8 @@ function generate(defs) {
   }
   function genFunc(token) {
     const body = gen(token.body)
-    if (token.argv.length > 0) {
-      return '(' + token.argv.join(',') + ') => ' + body
+    if (token.args.length > 0) {
+      return '(' + token.args.join(',') + ') => ' + body
     } else {
       return body
     }
@@ -342,7 +342,7 @@ function generate(defs) {
           case '=': return 'const ' + gen(token.lhs) + token.op + gen(token.rhs)
           case ':=': return 'let ' + gen(token.lhs) + ' = ' + gen(token.rhs)
           case '<-': const name = gen(token.lhs); return 'const ' + name + ' = ' + gen(token.rhs) + '(); if(' + name + '.__failed) { return ' + name + ' }'
-          case '=>': return '((' + token.args + ') => ' + gen(token.rhs) + ')'
+          case '=>': return '((' + token.args.join(',') + ') => ' + gen(token.rhs) + ')'
           case '++': return gen(token.lhs) + '.concat(' + gen(token.rhs) + ')'
           case ':': return genTypeMatch(token.lhs, token.rhs)
           case '->': return genArrow(token.lhs, token.rhs)
@@ -416,18 +416,18 @@ function infer(defs, src, tokens) {
       const type = func.type
       if (!type) { throw new Error('Not infered yet ' + str({func,token})) }
       if (type === 'func' && token.argv.length) {
-        const giveArgs = token.argv
-        let defArgs = func.argv.concat(func.body.op === '=>' ? func.body.lhs.items.map(t => t.name) : [])
-        if (giveArgs.length !== defArgs.length) {
-          throw new Error('Arguments does not match ' + str({token}))
+        const argv = token.argv
+        let args = func.args
+        if (args.length !== argv.length) {
+          throw new Error('Arguments does not match ' + str({args,argv,token}))
         } else {
-          return call(defArgs, giveArgs, () => inferType(func.body))
+          return call(args, argv, () => inferType(func.body))
         }
       } else {
         return type
       }
     } else {
-      throw new Error('Not found ' + token.name  + ' ' + str({token}))
+      throw new Error('Not found ' + token.name  + ' ' + str({src,token,scope}))
     }
   }
   function inferProp(token) {
@@ -527,7 +527,7 @@ function infer(defs, src, tokens) {
 
   for (const def of defs) {
     if (def.tag === 'func') {
-      def.type = def.argv.length ? 'func' : inferType(def.body)
+      def.type = def.args.length ? 'func' : inferType(def.body)
     } else if (def.enums) {
       for (const e of def.enums) {
         scope[e.id] = e
@@ -621,7 +621,6 @@ function unitTests() {
 
   // function
   eq(3, 'add(1 2)', 'add a b = a + b')
-  eq(3, 'add(1 2)', 'add = (a b) => a + b')
 
   // type
   eq({a: 1, b: true}, 'ab(1 true)', 'ab:\n  a int\n  b bool')
