@@ -17,7 +17,7 @@ const range = (s,e,n=1) => {
   }
   return l
 }
-const twin = (a,n=1) => range(n, a.length, 2).map(i => [a[i-1], a[i]])
+const twin = (f,a,n=1) => range(n, a.length, 2).map(i => f(a[i-1], a[i]))
 
 // runtime helper functions
 function Failure(message) { this.message = message }
@@ -140,9 +140,7 @@ function evaluate(src) {
     }
     function parseAssert(f, g, expect) {
       const r = f()
-      if (!g(r)) {
-        throw new Error(`Expect ${expect} but ${str(r)}`)
-      }
+      if (!g(r)) { throw new Error(`Expect ${expect} but ${str(r)}`) }
       return r
     }
     function parseCall(token) {
@@ -183,7 +181,7 @@ function evaluate(src) {
           token.enums = fields.map(field => {
             const [tag, ...kvs] = field.split(/ *[ ,:] */)
             if (!kvs.length || kvs.length % 2 !== 0) { throw new Error('Enum should be at least 1 field: ' + str(kvs)) }
-            return {tag, keys: twin(kvs).map(kv => kv[0])}
+            return {tag, keys: twin((a,b)=>[a,b], kvs).map(kv => kv[0])}
           })
           return token
         case 'struct':
@@ -243,24 +241,14 @@ function evaluate(src) {
     return nodes
   }
   function generate(defs) {
-    function genStruct(token) {
-      return 'const ' + token.name + ' = (' + token.keys + ') => ({' + token.keys + '})'
-    }
-    function genEnum(token) {
-      return token.enums.map(e => `const ${e.tag} = (...a) => __enum('${e.tag}', ${JSON.stringify(e.keys)}, a)`).join('\n') +
-        '\nconst ' + token.name + ' = {' + token.enums.map(x => x.tag) + '}'
-    }
-    function genFunc(token) {
-      const body = gen(token.body)
-      if (token.args.length > 0) {
-        return '(' + token.args + ') => ' + body
-      } else {
-        return body
-      }
-    }
-    function genCall(argv) {
-      return argv.length ? '(' + argv.map(gen) + ')' : ''
-    }
+    const genStruct = ({name,keys}) => `const ${name} = (${keys}) => ({${keys}})`
+    const genEnum = ({name, enums}) => enums.map(({tag,keys}) => `const ${tag} = (...a) => __enum('${tag}', ${JSON.stringify(keys)}, a)`).join('\n') +
+        '\nconst ' + name + ' = {' + enums.map(x => x.tag) + '}'
+    const genFunc = ({args,body}) => (args.length ? '(' + args + ') => ' : '') + gen(body)
+    const genCall = argv => argv.length ? '(' + argv.map(gen) + ')' : ''
+    const genProp = ({target,name,argv}) => `__prop(${gen(target)}, '${name}', ${argv.map(gen)})`
+    const genLine = t => t.tag === 'id' ? `__e = __eff(${gen(t)}); if (__e.__failed) { return __e }` : gen(t)
+    const genLines = ({lines}) => 'function() {\n' + (l => l.slice(0,-1).concat('return ' + l.slice(-1)[0]).join('\n  '))(lines.map(genLine)) + '\n}'
     function genId(token) {
       if (token.name === 'true' || token.name === 'false' || token.name === '_') {
         return token.name
@@ -270,53 +258,25 @@ function evaluate(src) {
         const l = token.argv.length
         if (l%2!=1) { throw new Error('if arguments have to odd number of arguments: ' + str(token)) }
         const argv = token.argv.map(gen)
-        const exps = []
-        for (let i=1; i<l; i+=2) {
-          exps.push(argv[i-1], '?', argv[i], ':')
-        }
-        exps.push(argv[argv.length-1])
-        return exps.join(' ')
+        return twin((a,b) => `${a} ? ${b} : `, argv).join('') + argv.slice(-1)[0]
       } else if (token.name === 'match') {
         const l = token.argv.length
         if (l%2!=1) { throw new Error('match arguments have to odd number of arguments: ' + str(token)) }
         const argv = token.argv.map(gen)
-        const exps = []
-        for (let i=2; i<l; i+=2) {
-          const cond = argv[i-1]
-          if (cond === '_' || i+1 === l) {
-            exps.push(argv[i])
-            return '(___m => ' + exps.join(' ') + ')(' + argv[0] + ')'
-          } else if (cond.match(/^[a-z_]+$/)) {
-            exps.push(`___m.__type === '${cond}'`, '?', argv[i] , ':')
-          } else {
-            exps.push('__match(___m, ' + cond + ')', '?', argv[i] , ':')
-          }
-        }
-        throw new Error('Gennerate Error for match')
+        const exps = twin((cond,body) =>
+          cond === '_' ? `true ? ${body} : ` :
+          cond.match(/^[a-z_]+$/) ?  `___m.__type === '${cond}' ? ${body} :` :
+          `__match(___m, ${cond}) ? ${body} :`
+        , argv, 2)
+        return `(___m => ${exps.join(' ')} __failure("miss match"))(${argv[0]})`
       } else if (token.name === 'trace') {
         return 'console.log' + genCall(token.argv)
       } else {
         return token.name + genCall(token.argv)
       }
     }
-    function genProp(token) {
-      return `__prop(${gen(token.target)}, '${token.name}', ${token.argv.map(gen)})`
-    }
-    function genLine(token) {
-      let js = gen(token)
-      if (token.tag === 'id') {
-        js = `__e = __eff(${js}); if (__e.__failed) { return __e }`
-      }
-      return js
-    }
-    function genLines(token) {
-      const body = token.lines.map(genLine).map((line, i) => (i===token.lines.length-1) ? 'return ' + line : line).join('\n  ')
-      return '(function () {\n  ' + body + '\n})'
-    }
     function gen(token) {
-      if (token.lines) {
-        return genLines(token)
-      }
+      if (token.lines) { return genLines(token) }
       switch (token.tag) {
         case 'int': return token.val
         case 'string': return '"' + token.val + '"'
