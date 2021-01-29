@@ -8,33 +8,43 @@ const puts = (...a) => console.log(...a)
 const dump = o => console.dir(o, {depth: null})
 const copy = o => JSON.parse(JSON.stringify(o))
 const dig = (d,...args) => args.reduce((o,name) => o[name], d)
+const range = (s,e,n=1) => {
+  if (!e) { e=s; s=0 }
+  const l = []
+  for (let i=s; i<e; i+=n) {
+    l.push(i)
+  }
+  return l
+}
+const twin = (a,n=1) => range(n, a.length, 2).map(i => [a[i-1], a[i]])
 
-// runtime for evaluate
+// runtime helper functions
+const embedded = {
+  number: {string: o => o.toString()},
+  string: {char: (o,n) => o[n]},
+}
+global.__dict = (a,b) => range(a.length).reduce((o,i) => (o[a[i]]=b[i], o), {})
+global.__enum = (tag,keys,vals) => __dict(keys.concat(['__type']), vals.concat([tag]))
 global.__equals = (a,b) => a === b || str(a) === str(b)
 global.__match = (a,b) => __equals(a, b)
+global.__prop = (obj,name,...args) => {
+  const v = obj[name]
+  const t = typeof v
+  if (t === 'undefined') {
+    const ot = typeof obj
+    const o = embedded[ot]
+    if (!o) { throw new Error(`Not found ${ot} in ${embedded}`) }
+    const m = o[name]
+    if (!m) { throw new Error(`Not found ${ot} in ${o}`) }
+    return m(obj, ...args)
+  } else if (t === 'function' && args.lentgh) {
+    return v(...args)
+  } else {
+    return v
+  }
+}
 
 function evaluate(src) {
-  // top: define+
-  // define: id+ '=' body
-  // body:
-  // | ('\n' line)+
-  // | exp
-  // line:
-  // | define
-  // | id eff body
-  // | exp
-  // exp:
-  // | '(' exp ')'
-  // | unit (op2 exp)*
-  // unit:
-  // | id '(' exp+ ')'
-  // | val
-  // val:
-  // | [0-9]+
-  // | '"' [^"]* '"'
-  // id: [a-z][a-z0-9]*
-  // op2: + - * || && > >= < <= == !=
-  // eff: <- :=
   function tokenize() {
     const lines = src.split('\n')
     function Token(tag, code) {
@@ -162,18 +172,15 @@ function evaluate(src) {
           const [ename, ...fields] = token.code.split('\n').map(x => x.trim()).filter(x => x)
           token.name = token.type = ename.replace('|', '')
           token.enums = fields.map(field => {
-            const [id, ...bodies] = field.split(/ *[ ,:] */)
-            if (bodies.length === 1) {
-              return {id, type: bodies[0]}
-            } else {
-              return {id, struct: dict2(bodies)}
-            }
+            const [tag, ...kvs] = field.split(/ *[ ,:] */)
+            if (!kvs.length || kvs.length % 2 !== 0) { throw new Error('Enum should be at least 1 field: ' + str(kvs)) }
+            return {tag, keys: twin(kvs).map(kv => kv[0])}
           })
           return token
         case 'struct':
           const [sname, ...struct] = token.code.split('\n').map(x => x.trim()).filter(x => x)
           token.name = token.type = sname.replace(':', '')
-          token.struct = struct.map(x => x.split(' '))
+          token.keys = struct.map(x => x.split(' ')[0])
           return token
         case 'id': parseCall(token); return token
         case 'la': token.ary = until(t => t.tag !== 'ra'); return token
@@ -211,12 +218,12 @@ function evaluate(src) {
     }
 
     for (const node of nodes) {
-      if (node.tag === 'op2' && (!node.lhs || !node.rhs)) { throw new Error('Invalid ' + str(node)) }
-      if (node.tag === 'prop' && (!node.target || !node.argv)) { throw new Error('Invalid ' + str(node)) }
-      if (node.tag === 'la' && (!node.ary)) { throw new Error('Invalid ' + str(node)) }
-      if (node.tag === 'lp' && (!node.items)) { throw new Error('Invalid ' + str(node)) }
-      if (node.tag === 'ra') { throw new Error('Invalid ' + str({node,tokens})) }
-      if (node.tag === 'rp') { throw new Error('Invalid ' + str({node,tokens})) }
+      if (node.tag === 'op2' && (!node.lhs || !node.rhs)) { throw new Error('Invalid op2 ' + str(node)) }
+      if (node.tag === 'prop' && (!node.target || !node.argv)) { throw new Error('Invalid prop ' + str(node)) }
+      if (node.tag === 'la' && (!node.ary)) { throw new Error('Invalid (' + str(node)) }
+      if (node.tag === 'lp' && (!node.items)) { throw new Error('Invalid )' + str(node)) }
+      if (node.tag === 'ra') { throw new Error('Invalid ( ' + str({node,tokens})) }
+      if (node.tag === 'rp') { throw new Error('Invalid ) ' + str({node,tokens})) }
     }
     const expect = tokens.filter(t => ['func', 'struct', 'enums'].includes(t.tag) && t.indent === 0).map(t => t.name).join(' ')
     const actual = nodes.map(t => t.name).join(' ')
@@ -227,40 +234,28 @@ function evaluate(src) {
     return nodes
   }
   function generate(defs) {
-    const embeddedProps = {
-      'int': {string: 'toString()'},
-    }
-    const embeddedFuncs = {
-      'string': {int: '__stringInt', char: '__stringChar'},
-      'eff': {alt: '__alt', then: '__then'},
-      '[]': {at: '__arrayAt'},
-    }
-    const embeddedIds = {
-      guard: '__guard',
-      trace: 'console.log',
-      warn: 'console.warn',
-    }
-    function genCall(argv) {
-      return argv.length === 0 ? '' : '(' + argv.map(gen).join(',') + ')'
-    }
     function genStruct(token) {
-      const fields = token.struct.map(x => x[0])
-      return 'const ' + token.name + ' = (' + fields + ') => ({' + fields + '})'
+      return 'const ' + token.name + ' = (' + token.keys + ') => ({' + token.keys + '})'
     }
     function genEnum(token) {
-      return token.enums.map(x => 'const ' + x.id + " = __val => ({__val,__type:'" + x.id + "'})").join('\n') +
-        '\nconst ' + token.name + ' = {' + token.enums.map(x => x.id).join(',') + '}'
+      return token.enums.map(e => `const ${e.tag} = (...a) => __enum('${e.tag}', ${JSON.stringify(e.keys)}, a)`).join('\n') +
+        '\nconst ' + token.name + ' = {' + token.enums.map(x => x.tag) + '}'
     }
     function genFunc(token) {
       const body = gen(token.body)
       if (token.args.length > 0) {
-        return '(' + token.args.join(',') + ') => ' + body
+        return '(' + token.args + ') => ' + body
       } else {
         return body
       }
     }
+    function genCall(argv) {
+      return argv.length ? '(' + argv.map(gen) + ')' : ''
+    }
     function genId(token) {
-      if (token.name === 'if') {
+      if (token.name === 'true' || token.name === 'false' || token.name === '_') {
+        return token.name
+      } else if (token.name === 'if') {
         const l = token.argv.length
         if (l%2!=1) { throw new Error('if arguments have to odd number of arguments: ' + str(token)) }
         const argv = token.argv.map(gen)
@@ -279,35 +274,25 @@ function evaluate(src) {
           const cond = argv[i-1]
           if (cond === '_' || i+1 === l) {
             exps.push(argv[i])
-            return '(__target => ' + exps.join(' ') + ')(' + argv[0] + ')'
+            return '(___m => ' + exps.join(' ') + ')(' + argv[0] + ')'
+          } else if (cond.match(/^[a-z_]+$/)) {
+            exps.push(`___m.__type === '${cond}'`, '?', argv[i] , ':')
           } else {
-            exps.push('__match(__target, ' + argv[i-1] + ')', '?', argv[i] , ':')
+            exps.push('__match(___m, ' + cond + ')', '?', argv[i] , ':')
           }
         }
         throw new Error('Gennerate Error for match')
-      } else if (token.name === 'typeof') {
-        return "'" + token.argv[0].type + "'/* typeof " + gen(token.argv[0]) + ' */'
+      } else if (token.name === 'trace') {
+        return 'console.log' + genCall(token.argv)
       } else {
-        return (embeddedIds[token.name] || token.name) + genCall(token.argv)
+        return token.name + genCall(token.argv)
       }
     }
     function genProp(token) {
-      if (!token.target.type) {
-        throw new Error('genProp error: type is undefined ' + str(token))
-      }
-      const type = token.target.type.startsWith('[]') ? '[]' : token.target.type
-      const prop = dig(embeddedProps, type, token.name)
-      if (prop) {
-        return wrapIfNum(gen(token.target)) + '.' + prop + genCall(token.argv)
-      }
-      const func = dig(embeddedFuncs, type, token.name)
-      if (func) {
-        return func + genCall([token.target].concat(token.argv))
-      }
-      return wrapIfNum(gen(token.target)) + '.' + token.name + genCall(token.argv)
+      return `__prop(${gen(token.target)}, '${token.name}', ${token.argv.map(gen)})`
     }
-    function wrapIfNum(s) {
-      return parseInt(s).toString() === s ? '(' + s + ')' : s
+    function wrapIfNumber(s) {
+      return parseInt(s) == s ? `(${s})` : s
     }
     function genArrow(lhs, rhs) {
       if (lhs.name === '_') {
@@ -337,7 +322,7 @@ function evaluate(src) {
         case 'struct': return genStruct(token)
         case 'enums': return genEnum(token)
         case 'id': return genId(token)
-        case 'la': return '[' + token.ary.map(gen).join(',') + ']'
+        case 'la': return '[' + token.ary.map(gen) + ']'
         case 'lp': return '(' + token.items.map(gen).join('') + ')'
         case 'prop': return genProp(token)
         case 'op2':
@@ -345,9 +330,7 @@ function evaluate(src) {
             case '=': return 'const ' + gen(token.lhs) + token.op + gen(token.rhs)
             case ':=': return 'let ' + gen(token.lhs) + ' = ' + gen(token.rhs)
             case '<-': const name = gen(token.lhs); return 'const ' + name + ' = ' + gen(token.rhs) + '(); if(' + name + '.__failed) { return ' + name + ' }'
-            case '=>': return '((' + token.args.join(',') + ') => ' + gen(token.rhs) + ')'
-            case '++': return gen(token.lhs) + '.concat(' + gen(token.rhs) + ')'
-            case '->': return genArrow(token.lhs, token.rhs)
+            case '=>': return '((' + token.args + ') => ' + gen(token.rhs) + ')'
             default: return gen(token.lhs) + token.op + gen(token.rhs)
           }
         default: throw new Error('gen ' + str(token))
@@ -357,13 +340,19 @@ function evaluate(src) {
   }
 
   const ret = {value: undefined, stdout: '', stderr: '', error: undefined, js: '', defs: []}
+  const originalConsoleLog = console.log
+  const stdout = []
   try {
     const tokens = tokenize()
     ret.defs = parse(tokens)
     ret.js = generate(ret.defs) + '\nreturn typeof(main) === "function" ? main() : main'
+    console.log = s => stdout.push(s)
     ret.value = Function(ret.js)()
   } catch (e) {
     ret.error = e
+  } finally {
+    console.log = originalConsoleLog
+    ret.stdout = stdout.join('\n')
   }
   return ret
 }
@@ -411,8 +400,8 @@ function runTest() {
 
   // type
   eq({a: 1, b: true}, 'ab(1 true)', 'ab:\n  a int\n  b bool')
-  eq({ __val: 1, __type: 'a'}, 'a(1)', 'ab|\n  a int\n  b []int')
-  eq({ __val: [1], __type: 'b'}, 'b([1])', 'ab|\n  a int\n  b []int')
+  eq({x: 1, __type: 'a'}, 'a(1)', 'adt|\n  a: x int\n  b: y []int')
+  eq({y: [1], __type: 'b'}, 'b([1])', 'adt|\n  a: x int\n  b: y []int')
 
   // control flow
   eq(1, 'if(true 1 2)')
@@ -424,12 +413,9 @@ function runTest() {
   eq(99, 'match(3 1 10 2 20 _ 99)')
   eq(99, 'match(3 1 10 2 20 _ 99 _ 999)')
   eq(10, 'match(1 1 10 2 not_found)') // check lazy evaluation
+  eq(1, 'f(a(1))', 'f v = match(v a v.x b v.y)', 'adt|\n  a: x int\n  b: y []int')
+  eq([1], 'f(b([1]))', 'f v = match(v a v.x b v.y)', 'adt|\n  a: x int\n  b: y []int')
 
-//  // control flow
-//  eq(1, 'match(a -> b\n  _ -> c)', 'a = true', 'b = 1', 'c = 2')
-//  eq(2, 'match(a -> b\n  _ -> c)', 'a = false', 'b = 1', 'c = 2')
-//  eq(2, 'match(a -> b\n  c -> d\n  _ -> e)', 'a = false', 'b = 1', 'c = true', 'd = 2', 'e = 3')
-//
 //  // pattern match for enum
 //  eq(3, 'f(a(1)) + f(a(2))', 'ab|\n  a int\n  b bool', 'f v = match(v:a->v v:b->v)')
 //  eq(true, 'f(b(true))', 'ab|\n  a int\n  b bool', 'f v = match(v:a->v v:b->v)')
@@ -444,13 +430,13 @@ function runTest() {
 //  eq(0, '"a".int.then((x) => x + 2).alt(0)')
 //
 //
-//  // embedded
-//  stdout('1', 'trace(1)')
-//  stdout('hi', 'trace("hi")')
-//
-//  // embedded string
-//  eq('1', '1.string')
-//  eq('i', '"hi".char(1)')
+  // embedded
+  stdout('1', 'trace(1)')
+  stdout('hi', 'trace("hi")')
+
+  // embedded string
+  eq('1', '1.string')
+  //eq('i', '"hi".char(1)')
 //  fail('out of index', '"hi".char(2)')
 //
 //  // embedded array
