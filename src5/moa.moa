@@ -1,0 +1,35 @@
+ast|
+  aint int
+
+kind|
+  kint
+  kstr
+
+token:
+  tag kind
+  src string
+
+parse src =
+#  tokenize =
+#    pos := 0
+#    many1 f = many_acc(f [""])
+#    many_acc f acc = f.then(v -> many_acc(f (acc++[v]))).alt(acc)
+#    satisfy f =
+#      c <- src.char(pos)
+#      guard(f(c))
+#      pos += 1
+#      c
+#    tint =
+#      s <- many1(satisfy(c => ("0" <= c) && ("z" <= c)))
+#      token(kstr s)
+#    tint
+  n <- src.int
+  aint(n)
+
+build_js a = match(a:aint -> a)
+
+main =
+  src <- io.reads
+  node <- parse(src)
+  js = build_js(node)
+  io.write(js)
