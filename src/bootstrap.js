@@ -90,7 +90,8 @@ function evaluate(src) {
       let line = 1
       let column = 1
       return {
-        mention: t => `\n${line}: ${lines[line-1]}\n${' '.repeat(line.toString().length + column)} ^ ${t}`,
+        mention: t => `\n${line}: ${lines[line-1]}\n` +
+          ' '.repeat(line.toString().length + column) + ' ^' + t,
         forward: s =>  {
           const l = s.split('\n')
           if (l.length === 1) {
