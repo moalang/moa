@@ -2,9 +2,10 @@
 //const moa = require('fs').readFileSync('moa.moa', 'utf8')
 
 // utils
+const originalConsoleLog = console.log
 const str = obj => JSON.stringify(obj, null, 2)
 const put = s => process.stdout.write(s)
-const puts = (...a) => console.log(...a)
+const puts = (...a) => originalConsoleLog(...a)
 const dump = o => console.dir(o, {depth: null})
 const copy = o => JSON.parse(JSON.stringify(o))
 const dig = (d,...args) => args.reduce((o,name) => o[name], d)
@@ -19,29 +20,39 @@ const range = (s,e,n=1) => {
 const twin = (a,n=1) => range(n, a.length, 2).map(i => [a[i-1], a[i]])
 
 // runtime helper functions
+function Failure(message) {
+  this.message = message
+}
+Failure.prototype.__failed = true
+global.__failure = message => new Failure(message)
+global.__eff = o => typeof o === 'function' ? o() : o
+const guessType = o => typeof o === 'object' ? o.constructor.name : typeof o
+const ooo = new Failure('out of index')
 const embedded = {
   number: {string: o => o.toString()},
-  string: {char: (o,n) => o[n]},
+  string: {char: (o,n) => o[n] || ooo, count: o => o.length, int: s => parseInt(s) == s ? parseInt(s) : new Failure('string.int: not a number ' + s)},
+  Array: {at: (a,n) => n < a.length && 0 <= n ? a[n] : ooo},
+  Failure: {alt: (_,v) => v, then: (e,_) => e},
 }
+embedded.number.alt = embedded.string.alt = (v,_) => v
+embedded.number.then = embedded.string.then = (v,f) => f(v)
 global.__dict = (a,b) => range(a.length).reduce((o,i) => (o[a[i]]=b[i], o), {})
 global.__enum = (tag,keys,vals) => __dict(keys.concat(['__type']), vals.concat([tag]))
 global.__equals = (a,b) => a === b || str(a) === str(b)
 global.__match = (a,b) => __equals(a, b)
 global.__prop = (obj,name,...args) => {
-  const v = obj[name]
-  const t = typeof v
-  if (t === 'undefined') {
-    const ot = typeof obj
-    const o = embedded[ot]
-    if (!o) { throw new Error(`Not found ${ot} in ${embedded}`) }
-    const m = o[name]
-    if (!m) { throw new Error(`Not found ${ot} in ${o}`) }
-    return m(obj, ...args)
-  } else if (t === 'function' && args.lentgh) {
-    return v(...args)
-  } else {
-    return v
+  if (obj[name]) {
+    const v = obj[name]
+    const t = guessType(v)
+    return t === 'function' ? (args.length ? v.call(obj, ...args) : v.bind(obj)) : v
   }
+
+  const type = guessType(obj)
+  const map = embedded[type]
+  if (!map) { throw new Error(`Not found ${type} in ${str(embedded)}`) }
+  const method = map[name]
+  if (!method) { throw new Error(`Not found ${method} in ${str(map)}`) }
+  return method(obj, ...args)
 }
 
 function evaluate(src) {
@@ -78,7 +89,7 @@ function evaluate(src) {
       reg(p, 'int', /^[0-9]+/) ||
       reg(p, 'id', /^[a-z_][a-z0-9_]*/) ||
       reg(p, 'string', /^"(?:(?:\\")|[^"])*"/) ||
-      reg(p, 'prop', /^\.[a-z_][a-z0-9_]*\(?/) ||
+      reg(p, 'prop', /^\.[a-z_][a-z0-9_]*/) ||
       reg(p, 'spaces', /^[ \n]+/) ||
       reg(p, 'comment', /^ *#.*/) ||
       some(p, 'la', '[') ||
@@ -102,7 +113,7 @@ function evaluate(src) {
           if (indent % 2 != 0) { throw new Error('invalid indent=' + indent + ' at ' + token.line) }
         }
       }
-      if (token.code === '(' && prev.tag === 'id') {
+      if (token.code === '(' && (prev.tag === 'id' || prev.tag === 'prop')) {
         prev.calling = true
       }
       token.indent = indent
@@ -132,7 +143,7 @@ function evaluate(src) {
     function parseAssert(f, g, expect) {
       const r = f()
       if (!g(r)) {
-        throw new Error(`Except ${expect} but ${str(r)}`)
+        throw new Error(`Expect ${expect} but ${str(r)}`)
       }
       return r
     }
@@ -222,13 +233,13 @@ function evaluate(src) {
       if (node.tag === 'prop' && (!node.target || !node.argv)) { throw new Error('Invalid prop ' + str(node)) }
       if (node.tag === 'la' && (!node.ary)) { throw new Error('Invalid (' + str(node)) }
       if (node.tag === 'lp' && (!node.items)) { throw new Error('Invalid )' + str(node)) }
-      if (node.tag === 'ra') { throw new Error('Invalid ( ' + str({node,tokens})) }
-      if (node.tag === 'rp') { throw new Error('Invalid ) ' + str({node,tokens})) }
+      if (node.tag === 'ra') { throw new Error('Invalid ( ' + str({node,nodes})) }
+      if (node.tag === 'rp') { throw new Error('Invalid ) ' + str({node,nodes})) }
     }
     const expect = tokens.filter(t => ['func', 'struct', 'enums'].includes(t.tag) && t.indent === 0).map(t => t.name).join(' ')
     const actual = nodes.map(t => t.name).join(' ')
     if (expect !== actual) {
-      throw new Error('Lack of information after parsing: ' + str({expect,actual,tokens}))
+      throw new Error('Lack of information after parsing: ' + str({expect,actual,nodes}))
     }
 
     return nodes
@@ -255,6 +266,8 @@ function evaluate(src) {
     function genId(token) {
       if (token.name === 'true' || token.name === 'false' || token.name === '_') {
         return token.name
+      } else if (token.name === 'guard') {
+        return token.argv.map(gen).join(' && ') + ' ? ({}) : __failure("guard")'
       } else if (token.name === 'if') {
         const l = token.argv.length
         if (l%2!=1) { throw new Error('if arguments have to odd number of arguments: ' + str(token)) }
@@ -302,8 +315,8 @@ function evaluate(src) {
     }
     function genLine(token) {
       let js = gen(token)
-      if (token.type === 'eff' && token.tag === 'id') {
-        js = '__e = ' + js + '(); if (__e.__failed) { return __e }'
+      if (token.tag === 'id') {
+        js = `__e = __eff(${js}); if (__e.__failed) { return __e }`
       }
       return js
     }
@@ -340,7 +353,6 @@ function evaluate(src) {
   }
 
   const ret = {value: undefined, stdout: '', stderr: '', error: undefined, js: '', defs: []}
-  const originalConsoleLog = console.log
   const stdout = []
   try {
     const tokens = tokenize()
@@ -364,7 +376,7 @@ function runTest() {
     return equals(r => r.stdout, ...args)
   }
   function fail(...args) {
-    return equals(r => r.error, ...args)
+    return equals(r => r.value && r.value.message, ...args)
   }
   function equals(unwrap, expect, main, ...funcs) {
     const src = funcs.map(x => x + '\n').join('') + 'main = ' + main
@@ -416,53 +428,34 @@ function runTest() {
   eq(1, 'f(a(1))', 'f v = match(v a v.x b v.y)', 'adt|\n  a: x int\n  b: y []int')
   eq([1], 'f(b([1]))', 'f v = match(v a v.x b v.y)', 'adt|\n  a: x int\n  b: y []int')
 
-//  // pattern match for enum
-//  eq(3, 'f(a(1)) + f(a(2))', 'ab|\n  a int\n  b bool', 'f v = match(v:a->v v:b->v)')
-//  eq(true, 'f(b(true))', 'ab|\n  a int\n  b bool', 'f v = match(v:a->v v:b->v)')
-//
-//  // effect
-//  eq(3, '\n  count := 0\n  count += 1\n  count += 2\n  count')
-//  eq(2, 'f', 'f =\n  n := 0\n  g =\n    n += 1\n    n\n  g\n  g')
-//  fail('string.int: not a number hi', '"hi".int')
-//  eq(0, '"a".int.alt(0)')
-//  eq(1, '"1".int.alt(0)')
-//  eq(3, '"1".int.then((x) => x + 2)')
-//  eq(0, '"a".int.then((x) => x + 2).alt(0)')
-//
-//
+  // effect
+  eq(3, '\n  count := 0\n  count += 1\n  count += 2\n  count')
+  eq(2, 'f', 'f =\n  n := 0\n  g =\n    n += 1\n    n\n  g\n  g')
+  fail('string.int: not a number hi', '"hi".int')
+  eq(0, '"a".int.alt(0)')
+  eq(1, '"1".int.alt(0)')
+  eq(3, '"1".int.then((x) => x + 2)')
+  eq(0, '"a".int.then((x) => x + 2).alt(0)')
+
   // embedded
   stdout('1', 'trace(1)')
   stdout('hi', 'trace("hi")')
 
   // embedded string
   eq('1', '1.string')
-  //eq('i', '"hi".char(1)')
-//  fail('out of index', '"hi".char(2)')
-//
-//  // embedded array
-//  eq(1, '[1]int.at(0)')
-//  fail('out of index', '[1]int.at(1)')
-//  fail('out of index', '[1]int.at(0-1)')
-//  eq([2, 3, 4], '[1 2 3]int.map(x => x + 1)')
-//
-//  // embedded effect
-//  eq(1, '\n  guard(true)\n  1')
-//  fail('guard', '\n  guard(false)\n  1')
-//
-//  // embedded typeof
-//  eq('int', 'typeof(1)')
-//  eq('string', 'typeof("hi")')
-//  eq('int', 'typeof(f)', 'f = 1')
-//  eq('func', 'typeof(f)', 'f a = a')
-//  eq('int', 'typeof(g)', 'f = 1', 'g = f')
-//  eq('func', 'typeof(g)', 'f a = 1', 'g = f')
-//  eq('int', 'typeof(match(true -> 1))')
-//  eq('int', 'typeof(match(f:a -> f))', 'ab|\n  a  int\n  b  bool', 'f = a(1)')
-//  eq('bool', 'typeof(match(f:a -> f))', 'ab|\n  a  int\n  b  bool', 'f = b(true)')
-//  eq('string', 'typeof(match(f:a -> "a"))', 'ab|\n  a  int\n  b  bool', 'f = b(true)')
-//  eq('eff', 'typeof(f)', 'f = trace(1)')
-//  eq('eff', 'typeof(f)', 'f =\n  n:=0\n  n')
-//  eq('int', 'f', 'f =\n  n:=0\n  typeof(n)')
+  eq(2, '"hi".count')
+  eq('i', '"hi".char(1)')
+  fail('out of index', '"hi".char(2)')
+
+  // embedded array
+  eq(1, '[1].at(0)')
+  fail('out of index', '[1].at(1)')
+  fail('out of index', '[1].at(0-1)')
+  eq([2, 3, 4], '[1 2 3].map(x => x + 1)')
+
+  // embedded effect
+  eq(1, '\n  guard(true)\n  1')
+  fail('guard', '\n  guard(false)\n  1')
 
   // spiteful tests
   eq(1, ' 1 ')
