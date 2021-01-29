@@ -25,22 +25,33 @@ Failure.prototype.__failed = true
 global.__failure = message => new Failure(message)
 global.__eff = o => typeof o === 'function' ? o() : o
 const guessType = o => typeof o === 'object' ? o.constructor.name : typeof o
-const ooo = new Failure('out of index')
+const ooo = __failure('out of index')
 const embedded = {
-  number: {string: o => o.toString()},
-  string: {char: (o,n) => o[n] || ooo, count: o => o.length, int: s => parseInt(s) == s ? parseInt(s) : new Failure('string.int: not a number ' + s)},
-  Array: {at: (a,n) => n < a.length && 0 <= n ? a[n] : ooo},
-  Failure: {alt: (_,v) => v, then: (e,_) => e},
+  number: {
+    string: o => o.toString()
+  },
+  string: {
+    char: (o,n) => o[n] || ooo,
+    count: o => o.length,
+    int: s => parseInt(s) == s ? parseInt(s) : __failure('string.int: not a number ' + s),
+  },
+  Array: {
+    at: (a,n) => n < a.length && 0 <= n ? a[n] : ooo,
+  },
+  Failure: {
+    then: (e,_) => e,
+    alt: (_,v) => v,
+  },
 }
-embedded.number.alt = embedded.string.alt = (v,_) => v
 embedded.number.then = embedded.string.then = (v,f) => f(v)
+embedded.number.alt = embedded.string.alt = (v,_) => v
 global.__dict = (a,b) => range(a.length).reduce((o,i) => (o[a[i]]=b[i], o), {})
 global.__enum = (tag,keys,vals) => __dict(keys.concat(['__type']), vals.concat([tag]))
 global.__equals = (a,b) => a === b || str(a) === str(b)
 global.__match = (a,b) => __equals(a, b)
 global.__prop = (obj,name,...args) => {
-  if (obj[name]) {
-    const v = obj[name]
+  const v = obj[name]
+  if (v || v === false) {
     const t = guessType(v)
     return t === 'function' ? (args.length ? v.call(obj, ...args) : v.bind(obj)) : v
   }
@@ -55,29 +66,7 @@ global.__prop = (obj,name,...args) => {
 
 function evaluate(src) {
   function tokenize() {
-    const lines = src.split('\n')
-    function Token(tag, code) {
-      this.tag = tag
-      this.code = code
-    }
-    function Liner() {
-      this.line = 1
-      this.column = 1
-    }
-    Liner.prototype.mention = function(text) {
-      return '\n' + this.line + ': ' + lines[this.line-1] +
-        '\n' + ' '.repeat(this.line.toString().length + this.column + 1) + '^ ' + text
-    }
-    Liner.prototype.forward = function(fragment) {
-      const tokenLines = fragment.split('\n')
-      if (tokenLines.length === 1) {
-        this.column += fragment.length
-      } else {
-        this.line += tokenLines.length - 1
-        this.column = tokenLines[tokenLines.length-1].length + 1
-      }
-    }
-    const consume = (tag,m) => m ? new Token(tag, typeof(m) === 'string' ? m : m[0]) : null
+    const consume = (tag,m) => m ? ({tag, code: typeof(m) === 'string' ? m : m[0]}) : null
     const reg = (p,tag,r) => consume(tag, src.slice(p).match(r))
     const some = (p,tag,s) => consume(tag, s.split(' ').find(w => src.slice(p).startsWith(w)))
     const eat = p =>
@@ -96,7 +85,24 @@ function evaluate(src) {
       some(p, 'rp', ')') ||
       some(p, 'op2', '+= -= *= /= || && == != >= <= ++ => := <- > < + - * /')
 
-    const liner = new Liner()
+    function newLiner() {
+      const lines = src.split('\n')
+      let line = 1
+      let column = 1
+      return {
+        mention: t => `\n${line}: ${lines[line-1]}\n${' '.repeat(line.toString().length + column)} ^ ${t}`,
+        forward: s =>  {
+          const l = s.split('\n')
+          if (l.length === 1) {
+            column += s.length
+          } else {
+            line += l.length - 1
+            column = l[l.length-1].length + 1
+          }
+        }
+      }
+    }
+    const liner = newLiner()
     let indent = 0
     let pos = 0
     let tokens=[]
