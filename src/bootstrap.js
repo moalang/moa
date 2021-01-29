@@ -128,16 +128,8 @@ function evaluate(src) {
 
   function parse(tokens) {
     const nodes = []
-    const eot = {tag: 'EOT', code: ''}
     let pos = 0
-    function until(f) {
-      const ary = []
-      let t
-      while (pos < tokens.length && f(t = parseTop())) {
-        ary.push(t)
-      }
-      return ary
-    }
+    const parseTop = () => parseLeft(parseUnit())
     function parseAssert(f, g, expect) {
       const r = f()
       if (!g(r)) { throw new Error(`Expect ${expect} but ${str(r)}`) }
@@ -146,9 +138,6 @@ function evaluate(src) {
     function parseCall(token) {
       token.name = escape(token.code.replace('(', '')).replace('.', '')
       token.argv = token.calling ? parseAssert(parseUnit, t => t.code === '(', '(').items : []
-    }
-    function parseTop() {
-      return parseLeft(parseUnit())
     }
     function parseIndent(t1, t2) {
       if (t1.indent < t2.indent) {
@@ -217,6 +206,15 @@ function evaluate(src) {
         return token
       }
     }
+    function until(f) {
+      const ary = []
+      let t
+      while (pos < tokens.length && f(t = parseTop())) {
+        ary.push(t)
+      }
+      return ary
+    }
+
     let next
     while (pos < tokens.length) {
       let node = parseTop()
@@ -242,13 +240,17 @@ function evaluate(src) {
   }
   function generate(defs) {
     const genStruct = ({name,keys}) => `const ${name} = (${keys}) => ({${keys}})`
-    const genEnum = ({name, enums}) => enums.map(({tag,keys}) => `const ${tag} = (...a) => __enum('${tag}', ${JSON.stringify(keys)}, a)`).join('\n') +
-        '\nconst ' + name + ' = {' + enums.map(x => x.tag) + '}'
+    const genEnumLine = ({tag,keys}) => `const ${tag} = (...a) => __enum('${tag}', ${JSON.stringify(keys)}, a)`
+    const genEnum = ({name, enums}) => `${enums.map(genEnumLine).join('\n')}\nconst ${name} = {${enums.map(x => x.tag)}}`
     const genFunc = ({args,body}) => (args.length ? '(' + args + ') => ' : '') + gen(body)
     const genCall = argv => argv.length ? '(' + argv.map(gen) + ')' : ''
     const genProp = ({target,name,argv}) => `__prop(${gen(target)}, '${name}', ${argv.map(gen)})`
     const genLine = t => t.tag === 'id' ? `__e = __eff(${gen(t)}); if (__e.__failed) { return __e }` : gen(t)
     const genLines = ({lines}) => 'function() {\n' + (l => l.slice(0,-1).concat('return ' + l.slice(-1)[0]).join('\n  '))(lines.map(genLine)) + '\n}'
+    const genMatch = (cond,body) =>
+          cond === '_' ? `true ? ${body} : ` :
+          cond.match(/^[a-z_]+$/) ?  `___m.__type === '${cond}' ? ${body} :` :
+          `__match(___m, ${cond}) ? ${body} :`
     function genId(token) {
       if (token.name === 'true' || token.name === 'false' || token.name === '_') {
         return token.name
@@ -260,14 +262,9 @@ function evaluate(src) {
         const argv = token.argv.map(gen)
         return twin((a,b) => `${a} ? ${b} : `, argv).join('') + argv.slice(-1)[0]
       } else if (token.name === 'match') {
-        const l = token.argv.length
-        if (l%2!=1) { throw new Error('match arguments have to odd number of arguments: ' + str(token)) }
+        if (token.argv.length % 2 !== 1) { throw new Error('match arguments have to odd number of arguments: ' + str(token)) }
         const argv = token.argv.map(gen)
-        const exps = twin((cond,body) =>
-          cond === '_' ? `true ? ${body} : ` :
-          cond.match(/^[a-z_]+$/) ?  `___m.__type === '${cond}' ? ${body} :` :
-          `__match(___m, ${cond}) ? ${body} :`
-        , argv, 2)
+        const exps = twin(genMatch, argv, 2)
         return `(___m => ${exps.join(' ')} __failure("miss match"))(${argv[0]})`
       } else if (token.name === 'trace') {
         return 'console.log' + genCall(token.argv)
@@ -293,6 +290,7 @@ function evaluate(src) {
             case ':=': return 'let ' + gen(token.lhs) + ' = ' + gen(token.rhs)
             case '<-': const name = gen(token.lhs); return 'const ' + name + ' = ' + gen(token.rhs) + '(); if(' + name + '.__failed) { return ' + name + ' }'
             case '=>': return '((' + token.args + ') => ' + gen(token.rhs) + ')'
+            case '==': return `__equals(${gen(token.lhs)}, ${gen(token.rhs)})`
             default: return gen(token.lhs) + token.op + gen(token.rhs)
           }
         default: throw new Error('gen ' + str(token))
@@ -301,7 +299,7 @@ function evaluate(src) {
     return defs.map(gen).join("\n")
   }
 
-  const ret = {value: undefined, stdout: '', stderr: '', error: undefined, js: '', defs: []}
+  const ret = {}
   const stdout = []
   try {
     const tokens = tokenize()
@@ -342,19 +340,22 @@ function runTest() {
   eq(true, 'true')
   eq('a', '"a"')
   eq([], '[]')
-  eq([1, 2, 3], '[1 2 3]')
+  eq([1, 2], '[1 2]')
 
   // expression
   eq(3, '1+2')
   eq(7, '1 + 2 * 3')
   eq(9, '(1 + 2) * 3')
   eq(5, '1 * (2 + 3)')
+  eq(true, '1 < 2')
 
   // function
   eq(3, 'add(1 2)', 'add a b = a + b')
 
   // type
   eq({a: 1, b: true}, 'ab(1 true)', 'ab:\n  a int\n  b bool')
+  eq(true, 'ab(1 true) == ab(1 true)', 'ab:\n  a int\n  b bool')
+  eq(false, 'ab(1 true) == ab(2 true)', 'ab:\n  a int\n  b bool')
   eq({x: 1, __type: 'a'}, 'a(1)', 'adt|\n  a: x int\n  b: y []int')
   eq({y: [1], __type: 'b'}, 'b([1])', 'adt|\n  a: x int\n  b: y []int')
 
