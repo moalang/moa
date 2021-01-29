@@ -20,9 +20,7 @@ const range = (s,e,n=1) => {
 const twin = (a,n=1) => range(n, a.length, 2).map(i => [a[i-1], a[i]])
 
 // runtime helper functions
-function Failure(message) {
-  this.message = message
-}
+function Failure(message) { this.message = message }
 Failure.prototype.__failed = true
 global.__failure = message => new Failure(message)
 global.__eff = o => typeof o === 'function' ? o() : o
@@ -304,15 +302,6 @@ function evaluate(src) {
     function genProp(token) {
       return `__prop(${gen(token.target)}, '${token.name}', ${token.argv.map(gen)})`
     }
-    function wrapIfNumber(s) {
-      return parseInt(s) == s ? `(${s})` : s
-    }
-    function genArrow(lhs, rhs) {
-      if (lhs.name === '_') {
-        return '() => ' + gen(rhs)
-      }
-      return '() => (' + gen(lhs) + ') ? ' + gen(rhs) + ' : undefined'
-    }
     function genLine(token) {
       let js = gen(token)
       if (token.tag === 'id') {
@@ -369,15 +358,6 @@ function evaluate(src) {
   return ret
 }
 function runTest() {
-  function eq(...args) {
-    return equals(r => r.value, ...args)
-  }
-  function stdout(...args) {
-    return equals(r => r.stdout, ...args)
-  }
-  function fail(...args) {
-    return equals(r => r.value && r.value.message, ...args)
-  }
   function equals(unwrap, expect, main, ...funcs) {
     const src = funcs.map(x => x + '\n').join('') + 'main = ' + main
     const result = evaluate(src)
@@ -393,6 +373,9 @@ function runTest() {
       process.exit(1)
     }
   }
+  const eq = (...args) => equals(r => r.value, ...args)
+  const stdout = (...args) => equals(r => r.stdout, ...args)
+  const fail = (...args) => equals(r => r.value && r.value.message, ...args)
 
   // basic values
   eq(1, '1')
