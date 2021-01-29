@@ -397,7 +397,7 @@ function infer(defs, src, tokens) {
           case '=':
           case ':=':
           case '<-': token.lhs.type = inferType(token.rhs); return 'eff'
-          case '+=': should(token.lhs, 'int'); inferType(token.rhs); return should(token.rhs, 'int')
+          case '+=': setType(token.lhs, 'int'); inferType(token.rhs); return setType(token.rhs, 'int')
           case '=>': return 'func'
           case '->': return inferPatternMatch(token.lhs, token.rhs)
           default:
@@ -416,7 +416,7 @@ function infer(defs, src, tokens) {
       const type = func.type
       if (!type) { throw new Error('Not infered yet ' + str({func,token})) }
       if (type === 'func' && token.argv.length) {
-        const giveArgs = token.argv.map(t => t.type)
+        const giveArgs = token.argv
         let defArgs = func.argv.concat(func.body.op === '=>' ? func.body.lhs.items.map(t => t.name) : [])
         if (giveArgs.length !== defArgs.length) {
           throw new Error('Arguments does not match ' + str({token}))
@@ -437,14 +437,14 @@ function infer(defs, src, tokens) {
     if(type.startsWith('[]')) {
       const etype = type.slice(2)
       const ptype = arrayType(etype)[name]
-      should(token, ptype)
+      setType(token, ptype)
       return ptype
     } else {
       const prop = scope[type].struct
       if (!prop) { throw new Error('Object not found ' + str({type,name,token})) }
       const ptype = prop[name]
       if (!ptype) { throw new Error('Property not found ' + str({type,name,token})) }
-      should(token, ptype)
+      setType(token, ptype)
       return ptype
     }
   }
@@ -464,10 +464,10 @@ function infer(defs, src, tokens) {
       const [token, ...rest] = lines
       if ([':=', '<-'].includes(token.op)) {
         token.lhs.type = inferType(token)
-        return local(token.lhs.name, token.rhs.type, () => inferLines(rest))
+        return local(token.lhs.name, token.rhs, () => inferLines(rest))
       } else if (token.tag === 'func') {
         token.type = inferType(token.body)
-        return local(token.name, token.type, () => inferLines(rest))
+        return local(token.name, token, () => inferLines(rest))
       } else {
         inferType(token)
         return inferLines(rest)
@@ -476,7 +476,9 @@ function infer(defs, src, tokens) {
   }
   function inferPatternMatch(lhs, rhs) {
     if (lhs.argv.length) {
-      return local(lhs.argv[0].name, lhs.name, () => inferType(rhs))
+      puts(lhs)
+      lhs.type = lhs.name
+      return local(lhs.argv[0].name, lhs, () => inferType(rhs))
     } else {
       return inferType(rhs)
     }
@@ -496,7 +498,7 @@ function infer(defs, src, tokens) {
       if (key in scope) {
         backup[key] = scope[key]
       }
-      scope[key] = {type: vals[i]}
+      scope[key] = vals[i]
     }
     const ret = f()
     for (const k in Object.keys(backup)) {
@@ -508,7 +510,7 @@ function infer(defs, src, tokens) {
     }
     return ret
   }
-  function should(token, type) {
+  function setType(token, type) {
     if (token.type && token.type !== type) {
       throw new Error('unexpected ' + type + ' != ' + str(token))
     }
@@ -650,6 +652,8 @@ function unitTests() {
   eq('2', '(a + 1).string', 'a = 1')
   eq('4c', '(a + b + 1).string ++ c', 'a = 1', 'b = 2', 'c = "c"')
   eq('[]int', 'typeof([]int)')
+  //eq('int', '\n  f g = g(1)\n  r = f(x => x)\n  typeof(r)')
+
 
   // embedded
   stdout('1', 'trace(1)')
