@@ -75,7 +75,7 @@ function evaluate(src) {
       some(p, 'rp', ')') ||
       some(p, 'op2', '+= -= *= /= || && == != >= <= ++ => := <- > < + - * /')
 
-    function newLiner() {
+    const liner = (function() {
       const lines = src.split('\n')
       let line = 1
       let column = 1
@@ -92,8 +92,7 @@ function evaluate(src) {
           }
         }
       }
-    }
-    const liner = newLiner()
+    })()
     let indent = 0
     let pos = 0
     let tokens=[]
@@ -117,7 +116,6 @@ function evaluate(src) {
       tokens.push(token)
       prev = token
     }
-
     const dst = tokens.map(t => t.code).join('')
     if (src !== dst) throw new Error('tokenize assertion: src=' + str({src,dst}))
     return tokens.filter(t => t.tag !== 'spaces' && t.tag !== 'comment')
@@ -212,13 +210,11 @@ function evaluate(src) {
       return ary
     }
 
-    let next
     while (pos < tokens.length) {
       let node = parseTop()
       if (!node) { throw new Error('failed to parse at=' + pos + ' tokens=' + str(tokens)) }
       nodes.push(node)
     }
-
     for (const node of nodes) {
       if (node.tag === 'op2' && (!node.lhs || !node.rhs)) { throw new Error('Invalid op2 ' + str(node)) }
       if (node.tag === 'prop' && (!node.target || !node.argv)) { throw new Error('Invalid prop ' + str(node)) }
@@ -232,7 +228,6 @@ function evaluate(src) {
     if (expect !== actual) {
       throw new Error('Lack of information after parsing: ' + str({expect,actual,nodes}))
     }
-
     return nodes
   }
   function generate(defs) {
