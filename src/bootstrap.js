@@ -24,8 +24,6 @@ function Failure(message) { this.message = message }
 Failure.prototype.__failed = true
 Failure.prototype.then = function() { return this }
 Failure.prototype.alt = v => v
-const guessType = o => typeof o === 'object' ? o.constructor.name : typeof o
-const ooo = new Failure('out of index')
 function extend(obj, d) {
   for (const key of Object.keys(d)) {
     const f = d[key]
@@ -38,6 +36,7 @@ function extend(obj, d) {
   obj.prototype.then = function(f) { return f(this) }
   obj.prototype.alt = function() { return this }
 }
+const ooo = new Failure('out of index')
 extend(Number, {
   string: n => n.toString(),
 })
@@ -51,10 +50,7 @@ extend(Array, {
 })
 global.__failure = message => new Failure(message)
 global.__eff = o => typeof o === 'function' ? o() : o
-global.__dict = (a,b) => range(a.length).reduce((o,i) => (o[a[i]]=b[i], o), {})
-global.__enum = (tag,keys,vals) => __dict(keys.concat(['__type']), vals.concat([tag]))
 global.__equals = (a,b) => a === b || str(a) === str(b)
-global.__match = (a,b) => __equals(a, b)
 
 function evaluate(src) {
   function tokenize() {
@@ -239,7 +235,7 @@ function evaluate(src) {
   }
   function generate(defs) {
     const genStruct = ({name,keys}) => `const ${name} = (${keys}) => ({${keys}})`
-    const genEnumLine = ({tag,keys}) => `const ${tag} = (...a) => __enum('${tag}', ${JSON.stringify(keys)}, a)`
+    const genEnumLine = ({tag,keys}) => `const ${tag} = (${keys}) => ({${keys},__type: '${tag}'})`
     const genEnum = ({name, enums}) => `${enums.map(genEnumLine).join('\n')}\nconst ${name} = {${enums.map(x => x.tag)}}`
     const genFunc = ({args,body}) => (args.length ? '(' + args + ') => ' : '') + gen(body)
     const genCall = argv => argv.length ? '(' + argv.map(gen) + ')' : ''
@@ -250,7 +246,7 @@ function evaluate(src) {
     const genMatch = (cond,body) =>
           cond === '_' ? `true ? ${body} : ` :
           cond.match(/^[a-z_]+$/) ?  `___m.__type === '${cond}' ? ${body} :` :
-          `__match(___m, ${cond}) ? ${body} :`
+          `__equals(___m, ${cond}) ? ${body} :`
     function genId(token) {
       if (token.name === 'true' || token.name === 'false' || token.name === '_') {
         return token.name
