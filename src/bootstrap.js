@@ -22,47 +22,39 @@ const twin = (f,a,n=1) => range(n, a.length, 2).map(i => f(a[i-1], a[i]))
 // runtime helper functions
 function Failure(message) { this.message = message }
 Failure.prototype.__failed = true
+Failure.prototype.then = function() { return this }
+Failure.prototype.alt = v => v
+const guessType = o => typeof o === 'object' ? o.constructor.name : typeof o
+const ooo = new Failure('out of index')
+function extend(obj, d) {
+  for (const key of Object.keys(d)) {
+    const f = d[key]
+    if (f.length <= 1) {
+      Object.defineProperty(obj.prototype, key, { get: function() { return f(this) } })
+    } else {
+      obj.prototype[key] = function(...args) { return f(this, ...args) }
+    }
+  }
+  obj.prototype.then = function(f) { return f(this) }
+  obj.prototype.alt = function() { return this }
+}
+extend(Number, {
+  string: n => n.toString(),
+})
+extend(String, {
+  char: (s,n) => s[n] || ooo,
+  count: s => s.length,
+  int: s => s.match(/^[0-9]+$/) ? parseInt(s) : new Failure('string.int: not a number ' + s),
+})
+extend(Array, {
+  at: (a, n) => n < a.length && 0 <= n ? a[n] : ooo,
+})
 global.__failure = message => new Failure(message)
 global.__eff = o => typeof o === 'function' ? o() : o
-const guessType = o => typeof o === 'object' ? o.constructor.name : typeof o
-const ooo = __failure('out of index')
-const embedded = {
-  number: {
-    string: o => o.toString()
-  },
-  string: {
-    char: (o,n) => o[n] || ooo,
-    count: o => o.length,
-    int: s => parseInt(s) == s ? parseInt(s) : __failure('string.int: not a number ' + s),
-  },
-  Array: {
-    at: (a,n) => n < a.length && 0 <= n ? a[n] : ooo,
-  },
-  Failure: {
-    then: (e,_) => e,
-    alt: (_,v) => v,
-  },
-}
-embedded.number.then = embedded.string.then = (v,f) => f(v)
-embedded.number.alt = embedded.string.alt = (v,_) => v
 global.__dict = (a,b) => range(a.length).reduce((o,i) => (o[a[i]]=b[i], o), {})
 global.__enum = (tag,keys,vals) => __dict(keys.concat(['__type']), vals.concat([tag]))
 global.__equals = (a,b) => a === b || str(a) === str(b)
 global.__match = (a,b) => __equals(a, b)
-global.__prop = (obj,name,...args) => {
-  const v = obj[name]
-  if (v || v === false) {
-    const t = guessType(v)
-    return t === 'function' ? (args.length ? v.call(obj, ...args) : v.bind(obj)) : v
-  }
-
-  const type = guessType(obj)
-  const map = embedded[type]
-  if (!map) { throw new Error(`Not found ${type} in ${str(embedded)}`) }
-  const method = map[name]
-  if (!method) { throw new Error(`Not found ${method} in ${str(map)}`) }
-  return method(obj, ...args)
-}
 
 function evaluate(src) {
   function tokenize() {
@@ -251,7 +243,8 @@ function evaluate(src) {
     const genEnum = ({name, enums}) => `${enums.map(genEnumLine).join('\n')}\nconst ${name} = {${enums.map(x => x.tag)}}`
     const genFunc = ({args,body}) => (args.length ? '(' + args + ') => ' : '') + gen(body)
     const genCall = argv => argv.length ? '(' + argv.map(gen) + ')' : ''
-    const genProp = ({target,name,argv}) => `__prop(${gen(target)}, '${name}', ${argv.map(gen)})`
+    const genProp = ({target,name,argv}) => wrapIfInt(gen(target)) + '.' + name + genCall(argv)
+    const wrapIfInt = s => s.match(/^[0-9]/) ? '(' + s + ')' : s
     const genLine = t => t.tag === 'id' ? `__e = __eff(${gen(t)}); if (__e.__failed) { return __e }` : gen(t)
     const genLines = ({lines}) => 'function() {\n' + (l => l.slice(0,-1).concat('return ' + l.slice(-1)[0]).join('\n  '))(lines.map(genLine)) + '\n}'
     const genMatch = (cond,body) =>
@@ -334,6 +327,7 @@ function runTest() {
       puts('expect: ', expect)
       puts('actual: ', actual)
       puts('src   : ', src)
+      put('dump  : ')
       dump(result)
       process.exit(1)
     }
