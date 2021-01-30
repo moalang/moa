@@ -48,6 +48,8 @@ extend(String, {
 extend(Array, {
   at: (a, n) => n < a.length && 0 <= n ? a[n] : ooo,
 })
+Function.prototype.then = function(f) { return () => this().then(f) }
+Function.prototype.alt = function(v) { return () => this().alt(v) }
 global.__failure = message => new Failure(message)
 global.__eff = o => typeof o === 'function' ? o() : o
 global.__equals = (a,b) => a === b || str(a) === str(b)
@@ -165,13 +167,13 @@ function evaluate(src) {
           token.enums = fields.map(field => {
             const [tag, ...kvs] = field.split(/ *[ ,:] */)
             if (!kvs.length || kvs.length % 2 !== 0) { throw new Error('Enum should be at least 1 field: ' + str(kvs)) }
-            return {tag, keys: twin((a,b)=>[a,b], kvs).map(kv => kv[0])}
+            return {tag, keys: twin((a,_)=>a, kvs)}
           })
           return token
         case 'struct':
-          const [sname, ...struct] = token.code.split('\n').map(x => x.trim()).filter(x => x)
-          token.name = token.type = sname.replace(':', '')
-          token.keys = struct.map(x => x.split(' ')[0])
+          const [sname, ...kvs] = token.code.split(/[\n: ]/).map(x => x.trim()).filter(x => x)
+          token.name = sname
+          token.keys = twin((a,_) => a, kvs)
           return token
         case 'id': parseCall(token); return token
         case 'la': token.ary = until(t => t.tag !== 'ra'); return token
@@ -397,6 +399,9 @@ function runTest() {
   // embedded effect
   eq(1, '\n  guard(true)\n  1')
   fail('guard', '\n  guard(false)\n  1')
+  eq(2, 'f.then(a => a+1)', 'f =\n  guard(true)\n  1')
+  fail('guard', 'f.then(a => a+1)', 'f =\n  guard(false)\n  1')
+  eq(2, 'f.alt(2)', 'f =\n  guard(false)\n  1')
 
   // spiteful tests
   eq(1, ' 1 ')
