@@ -10,7 +10,7 @@ const dump = o => console.dir(o, {depth: null})
 const copy = o => JSON.parse(JSON.stringify(o))
 const dig = (d,...args) => args.reduce((o,name) => o[name], d)
 const range = (s,e,n=1) => {
-  if (!e) { e=s; s=0 }
+  if (e === undefined) { e=s; s=0 }
   const l = []
   for (let i=s; i<e; i+=n) {
     l.push(i)
@@ -62,7 +62,7 @@ function evaluate(src) {
     const eat = p =>
       reg(p, 'func', /^[a-z_][a-z0-9_]*( +[a-z_][a-z0-9_]*)* +=(?![>=])/) ||
       reg(p, 'struct', /^[A-Za-z_][A-Za-z0-9_]*:(\n  [a-z].*)+/) ||
-      reg(p, 'enums', /^[A-Za-z_][A-Za-z0-9_]*\|(\n  [a-z].*)+/) ||
+      reg(p, 'adt', /^[A-Za-z_][A-Za-z0-9_]*\|(\n  [a-z].*)+/) ||
       reg(p, 'int', /^[0-9]+/) ||
       reg(p, 'id', /^[a-z_][a-z0-9_]*/) ||
       reg(p, 'string', /^"(?:(?:\\")|[^"])*"/) ||
@@ -161,12 +161,12 @@ function evaluate(src) {
           [token.name, ...token.args] = token.code.replace('=', '').split(/ +/).slice(0, -1)
           token.body = parseIndent(token, parseTop())
           return token
-        case 'enums':
-          const [ename, ...fields] = token.code.split('\n').map(x => x.trim()).filter(x => x)
-          token.name = token.type = ename.replace('|', '')
-          token.enums = fields.map(field => {
+        case 'adt':
+          const [aname, ...fields] = token.code.split('\n').map(x => x.trim()).filter(x => x)
+          token.name = token.type = aname.replace('|', '')
+          token.adt = fields.map(field => {
             const [tag, ...kvs] = field.split(/ *[ ,:] */)
-            if (!kvs.length || kvs.length % 2 !== 0) { throw new Error('Enum should be at least 1 field: ' + str(kvs)) }
+            if (kvs.length % 2 !== 0) { throw new Error('The number of ADT fields shoul be even: ' + str(kvs)) }
             return {tag, keys: twin((a,_)=>a, kvs)}
           })
           return token
@@ -227,7 +227,7 @@ function evaluate(src) {
       if (node.tag === 'ra') { throw new Error('Invalid ( ' + str({node,nodes})) }
       if (node.tag === 'rp') { throw new Error('Invalid ) ' + str({node,nodes})) }
     }
-    const expect = tokens.filter(t => ['func', 'struct', 'enums'].includes(t.tag) && t.indent === 0).map(t => t.name).join(' ')
+    const expect = tokens.filter(t => ['func', 'struct', 'adt'].includes(t.tag) && t.indent === 0).map(t => t.name).join(' ')
     const actual = nodes.map(t => t.name).join(' ')
     if (expect !== actual) {
       throw new Error('Lack of information after parsing: ' + str({expect,actual,nodes}))
@@ -237,8 +237,8 @@ function evaluate(src) {
   }
   function generate(defs) {
     const genStruct = ({name,keys}) => `const ${name} = (${keys}) => ({${keys}})`
-    const genEnumLine = ({tag,keys}) => `const ${tag} = (${keys}) => ({${keys},__type: '${tag}'})`
-    const genEnum = ({name, enums}) => `${enums.map(genEnumLine).join('\n')}\nconst ${name} = {${enums.map(x => x.tag)}}`
+    const genAdtElement = ({tag,keys}) => `const ${tag} = ` + (keys.length ? `(${keys}) => ` : '') + `({${keys.concat(['__type'])}:'${tag}'})`
+    const genAdt = ({name, adt}) => `${adt.map(genAdtElement).join('\n')}\nconst ${name} = {${adt.map(x => x.tag)}}`
     const genFunc = ({args,body}) => (args.length ? '(' + args + ') => ' : '') + gen(body)
     const genCall = argv => argv.length ? '(' + argv.map(gen) + ')' : ''
     const genProp = ({target,name,argv}) => wrapIfInt(gen(target)) + '.' + name + genCall(argv)
@@ -277,7 +277,7 @@ function evaluate(src) {
         case 'string': return '"' + token.val + '"'
         case 'func': return 'const ' + token.name + ' = ' + genFunc(token)
         case 'struct': return genStruct(token)
-        case 'enums': return genEnum(token)
+        case 'adt': return genAdt(token)
         case 'id': return genId(token)
         case 'la': return '[' + token.ary.map(gen) + ']'
         case 'lp': return '(' + token.items.map(gen).join('') + ')'
@@ -370,6 +370,8 @@ function runTest() {
   eq(10, 'match(1 1 10 2 not_found)') // check lazy evaluation
   eq(1, 'f(a(1))', 'f v = match(v a v.x b v.y)', 'adt|\n  a: x int\n  b: y []int')
   eq([1], 'f(b([1]))', 'f v = match(v a v.x b v.y)', 'adt|\n  a: x int\n  b: y []int')
+  eq(1, 'f(a)', 'f v = match(v a 1 b 2)', 'adt|\n  a\n  b')
+  eq(2, 'f(b)', 'f v = match(v a 1 b 2)', 'adt|\n  a\n  b')
 
   // effect
   eq(3, '\n  count := 0\n  count += 1\n  count += 2\n  count')
