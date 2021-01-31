@@ -90,10 +90,8 @@ generate defines =
     acall (gen(a.target) + "(" + a.argv.map(gen).join(",") + ")")
     aop2  (gen(a.lhs) + a.op.code + gen(a.rhs)))
   defines.map(gen).join("\n")
-main =
-  #src <- io.reads
-  src = "main = console.log(1 + 2)"
+compile src =
   tokens <- tokenize(src)
   defines <- parse(tokens)
   js <- generate(defines)
-  io.print(js+"\nmain()")
+  js

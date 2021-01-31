@@ -10,10 +10,7 @@ function humanize(o) {
     const t = typeof o
     if (t === 'object') {
       if (o.constructor === Array) {
-        const s = '  '.repeat(indent+1)
-        return select(
-          '[' + o.map(e => show(e, indent+1)).join('\n') + ']',
-          '[\n' + o.map(e => s + show(e, indent+1)).join('\n') + '  \n]')
+        return '[' + o.map(e => show(e, indent+1)).join(' ') + ']'
       } else if (o.__type) {
         const keys = Object.keys(o).filter(x => x !== '__type')
         const fields = keys.map(k => k+':'+show(o[k], indent+1))
@@ -88,11 +85,12 @@ global.io = (() => {
   let stderr = []
   return {
     reads: () => '',
-    print: (...args) => (stdout.push(args.map(humanize).join(' ')), args[0]),
-    warn: (...args) => (stderr.push(args.map(humanize).join(' ')), args[0]),
+    write: (...args) => (stdout.push(args.map(humanize).join(' ')), args[0]),
+    print: (...args) => (stdout.push(args.map(humanize).join(' ') + "\n"), args[0]),
+    warn: (...args) => (stderr.push(args.map(humanize).join(' ') + "\n"), args[0]),
     __flush: () => {
-      const out = stdout.join('\n')
-      const err = stderr.join('\n')
+      const out = stdout.join('')
+      const err = stderr.join('')
       stdout = []
       stderr = []
       return [out, err]
@@ -365,6 +363,43 @@ function evaluate(src, option={}) {
   return ret
 }
 function runTest() {
+  testBootstrap()
+  testMoa()
+}
+function testMoa() {
+  const moa = require('fs').readFileSync('moa.moa', 'utf8')
+  function test(expect, main, ...funcs) {
+    funcs.push(moa)
+    funcs.push('main = compile(' + str(main) + ')')
+    const src = funcs.map(x => x + '\n').join('')
+    const result = evaluate(src)
+    if (result.error) {
+      console.error('Failed')
+      print('expect: ', expect)
+      print('actual: ', actual)
+      print('src   : ', src)
+      print('dump  : ')
+      dump(result)
+      process.exit(1)
+    }
+    const compiler = result.js
+    const js = Function(compiler)()
+    const ret = Function(js + '\nreturn main()')()
+    if (__equals(expect, ret)) {
+      put('.')
+    } else {
+      console.error('Failed')
+      print('expect: ', expect)
+      print('src   : ', main)
+      process.exit(1)
+    }
+    return ret
+  }
+
+  test(1, 'main = 1')
+  print('ok')
+}
+function testBootstrap() {
   function equals(unwrap, expect, main, ...funcs) {
     const src = funcs.map(x => x + '\n').join('') + 'main = ' + main
     const result = evaluate(src)
@@ -437,9 +472,10 @@ function runTest() {
   eq(0, '"a".int.then((x) => x + 2).alt(0)')
 
   // embedded io
-  stdout('1', 'io.print(1)')
-  stdout('1 true [] hi', 'io.print(1 true [] "hi")')
-  stderr('1 true [] hi', 'io.warn(1 true [] "hi")')
+  stdout('1', 'io.write(1)')
+  stdout('1\n', 'io.print(1)')
+  stdout('1 true [] hi\n', 'io.print(1 true [] "hi")')
+  stderr('1 true [] hi\n', 'io.warn(1 true [] "hi")')
 
   // embedded string
   eq('1', '1.string')
