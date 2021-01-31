@@ -2,25 +2,39 @@
 //const moa = require('fs').readFileSync('moa.moa', 'utf8')
 
 // utils
-function stringify(o) {
-  const t = typeof o
-  if (t === 'object') {
-    if (o.constructor === Array) {
-      return '[' + o.map(stringify).join(' ') + ']'
-    } else {
-      const keys = Object.keys(o)
-      const fields = keys.map(k => k+':'+stringify(o[k]))
-      return '(' + fields.join(' ') + ')'
-    }
-  } else if (t === 'undefined') {
-    return 'undefined'
-  } else {
-    return o.toString()
+function humanize(o) {
+  function select(s1, s2) {
+    return s1.length < 100 ? s1 : s2
   }
+  function show(o, indent) {
+    const t = typeof o
+    if (t === 'object') {
+      if (o.constructor === Array) {
+        const s = '  '.repeat(indent+1)
+        return select(
+          '[' + o.map(e => show(e, indent+1)).join('\n') + ']',
+          '[\n' + o.map(e => s + show(e, indent+1)).join('\n') + '  \n]')
+      } else if (o.__type) {
+        const keys = Object.keys(o).filter(x => x !== '__type')
+        const fields = keys.map(k => k+':'+show(o[k], indent+1))
+        return o.__type + (keys.length ? '(' + fields.join(' ') + ')' : '')
+      } else {
+        const keys = Object.keys(o)
+        const fields = keys.map(k => k+':'+show(o[k], indent+1))
+        return '(' + fields.join(' ') + ')'
+      }
+    } else if (t === 'undefined') {
+      return 'undefined'
+    } else {
+      return o.toString()
+    }
+  }
+  return show(o, 0)
 }
 const str = obj => JSON.stringify(obj, null, 2)
-const put = s => process.stdout.write(stringify(s))
+const put = s => process.stdout.write(humanize(s))
 const print = (...a) => console.log(...a)
+const warn = (...a) => console.warn(...a)
 const dump = o => console.dir(o, {depth: null})
 const copy = o => JSON.parse(JSON.stringify(o))
 const dig = (d,...args) => args.reduce((o,name) => o[name], d)
@@ -33,7 +47,6 @@ const range = (s,e,n=1) => {
   return l
 }
 const twin = (f,a,n=1) => range(n, a.length, 2).map(i => f(a[i-1], a[i]))
-const debug = o => (console.warn("*", JSON.stringify(o), "*"), o)
 
 // runtime helper functions
 function Failure(message) { this.message = message }
@@ -51,7 +64,7 @@ function extend(obj, d) {
       obj.prototype[key] = function(...args) { return f(this, ...args) }
     }
   }
-  Object.defineProperty(obj.prototype, 'string', { get: function() { return stringify(this) } })
+  Object.defineProperty(obj.prototype, 'string', { get: function() { return humanize(this) } })
 }
 const ooo = new Failure('out of index')
 extend(Number, {})
@@ -62,6 +75,7 @@ extend(String, {
 })
 extend(Array, {
   at: (a, n) => n < a.length && 0 <= n ? a[n] : ooo,
+  all: (a, f) => a.every(f),
 })
 Function.prototype.then = function(f) { return () => this().then(f) }
 Function.prototype.alt = function(v) { return () => this().alt(v) }
@@ -74,8 +88,8 @@ global.io = (() => {
   let stderr = []
   return {
     reads: () => '',
-    print: (...args) => (stdout.push(args.map(stringify).join(' ')), undefined),
-    warn: (...args) => (stderr.push(args.map(stringify).join(' ')), undefined),
+    print: (...args) => (stdout.push(args.map(humanize).join(' ')), args[0]),
+    warn: (...args) => (stderr.push(args.map(humanize).join(' ')), args[0]),
     __flush: () => {
       const out = stdout.join('\n')
       const err = stderr.join('\n')
@@ -86,18 +100,14 @@ global.io = (() => {
   }
 })()
 function evaluate(src, option={}) {
+  const around = t => t.tag === 'op2' ? src.slice(t.lhs.pos, t.rhs.pos + t.rhs.code.length) :
+    t.calling ? src.slice(t.pos, t.argv.slice(-1)[0].pos) :
+    t.code
   function tokenize() {
     function Token(tag, code, pos) {
       this.tag = tag
       this.code = code
       this.pos = pos
-    }
-    Token.prototype.around = function () {
-      if (this.tag === 'op2') {
-        return src.slice(this.lhs.pos, this.rhs.pos + this.rhs.code.length)
-      } else {
-        return this.code
-      }
     }
     const consume = (p,tag,m) => m ? new Token(tag, typeof(m) === 'string' ? m : m[0], p) : null
     const reg = (p,tag,r) => consume(p, tag, src.slice(p).match(r))
@@ -283,10 +293,10 @@ function evaluate(src, option={}) {
     const genProp = ({target,name,argv}) => wrapIfInt(gen(target)) + '.' + name + genCall(argv)
     const wrapIfInt = s => s.match(/^[0-9]/) ? '(' + s + ')' : s
     const genLine = t => t.tag === 'id' && t.name !== 'assert' ? `__e = __eff(${gen(t)}); if (__e.__failed) { return __e }` : gen(t)
-    const genLines = ({lines}) => 'function() {\n' + (l => l.slice(0,-1).concat('return ' + l.slice(-1)[0]).join('\n  '))(lines.map(genLine)) + '\n}'
+    const genLines = ({indent,lines}) => 'function() {\n' + ' '.repeat(indent) + (l => l.slice(0,-1).concat('return ' + l.slice(-1)[0]).join('\n' +  ' '.repeat(indent)))(lines.map(genLine)) + '\n' + ' '.repeat(indent-2) + '}'
     const genMatch = (cond,body) =>
           cond === '_' ? `true ? ${body} : ` :
-          cond.match(/^[a-z_]+$/) ?  `___m.__type === '${cond}' ? ${body} :` :
+          cond.match(/^[a-z_]/) ?  `___m.__type === '${cond}' ? ${body} :` :
           `__equals(___m, ${cond}) ? ${body} :`
     function genId(token) {
       if (token.name === 'true' || token.name === 'false' || token.name === '_') {
@@ -296,8 +306,8 @@ function evaluate(src, option={}) {
       } else if (token.name === 'assert') {
         const cond = token.argv[0]
         const value = cond.tag === 'op2' ? gen(cond.lhs) + '.string+"'+cond.op+'"+' + gen(cond.rhs) + '.string' : 'false'
-        const around = str(cond.around())
-        return `assert(${gen(cond)}, ${value} + " at " + ${around})`
+        const at = str(around(cond))
+        return `assert(${gen(cond)}, ${value} + " at " + ${at})`
       } else if (token.name === 'if') {
         const l = token.argv.length
         if (l%2!=1) { throw new Error('if arguments have to odd number of arguments: ' + str(token)) }
@@ -307,7 +317,9 @@ function evaluate(src, option={}) {
         if (token.argv.length % 2 !== 1) { throw new Error('match arguments have to odd number of arguments: ' + str(token)) }
         const argv = token.argv.map(gen)
         const exps = twin(genMatch, argv, 2)
-        return `(___m => ${exps.join(' ')} __failure("miss match"))(${argv[0]})`
+        const at = str(around(token))
+        const space = ' '.repeat(token.indent)
+        return `(___m => ${exps.map(s => '\n  ' + space + s).join('')}\n  ${space}(()=>{throw new Error("miss match: " + io.warn(___m) + " at " + ${at})})())(${argv[0]})`
       } else {
         return token.name + genCall(token.argv)
       }
@@ -467,7 +479,9 @@ function runStdin() {
     console.warn(result.js)
     process.exit(1)
   }
-  console.warn(result.stderr)
+  if (result.stderr) {
+    console.warn(result.stderr)
+  }
   console.log(result.stdout)
 }
 function main() {
