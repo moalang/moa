@@ -19,6 +19,11 @@ const range = (s,e,n=1) => {
 const twin = (f,a,n=1) => range(n, a.length, 2).map(i => f(a[i-1], a[i]))
 
 // runtime helper functions
+function stringify(o) {
+  return o = typeof o === 'object' && o.constructor === Array ?
+    '[' + o.map(stringify).join(' ') + ']' :
+    o.toString()
+}
 function Failure(message) { this.message = message }
 Failure.prototype.__failed = true
 Failure.prototype.then = function() { return this }
@@ -34,11 +39,10 @@ function extend(obj, d) {
   }
   obj.prototype.then = function(f) { return f(this) }
   obj.prototype.alt = function() { return this }
+  Object.defineProperty(obj.prototype, 'string', { get: function() { return stringify(this) } })
 }
 const ooo = new Failure('out of index')
-extend(Number, {
-  string: n => n.toString(),
-})
+extend(Number, {})
 extend(String, {
   char: (s,n) => s[n] || ooo,
   count: s => s.length,
@@ -52,7 +56,18 @@ Function.prototype.alt = function(v) { return () => this().alt(v) }
 global.__failure = message => new Failure(message)
 global.__eff = o => typeof o === 'function' ? o() : o
 global.__equals = (a,b) => a === b || str(a) === str(b)
-
+global.io = (() => {
+  let stdout = []
+  return {
+    reads: () => '',
+    print: (...args) => (stdout.push(args.map(stringify).join(' ')), undefined),
+    __flush: () => {
+      const s = stdout.join('\n')
+      stdout = []
+      return s
+    }
+  }
+})()
 function evaluate(src, option={}) {
   function tokenize() {
     const consume = (tag,m) => m ? ({tag, code: typeof(m) === 'string' ? m : m[0]}) : null
@@ -291,17 +306,15 @@ function evaluate(src, option={}) {
   }
 
   const ret = {}
-  const stdout = []
   try {
     const tokens = tokenize()
     ret.defs = parse(tokens)
     ret.js = generate(ret.defs) + '\nreturn typeof(main) === "function" ? main() : main'
-    global.print = s => stdout.push(s)
     ret.value = Function(ret.js)()
   } catch (e) {
     ret.error = e
   } finally {
-    ret.stdout = stdout.join('\n')
+    ret.stdout = io.__flush()
   }
   return ret
 }
@@ -377,8 +390,8 @@ function runTest() {
   eq(0, '"a".int.then((x) => x + 2).alt(0)')
 
   // embedded
-  stdout('1', 'print(1)')
-  stdout('hi', 'print("hi")')
+  stdout('1', 'io.print(1)')
+  stdout('1 true [] hi', 'io.print(1 true [] "hi")')
 
   // embedded string
   eq('1', '1.string')
@@ -387,6 +400,8 @@ function runTest() {
   fail('out of index', '"hi".char(2)')
 
   // embedded array
+  eq('[]', '[].string')
+  eq('[1 2]', '[1 2].string')
   eq(1, '[1].at(0)')
   fail('out of index', '[1].at(1)')
   fail('out of index', '[1].at(0-1)')
