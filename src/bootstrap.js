@@ -55,9 +55,6 @@ global.__eff = o => typeof o === 'function' ? __eff(o()) : o
 global.__equals = (a,b) => a === b || str(a) === str(b)
 global.assert = (cond,message) => { if (!cond) { throw new Error('Assert: ' + message) }}
 function evaluate(src, option={}) {
-  const around = t => t.tag === 'op2' ? src.slice(t.lhs.pos, t.rhs.pos + t.rhs.code.length) :
-    t.calling ? src.slice(t.pos, t.argv.slice(-1)[0].pos) :
-    t.code
   function tokenize() {
     function Token(tag, code, pos) {
       this.tag = tag
@@ -89,6 +86,7 @@ function evaluate(src, option={}) {
       let line = 1
       let column = 1
       return {
+        at: () => `${line}: ${lines[line-1]}`,
         mention: t => `\n${line}: ${lines[line-1]}\n` +
           ' '.repeat(line.toString().length + column) + ' ^' + t,
         forward: s =>  {
@@ -120,6 +118,7 @@ function evaluate(src, option={}) {
         prev.calling = true
       }
       token.indent = indent
+      token.at = liner.at()
       pos += token.code.length
       liner.forward(token.code)
       tokens.push(token)
@@ -261,7 +260,7 @@ function evaluate(src, option={}) {
       } else if (token.name === 'assert') {
         const cond = token.argv[0]
         const value = cond.tag === 'op2' ? gen(cond.lhs) + '.string+"'+cond.op+'"+' + gen(cond.rhs) + '.string' : 'false'
-        const at = str(around(cond))
+        const at = str(cond.at)
         return `assert(${gen(cond)}, ${value} + " at " + ${at})`
       } else if (token.name === 'if') {
         const l = token.argv.length
@@ -272,7 +271,7 @@ function evaluate(src, option={}) {
         if (token.argv.length % 2 !== 1) { throw new Error('match arguments have to odd number of arguments: ' + str(token)) }
         const argv = token.argv.map(gen)
         const exps = twin(genMatch, argv, 2)
-        const at = str(around(token))
+        const at = str(token.at)
         const space = ' '.repeat(token.indent)
         return `(___m => ${exps.map(s => '\n  ' + space + s).join('')}\n  ${space}(()=>{throw new Error("miss match: " + io.warn(___m) + " at " + ${at})})())(${argv[0]})`
       } else {
