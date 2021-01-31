@@ -320,39 +320,6 @@ function runTest() {
   testBootstrap()
   testMoa()
 }
-function testMoa() {
-  const moa = require('fs').readFileSync('moa.moa', 'utf8')
-  function test(expect, main, ...funcs) {
-    funcs.push(moa)
-    funcs.push('main = compile(' + str(main) + ')')
-    const src = funcs.map(x => x + '\n').join('')
-    const result = evaluate(src)
-    if (result.error) {
-      console.error('Failed')
-      print('expect: ', expect)
-      print('actual: ', actual)
-      print('src   : ', src)
-      print('dump  : ')
-      dump(result)
-      process.exit(1)
-    }
-    const compiler = result.js
-    const js = Function(compiler)()
-    const ret = Function(js + '\nreturn main()')()
-    if (__equals(expect, ret)) {
-      put('.')
-    } else {
-      console.error('Failed')
-      print('expect: ', expect)
-      print('src   : ', main)
-      process.exit(1)
-    }
-    return ret
-  }
-
-  test(1, 'main = 1')
-  print('ok')
-}
 function testBootstrap() {
   function equals(unwrap, expect, main, ...funcs) {
     const src = funcs.map(x => x + '\n').join('') + 'main = ' + main
@@ -361,7 +328,7 @@ function testBootstrap() {
     if (str(expect) === str(actual)) {
       put('.')
     } else {
-      console.error('Failed')
+      warn('Failed')
       print('expect: ', expect)
       print('actual: ', actual)
       print('src   : ', src)
@@ -448,23 +415,55 @@ function testBootstrap() {
   eq(1, ' 1 ')
   eq(1, ' ( ( ( 1 ) ) ) ')
 
-  console.log('ok')
+  print('ok')
+}
+function testMoa() {
+  const moa = require('fs').readFileSync('moa.moa', 'utf8')
+  function test(expect, main, ...funcs) {
+    funcs.push('main = ' + main)
+    const src = moa + '\nmain = compile(' + str(funcs.join('\n')) + ')'
+    const result = evaluate(src)
+    if (result.error) {
+      warn('Failed')
+      print('expect: ', expect)
+      print('src   : ', src)
+      print('dump  : ')
+      dump(result)
+      process.exit(1)
+    }
+    const compiler = result.js
+    const js = Function(compiler)()
+    const ret = Function(js + '\nreturn main()')()
+    if (__equals(expect, ret)) {
+      put('.')
+    } else {
+      warn('Failed')
+      print('expect: ', expect)
+      print('src   : ', main)
+      process.exit(1)
+    }
+    return ret
+  }
+
+  test(1, '1')
+  test(3, '1 + 2')
+  print('ok')
 }
 function runStdin() {
   const moa = require('fs').readFileSync('/dev/stdin', 'utf8')
   global.io.reads = () => moa
   const result = evaluate(moa)
   if (result.error) {
-    console.warn(result.stderr)
-    console.warn(result.error)
-    console.warn('-- js: ')
-    console.warn(result.js)
+    warn(result.stderr)
+    warn(result.error)
+    warn('-- js: ')
+    warn(result.js)
     process.exit(1)
   }
   if (result.stderr) {
-    console.warn(result.stderr)
+    warn(result.stderr)
   }
-  console.log(result.stdout)
+  print(result.stdout)
 }
 function main() {
   process.argv[2] === 'test' ? runTest() : runStdin()
