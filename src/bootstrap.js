@@ -2,10 +2,9 @@
 //const moa = require('fs').readFileSync('moa.moa', 'utf8')
 
 // utils
-const originalConsoleLog = console.log
 const str = obj => JSON.stringify(obj, null, 2)
 const put = s => process.stdout.write(s)
-const puts = (...a) => originalConsoleLog(...a)
+const puts = (...a) => console.log(...a)
 const dump = o => console.dir(o, {depth: null})
 const copy = o => JSON.parse(JSON.stringify(o))
 const dig = (d,...args) => args.reduce((o,name) => o[name], d)
@@ -54,7 +53,7 @@ global.__failure = message => new Failure(message)
 global.__eff = o => typeof o === 'function' ? o() : o
 global.__equals = (a,b) => a === b || str(a) === str(b)
 
-function evaluate(src) {
+function evaluate(src, option={}) {
   function tokenize() {
     const consume = (tag,m) => m ? ({tag, code: typeof(m) === 'string' ? m : m[0]}) : null
     const reg = (p,tag,r) => consume(tag, src.slice(p).match(r))
@@ -260,8 +259,6 @@ function evaluate(src) {
         const argv = token.argv.map(gen)
         const exps = twin(genMatch, argv, 2)
         return `(___m => ${exps.join(' ')} __failure("miss match"))(${argv[0]})`
-      } else if (token.name === 'trace') {
-        return 'console.log' + genCall(token.argv)
       } else {
         return token.name + genCall(token.argv)
       }
@@ -299,12 +296,11 @@ function evaluate(src) {
     const tokens = tokenize()
     ret.defs = parse(tokens)
     ret.js = generate(ret.defs) + '\nreturn typeof(main) === "function" ? main() : main'
-    console.log = s => stdout.push(s)
+    global.print = s => stdout.push(s)
     ret.value = Function(ret.js)()
   } catch (e) {
     ret.error = e
   } finally {
-    console.log = originalConsoleLog
     ret.stdout = stdout.join('\n')
   }
   return ret
@@ -381,8 +377,8 @@ function runTest() {
   eq(0, '"a".int.then((x) => x + 2).alt(0)')
 
   // embedded
-  stdout('1', 'trace(1)')
-  stdout('hi', 'trace("hi")')
+  stdout('1', 'print(1)')
+  stdout('hi', 'print("hi")')
 
   // embedded string
   eq('1', '1.string')
