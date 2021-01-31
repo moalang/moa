@@ -1,0 +1,34 @@
+token:
+  tag string
+  code string
+tokenize src =
+  pos := 0
+  satisfy f =
+    c <- src.at(pos)
+    guard(f(c))
+    pos += 1
+    c
+  many_acc f acc = f.then(c => many_acc(f acc.concat([c]))).alt(acc)
+  many f = many_acc(f [])
+  many1 f =
+    c <- f
+    cs <- many(f)
+    [c].concat(cs)
+  many1t tag f = many1(f).then(cs => token(tag cs.join("")))
+  read_int = many1t("int" satisfy(c => ("0" <= c) && (c <= "9")))
+  read_id = many1t("id" satisfy(c => ("a" <= c) && (c <= "z")))
+  read_spaces = many1t("spaces" satisfy(c => " \n#".includes(c)))
+  read_sym = many1t("sym" satisfy(c => "+-*/%=><&|:".includes(c)))
+  read_top = read_int.alt(read_id).alt(read_spaces).alt(read_sym)
+  tokens <- many(read_top)
+  assert(pos == src.count)
+  tokens
+parse tokens =
+  "hi"
+main =
+  #src <- io.reads
+  src = "hi 1+==3 && 3 | 5"
+  tokens <- tokenize(src)
+  defines <- parse(tokens)
+  io.warn(tokens)
+  io.print("console.log(1)")

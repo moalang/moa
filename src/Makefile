@@ -23,11 +23,7 @@ run_test:
 
 run_js:
 	@clear && printf '\e[3J'
-	@cat runtime.js > /tmp/moa.js
-	@node bootstrap.js js < moa.moa >> /tmp/moa.js
-	@echo "io.reads = () => require('fs').readFileSync('/dev/stdin', 'utf8')" >> /tmp/moa.js
-	@echo 'console.error(main())' >> /tmp/moa.js
-	@cat -n /tmp/moa.js
+	@node bootstrap.js js < moa.moa > /tmp/moa.js
 	@node /tmp/moa.js < moa.moa
 
 run_html:

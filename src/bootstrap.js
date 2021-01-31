@@ -2,9 +2,25 @@
 //const moa = require('fs').readFileSync('moa.moa', 'utf8')
 
 // utils
+function stringify(o) {
+  const t = typeof o
+  if (t === 'object') {
+    if (o.constructor === Array) {
+      return '[' + o.map(stringify).join(' ') + ']'
+    } else {
+      const keys = Object.keys(o)
+      const fields = keys.map(k => k+':'+stringify(o[k]))
+      return '(' + fields.join(' ') + ')'
+    }
+  } else if (t === 'undefined') {
+    return 'undefined'
+  } else {
+    return o.toString()
+  }
+}
 const str = obj => JSON.stringify(obj, null, 2)
-const put = s => process.stdout.write(s)
-const puts = (...a) => console.log(...a)
+const put = s => process.stdout.write(stringify(s))
+const print = (...a) => console.log(...a)
 const dump = o => console.dir(o, {depth: null})
 const copy = o => JSON.parse(JSON.stringify(o))
 const dig = (d,...args) => args.reduce((o,name) => o[name], d)
@@ -17,17 +33,15 @@ const range = (s,e,n=1) => {
   return l
 }
 const twin = (f,a,n=1) => range(n, a.length, 2).map(i => f(a[i-1], a[i]))
+const debug = o => (console.warn("*", JSON.stringify(o), "*"), o)
 
 // runtime helper functions
-function stringify(o) {
-  return o = typeof o === 'object' && o.constructor === Array ?
-    '[' + o.map(stringify).join(' ') + ']' :
-    o.toString()
-}
 function Failure(message) { this.message = message }
 Failure.prototype.__failed = true
 Failure.prototype.then = function() { return this }
 Failure.prototype.alt = v => v
+Object.prototype.then = function(f) { return f(this) }
+Object.prototype.alt = function() { return this }
 function extend(obj, d) {
   for (const key of Object.keys(d)) {
     const f = d[key]
@@ -37,14 +51,12 @@ function extend(obj, d) {
       obj.prototype[key] = function(...args) { return f(this, ...args) }
     }
   }
-  obj.prototype.then = function(f) { return f(this) }
-  obj.prototype.alt = function() { return this }
   Object.defineProperty(obj.prototype, 'string', { get: function() { return stringify(this) } })
 }
 const ooo = new Failure('out of index')
 extend(Number, {})
 extend(String, {
-  char: (s,n) => s[n] || ooo,
+  at: (s,n) => s[n] || ooo,
   count: s => s.length,
   int: s => s.match(/^[0-9]+$/) ? parseInt(s) : new Failure('string.int: not a number ' + s),
 })
@@ -54,25 +66,42 @@ extend(Array, {
 Function.prototype.then = function(f) { return () => this().then(f) }
 Function.prototype.alt = function(v) { return () => this().alt(v) }
 global.__failure = message => new Failure(message)
-global.__eff = o => typeof o === 'function' ? o() : o
+global.__eff = o => typeof o === 'function' ? __eff(o()) : o
 global.__equals = (a,b) => a === b || str(a) === str(b)
+global.assert = (cond,message) => { if (!cond) { throw new Error('Assert: ' + message) }}
 global.io = (() => {
   let stdout = []
+  let stderr = []
   return {
     reads: () => '',
     print: (...args) => (stdout.push(args.map(stringify).join(' ')), undefined),
+    warn: (...args) => (stderr.push(args.map(stringify).join(' ')), undefined),
     __flush: () => {
-      const s = stdout.join('\n')
+      const out = stdout.join('\n')
+      const err = stderr.join('\n')
       stdout = []
-      return s
+      stderr = []
+      return [out, err]
     }
   }
 })()
 function evaluate(src, option={}) {
   function tokenize() {
-    const consume = (tag,m) => m ? ({tag, code: typeof(m) === 'string' ? m : m[0]}) : null
-    const reg = (p,tag,r) => consume(tag, src.slice(p).match(r))
-    const some = (p,tag,s) => consume(tag, s.split(' ').find(w => src.slice(p).startsWith(w)))
+    function Token(tag, code, pos) {
+      this.tag = tag
+      this.code = code
+      this.pos = pos
+    }
+    Token.prototype.around = function () {
+      if (this.tag === 'op2') {
+        return src.slice(this.lhs.pos, this.rhs.pos + this.rhs.code.length)
+      } else {
+        return this.code
+      }
+    }
+    const consume = (p,tag,m) => m ? new Token(tag, typeof(m) === 'string' ? m : m[0], p) : null
+    const reg = (p,tag,r) => consume(p, tag, src.slice(p).match(r))
+    const some = (p,tag,s) => consume(p, tag, s.split(' ').find(w => src.slice(p).startsWith(w)))
     const eat = p =>
       reg(p, 'func', /^[a-z_][a-z0-9_]*( +[a-z_][a-z0-9_]*)* +=(?![>=])/) ||
       reg(p, 'struct', /^[A-Za-z_][A-Za-z0-9_]*:(\n  [a-z].*)+/) ||
@@ -253,7 +282,7 @@ function evaluate(src, option={}) {
     const genCall = argv => argv.length ? '(' + argv.map(gen) + ')' : ''
     const genProp = ({target,name,argv}) => wrapIfInt(gen(target)) + '.' + name + genCall(argv)
     const wrapIfInt = s => s.match(/^[0-9]/) ? '(' + s + ')' : s
-    const genLine = t => t.tag === 'id' ? `__e = __eff(${gen(t)}); if (__e.__failed) { return __e }` : gen(t)
+    const genLine = t => t.tag === 'id' && t.name !== 'assert' ? `__e = __eff(${gen(t)}); if (__e.__failed) { return __e }` : gen(t)
     const genLines = ({lines}) => 'function() {\n' + (l => l.slice(0,-1).concat('return ' + l.slice(-1)[0]).join('\n  '))(lines.map(genLine)) + '\n}'
     const genMatch = (cond,body) =>
           cond === '_' ? `true ? ${body} : ` :
@@ -264,6 +293,11 @@ function evaluate(src, option={}) {
         return token.name
       } else if (token.name === 'guard') {
         return token.argv.map(gen).join(' && ') + ' ? ({}) : __failure("guard")'
+      } else if (token.name === 'assert') {
+        const cond = token.argv[0]
+        const value = cond.tag === 'op2' ? gen(cond.lhs) + '.string+"'+cond.op+'"+' + gen(cond.rhs) + '.string' : 'false'
+        const around = str(cond.around())
+        return `assert(${gen(cond)}, ${value} + " at " + ${around})`
       } else if (token.name === 'if') {
         const l = token.argv.length
         if (l%2!=1) { throw new Error('if arguments have to odd number of arguments: ' + str(token)) }
@@ -294,7 +328,7 @@ function evaluate(src, option={}) {
           switch (token.op) {
             case '=': return 'const ' + gen(token.lhs) + token.op + gen(token.rhs)
             case ':=': return 'let ' + gen(token.lhs) + ' = ' + gen(token.rhs)
-            case '<-': const name = gen(token.lhs); return 'const ' + name + ' = ' + gen(token.rhs) + '(); if(' + name + '.__failed) { return ' + name + ' }'
+            case '<-': const name = gen(token.lhs); return 'const ' + name + ' = __eff(' + gen(token.rhs) + '); if(' + name + '.__failed) { return ' + name + ' }'
             case '=>': return '((' + token.args + ') => ' + gen(token.rhs) + ')'
             case '==': return `__equals(${gen(token.lhs)}, ${gen(token.rhs)})`
             default: return gen(token.lhs) + token.op + gen(token.rhs)
@@ -314,7 +348,7 @@ function evaluate(src, option={}) {
   } catch (e) {
     ret.error = e
   } finally {
-    ret.stdout = io.__flush()
+    [ret.stdout, ret.stderr] = io.__flush()
   }
   return ret
 }
@@ -327,16 +361,17 @@ function runTest() {
       put('.')
     } else {
       console.error('Failed')
-      puts('expect: ', expect)
-      puts('actual: ', actual)
-      puts('src   : ', src)
-      put('dump  : ')
+      print('expect: ', expect)
+      print('actual: ', actual)
+      print('src   : ', src)
+      print('dump  : ')
       dump(result)
       process.exit(1)
     }
   }
   const eq = (...args) => equals(r => r.value, ...args)
   const stdout = (...args) => equals(r => r.stdout, ...args)
+  const stderr = (...args) => equals(r => r.stderr, ...args)
   const fail = (...args) => equals(r => r.value && r.value.message, ...args)
 
   // basic values
@@ -389,15 +424,16 @@ function runTest() {
   eq(3, '"1".int.then((x) => x + 2)')
   eq(0, '"a".int.then((x) => x + 2).alt(0)')
 
-  // embedded
+  // embedded io
   stdout('1', 'io.print(1)')
   stdout('1 true [] hi', 'io.print(1 true [] "hi")')
+  stderr('1 true [] hi', 'io.warn(1 true [] "hi")')
 
   // embedded string
   eq('1', '1.string')
   eq(2, '"hi".count')
-  eq('i', '"hi".char(1)')
-  fail('out of index', '"hi".char(2)')
+  eq('i', '"hi".at(1)')
+  fail('out of index', '"hi".at(2)')
 
   // embedded array
   eq('[]', '[].string')
@@ -420,10 +456,19 @@ function runTest() {
 
   console.log('ok')
 }
-function compileStdin() {
+function runStdin() {
   const moa = require('fs').readFileSync('/dev/stdin', 'utf8')
-  const result = evaluate(moa).stdout
-  put(result.stdout)
+  global.io.reads = () => moa
+  const result = evaluate(moa)
+  if (result.error) {
+    console.warn(result.stderr)
+    console.warn(result.error)
+    console.warn('-- js: ')
+    console.warn(result.js)
+    process.exit(1)
+  }
+  console.warn(result.stderr)
+  console.log(result.stdout)
 }
 function main() {
   process.argv[2] === 'test' ? runTest() : runStdin()
