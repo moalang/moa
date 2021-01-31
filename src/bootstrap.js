@@ -2,34 +2,8 @@
 //const moa = require('fs').readFileSync('moa.moa', 'utf8')
 
 // utils
-function humanize(o) {
-  function select(s1, s2) {
-    return s1.length < 100 ? s1 : s2
-  }
-  function show(o, indent) {
-    const t = typeof o
-    if (t === 'object') {
-      if (o.constructor === Array) {
-        return '[' + o.map(e => show(e, indent+1)).join(' ') + ']'
-      } else if (o.__type) {
-        const keys = Object.keys(o).filter(x => x !== '__type')
-        const fields = keys.map(k => k+':'+show(o[k], indent+1))
-        return o.__type + (keys.length ? '(' + fields.join(' ') + ')' : '')
-      } else {
-        const keys = Object.keys(o)
-        const fields = keys.map(k => k+':'+show(o[k], indent+1))
-        return '(' + fields.join(' ') + ')'
-      }
-    } else if (t === 'undefined') {
-      return 'undefined'
-    } else {
-      return o.toString()
-    }
-  }
-  return show(o, 0)
-}
 const str = obj => JSON.stringify(obj, null, 2)
-const put = s => process.stdout.write(humanize(s))
+const put = s => process.stdout.write(typeof s === 'string' ? s : str(s))
 const print = (...a) => console.log(...a)
 const warn = (...a) => console.warn(...a)
 const dump = o => console.dir(o, {depth: null})
@@ -61,7 +35,7 @@ function extend(obj, d) {
       obj.prototype[key] = function(...args) { return f(this, ...args) }
     }
   }
-  Object.defineProperty(obj.prototype, 'string', { get: function() { return humanize(this) } })
+  Object.defineProperty(obj.prototype, 'string', { get: function() { return str(this) } })
 }
 const ooo = new Failure('out of index')
 extend(Number, {})
@@ -80,23 +54,6 @@ global.__failure = message => new Failure(message)
 global.__eff = o => typeof o === 'function' ? __eff(o()) : o
 global.__equals = (a,b) => a === b || str(a) === str(b)
 global.assert = (cond,message) => { if (!cond) { throw new Error('Assert: ' + message) }}
-global.io = (() => {
-  let stdout = []
-  let stderr = []
-  return {
-    reads: () => '',
-    write: (...args) => (stdout.push(args.map(humanize).join(' ')), args[0]),
-    print: (...args) => (stdout.push(args.map(humanize).join(' ') + "\n"), args[0]),
-    warn: (...args) => (stderr.push(args.map(humanize).join(' ') + "\n"), args[0]),
-    __flush: () => {
-      const out = stdout.join('')
-      const err = stderr.join('')
-      stdout = []
-      stderr = []
-      return [out, err]
-    }
-  }
-})()
 function evaluate(src, option={}) {
   const around = t => t.tag === 'op2' ? src.slice(t.lhs.pos, t.rhs.pos + t.rhs.code.length) :
     t.calling ? src.slice(t.pos, t.argv.slice(-1)[0].pos) :
@@ -357,8 +314,6 @@ function evaluate(src, option={}) {
     ret.value = Function(ret.js)()
   } catch (e) {
     ret.error = e
-  } finally {
-    [ret.stdout, ret.stderr] = io.__flush()
   }
   return ret
 }
@@ -417,8 +372,6 @@ function testBootstrap() {
     }
   }
   const eq = (...args) => equals(r => r.value, ...args)
-  const stdout = (...args) => equals(r => r.stdout, ...args)
-  const stderr = (...args) => equals(r => r.stderr, ...args)
   const fail = (...args) => equals(r => r.value && r.value.message, ...args)
 
   // basic values
@@ -471,12 +424,6 @@ function testBootstrap() {
   eq(3, '"1".int.then((x) => x + 2)')
   eq(0, '"a".int.then((x) => x + 2).alt(0)')
 
-  // embedded io
-  stdout('1', 'io.write(1)')
-  stdout('1\n', 'io.print(1)')
-  stdout('1 true [] hi\n', 'io.print(1 true [] "hi")')
-  stderr('1 true [] hi\n', 'io.warn(1 true [] "hi")')
-
   // embedded string
   eq('1', '1.string')
   eq(2, '"hi".count')
@@ -485,7 +432,7 @@ function testBootstrap() {
 
   // embedded array
   eq('[]', '[].string')
-  eq('[1 2]', '[1 2].string')
+  eq(str([1, 2]), '[1 2].string')
   eq(1, '[1].at(0)')
   fail('out of index', '[1].at(1)')
   fail('out of index', '[1].at(0-1)')
