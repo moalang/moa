@@ -66,6 +66,7 @@ function evaluate(src) {
       reg(p, 'int', /^[0-9]+/) ||
       reg(p, 'id', /^[a-z_][a-z0-9_]*/) ||
       reg(p, 'string', /^"(?:(?:\\")|[^"])*"/) ||
+      reg(p, 'string', /^`(?:(?:\\`)|[^`])*`/) ||
       reg(p, 'prop', /^\.[a-z_][a-z0-9_]*/) ||
       reg(p, 'spaces', /^[ \n]+/) ||
       reg(p, 'comment', /^ *#.*/) ||
@@ -269,7 +270,7 @@ function evaluate(src) {
       if (token.lines) { return genLines(token) }
       switch (token.tag) {
         case 'int': return token.val
-        case 'string': return '"' + token.val + '"'
+        case 'string': return '"' + token.val.replace('\n', '\\n') + '"'
         case 'func': return 'const ' + token.name + ' = ' + genFunc(token)
         case 'struct': return genStruct(token)
         case 'adt': return genAdt(token)
@@ -333,6 +334,8 @@ function runTest() {
   eq(1, '1')
   eq(true, 'true')
   eq('a', '"a"')
+  eq('a', '`a`')
+  eq('a\nb', '`a\nb`')
   eq([], '[]')
   eq([1, 2], '[1 2]')
 
