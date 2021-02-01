@@ -70,7 +70,7 @@ global.__eff = o => typeof o === 'function' ? __eff(o()) : o
 global.__equals = (a,b) => a === b || str(a) === str(b)
 global.__dump = dump
 global.assert = (cond,message) => { if (!cond) { throw new Error('Assert: ' + message) }}
-function evaluate(src, option={}) {
+function compile(src) {
   function tokenize() {
     function Token(tag, code, pos) {
       this.tag = tag
@@ -321,12 +321,23 @@ function evaluate(src, option={}) {
     return defs.map(gen).join("\n")
   }
 
-  const ret = {}
+  const tokens = tokenize()
+  const defs = parse(tokens)
+  const js = generate(defs)
   try {
-    const tokens = tokenize()
-    ret.defs = parse(tokens)
-    ret.js = generate(ret.defs) + '\nreturn __eff(main)'
-    ret.value = Function(ret.js)()
+    Function(js)()
+    return {defs, js}
+  } catch (error) {
+    return {defs, js, error}
+  }
+}
+function evaluate(src) {
+  const ret = compile(src)
+  if (ret.error) {
+    return ret
+  }
+  try {
+    ret.value = Function(ret.js + '\nreturn __eff(main)')()
   } catch (e) {
     ret.error = e
   }
@@ -440,23 +451,20 @@ function testBootstrap() {
 }
 function testMoa() {
   const moa = require('fs').readFileSync('moa.moa', 'utf8')
+  const result = compile(moa)
+  if (result.error) {
+    print('Failed compile compiler')
+    print('error : ', result.error)
+    print(result.js)
+    process.exit(1)
+  }
+  const compiler = result.js
+
   function eq(expect, main, ...funcs) {
     funcs.push('main = ' + main)
-    const src = moa + '\nmain = compile(' + str(funcs.join('\n')) + ')'
-    const result = evaluate(src)
-    if (result.error) {
-      warn('Failed')
-      print('main  : ', elipsis(main))
-      print('expect: ', expect)
-      print('error : ', result.error)
-      print('src   : ', elipsis(src))
-      print('js    : ')
-      print(result.js)
-      process.exit(1)
-    }
-    const compiler = result.js
-    const js = Function(compiler)()
+    const src = str(funcs.join('\n'))
     try {
+      const js = Function(compiler + '\nreturn __eff(compile(' + src + '))')()
       const actual = Function(js + '\nreturn __eff(main)')()
       if (__equals(expect, actual)) {
         put('.')
@@ -465,7 +473,7 @@ function testMoa() {
         print('main  : ', elipsis(main))
         print('expect: ', expect)
         print('actual: ', actual)
-        print('js    : ', js)
+        print(js)
         process.exit(1)
       }
     } catch (e) {
