@@ -50,6 +50,17 @@ extend(String, {
 extend(Array, {
   at: (a, n) => n < a.length && 0 <= n ? a[n] : ooo,
   all: (a, f) => a.every(f),
+  first: (a, f) => {
+    let ret = new Failure('empty')
+    for (const e of a) {
+      ret = __eff(f(e))
+      if (ret.__failed) {
+        continue
+      }
+      return ret
+    }
+    return ret
+  },
 })
 Function.prototype.then = function(f) { return () => this().then(f) }
 Function.prototype.alt = function(v) { return () => this().alt(v) }
@@ -277,7 +288,7 @@ function evaluate(src, option={}) {
         const exps = twin(genMatch, argv, 2)
         const at = str(token.at)
         const space = ' '.repeat(token.indent)
-        return `(___m => ${exps.map(s => '\n  ' + space + s).join('')}\n  ${space}(()=>{throw new Error("miss match: " + io.warn(___m) + " at " + ${at})})())(${argv[0]})`
+        return `(___m => ${exps.map(s => '\n  ' + space + s).join('')}\n  ${space}(()=>{throw new Error("miss match: " + ___m.string + " at " + ${at})})())(${argv[0]})`
       } else {
         return token.name + genCall(token.argv)
       }
@@ -466,9 +477,9 @@ function testMoa() {
   eq(1, '1')
   eq(true, 'true')
   eq('a', '"a"')
-//  eq('a', '`a`')
-//  eq('a\nb', '`a\nb`')
-//  eq([], '[]')
+  eq('a', '`a`')
+  eq('a\nb', '`a\nb`')
+  eq([], '[]')
 //  eq([1, 2], '[1 2]')
 
 //// expression
@@ -540,7 +551,6 @@ function testMoa() {
 }
 function runStdin() {
   const moa = require('fs').readFileSync('/dev/stdin', 'utf8')
-  global.io.reads = () => moa
   const result = evaluate(moa)
   if (result.error) {
     warn(result.stderr)
