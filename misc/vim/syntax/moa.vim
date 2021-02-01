@@ -22,7 +22,7 @@ syn match  Comment /#.*$/
 
 "*Constant       o 定数
 syn region String start='"' end='"' skip='\\"'
-"syn region String start='`' end='`' skip='\\`'
+syn region String start='`' end='`' skip='\\`'
 syn match Number / [0-9]\+\(\.[0-9]\+\)\?/
 syn keyword Boolean true false
 
