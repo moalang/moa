@@ -24,9 +24,11 @@ const elipsis = s => s.length <= 100 ? s : s.slice(0, 96) + ' ...\n'
 function Failure(message) { this.message = message }
 Failure.prototype.__failed = true
 Failure.prototype.then = function() { return this }
-Failure.prototype.alt = v => v
+Failure.prototype.alt = (...args) => args.first(a => a)
 Object.prototype.then = function(f) { return f(this) }
 Object.prototype.alt = function() { return this }
+Function.prototype.then = function(f) { return () => this().then(f) }
+Function.prototype.alt = function(...args) { return () => this().alt(...args) }
 function extend(obj, d) {
   for (const key of Object.keys(d)) {
     const f = d[key]
@@ -62,8 +64,6 @@ extend(Array, {
     return ret
   },
 })
-Function.prototype.then = function(f) { return () => this().then(f) }
-Function.prototype.alt = function(v) { return () => this().alt(v) }
 global.__failure = message => new Failure(message)
 global.__eff = o => typeof o === 'function' ? __eff(o()) : o
 global.__equals = (a,b) => a === b || str(a) === str(b)

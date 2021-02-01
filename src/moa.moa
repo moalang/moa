@@ -48,7 +48,7 @@ tokenize src =
   read_spaces = many1t("spaces" satisfy(c => " \n#".includes(c)))
   read_sym =
     "= + - * / % == < <= > >= && || : ( ) [ ] .".split(" ").first(equal).then(s => token("sym" s))
-  read_top = read_id.alt(read_int).alt(read_str).alt(read_spaces).alt(read_sym)
+  read_top = read_id.alt(read_int read_str read_spaces read_sym)
   tokens <- many(read_top)
   assert(pos == src.count)
   tokens.filter(t => t.tag != "spaces")
@@ -94,7 +94,7 @@ parse tokens =
       argv <- many(parse_exp)
       consume_sym(")")
       acall(target argv)
-    val <- parse_parenthesis.alt(parse_list).alt(parse_int).alt(parse_str).alt(parse_id)
+    val <- parse_parenthesis.alt(parse_list parse_int parse_str parse_id)
     parse_call(val).alt(val)
   parse_exp =
     token <- parse_unit
