@@ -52,6 +52,7 @@ extend(String, {
 extend(Array, {
   at: (a, n) => n < a.length && 0 <= n ? a[n] : ooo,
   all: (a, f) => a.every(f),
+  present: a => !!a.length,
   first: (a, f) => {
     let ret = new Failure('empty')
     for (const e of a) {
@@ -421,6 +422,8 @@ function testBootstrap() {
   fail('out of index', '[1].at(1)')
   fail('out of index', '[1].at(0-1)')
   eq([2, 3, 4], '[1 2 3].map(x => x + 1)')
+  eq(false, '[].present')
+  eq(true, '[1].present')
 
   // embedded effect
   eq(1, '\n  guard(true)\n  1')
@@ -443,6 +446,7 @@ function testMoa() {
     const result = evaluate(src)
     if (result.error) {
       warn('Failed')
+      print('main  : ', elipsis(main))
       print('expect: ', expect)
       print('error : ', result.error)
       print('src   : ', elipsis(src))
@@ -458,9 +462,9 @@ function testMoa() {
         put('.')
       } else {
         warn('Failed')
+        print('main  : ', elipsis(main))
         print('expect: ', expect)
         print('actual: ', actual)
-        print('main  : ', elipsis(main))
         print('js    : ', js)
         process.exit(1)
       }
@@ -480,17 +484,17 @@ function testMoa() {
   eq('a', '`a`')
   eq('a\nb', '`a\nb`')
   eq([], '[]')
-//  eq([1, 2], '[1 2]')
+  eq([1, 2], '[1 2]')
 
-//// expression
-//eq(3, '1+2')
-//eq(7, '1 + 2 * 3')
-//eq(9, '(1 + 2) * 3')
-//eq(5, '1 * (2 + 3)')
-//eq(true, '1 < 2')
-//
-//// function
-//eq(3, 'add(1 2)', 'add a b = a + b')
+  // expression
+  eq(3, '1+2')
+  eq(7, '1 + 2 * 3')
+  eq(9, '(1 + 2) * 3')
+  eq(5, '1 * (2 + 3)')
+  eq(true, '1 < 2')
+
+  // function
+  eq(3, 'add(1 2)', 'add a b = a + b')
 //
 //// type
 //eq({a: 1, b: true}, 'ab(1 true)', 'ab:\n  a int\n  b bool')
