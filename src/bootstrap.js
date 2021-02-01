@@ -19,6 +19,14 @@ const range = (s,e,n=1) => {
 }
 const twin = (f,a,n=1) => range(n, a.length, 2).map(i => f(a[i-1], a[i]))
 const elipsis = s => s.length <= 100 ? s : s.slice(0, 96) + ' ...\n'
+const cat = s => {
+  const lines = s.split('\n')
+  const l = lines.length.toString().length
+  for (const [i,line] of lines.entries()) {
+    const no = (i+1).toString().padStart(l, ' ')
+    print(no + ': ' + line)
+  }
+}
 
 // runtime helper functions
 function Failure(message) { this.message = message }
@@ -53,6 +61,7 @@ extend(Array, {
   at: (a, n) => n < a.length && 0 <= n ? a[n] : ooo,
   all: (a, f) => a.every(f),
   present: a => !!a.length,
+  count: a => a.length,
   first: (a, f) => {
     let ret = new Failure('empty')
     for (const e of a) {
@@ -69,7 +78,10 @@ global.__failure = message => new Failure(message)
 global.__eff = o => typeof o === 'function' ? __eff(o()) : o
 global.__equals = (a,b) => a === b || str(a) === str(b)
 global.__dump = dump
-global.assert = (cond,message) => { if (!cond) { throw new Error('Assert: ' + message) }}
+global.assert = (cond,message,...params) => {
+  if (cond) { return }
+  throw new Error('Assert: ' + message + (params.length ? ' ' + str(params) : ''))
+}
 function compile(src) {
   function tokenize() {
     function Token(tag, code, pos) {
@@ -274,10 +286,10 @@ function compile(src) {
       } else if (token.name === 'guard') {
         return token.argv.map(gen).join(' && ') + ' ? ({}) : __failure("guard")'
       } else if (token.name === 'assert') {
-        const cond = token.argv[0]
+        const [cond, ...params] = token.argv
         const value = cond.tag === 'op2' ? gen(cond.lhs) + '.string+"'+cond.op+'"+' + gen(cond.rhs) + '.string' : 'false'
         const at = str(cond.at)
-        return `assert(${gen(cond)}, ${value} + " at " + ${at})`
+        return `assert(${gen(cond)}, ${value} + " at " + ${at}, ${params.map(gen).join(',')})`
       } else if (token.name === 'if') {
         const l = token.argv.length
         if (l%2!=1) { throw new Error('if arguments have to odd number of arguments: ' + str(token)) }
@@ -435,6 +447,7 @@ function testBootstrap() {
   eq([2, 3, 4], '[1 2 3].map(x => x + 1)')
   eq(false, '[].present')
   eq(true, '[1].present')
+  eq(0, '[].count')
 
   // embedded effect
   eq(1, '\n  guard(true)\n  1')
@@ -473,14 +486,14 @@ function testMoa() {
         print('main  : ', elipsis(main))
         print('expect: ', expect)
         print('actual: ', actual)
-        print(js)
+        cat(compiler)
         process.exit(1)
       }
     } catch (e) {
       warn('Failed')
       print(e)
       print('main: ', elipsis(main))
-      print(js)
+      cat(compiler)
       process.exit(1)
     }
   }
@@ -503,14 +516,15 @@ function testMoa() {
 
   // function
   eq(3, 'add(1 2)', 'add a b = a + b')
-//
-//// type
-//eq({a: 1, b: true}, 'ab(1 true)', 'ab:\n  a int\n  b bool')
-//eq(true, 'ab(1 true) == ab(1 true)', 'ab:\n  a int\n  b bool')
-//eq(false, 'ab(1 true) == ab(2 true)', 'ab:\n  a int\n  b bool')
-//eq({x: 1, __type: 'a'}, 'a(1)', 'adt|\n  a: x int\n  b: y []int')
-//eq({y: [1], __type: 'b'}, 'b([1])', 'adt|\n  a: x int\n  b: y []int')
-//
+
+  // type
+  //eq(1, 'ab(1 true).a', 'ab:\n  a int\n  b bool')
+  //eq(true, 'ab(1 true).b', 'ab:\n  a int\n  b bool')
+  //eq(true, 'ab(1 true) == ab(1 true)', 'ab:\n  a int\n  b bool')
+  //eq(false, 'ab(1 true) == ab(2 true)', 'ab:\n  a int\n  b bool')
+  //eq(1, 'a(1).x', 'adt|\n  a: x int\n  b: y [int]')
+  //eq([1], 'b(1).y', 'adt|\n  a: x int\n  b: y [int]')
+
 //// control flow
 //eq(1, 'if(true 1 2)')
 //eq(2, 'if(false 1 2)')

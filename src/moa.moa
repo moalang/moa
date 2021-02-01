@@ -104,7 +104,9 @@ parse tokens =
       rhs <- parse_exp
       aop2(op token rhs)
     parse_op2.alt(token)
-  many(parse_func)
+  defines <- many(parse_func)
+  assert(tokens.count == pos tokens.at(pos))
+  defines
 generate defines =
   call args = if(args.present "(" + args.map(a=>a.code).join(",") + ")=>" "")
   gen a = match(a
