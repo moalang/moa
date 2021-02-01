@@ -6,7 +6,7 @@ const str = obj => JSON.stringify(obj, null, 2)
 const put = s => process.stdout.write(typeof s === 'string' ? s : str(s))
 const print = (...a) => console.log(...a)
 const warn = (...a) => console.warn(...a)
-const dump = o => console.dir(o, {depth: null})
+const dump = o => (console.dir(o, {depth: null}), o)
 const copy = o => JSON.parse(JSON.stringify(o))
 const dig = (d,...args) => args.reduce((o,name) => o[name], d)
 const range = (s,e,n=1) => {
@@ -18,6 +18,7 @@ const range = (s,e,n=1) => {
   return l
 }
 const twin = (f,a,n=1) => range(n, a.length, 2).map(i => f(a[i-1], a[i]))
+const elipsis = s => s.length <= 100 ? s : s.slice(0, 96) + ' ...\n'
 
 // runtime helper functions
 function Failure(message) { this.message = message }
@@ -38,7 +39,9 @@ function extend(obj, d) {
   Object.defineProperty(obj.prototype, 'string', { get: function() { return str(this) } })
 }
 const ooo = new Failure('out of index')
-extend(Number, {})
+extend(Number, {
+  char: n => String.fromCharCode(n),
+})
 extend(String, {
   at: (s,n) => s[n] || ooo,
   count: s => s.length,
@@ -53,6 +56,7 @@ Function.prototype.alt = function(v) { return () => this().alt(v) }
 global.__failure = message => new Failure(message)
 global.__eff = o => typeof o === 'function' ? __eff(o()) : o
 global.__equals = (a,b) => a === b || str(a) === str(b)
+global.__dump = dump
 global.assert = (cond,message) => { if (!cond) { throw new Error('Assert: ' + message) }}
 function evaluate(src, option={}) {
   function tokenize() {
@@ -234,7 +238,7 @@ function evaluate(src, option={}) {
     const expect = tokens.filter(t => ['func', 'struct', 'adt'].includes(t.tag) && t.indent === 0).map(t => t.name).join(' ')
     const actual = nodes.map(t => t.name).join(' ')
     if (expect !== actual) {
-      throw new Error('Lack of information after parsing: ' + str({expect,actual,nodes}))
+      throw new Error('Lack of information after parsing: ' + str({expect,actual}))
     }
     return nodes
   }
@@ -309,7 +313,7 @@ function evaluate(src, option={}) {
   try {
     const tokens = tokenize()
     ret.defs = parse(tokens)
-    ret.js = generate(ret.defs) + '\nreturn typeof(main) === "function" ? main() : main'
+    ret.js = generate(ret.defs) + '\nreturn __eff(main)'
     ret.value = Function(ret.js)()
   } catch (e) {
     ret.error = e
@@ -390,8 +394,11 @@ function testBootstrap() {
   eq(3, '"1".int.then((x) => x + 2)')
   eq(0, '"a".int.then((x) => x + 2).alt(0)')
 
-  // embedded string
+  // embedded integer
   eq('1', '1.string')
+  eq('A', '65.char')
+
+  // embedded string
   eq(2, '"hi".count')
   eq('i', '"hi".at(1)')
   fail('out of index', '"hi".at(2)')
@@ -419,34 +426,116 @@ function testBootstrap() {
 }
 function testMoa() {
   const moa = require('fs').readFileSync('moa.moa', 'utf8')
-  function test(expect, main, ...funcs) {
+  function eq(expect, main, ...funcs) {
     funcs.push('main = ' + main)
     const src = moa + '\nmain = compile(' + str(funcs.join('\n')) + ')'
     const result = evaluate(src)
     if (result.error) {
       warn('Failed')
       print('expect: ', expect)
-      print('src   : ', src)
-      print('dump  : ')
-      dump(result)
+      print('error : ', result.error)
+      print('src   : ', elipsis(src))
+      print('js    : ')
+      print(result.js)
       process.exit(1)
     }
     const compiler = result.js
     const js = Function(compiler)()
-    const ret = Function(js + '\nreturn main()')()
-    if (__equals(expect, ret)) {
-      put('.')
-    } else {
+    try {
+      const actual = Function(js + '\nreturn __eff(main)')()
+      if (__equals(expect, actual)) {
+        put('.')
+      } else {
+        warn('Failed')
+        print('expect: ', expect)
+        print('actual: ', actual)
+        print('main  : ', elipsis(main))
+        print('js    : ', js)
+        process.exit(1)
+      }
+    } catch (e) {
       warn('Failed')
-      print('expect: ', expect)
-      print('src   : ', main)
+      print(e)
+      print('main: ', elipsis(main))
+      print(js)
       process.exit(1)
     }
-    return ret
   }
 
-  test(1, '1')
-  test(3, '1 + 2')
+  // basic values
+  eq(1, '1')
+  eq(true, 'true')
+  eq('a', '"a"')
+//  eq('a', '`a`')
+//  eq('a\nb', '`a\nb`')
+//  eq([], '[]')
+//  eq([1, 2], '[1 2]')
+
+//// expression
+//eq(3, '1+2')
+//eq(7, '1 + 2 * 3')
+//eq(9, '(1 + 2) * 3')
+//eq(5, '1 * (2 + 3)')
+//eq(true, '1 < 2')
+//
+//// function
+//eq(3, 'add(1 2)', 'add a b = a + b')
+//
+//// type
+//eq({a: 1, b: true}, 'ab(1 true)', 'ab:\n  a int\n  b bool')
+//eq(true, 'ab(1 true) == ab(1 true)', 'ab:\n  a int\n  b bool')
+//eq(false, 'ab(1 true) == ab(2 true)', 'ab:\n  a int\n  b bool')
+//eq({x: 1, __type: 'a'}, 'a(1)', 'adt|\n  a: x int\n  b: y []int')
+//eq({y: [1], __type: 'b'}, 'b([1])', 'adt|\n  a: x int\n  b: y []int')
+//
+//// control flow
+//eq(1, 'if(true 1 2)')
+//eq(2, 'if(false 1 2)')
+//eq(3, 'if(false 1 false 2 3)')
+//eq(1, 'if(true 1 not_found)') // check lazy evaluation
+//eq(10, 'match(1 1 10 2 20)')
+//eq(20, 'match(2 1 10 2 20)')
+//eq(99, 'match(3 1 10 2 20 _ 99)')
+//eq(99, 'match(3 1 10 2 20 _ 99 _ 999)')
+//eq(10, 'match(1 1 10 2 not_found)') // check lazy evaluation
+//eq(1, 'f(a(1))', 'f v = match(v a v.x b v.y)', 'adt|\n  a: x int\n  b: y []int')
+//eq([1], 'f(b([1]))', 'f v = match(v a v.x b v.y)', 'adt|\n  a: x int\n  b: y []int')
+//eq(1, 'f(a)', 'f v = match(v a 1 b 2)', 'adt|\n  a\n  b')
+//eq(2, 'f(b)', 'f v = match(v a 1 b 2)', 'adt|\n  a\n  b')
+//
+//// effect
+//eq(3, '\n  count := 0\n  count += 1\n  count += 2\n  count')
+//eq(2, 'f', 'f =\n  n := 0\n  g =\n    n += 1\n    n\n  g\n  g')
+//fail('string.int: not a number hi', '"hi".int')
+//eq(0, '"a".int.alt(0)')
+//eq(1, '"1".int.alt(0)')
+//eq(3, '"1".int.then((x) => x + 2)')
+//eq(0, '"a".int.then((x) => x + 2).alt(0)')
+//
+//// embedded string
+//eq('1', '1.string')
+//eq(2, '"hi".count')
+//eq('i', '"hi".at(1)')
+//fail('out of index', '"hi".at(2)')
+//
+//// embedded array
+//eq('[]', '[].string')
+//eq(str([1, 2]), '[1 2].string')
+//eq(1, '[1].at(0)')
+//fail('out of index', '[1].at(1)')
+//fail('out of index', '[1].at(0-1)')
+//eq([2, 3, 4], '[1 2 3].map(x => x + 1)')
+//
+//// embedded effect
+//eq(1, '\n  guard(true)\n  1')
+//fail('guard', '\n  guard(false)\n  1')
+//eq(2, 'f.then(a => a+1)', 'f =\n  guard(true)\n  1')
+//fail('guard', 'f.then(a => a+1)', 'f =\n  guard(false)\n  1')
+//eq(2, 'f.alt(2)', 'f =\n  guard(false)\n  1')
+
+  // spiteful tests
+  eq(1, ' 1 ')
+  eq(1, ' ( ( ( 1 ) ) ) ')
   print('ok')
 }
 function runStdin() {

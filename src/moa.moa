@@ -4,6 +4,7 @@ token:
   code string
 ast|
   aint: value token
+  astr: value token
   aid: name token
   afunc: name token, args []token, body ast
   acall: target ast, argv []token
@@ -25,12 +26,20 @@ tokenize src =
     guard(f(c))
     pos += 1
     c
+  read_chars n =
+    satisfy(c => (c == n.char))
+    cs <- many(satisfy(c => c != n.char))
+    satisfy(c => (c == n.char))
+    token("str" cs.join(""))
+  not_chars s =
+    many(satisfy(c => (c != s)))
   many1t tag f = many1(f).then(cs => token(tag cs.join("")))
   read_int = many1t("int" satisfy(c => ("0" <= c) && (c <= "9")))
   read_id = many1t("id" satisfy(c => ("a" <= c) && (c <= "z")))
+  read_str = read_chars(34).alt(read_chars(96))
   read_spaces = many1t("spaces" satisfy(c => " \n#".includes(c)))
   read_sym = many1t("sym" satisfy(c => "+-*/%=><&|:()[].".includes(c)))
-  read_top = read_int.alt(read_id).alt(read_spaces).alt(read_sym)
+  read_top = read_id.alt(read_int).alt(read_str).alt(read_spaces).alt(read_sym)
   tokens <- many(read_top)
   assert(pos == src.count)
   tokens.filter(t => t.tag != "spaces")
@@ -65,6 +74,8 @@ parse tokens =
       consume_between("(" ")" parse_exp)
     parse_int =
       consume(t => t.tag == "int").then(aint)
+    parse_str =
+      consume(t => t.tag == "str").then(astr)
     parse_id =
       consume(t => t.tag == "id").then(aid)
     parse_call target =
@@ -72,7 +83,7 @@ parse tokens =
       argv <- many(parse_exp)
       consume_sym(")")
       acall(target argv)
-    val <- parse_parenthesis.alt(parse_int).alt(parse_id)
+    val <- parse_parenthesis.alt(parse_int).alt(parse_str).alt(parse_id)
     parse_call(val).alt(val)
   parse_exp =
     token <- parse_unit
@@ -83,15 +94,18 @@ parse tokens =
     parse_op2.alt(token)
   many(parse_func)
 generate defines =
+  call args = if(args.present "(" + args.map(a=>a.code).join(",") + ")=>" "")
   gen a = match(a
     aint  a.value.code
+    astr  a.value.code.string
     aid   a.name.code
-    afunc ("const " + a.name.code + " = (" + a.args.map(a => a.code).join(",") + ") => " + gen(a.body))
-    acall (gen(a.target) + "(" + a.argv.map(gen).join(",") + ")")
+    afunc ("const " + a.name.code + " = " + call(a.args) + gen(a.body))
+    acall ("(" + gen(a.target) + ")(" + a.argv.map(gen).join(",") + ")")
     aop2  (gen(a.lhs) + a.op.code + gen(a.rhs)))
   defines.map(gen).join("\n")
 compile src =
   tokens <- tokenize(src)
   defines <- parse(tokens)
   js <- generate(defines)
+  #__dump([js defines])
   js
