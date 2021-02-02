@@ -109,17 +109,14 @@ add x y = x + y
 
 Control Flow
 ```
-gcd a b = match(
-  a < b  -> gcd(b a)
-  b == 0 -> a
-  _ -> gcd(b a/b))
-```
+gcd a b = if(
+  a < b  gcd(b a)
+  b == 0 a
+  _      gcd(b a/b))
 
-Pattern Matching
-```
-show m = match(
-  m:none -> "none"
-  m:just -> "just " ++ m.string)
+show m = match(m
+  none "none"
+  just ++("just " m))
 ```
 
 Effect

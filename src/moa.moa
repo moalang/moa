@@ -11,6 +11,7 @@ ast|
   afunc: name token, args [token], body ast
   acall: target ast, argv [token]
   aop2: op token, lhs ast, rhs ast
+  atype: name token, targs [token], members [token token]
 
 # helper
 many_acc f acc = f.then(c => many_acc(f acc.concat([c]))).alt(acc)
@@ -73,12 +74,15 @@ parse tokens =
     ret <- c
     consume_code(r)
     ret
-  parse_func =
+  parse_define =
     name <- consume_id
     args <- many(consume_id)
-    consume_code("=")
-    body <- parse_exp
-    afunc(name args body)
+    mark <- consume(t => ["=" ":"].includes(t.code))
+    read_struct =
+      atype(name args [])
+    match(mark.code
+      "=" parse_exp.then(body => afunc(name args body))
+      ":" read_struct)
   parse_unit =
     parse_parenthesis =
       consume_between("(" ")" parse_exp).then(apair)
@@ -104,20 +108,26 @@ parse tokens =
       rhs <- parse_exp
       aop2(op token rhs)
     parse_op2.alt(token)
-  defines <- many(parse_func)
+
+  defines <- many(parse_define)
   assert(tokens.count == pos tokens.at(pos))
   defines
 generate defines =
   call args = if(args.present "(" + args.map(a=>a.code).join(",") + ")=>" "")
+  keys xs = xs.map(x => x.at(0).code).join(",")
+  wrap a = match(a
+    aint "(" + gen(a) + ")"
+    _ gen(a))
   gen a = match(a
     aint  a.value.code
     astr  a.value.code.string
     aid   a.name.code
     apair ("(" + gen(a.value) + ")")
+    atype ("const " + a.name.code + " = (" + keys(a.members) + ")" + " => ({" + keys(a.members) + "})")
     alist ("[" + a.values.map(gen).join(",") + "]")
     afunc ("const " + a.name.code + " = " + call(a.args) + gen(a.body))
     acall (gen(a.target) + "(" + a.argv.map(gen).join(",") + ")")
-    aop2  (gen(a.lhs) + a.op.code + gen(a.rhs)))
+    aop2  (wrap(a.lhs) + a.op.code + gen(a.rhs)))
   defines.map(gen).join("\n")
 compile src =
   tokens <- tokenize(src)

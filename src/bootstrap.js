@@ -196,12 +196,12 @@ function compile(src) {
           token.body = parseIndent(token, parseTop())
           return token
         case 'adt':
-          const [aname, ...fields] = token.code.split('\n').map(x => x.trim()).filter(x => x)
+          const [aname, ...lines] = token.code.split('\n').map(x => x.trim()).filter(x => x)
           token.name = token.type = aname.replace('|', '')
-          token.adt = fields.map(field => {
-            const [tag, ...kvs] = field.split(/ *[ ,:] */)
-            if (kvs.length % 2 !== 0) { throw new Error('The number of ADT fields shoul be even: ' + str(kvs)) }
-            return {tag, keys: twin((a,_)=>a, kvs)}
+          token.adt = lines.map(line => {
+            const [tag, kvs] = line.split(':')
+            const keys = kvs ? kvs.split(',').map(f => f.trim().split(' ')[0]) : []
+            return {tag, keys}
           })
           return token
         case 'struct':
@@ -492,7 +492,7 @@ function testMoa() {
     } catch (e) {
       warn('Failed')
       print(e)
-      print('main: ', elipsis(main))
+      print("#", funcs.join("\n"))
       cat(compiler)
       process.exit(1)
     }
@@ -506,6 +506,19 @@ function testMoa() {
   eq('a\nb', '`a\nb`')
   eq([], '[]')
   eq([1, 2], '[1 2]')
+
+  // embedded string
+  eq('1', '1.string')
+  eq(2, '"hi".count')
+  eq('i', '"hi".at(1)')
+
+  // embedded array
+  //eq('[]', '[].string')
+  //eq(str([1, 2]), '[1 2].string')
+  //eq(1, '[1].at(0)')
+  //fail('out of index', '[1].at(1)')
+  //fail('out of index', '[1].at(0-1)')
+  //eq([2, 3, 4], '[1 2 3].map(x => x + 1)')
 
   // expression
   eq(3, '1+2')
@@ -548,20 +561,6 @@ function testMoa() {
 //eq(1, '"1".int.alt(0)')
 //eq(3, '"1".int.then((x) => x + 2)')
 //eq(0, '"a".int.then((x) => x + 2).alt(0)')
-//
-//// embedded string
-//eq('1', '1.string')
-//eq(2, '"hi".count')
-//eq('i', '"hi".at(1)')
-//fail('out of index', '"hi".at(2)')
-//
-//// embedded array
-//eq('[]', '[].string')
-//eq(str([1, 2]), '[1 2].string')
-//eq(1, '[1].at(0)')
-//fail('out of index', '[1].at(1)')
-//fail('out of index', '[1].at(0-1)')
-//eq([2, 3, 4], '[1 2 3].map(x => x + 1)')
 //
 //// embedded effect
 //eq(1, '\n  guard(true)\n  1')
