@@ -95,9 +95,9 @@ function compile(src) {
     const reg = (p,tag,r) => consume(p, tag, src.slice(p).match(r))
     const some = (p,tag,s) => consume(p, tag, s.split(' ').find(w => src.slice(p).startsWith(w)))
     const eat = p =>
-      reg(p, 'func', /^[a-z_][a-z0-9_]*( +[a-z_][a-z0-9_]*)* +=(?![>=])/) ||
-      reg(p, 'struct', /^[A-Za-z_][A-Za-z0-9_]*:(\n  [a-z].*)+/) ||
-      reg(p, 'adt', /^[A-Za-z_][A-Za-z0-9_]*\|(\n  [a-z].*)+/) ||
+      reg(p, 'func', /^[a-z_][a-z0-9_]*( +[a-z_][a-z0-9_]*)* *:(?![:|=])/) ||
+      reg(p, 'struct', /^[A-Za-z_][A-Za-z0-9_]*::(\n  [a-z].*)+/) ||
+      reg(p, 'adt', /^[A-Za-z_][A-Za-z0-9_]*\:\|(\n  [a-z].*)+/) ||
       reg(p, 'int', /^[0-9]+/) ||
       reg(p, 'id', /^[a-z_][a-z0-9_]*/) ||
       reg(p, 'string', /^"(?:(?:\\")|[^"])*"/) ||
@@ -109,7 +109,7 @@ function compile(src) {
       some(p, 'ra', ']') ||
       some(p, 'lp', '(') ||
       some(p, 'rp', ')') ||
-      some(p, 'op2', '+= -= *= /= || && == != >= <= ++ => :: := <- > < + - * /')
+      some(p, 'op2', '+= -= *= /= || && == != >= <= ++ => := = <- > < + - * /')
 
     const liner = (function() {
       const lines = src.split('\n')
@@ -194,12 +194,12 @@ function compile(src) {
         case 'ra':
         case 'rp': return token
         case 'func':
-          [token.name, ...token.args] = token.code.replace('=', '').split(/ +/).slice(0, -1)
+          [token.name, ...token.args] = token.code.replace(':', '').split(/ +/)
           token.body = parseIndent(token, parseTop())
           return token
         case 'adt':
           const [aname, ...lines] = token.code.split('\n').map(x => x.trim()).filter(x => x)
-          token.name = token.type = aname.replace('|', '')
+          token.name = token.type = aname.replace(':|', '')
           token.adt = lines.map(line => {
             const [tag, kvs] = line.split(':')
             const keys = kvs ? kvs.split(',').map(f => f.trim().split(' ')[0]) : []
@@ -214,7 +214,7 @@ function compile(src) {
         case 'id': parseCall(token); return token
         case 'la': token.ary = until(t => t.tag !== 'ra'); return token
         case 'lp': token.items = until(t => t.tag !== 'rp'); return token
-        default: throw new Error('Unexpected tag ' + str(token))
+        default: throw new Error('Unexpected tag ' + str({src,token}))
       }
     }
     function parseLeft(token) {
@@ -264,7 +264,7 @@ function compile(src) {
     const expect = tokens.filter(t => ['func', 'struct', 'adt'].includes(t.tag) && t.indent === 0).map(t => t.name).join(' ')
     const actual = nodes.map(t => t.name).join(' ')
     if (expect !== actual) {
-      throw new Error('Lack of information after parsing: ' + str({expect,actual}))
+      throw new Error('Lack of information after parsing: ' + str({src,expect,actual,nodes}))
     }
     return nodes
   }
@@ -322,10 +322,11 @@ function compile(src) {
         case 'prop': return genProp(token)
         case 'op2':
           switch (token.op) {
-            case '=': return 'const ' + gen(token.lhs) + token.op + gen(token.rhs)
-            case '::': return 'let ' + gen(token.lhs) + ' = ' + gen(token.rhs)
+            case ':': return 'const ' + gen(token.lhs) + '=' + gen(token.rhs)
+            case '=': const name = gen(token.lhs); return 'const ' + name + ' = __eff(' + gen(token.rhs) + '); if(' +
+ name + '.__failed) { return ' + name + ' }'
+            case '<-': return 'let ' + gen(token.lhs) + ' = ' + gen(token.rhs)
             case ':=': return gen(token.lhs) + ' = ' + gen(token.rhs)
-            case '<-': const name = gen(token.lhs); return 'const ' + name + ' = __eff(' + gen(token.rhs) + '); if(' + name + '.__failed) { return ' + name + ' }'
             case '=>': return '((' + token.args + ') => ' + gen(token.rhs) + ')'
             case '==': return `__equals(${gen(token.lhs)}, ${gen(token.rhs)})`
             default: return gen(token.lhs) + token.op + gen(token.rhs)
@@ -364,7 +365,7 @@ function runTest() {
 }
 function testBootstrap() {
   function equals(unwrap, expect, main, ...funcs) {
-    const src = funcs.map(x => x + '\n').join('') + 'main = ' + main
+    const src = funcs.map(x => x + '\n').join('') + 'main: ' + main
     const result = evaluate(src)
     const actual = unwrap(result)
     if (str(expect) === str(actual)) {
@@ -399,14 +400,14 @@ function testBootstrap() {
   eq(true, '1 < 2')
 
   // function
-  eq(3, 'add(1 2)', 'add a b = a + b')
+  eq(3, 'add(1 2)', 'add a b: a + b')
 
   // type
-  eq({a: 1, b: true}, 'ab(1 true)', 'ab:\n  a int\n  b bool')
-  eq(true, 'ab(1 true) == ab(1 true)', 'ab:\n  a int\n  b bool')
-  eq(false, 'ab(1 true) == ab(2 true)', 'ab:\n  a int\n  b bool')
-  eq({x: 1, __type: 'a'}, 'a(1)', 'adt|\n  a: x int\n  b: y []int')
-  eq({y: [1], __type: 'b'}, 'b([1])', 'adt|\n  a: x int\n  b: y []int')
+  eq({a: 1, b: true}, 'ab(1 true)', 'ab::\n  a int\n  b bool')
+  eq(true, 'ab(1 true) == ab(1 true)', 'ab::\n  a int\n  b bool')
+  eq(false, 'ab(1 true) == ab(2 true)', 'ab::\n  a int\n  b bool')
+  eq({x: 1, __type: 'a'}, 'a(1)', 'adt:|\n  a: x int\n  b: y []int')
+  eq({y: [1], __type: 'b'}, 'b([1])', 'adt:|\n  a: x int\n  b: y []int')
 
   // control flow
   eq(1, 'if(true 1 2)')
@@ -418,15 +419,15 @@ function testBootstrap() {
   eq(99, 'match(3 1 10 2 20 _ 99)')
   eq(99, 'match(3 1 10 2 20 _ 99 _ 999)')
   eq(10, 'match(1 1 10 2 not_found)') // check lazy evaluation
-  eq(1, 'f(a(1))', 'f v = match(v a v.x b v.y)', 'adt|\n  a: x int\n  b: y []int')
-  eq([1], 'f(b([1]))', 'f v = match(v a v.x b v.y)', 'adt|\n  a: x int\n  b: y []int')
-  eq(1, 'f(a)', 'f v = match(v a 1 b 2)', 'adt|\n  a\n  b')
-  eq(2, 'f(b)', 'f v = match(v a 1 b 2)', 'adt|\n  a\n  b')
+  eq(1, 'f(a(1))', 'f v: match(v a v.x b v.y)', 'adt:|\n  a: x int\n  b: y []int')
+  eq([1], 'f(b([1]))', 'f v: match(v a v.x b v.y)', 'adt:|\n  a: x int\n  b: y []int')
+  eq(1, 'f(a)', 'f v: match(v a 1 b 2)', 'adt:|\n  a\n  b')
+  eq(2, 'f(b)', 'f v: match(v a 1 b 2)', 'adt:|\n  a\n  b')
 
   // effect
-  eq(3, '\n  count :: 0\n  count += 1\n  count += 2\n  count')
-  eq(2, 'f', 'f =\n  n :: 0\n  g =\n    n += 1\n    n\n  g\n  g')
-  eq(1, 'f', 'f =\n  n :: 0\n  g =\n    n := 1\n    n\n  g\n  n')
+  eq(3, '\n  count <- 0\n  count += 1\n  count += 2\n  count')
+  eq(2, 'f', 'f:\n  n <- 0\n  g:\n    n += 1\n    n\n  g\n  g')
+  eq(1, 'f', 'f:\n  n <- 0\n  g:\n    n := 1\n    n\n  g\n  n')
   fail('string.int: not a number hi', '"hi".int')
   eq(0, '"a".int.alt(0)')
   eq(1, '"1".int.alt(0)')
@@ -459,9 +460,9 @@ function testBootstrap() {
   // embedded effect
   eq(1, '\n  guard(true)\n  1')
   fail('guard', '\n  guard(false)\n  1')
-  eq(2, 'f.then(a => a+1)', 'f =\n  guard(true)\n  1')
-  fail('guard', 'f.then(a => a+1)', 'f =\n  guard(false)\n  1')
-  eq(2, 'f.alt(2)', 'f =\n  guard(false)\n  1')
+  eq(2, 'f.then(a => a+1)', 'f:\n  guard(true)\n  1')
+  fail('guard', 'f.then(a => a+1)', 'f:\n  guard(false)\n  1')
+  eq(2, 'f.alt(2)', 'f:\n  guard(false)\n  1')
 
   // spiteful tests
   eq(1, ' 1 ')
@@ -481,7 +482,7 @@ function testMoa() {
   const compiler = result.js
 
   function eq(expect, main, ...funcs) {
-    funcs.push('main = ' + main)
+    funcs.push('main: ' + main)
     const src = str(funcs.join('\n'))
     try {
       const js = Function(compiler + '\nreturn __eff(compile(' + src + '))')()
@@ -535,7 +536,7 @@ function testMoa() {
   eq(true, '1 < 2')
 
   // function
-  eq(3, 'add(1 2)', 'add a b = a + b')
+  eq(3, 'add(1 2)', 'add a b: a + b')
 
   // type
   //eq(1, '\n  \n    1')
@@ -556,10 +557,10 @@ function testMoa() {
 //eq(99, 'match(3 1 10 2 20 _ 99)')
 //eq(99, 'match(3 1 10 2 20 _ 99 _ 999)')
 //eq(10, 'match(1 1 10 2 not_found)') // check lazy evaluation
-//eq(1, 'f(a(1))', 'f v = match(v a v.x b v.y)', 'adt|\n  a: x int\n  b: y []int')
-//eq([1], 'f(b([1]))', 'f v = match(v a v.x b v.y)', 'adt|\n  a: x int\n  b: y []int')
-//eq(1, 'f(a)', 'f v = match(v a 1 b 2)', 'adt|\n  a\n  b')
-//eq(2, 'f(b)', 'f v = match(v a 1 b 2)', 'adt|\n  a\n  b')
+//eq(1, 'f(a(1))', 'f v: match(v a v.x b v.y)', 'adt|\n  a: x int\n  b: y []int')
+//eq([1], 'f(b([1]))', 'f v: match(v a v.x b v.y)', 'adt|\n  a: x int\n  b: y []int')
+//eq(1, 'f(a)', 'f v: match(v a 1 b 2)', 'adt|\n  a\n  b')
+//eq(2, 'f(b)', 'f v: match(v a 1 b 2)', 'adt|\n  a\n  b')
 //
 //// effect
 //eq(3, '\n  count :: 0\n  count += 1\n  count += 2\n  count')

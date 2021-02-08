@@ -35,7 +35,7 @@ main = io.print("Hello World")
 Test
 ```
 > moa test
-..x. Failed
+.x Failed
 test.moa:5|  eq(1 2)
 expect: 1
   fact: 2
@@ -64,7 +64,7 @@ true # bool
 Container
 ```
 (1 2)             # tuple
-(a:1 b:2)         # named tuple
+(a=1 b=2)         # named tuple
 [1 2 3]           # list []
 ["one":1 "two":2] # hash [:]
 ```
