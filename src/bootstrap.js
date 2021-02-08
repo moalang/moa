@@ -73,6 +73,8 @@ extend(Array, {
     }
     return ret
   },
+  head: a => a.length ? a[0] : ooo,
+  last: a => a.length ? a[a.length-1] : ooo,
 })
 global.__failure = message => new Failure(message)
 global.__eff = o => typeof o === 'function' ? __eff(o()) : o
@@ -107,7 +109,7 @@ function compile(src) {
       some(p, 'ra', ']') ||
       some(p, 'lp', '(') ||
       some(p, 'rp', ')') ||
-      some(p, 'op2', '+= -= *= /= || && == != >= <= ++ => := <- > < + - * /')
+      some(p, 'op2', '+= -= *= /= || && == != >= <= ++ => :: := <- > < + - * /')
 
     const liner = (function() {
       const lines = src.split('\n')
@@ -321,7 +323,8 @@ function compile(src) {
         case 'op2':
           switch (token.op) {
             case '=': return 'const ' + gen(token.lhs) + token.op + gen(token.rhs)
-            case ':=': return 'let ' + gen(token.lhs) + ' = ' + gen(token.rhs)
+            case '::': return 'let ' + gen(token.lhs) + ' = ' + gen(token.rhs)
+            case ':=': return gen(token.lhs) + ' = ' + gen(token.rhs)
             case '<-': const name = gen(token.lhs); return 'const ' + name + ' = __eff(' + gen(token.rhs) + '); if(' + name + '.__failed) { return ' + name + ' }'
             case '=>': return '((' + token.args + ') => ' + gen(token.rhs) + ')'
             case '==': return `__equals(${gen(token.lhs)}, ${gen(token.rhs)})`
@@ -421,8 +424,9 @@ function testBootstrap() {
   eq(2, 'f(b)', 'f v = match(v a 1 b 2)', 'adt|\n  a\n  b')
 
   // effect
-  eq(3, '\n  count := 0\n  count += 1\n  count += 2\n  count')
-  eq(2, 'f', 'f =\n  n := 0\n  g =\n    n += 1\n    n\n  g\n  g')
+  eq(3, '\n  count :: 0\n  count += 1\n  count += 2\n  count')
+  eq(2, 'f', 'f =\n  n :: 0\n  g =\n    n += 1\n    n\n  g\n  g')
+  eq(1, 'f', 'f =\n  n :: 0\n  g =\n    n := 1\n    n\n  g\n  n')
   fail('string.int: not a number hi', '"hi".int')
   eq(0, '"a".int.alt(0)')
   eq(1, '"1".int.alt(0)')
@@ -447,7 +451,10 @@ function testBootstrap() {
   eq([2, 3, 4], '[1 2 3].map(x => x + 1)')
   eq(false, '[].present')
   eq(true, '[1].present')
-  eq(0, '[].count')
+  eq(1, '[1 2].head')
+  eq(2, '[1 2].last')
+  fail('out of index', '[].head')
+  fail('out of index', '[].last')
 
   // embedded effect
   eq(1, '\n  guard(true)\n  1')
@@ -531,6 +538,7 @@ function testMoa() {
   eq(3, 'add(1 2)', 'add a b = a + b')
 
   // type
+  //eq(1, '\n  \n    1')
   //eq(1, 'ab(1 true).a', 'ab:\n  a int\n  b bool')
   //eq(true, 'ab(1 true).b', 'ab:\n  a int\n  b bool')
   //eq(true, 'ab(1 true) == ab(1 true)', 'ab:\n  a int\n  b bool')
@@ -554,8 +562,8 @@ function testMoa() {
 //eq(2, 'f(b)', 'f v = match(v a 1 b 2)', 'adt|\n  a\n  b')
 //
 //// effect
-//eq(3, '\n  count := 0\n  count += 1\n  count += 2\n  count')
-//eq(2, 'f', 'f =\n  n := 0\n  g =\n    n += 1\n    n\n  g\n  g')
+//eq(3, '\n  count :: 0\n  count += 1\n  count += 2\n  count')
+//eq(2, 'f', 'f =\n  n :: 0\n  g =\n    n += 1\n    n\n  g\n  g')
 //fail('string.int: not a number hi', '"hi".int')
 //eq(0, '"a".int.alt(0)')
 //eq(1, '"1".int.alt(0)')

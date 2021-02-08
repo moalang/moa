@@ -2,14 +2,6 @@
 Moa is an open source programming language.
 This language maximize productivity by fun programming.
 
-Table of contents
-1. Hello world
-2. Syntax
-3. Buildin
-4. Appendix
-
-
-
 
 
 ## 1. Getting started
@@ -44,17 +36,15 @@ Test
 ```
 > moa test
 ..x. Failed
-test.moa:5|  eq(12 v)
-expect: 12
-  fact: 11
+test.moa:5|  eq(1 2)
+expect: 1
+  fact: 2
 
 # test.moa
 - test
 main =
-  v = 11
   test.eq(1 1)
-  test.eq(12 v)
-  test.eq(1 1)
+  test.eq(1 2)
 ```
 
 
@@ -67,92 +57,91 @@ Primitives
 ```
 true # bool
 1    # int 64bit signed integer
-1.0  # real 64bit
+1.0  # float 64bit
 "hi" # string utf8
 ```
 
 Container
 ```
-[1 2 3] # list
+(1 2)             # tuple
+(a:1 b:2)         # named tuple
+[1 2 3]           # list []
+["one":1 "two":2] # hash [:]
 ```
 
-Expression
+Anonymouse Function
 ```
-1 + (2 * 3)
+a => a
 (a b) => a + b
 ```
 
 Types
 ```
-person:
-  name string
-  age int
-
-dict k v:
-  values [](k,v)
-
-bool|
-  true
-  false
-
-maybe a|
-  none
-  just a
+person:: name age
+dict k v:: values[(k v)]
+bool:| true false
+maybe a:| none just(a)
 ```
 
 Function
 ```
-pi = 3
-inc x = x + 1
-add x y = x + y
+pi: 3
+inc x: x + 1
+add x y: x + y
 ```
 
 Control Flow
 ```
-gcd a b = if(
+gcd a b: if(
   a < b  gcd(b a)
   b == 0 a
   _      gcd(b a/b))
 
-show m = match(m
+show m: match(m
   none "none"
-  just ++("just " m))
+  just (++ "just " m))
 ```
 
 Effect
 ```
-main =
-  acc := 0
-  count <- calculate 1
-  acc += count
-  print(acc)
-  acc
+main:
+  line := io.readline # := allow override
+  line = "> " + line
+  io.print(line)
 ```
 
 
 
 ## 3. Syntax
 ```
-top: unit (op2 top)
-unit: group | num | id | str
-group: "(" top* ")" | "[" top* "]" | "{" top+ "}"
-num: [0-9]+ (.[0-9]+)?
+top: func | data | adt | scope
+func: id+ "=" exp
+data: id+ ":" (br attr)+
+adt: id+ "|" (br id attr*)+
+scope:
+| "-" id+ (":" (br id type*)+)?
+
+body: (br exp)+ | exp
+exp: unit (op2 exp)?
+unit:
+| "(" exp+ ")" call?
+| "[" exp* "]"
+| [0-9]+ (.[0-9]+)?
+| '"' [^"] '"'
+| id call?
+call: "(" exp+ ")"
+op2: + - * / // % = += -= *= /= == != || && >= > <= < =>
+
 id: [A-Za-z_][A-Za-z0-9_]
-str: '"' [^"] '"'
+attr: id type
+type: id | "[" type (":" type)? "]" | "(" type type+ ")"
 ```
 
 ## 4. Buildin
 
-Reserved words
-types
-- bool, true, false
-- int, float
-- string
-- seq, array, set, dict, tuple, func
-- nil, error
-- opt, do, try
-methods
-- trace
+- bool: true false
+- int, float, string, i8..i64, u8..u64, f32,f64
+- error: nil
 
 Binary operators order
 ```
