@@ -75,6 +75,7 @@ extend(Array, {
   },
   head: a => a.length ? a[0] : ooo,
   last: a => a.length ? a[a.length-1] : ooo,
+  joinWith: (a,f) => a.reduce((acc,e,n) => acc+f(n-1)+e),
 })
 global.__failure = message => new Failure(message)
 global.__eff = o => typeof o === 'function' ? __eff(o()) : o
@@ -95,21 +96,21 @@ function compile(src) {
     const reg = (p,tag,r) => consume(p, tag, src.slice(p).match(r))
     const some = (p,tag,s) => consume(p, tag, s.split(' ').find(w => src.slice(p).startsWith(w)))
     const eat = p =>
-      reg(p, 'func', /^[a-z_][a-z0-9_]*( +[a-z_][a-z0-9_]*)* *:(?![:|=])/) ||
+      reg(p, 'func', /^[a-zA-Z_][a-zA-Z0-9_]*( +[a-zA-Z_][a-zA-Z0-9_]*)* *:(?![:|=])/) ||
       reg(p, 'struct', /^[A-Za-z_][A-Za-z0-9_]*::(\n  [a-z].*)+/) ||
       reg(p, 'adt', /^[A-Za-z_][A-Za-z0-9_]*\:\|(\n  [a-z].*)+/) ||
       reg(p, 'int', /^[0-9]+/) ||
-      reg(p, 'id', /^[a-z_][a-z0-9_]*/) ||
+      reg(p, 'id', /^[a-zA-Z_][a-zA-Z0-9_]*/) ||
       reg(p, 'string', /^"(?:(?:\\")|[^"])*"/) ||
       reg(p, 'string', /^`(?:(?:\\`)|[^`])*`/) ||
-      reg(p, 'prop', /^\.[a-z_][a-z0-9_]*/) ||
+      reg(p, 'prop', /^\.[a-zA-Z_][a-zA-Z0-9_]*/) ||
       reg(p, 'spaces', /^[ \n]+/) ||
       reg(p, 'comment', /^ *#.*/) ||
       some(p, 'la', '[') ||
       some(p, 'ra', ']') ||
       some(p, 'lp', '(') ||
       some(p, 'rp', ')') ||
-      some(p, 'op2', '+= -= *= /= || && == != >= <= ++ => := = <- > < + - * /')
+      some(p, 'op2', '+= -= *= /= || && == != >= <= ++ => := = <- > < + - * / %')
 
     const liner = (function() {
       const lines = src.split('\n')
@@ -294,7 +295,7 @@ function compile(src) {
         return `assert(${gen(cond)}, ${value} + " at " + ${at}, ${params.map(gen).join(',')})`
       } else if (token.name === 'if') {
         const l = token.argv.length
-        if (l%2!=1) { throw new Error('if arguments have to odd number of arguments: ' + str(token)) }
+        if (l%2!=1) { throw new Error('if should have odd number of arguments: ' + str(token)) }
         const argv = token.argv.map(gen)
         return map2((a,b) => `${a} ? ${b} : `, argv).join('') + argv.slice(-1)[0]
       } else if (token.name === 'match') {
@@ -493,7 +494,7 @@ function testMoa() {
         print('main  : ', elipsis(main))
         print('expect: ', expect)
         print('actual: ', actual)
-        cat(compiler)
+        cat(js)
         process.exit(1)
       }
     } catch (e) {
@@ -550,10 +551,10 @@ function testMoa() {
   //eq([1], 'b(1).y', 'adt|\n  a: x int\n  b: y [int]')
 
 //// control flow
-//eq(1, 'if(true 1 2)')
-//eq(2, 'if(false 1 2)')
-//eq(3, 'if(false 1 false 2 3)')
-//eq(1, 'if(true 1 not_found)') // check lazy evaluation
+  eq(1, 'if(true 1 2)')
+  eq(2, 'if(false 1 2)')
+  eq(3, 'if(false 1 false 2 3)')
+  eq(1, 'if(true 1 not_found)') // check lazy evaluation
 //eq(10, 'match(1 1 10 2 20)')
 //eq(20, 'match(2 1 10 2 20)')
 //eq(99, 'match(3 1 10 2 20 _ 99)')

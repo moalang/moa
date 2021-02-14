@@ -51,7 +51,7 @@ tokenize src:
     many(satisfy(c => (c != s)))
   many1t tag f: many1(f).then(cs => create(tag cs.join("")))
   read_int: many1t("int" satisfy(c => ("0" <= c) && (c <= "9")))
-  read_id: many1t("id" satisfy(c => ("a" <= c) && (c <= "z")))
+  read_id: many1t("id" satisfy(c => (("a" <= c) && (c <= "z")) || (c == "_")))
   read_str: read_chars(34).alt(read_chars(96))
   read_spaces:
     t = many1t("spaces" satisfy(c => " \n#".includes(c)))
@@ -121,11 +121,6 @@ parse tokens:
   assert(tokens.count == pos tokens.at(pos))
   defines
 generate defines:
-  call args: if(args.present "(" + args.map(a=>a.code).join(",") + ")=>" "")
-  keys xs: xs.map(x => x.at(0).code).join(",")
-  wrap a: match(a
-    aint "(" + gen(a) + ")"
-    _ gen(a))
   gen a: match(a
     aint  a.value.code
     astr  a.value.code.string
@@ -133,9 +128,18 @@ generate defines:
     apair ("(" + gen(a.value) + ")")
     atype ("const " + a.name.code + " = (" + keys(a.members) + ")" + " => ({" + keys(a.members) + "})")
     alist ("[" + a.values.map(gen).join(",") + "]")
-    afunc ("const " + a.name.code + " = " + call(a.args) + gen(a.body))
-    acall (gen(a.target) + "(" + a.argv.map(gen).join(",") + ")")
+    afunc ("const " + a.name.code + " = " + arrow(a.args) + gen(a.body))
+    acall call(gen(a.target) a.argv.map(gen))
     aop2  (wrap(a.lhs) + a.op.code + gen(a.rhs)))
+  call name argv: if(
+    (name == "if") buildin_if(argv)
+    name + "(" + argv.join(",") + ")")
+  buildin_if argv: argv.joinWith(n => if((n%2)==0 "?" ":"))
+  arrow args: if(args.present "(" + args.map(a=>a.code).join(",") + ")=>" "")
+  keys xs: xs.map(x => x.at(0).code).join(",")
+  wrap a: match(a
+    aint "(" + gen(a) + ")"
+    _ gen(a))
   defines.map(gen).join("\n")
 compile src:
   tokens = tokenize(src)
