@@ -44,13 +44,13 @@ syn match Function /^[a-zA-Z0-9_]\+/
 syn match Operator /[+\-\*/|&]=\=/
 syn match Operator /[<>]=\=/
 syn match Operator /[=!:]=/
-syn match Operator /[=;,]/
+syn match Operator /[=;,:]/
 syn match Operator "<-"
 syn match Operator "->"
 syn match Operator "||"
 syn match Operator "&&"
 
-syn match Macro /^ *- [a-zA-Z0-9_.]*/
+syn match Macro /^ *- [a-zA-Z0-9_.:]*/
 
 "*PreProc        o 一般的なプリプロセッサー命令
 ""syn match Macro /@[a-zA-Z0-9:_]\+/
