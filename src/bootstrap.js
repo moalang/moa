@@ -17,7 +17,7 @@ const range = (s,e,n=1) => {
   }
   return l
 }
-const twin = (f,a,n=1) => range(n, a.length, 2).map(i => f(a[i-1], a[i]))
+const map2 = (f,a,n=1) => range(n, a.length, 2).map(i => f(a[i-1], a[i]))
 const elipsis = s => s.length <= 100 ? s : s.slice(0, 96) + ' ...\n'
 const cat = s => {
   const lines = s.split('\n')
@@ -201,15 +201,15 @@ function compile(src) {
           const [aname, ...lines] = token.code.split('\n').map(x => x.trim()).filter(x => x)
           token.name = token.type = aname.replace(':|', '')
           token.adt = lines.map(line => {
-            const [tag, kvs] = line.split(':')
-            const keys = kvs ? kvs.split(',').map(f => f.trim().split(' ')[0]) : []
+            const [tag, ...kvs] = line.split(/[: ,]+/)
+            const keys = map2((v,_) => v, kvs)
             return {tag, keys}
           })
           return token
         case 'struct':
           const [sname, ...kvs] = token.code.split(/[\n: ]/).map(x => x.trim()).filter(x => x)
           token.name = sname
-          token.keys = twin((a,_) => a, kvs)
+          token.keys = map2((a,_) => a, kvs)
           return token
         case 'id': parseCall(token); return token
         case 'la': token.ary = until(t => t.tag !== 'ra'); return token
@@ -296,11 +296,11 @@ function compile(src) {
         const l = token.argv.length
         if (l%2!=1) { throw new Error('if arguments have to odd number of arguments: ' + str(token)) }
         const argv = token.argv.map(gen)
-        return twin((a,b) => `${a} ? ${b} : `, argv).join('') + argv.slice(-1)[0]
+        return map2((a,b) => `${a} ? ${b} : `, argv).join('') + argv.slice(-1)[0]
       } else if (token.name === 'match') {
         if (token.argv.length % 2 !== 1) { throw new Error('match arguments have to odd number of arguments: ' + str(token)) }
         const argv = token.argv.map(gen)
-        const exps = twin(genMatch, argv, 2)
+        const exps = map2(genMatch, argv, 2)
         const at = str(token.at)
         const space = ' '.repeat(token.indent)
         return `(___m => ${exps.map(s => '\n  ' + space + s).join('')}\n  ${space}(()=>{throw new Error("miss match: " + ___m.string + " at " + ${at})})())(${argv[0]})`
@@ -323,8 +323,7 @@ function compile(src) {
         case 'op2':
           switch (token.op) {
             case ':': return 'const ' + gen(token.lhs) + '=' + gen(token.rhs)
-            case '=': const name = gen(token.lhs); return 'const ' + name + ' = __eff(' + gen(token.rhs) + '); if(' +
- name + '.__failed) { return ' + name + ' }'
+            case '=': const name = gen(token.lhs); return 'const ' + name + ' = __eff(' + gen(token.rhs) + '); if(' + name + '.__failed) { return ' + name + ' }'
             case '<-': return 'let ' + gen(token.lhs) + ' = ' + gen(token.rhs)
             case ':=': return gen(token.lhs) + ' = ' + gen(token.rhs)
             case '=>': return '((' + token.args + ') => ' + gen(token.rhs) + ')'
@@ -406,8 +405,8 @@ function testBootstrap() {
   eq({a: 1, b: true}, 'ab(1 true)', 'ab::\n  a int\n  b bool')
   eq(true, 'ab(1 true) == ab(1 true)', 'ab::\n  a int\n  b bool')
   eq(false, 'ab(1 true) == ab(2 true)', 'ab::\n  a int\n  b bool')
-  eq({x: 1, __type: 'a'}, 'a(1)', 'adt:|\n  a: x int\n  b: y []int')
-  eq({y: [1], __type: 'b'}, 'b([1])', 'adt:|\n  a: x int\n  b: y []int')
+  eq({x: 1, __type: 'a'}, 'a(1)', 'adt:|\n  a x int\n  b y []int')
+  eq({y: [1], __type: 'b'}, 'b([1])', 'adt:|\n  a x int\n  b y []int')
 
   // control flow
   eq(1, 'if(true 1 2)')
@@ -419,8 +418,8 @@ function testBootstrap() {
   eq(99, 'match(3 1 10 2 20 _ 99)')
   eq(99, 'match(3 1 10 2 20 _ 99 _ 999)')
   eq(10, 'match(1 1 10 2 not_found)') // check lazy evaluation
-  eq(1, 'f(a(1))', 'f v: match(v a v.x b v.y)', 'adt:|\n  a: x int\n  b: y []int')
-  eq([1], 'f(b([1]))', 'f v: match(v a v.x b v.y)', 'adt:|\n  a: x int\n  b: y []int')
+  eq(1, 'f(a(1))', 'f v: match(v a v.x b v.y)', 'adt:|\n  a x int\n  b y []int')
+  eq([1], 'f(b([1]))', 'f v: match(v a v.x b v.y)', 'adt:|\n  a x int\n  b y []int')
   eq(1, 'f(a)', 'f v: match(v a 1 b 2)', 'adt:|\n  a\n  b')
   eq(2, 'f(b)', 'f v: match(v a 1 b 2)', 'adt:|\n  a\n  b')
 
