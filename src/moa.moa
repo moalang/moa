@@ -132,16 +132,41 @@ generate defines:
     acall call(gen(a.target) a.argv.map(gen))
     aop2  (wrap(a.lhs) + a.op.code + gen(a.rhs)))
   call name argv: if(
-    (name == "if") buildin_if(argv)
+    (name == "if") gen_if(argv)
+    (name == "match") gen_match(argv)
     name + "(" + argv.join(",") + ")")
-  buildin_if argv: argv.joinWith(n => if((n%2)==0 "?" ":"))
+  gen_if argv: "__if(" + argv.map(lazy).join(",") + ")"
+  gen_match argv: "__match(" + argv.map(lazy).join(",") + ")"
+  lazy s: "(()=>" + s + ")"
   arrow args: if(args.present "(" + args.map(a=>a.code).join(",") + ")=>" "")
   keys xs: xs.map(x => x.at(0).code).join(",")
   wrap a: match(a
     aint "(" + gen(a) + ")"
     _ gen(a))
   defines.map(gen).join("\n")
+runtime: `
+const _ = 1e100
+const __equals = (a,b) => a === b || JSON.stringify(a) === JSON.stringify(b)
+const __if = (...argv) => {
+  for (let i=1; i<argv.length; i+=2) {
+    if (argv[i-1]() === true) {
+      return argv[i]()
+    }
+  }
+  return argv[argv.length-1]()
+}
+const __match = (target, ...argv) => {
+  const m = target()
+  for (let i=1; i<argv.length; i+=2) {
+    const v = argv[i-1]()
+    if (v === _ || __equals(m, v)) {
+      return argv[i]()
+    }
+  }
+}
+`
 compile src:
   tokens = tokenize(src)
   defines = parse(tokens)
-  generate(defines)
+  js = generate(defines)
+  runtime + js

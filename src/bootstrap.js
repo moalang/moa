@@ -75,7 +75,6 @@ extend(Array, {
   },
   head: a => a.length ? a[0] : ooo,
   last: a => a.length ? a[a.length-1] : ooo,
-  joinWith: (a,f) => a.reduce((acc,e,n) => acc+f(n-1)+e),
 })
 global.__failure = message => new Failure(message)
 global.__eff = o => typeof o === 'function' ? __eff(o()) : o
@@ -313,7 +312,7 @@ function compile(src) {
       if (token.lines) { return genLines(token) }
       switch (token.tag) {
         case 'int': return token.val
-        case 'string': return '"' + token.val.replace('\n', '\\n') + '"'
+        case 'string': return '"' + token.val.replace(/\n/g, '\\n') + '"'
         case 'func': return 'const ' + token.name + ' = ' + genFunc(token)
         case 'struct': return genStruct(token)
         case 'adt': return genAdt(token)
@@ -484,8 +483,9 @@ function testMoa() {
   function eq(expect, main, ...funcs) {
     funcs.push('main: ' + main)
     const src = str(funcs.join('\n'))
+    let js = compiler
     try {
-      const js = Function(compiler + '\nreturn __eff(compile(' + src + '))')()
+      js = Function(compiler + '\nreturn __eff(compile(' + src + '))')()
       const actual = Function(js + '\nreturn __eff(main)')()
       if (__equals(expect, actual)) {
         put('.')
@@ -501,7 +501,7 @@ function testMoa() {
       warn('Failed')
       print(e)
       print("#", funcs.join("\n"))
-      cat(compiler)
+      cat(js)
       process.exit(1)
     }
   }
@@ -550,16 +550,16 @@ function testMoa() {
   //eq(1, 'a(1).x', 'adt|\n  a: x int\n  b: y [int]')
   //eq([1], 'b(1).y', 'adt|\n  a: x int\n  b: y [int]')
 
-//// control flow
+  // control flow
   eq(1, 'if(true 1 2)')
   eq(2, 'if(false 1 2)')
   eq(3, 'if(false 1 false 2 3)')
   eq(1, 'if(true 1 not_found)') // check lazy evaluation
-//eq(10, 'match(1 1 10 2 20)')
-//eq(20, 'match(2 1 10 2 20)')
-//eq(99, 'match(3 1 10 2 20 _ 99)')
-//eq(99, 'match(3 1 10 2 20 _ 99 _ 999)')
-//eq(10, 'match(1 1 10 2 not_found)') // check lazy evaluation
+  eq(10, 'match(1 1 10 2 20)')
+  eq(20, 'match(2 1 10 2 20)')
+  eq(99, 'match(3 1 10 2 20 _ 99)')
+  eq(99, 'match(3 1 10 2 20 _ 99 _ 999)')
+  eq(10, 'match(1 1 10 2 not_found)') // check lazy evaluation
 //eq(1, 'f(a(1))', 'f v: match(v a v.x b v.y)', 'adt|\n  a: x int\n  b: y []int')
 //eq([1], 'f(b([1]))', 'f v: match(v a v.x b v.y)', 'adt|\n  a: x int\n  b: y []int')
 //eq(1, 'f(a)', 'f v: match(v a 1 b 2)', 'adt|\n  a\n  b')
