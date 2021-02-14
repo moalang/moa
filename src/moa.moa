@@ -5,15 +5,15 @@ token::
   pos int
   indent int
 ast:|
-  aint: value token
-  astr: value token
-  aid: name token
-  apair: value token
-  alist: values [token]
-  afunc: name token, args [token], body ast
-  acall: target ast, argv [token]
-  aop2: op token, lhs ast, rhs ast
-  atype: name token, targs [token], members [token token]
+  aint value token
+  astr value token
+  aid name token
+  apair value token
+  alist values [token]
+  afunc name token, args [token], body ast
+  acall target ast, argv [token]
+  aop2 op token, lhs ast, rhs ast
+  atype name token, targs [token], members [token token]
 
 # helper
 many_acc f acc: f.then(c => many_acc(f acc.concat([c]))).alt(acc)

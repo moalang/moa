@@ -201,7 +201,7 @@ function compile(src) {
           const [aname, ...lines] = token.code.split('\n').map(x => x.trim()).filter(x => x)
           token.name = token.type = aname.replace(':|', '')
           token.adt = lines.map(line => {
-            const [tag, ...kvs] = line.split(/[: ,]+/)
+            const [tag, ...kvs] = line.split(/[ ,]+/)
             const keys = map2((v,_) => v, kvs)
             return {tag, keys}
           })
