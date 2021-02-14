@@ -504,6 +504,9 @@ function testMoa() {
       process.exit(1)
     }
   }
+  function fail(message, main, ...funcs) {
+    return eq(new Failure(message), main, ...funcs)
+  }
 
   // basic values
   eq(1, '1')
@@ -520,12 +523,12 @@ function testMoa() {
   eq('i', '"hi".at(1)')
 
   // embedded array
-  //eq('[]', '[].string')
-  //eq(str([1, 2]), '[1 2].string')
-  //eq(1, '[1].at(0)')
-  //fail('out of index', '[1].at(1)')
-  //fail('out of index', '[1].at(0-1)')
-  //eq([2, 3, 4], '[1 2 3].map(x => x + 1)')
+  eq('[]', '[].string')
+  eq(str([1, 2]), '[1 2].string')
+  eq(1, '[1].at(0)')
+  fail('out of index', '[1].at(1)')
+  fail('out of index', '[1].at(0-1)')
+  eq([2, 3, 4], '[1 2 3].map(x => x + 1)')
 
   // expression
   eq(3, '1+2')
