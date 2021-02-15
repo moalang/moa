@@ -137,7 +137,7 @@ generate defines:
     alist ("[" + a.values.map(gen).join(",") + "]")
     afunc ("const " + a.name.code + " = " + arrow(a.args) + gen(a.body))
     acall call(gen(a.target) a.argv.map(gen))
-    aop2  (wrap(a.lhs) + a.op.code + gen(a.rhs)))
+    aop2  op2(a))
   call name argv: if(
     (name == "if") gen_if(argv)
     (name == "match") gen_match(argv)
@@ -147,6 +147,9 @@ generate defines:
   lazy s: "(()=>" + s + ")"
   arrow args: if(args.present "(" + args.map(a=>a.code).join(",") + ")=>" "")
   keys xs: xs.map(x => x.at(0).code).join(",")
+  op2 a: match(a.op.code
+    "==" ("__equals(" + gen(a.lhs) + "," + gen(a.rhs) + ")")
+    _    (wrap(a.lhs) + a.op.code + gen(a.rhs)))
   wrap a: match(a
     aint "(" + gen(a) + ")"
     _ gen(a))
