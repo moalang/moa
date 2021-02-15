@@ -13,7 +13,8 @@ ast:|
   afunc name token, args [token], body ast
   acall target ast, argv [token]
   aop2 op token, lhs ast, rhs ast
-  atype name token, targs [token], members [token token]
+  aenum name token, targs [token], members [(token token)]
+  atype name token, targs [token], members [(token token)]
 
 # helper
 many_acc f acc: f.then(c => many_acc(f acc.concat([c]))).alt(acc)
@@ -25,7 +26,7 @@ many1 f:
 
 # main process
 op2s: "&& || == != => <= < >= > := = + - * / % .".split(" ")
-syms: ": ( ) [ ]".split(" ").concat(op2s)
+syms: ":: :| : ( ) [ ]".split(" ").concat(op2s)
 tokenize src:
   pos <- 0
   indent <- 0
@@ -72,6 +73,10 @@ parse tokens:
     t
   look:
     tokens.at(pos).alt(token("eot" ""))
+  until f:
+    found = tokens.filter(f)
+    pos += found.count
+    found
   consume_id:
     consume(t => t.tag == "id")
   consume_code s:
@@ -85,12 +90,13 @@ parse tokens:
     name = consume_id
     args = many(consume_id)
     mark = consume(t => ["::" ":|" ":"].includes(t.code))
-    read_type:
-      atype(name args [])
+    read_struct:
+      members = until(t => t.indent > name.indent)
+      atype(name args members.tuple)
     match(mark.code
       ":" parse_exp.then(body => afunc(name args body))
-      ":|" read_type
-      "::" read_type)
+      ":|" read_enum
+      "::" read_struct)
   parse_unit:
     parse_parenthesis:
       consume_between("(" ")" parse_exp).then(apair)
@@ -126,6 +132,7 @@ generate defines:
     astr  a.value.code.string
     aid   a.name.code
     apair ("(" + gen(a.value) + ")")
+    atype ("const " + a.name.code + " = (" + keys(a.members) + ")" + " => ({" + keys(a.members) + "})")
     atype ("const " + a.name.code + " = (" + keys(a.members) + ")" + " => ({" + keys(a.members) + "})")
     alist ("[" + a.values.map(gen).join(",") + "]")
     afunc ("const " + a.name.code + " = " + arrow(a.args) + gen(a.body))

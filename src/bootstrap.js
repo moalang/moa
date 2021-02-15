@@ -75,6 +75,15 @@ extend(Array, {
   },
   head: a => a.length ? a[0] : ooo,
   last: a => a.length ? a[a.length-1] : ooo,
+  tuple: a => {
+    const ret = []
+    for(let i=1; i<a.length; i+=2) {
+      const k = a[i-1]
+      const v = a[i]
+      ret.push([k,v])
+    }
+    return ret
+  },
 })
 global.__failure = message => new Failure(message)
 global.__eff = o => typeof o === 'function' ? __eff(o()) : o
@@ -542,13 +551,11 @@ function testMoa() {
   eq(3, 'add(1 2)', 'add a b: a + b')
 
   // type
-  //eq(1, '\n  \n    1')
-  //eq(1, 'ab(1 true).a', 'ab:\n  a int\n  b bool')
-  //eq(true, 'ab(1 true).b', 'ab:\n  a int\n  b bool')
-  //eq(true, 'ab(1 true) == ab(1 true)', 'ab:\n  a int\n  b bool')
-  //eq(false, 'ab(1 true) == ab(2 true)', 'ab:\n  a int\n  b bool')
-  //eq(1, 'a(1).x', 'adt|\n  a: x int\n  b: y [int]')
-  //eq([1], 'b(1).y', 'adt|\n  a: x int\n  b: y [int]')
+  eq({a: 1, b: true}, 'ab(1 true)', 'ab::\n  a int\n  b bool')
+  //eq(true, 'ab(1 true) == ab(1 true)', 'ab::\n  a int\n  b bool')
+  //eq(false, 'ab(1 true) == ab(2 true)', 'ab::\n  a int\n  b bool')
+  //eq({x: 1, __type: 'a'}, 'a(1)', 'adt:|\n  a x int\n  b y []int')
+  //eq({y: [1], __type: 'b'}, 'b([1])', 'adt:|\n  a x int\n  b y []int')
 
   // control flow
   eq(1, 'if(true 1 2)')
@@ -567,6 +574,7 @@ function testMoa() {
 //eq(2, 'f(b)', 'f v: match(v a 1 b 2)', 'adt|\n  a\n  b')
 //
 //// effect
+//eq(1, '\n  \n    1')
 //eq(3, '\n  count :: 0\n  count += 1\n  count += 2\n  count')
 //eq(2, 'f', 'f =\n  n :: 0\n  g =\n    n += 1\n    n\n  g\n  g')
 //fail('string.int: not a number hi', '"hi".int')
