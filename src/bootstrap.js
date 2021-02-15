@@ -554,12 +554,13 @@ function testMoa() {
   eq(1, 'if(true 1 2)')
   eq(2, 'if(false 1 2)')
   eq(3, 'if(false 1 false 2 3)')
-  eq(1, 'if(true 1 not_found)') // check lazy evaluation
+  eq(1, 'if(true 1 not_evaluated)')
+  eq(1, 'if(true 1 not_evaluated not_evaluated not_evaluated)')
   eq(10, 'match(1 1 10 2 20)')
   eq(20, 'match(2 1 10 2 20)')
   eq(99, 'match(3 1 10 2 20 _ 99)')
   eq(99, 'match(3 1 10 2 20 _ 99 _ 999)')
-  eq(10, 'match(1 1 10 2 not_found)') // check lazy evaluation
+  eq(10, 'match(1 1 10 not_evluated not_evluated)')
 //eq(1, 'f(a(1))', 'f v: match(v a v.x b v.y)', 'adt|\n  a: x int\n  b: y []int')
 //eq([1], 'f(b([1]))', 'f v: match(v a v.x b v.y)', 'adt|\n  a: x int\n  b: y []int')
 //eq(1, 'f(a)', 'f v: match(v a 1 b 2)', 'adt|\n  a\n  b')
