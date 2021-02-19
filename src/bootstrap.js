@@ -554,8 +554,8 @@ function testMoa() {
   eq({a: 1, b: true}, 'ab(1 true)', 'ab::\n  a int\n  b bool')
   eq(true, 'ab(1 true) == ab(1 true)', 'ab::\n  a int\n  b bool')
   eq(false, 'ab(1 true) == ab(2 true)', 'ab::\n  a int\n  b bool')
-  //eq({x: 1, __type: 'a'}, 'a(1)', 'adt:|\n  a x int\n  b y []int')
-  //eq({y: [1], __type: 'b'}, 'b([1])', 'adt:|\n  a x int\n  b y []int')
+  eq({x: 1, __type: 'a'}, 'a(1)', 'adt:|\n  a x int\n  b y [int]')
+  eq({y: [1], __type: 'b'}, 'b([1])', 'adt:|\n  a x int\n  b y [int]')
 
   // control flow
   eq(1, 'if(true 1 2)')

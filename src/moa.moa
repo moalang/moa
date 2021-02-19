@@ -4,6 +4,13 @@ token::
   code string
   pos int
   indent int
+  line int
+member::
+  mid token
+  type token
+tag::
+  tid token
+  members [member]
 ast:|
   aint value token
   astr value token
@@ -13,8 +20,8 @@ ast:|
   afunc name token, args [token], body ast
   acall target ast, argv [token]
   aop2 op token, lhs ast, rhs ast
-  aenum name token, targs [token], members [(token token)]
-  atype name token, targs [token], members [(token token)]
+  atype name token, targs [token], members [member]
+  aenum name token, targs [token], tags [tag]
 
 # helper
 many_acc f acc: f.then(c => many_acc(f acc.concat([c]))).alt(acc)
@@ -30,7 +37,8 @@ syms: ":: :| : ( ) [ ]".split(" ").concat(op2s)
 tokenize src:
   pos <- 0
   indent <- 0
-  create tag code: token(tag code pos indent)
+  line <- 1
+  create tag code: token(tag code pos indent line)
   equal s:
     ss = src.slice(pos pos+s.count)
     #__dump(["equal" src (ss==s) pos s ss])
@@ -57,6 +65,7 @@ tokenize src:
   read_spaces:
     t = many1t("spaces" satisfy(c => " \n#".includes(c)))
     t.code.split("\n").slice(1).last.then(s => indent := s.count).alt(0)
+    line += t.code.split("\n").count - 1
     t
   read_sym:
     syms.first(equal).then(s => create("sym" s))
@@ -67,9 +76,12 @@ tokenize src:
 parse tokens:
   pos <- 0
   consume f:
+    t = check(f)
+    pos += 1
+    t
+  check f:
     t = tokens.at(pos)
     guard(f(t))
-    pos += 1
     t
   look:
     tokens.at(pos).alt(token("eot" ""))
@@ -90,9 +102,28 @@ parse tokens:
     name = consume_id
     args = many(consume_id)
     mark = consume(t => ["::" ":|" ":"].includes(t.code))
+    read_type_of_array:
+      l = consume_code("[")
+      type = read_type
+      consume_code("]")
+      token("type" "[" + type.code + "]" l.pos l.indent l.pos)
+    read_type: read_type_of_array.alt(consume_id)
+    read_member f:
+      check(f)
+      mid = consume_id
+      type = read_type
+      member(mid type)
     read_struct:
-      members = until(t => t.indent > name.indent)
-      atype(name args members.tuple)
+      members = many(read_member(t => t.indent > name.indent))
+      atype(name args members)
+    read_enum:
+      read_tag:
+        check(t => t.indent > name.indent)
+        id = consume_id
+        members = many(read_member(t => t.line == id.line))
+        tag(id members)
+      tags = many(read_tag)
+      aenum(name args tags)
     match(mark.code
       ":" parse_exp.then(body => afunc(name args body))
       ":|" read_enum
@@ -124,7 +155,7 @@ parse tokens:
     parse_op2.alt(token)
 
   defines = many(parse_define)
-  assert(tokens.count == pos tokens.at(pos))
+  assert(tokens.count == pos tokens.slice(pos))
   defines
 generate defines:
   gen a: match(a
@@ -132,12 +163,13 @@ generate defines:
     astr  a.value.code.string
     aid   a.name.code
     apair ("(" + gen(a.value) + ")")
-    atype ("const " + a.name.code + " = (" + keys(a.members) + ")" + " => ({" + keys(a.members) + "})")
-    atype ("const " + a.name.code + " = (" + keys(a.members) + ")" + " => ({" + keys(a.members) + "})")
+    atype ("const " + a.name.code + " = (" + names(a.members) + ")" + " => ({" + names(a.members) + "})")
+    aenum (a.tags.map(gen_tag).join("\n") + "\nconst " + a.name.code + " = (" + tnames(a.tags) + ")" + " => ({" + tnames(a.tags) + "})")
     alist ("[" + a.values.map(gen).join(",") + "]")
     afunc ("const " + a.name.code + " = " + arrow(a.args) + gen(a.body))
     acall call(gen(a.target) a.argv.map(gen))
     aop2  op2(a))
+  gen_tag tag: "const " + tag.tid.code + " = (" + names(tag.members) + ") => ({" + names(tag.members) + ",__type:'" + tag.tid.code + "'})"
   call name argv: if(
     (name == "if") gen_if(argv)
     (name == "match") gen_match(argv)
@@ -146,7 +178,8 @@ generate defines:
   gen_match argv: "__match(" + argv.map(lazy).join(",") + ")"
   lazy s: "(()=>" + s + ")"
   arrow args: if(args.present "(" + args.map(a=>a.code).join(",") + ")=>" "")
-  keys xs: xs.map(x => x.at(0).code).join(",")
+  tnames tags: tags.map(t => t.tid.code).join(",")
+  names members: members.map(m => m.mid.code).join(",")
   op2 a: match(a.op.code
     "==" ("__equals(" + gen(a.lhs) + "," + gen(a.rhs) + ")")
     _    (wrap(a.lhs) + a.op.code + gen(a.rhs)))
