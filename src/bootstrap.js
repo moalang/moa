@@ -1,8 +1,8 @@
 'use strict'
 const print = (...args) => console.log(...args)
 const dump = s => JSON.stringify(s)
-const op2 = '++ + - * /'.split(' ')
-const syms = '= [ ]'.split(' ')
+const op2 = '&& || == != >= > <= < ++ + - * /'.split(' ')
+const syms = '= [ ] ( )'.split(' ')
 function tokenize(src) {
   const len = src.length
   let pos = 0
@@ -32,10 +32,10 @@ function parse(tokens) {
 
   const look = () => tokens[pos] || {}
   function consume(tag) {
-    if (pos >= len) { throw new Error('Out of index: ' + pos) }
+    if (pos >= len) { throw new Error('Out of index: ' + dump({len,pos,tokens})) }
     const token = tokens[pos]
-    pos++
     if (tag && token.tag !== tag) { throw new Error(`Unexpected ${tag}: ${dump(token)}`) }
+    pos++
     return token
   }
   function consumes(f) {
@@ -77,6 +77,7 @@ function parse(tokens) {
   function parse_unit() {
     const token = consume()
     switch (token.tag) {
+      case 'id':
       case 'num':
       case 'str':
       case 'op2': return token
@@ -84,6 +85,11 @@ function parse(tokens) {
           switch (token.code) {
             case '[':
               token.list = until(u => u.code !== ']').slice(0, -1)
+              return token
+            case '(':
+              token.body = parse_body()
+              if (consume('sym').code !== ')') { throw new Error('Not found close parenthese') }
+              return token
             default: return token
           }
       default: throw new Error('Unexpected token: ' + dump(token))
@@ -101,6 +107,7 @@ function generate(nodes) {
   }
   function gen(token) {
     switch (token.tag) {
+      case 'id':
       case 'num':
       case 'str': return token.code
       case 'op2':
@@ -112,6 +119,7 @@ function generate(nodes) {
         switch (token.code) {
           case '=': return genFunc(token.fname.code, token.args, token.body)
           case '[': return '[' + token.list.map(gen).join(', ') + ']'
+          case '(': return '(' + gen(token.body) + ')'
           default: throw Error('Gen sym error ' + dump(token))
         }
       default: throw Error('Gen error ' + dump(token))
@@ -158,13 +166,26 @@ function testAll() {
   eq([1], '[1]')
   eq([1, 2], '[1 2]')
   eq(['a', 'b'], '["a" "b"]')
+  eq(true, 'true')
+  eq(false, 'false')
 
   // exp
   eq(3, '1 + 2')
   eq(7, '1 + 2 * 3')
+  eq(9, '(1 + 2) * 3')
   eq(2, '4 / 2')
   eq('ab', '"a" ++ "b"')
   eq([1, 2], '[1] ++ [2]')
+  eq(false, 'true && false')
+  eq(true, 'false || true')
+  eq(false, '1 == 2')
+  eq(true, '1 != 2')
+  eq(true, '2 >= 2')
+  eq(false, '2 > 2')
+  eq(true, '2 <= 2')
+  eq(false, '2 < 2')
+  eq(true, '1 == 1 && 1 == 1')
+  eq(false, '1 == 1 && 1 == 2')
 
   // function
 
