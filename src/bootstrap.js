@@ -2,7 +2,7 @@
 const print = (...args) => console.log(...args)
 const dump = s => JSON.stringify(s)
 const op2 = '++ + - * /'.split(' ')
-const syms = op2.concat('= [ ]'.split(' '))
+const syms = '= [ ]'.split(' ')
 function tokenize(src) {
   const len = src.length
   let pos = 0
@@ -14,6 +14,7 @@ function tokenize(src) {
     find('num', s.match(/^[0-9]+/)) ||
     find('str', s.match(/^"[^"]*"/)) ||
     find('str', s.match(/^`[^`]*`/)) ||
+    find('op2', op2.find(a => s.startsWith(a))) ||
     find('sym', syms.find(a => s.startsWith(a))) ||
     find('spaces', s.match(/^[ \t\r\n]+/))
   const tokens = []
@@ -66,10 +67,10 @@ function parse(tokens) {
   function parse_body() {
     let l = parse_unit()
     while (op2.includes(look().code)) {
-      let sym = parse_unit()
-      sym.lhs = l
-      sym.rhs = parse_unit()
-      l = sym
+      let op = parse_unit()
+      op.lhs = l
+      op.rhs = parse_unit()
+      l = op
     }
     return l
   }
@@ -77,7 +78,8 @@ function parse(tokens) {
     const token = consume()
     switch (token.tag) {
       case 'num':
-      case 'str': return token
+      case 'str':
+      case 'op2': return token
       case 'sym':
           switch (token.code) {
             case '[':
@@ -101,15 +103,15 @@ function generate(nodes) {
     switch (token.tag) {
       case 'num':
       case 'str': return token.code
+      case 'op2':
+        switch (token.code) {
+          case '++': return `${gen(token.lhs)}.concat(${gen(token.rhs)})`
+          default: return `${gen(token.lhs)} ${token.code} ${gen(token.rhs)}`
+        }
       case 'sym':
         switch (token.code) {
           case '=': return genFunc(token.fname.code, token.args, token.body)
           case '[': return '[' + token.list.map(gen).join(', ') + ']'
-          case '+':
-          case '-':
-          case '*':
-          case '/': return `${gen(token.lhs)} ${token.code} ${gen(token.rhs)}`
-          case '++': return `${gen(token.lhs)}.concat(${gen(token.rhs)})`
           default: throw Error('Gen sym error ' + dump(token))
         }
       default: throw Error('Gen error ' + dump(token))
