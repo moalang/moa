@@ -31,10 +31,10 @@ function parse(tokens) {
   let pos = 0
 
   const look = () => tokens[pos] || {}
-  function consume(tag) {
+  function consume(f) {
     if (pos >= len) { throw new Error('Out of index: ' + dump({len,pos,tokens})) }
     const token = tokens[pos]
-    if (tag && token.tag !== tag) { throw new Error(`Unexpected ${tag}: ${dump(token)}`) }
+    if (f && !f(token)) { throw new Error(`Unexpected ${f.toString()} ${dump(token)}`) }
     pos++
     return token
   }
@@ -55,10 +55,9 @@ function parse(tokens) {
     return units
   }
   function parse_function() {
-    const fname = consume('id')
+    const fname = consume(t => t.tag === 'id')
     const args = consumes(t => t.tag === 'id')
-    const sym = consume('sym')
-    if (sym.code !== '=') { throw new Error('define function should contains =: ' + dump(eq)) }
+    const sym = consume(t => t.code === '=')
     sym.fname = fname
     sym.args = args
     sym.body = parse_body()
@@ -76,8 +75,14 @@ function parse(tokens) {
   }
   function parse_unit() {
     const token = consume()
+    const next = look()
     switch (token.tag) {
       case 'id':
+        if (next.code === '(' && next.pos === token.pos + token.code.length) {
+          consume(t => t.code === '(')
+          token.argv = until(t => t.code !== ')').slice(0, -1)
+        }
+        return token
       case 'num':
       case 'str':
       case 'op2': return token
@@ -88,7 +93,7 @@ function parse(tokens) {
               return token
             case '(':
               token.body = parse_body()
-              if (consume('sym').code !== ')') { throw new Error('Not found close parenthese') }
+              consume(t => t.code === ')')
               return token
             default: return token
           }
@@ -103,11 +108,19 @@ function parse(tokens) {
 }
 function generate(nodes) {
   function genFunc(fname, args, body) {
-    return `const ${fname} = (${args.map(t => t.code).join(',')}) => ` + gen(body)
+    if (args.length > 0) {
+      return `const ${fname} = (${args.map(t => t.code).join(',')}) => ` + gen(body)
+    } else {
+      return `const ${fname} = ${gen(body)}`
+    }
+  }
+  function genCall(argv) {
+    return argv ? '(' + argv.map(gen).join(', ') + ')' : ''
   }
   function gen(token) {
     switch (token.tag) {
       case 'id':
+        return token.code + genCall(token.argv)
       case 'num':
       case 'str': return token.code
       case 'op2':
@@ -141,8 +154,9 @@ function run(src) {
   return {tokens, nodes, js, actual, error}
 }
 function testAll() {
-  const eq = (expect, exp) => {
-    const src = 'main = ' + exp
+  const eq = (expect, exp, ...funcs) => {
+    funcs.push('main = ' + exp)
+    const src = funcs.join('\n')
     const result = run(src)
     const actual = result.actual
     if (dump(expect) === dump(actual)) {
@@ -188,6 +202,8 @@ function testAll() {
   eq(false, '1 == 1 && 1 == 2')
 
   // function
+  eq(1, 'a', 'a=1')
+  eq(3, 'add(1 2)', 'add a b = a + b')
 
   // struct
 
