@@ -12,6 +12,7 @@ function tokenize(src) {
     find('id', s.match(/^[A-Za-z_][A-Za-z_0-9]*/)) ||
     find('num', s.match(/^[0-9]+/)) ||
     find('str', s.match(/^"[^"]*"/)) ||
+    find('str', s.match(/^`[^`]*`/)) ||
     any('sym', s, '+ - * / = [ ]'.split(' ')) ||
     find('spaces', s.match(/^[ \t\r\n]+/))
   const tokens = []
@@ -133,6 +134,7 @@ function testAll() {
   // value
   eq(1, '1')
   eq('hi', '"hi"')
+  eq('"hi"', '`"hi"`')
   eq([], '[]')
   eq([1], '[1]')
   eq([1, 2], '[1 2]')
