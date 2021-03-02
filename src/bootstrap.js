@@ -1,19 +1,20 @@
 'use strict'
 const print = (...args) => console.log(...args)
 const dump = s => JSON.stringify(s)
+const op2 = '++ + - * /'.split(' ')
+const syms = op2.concat('= [ ]'.split(' '))
 function tokenize(src) {
   const len = src.length
   let pos = 0
   let indent = 0
-  const newToken = (tag,code) => ({tag,code,pos,indent})
-  const find = (tag, m) => m ? newToken(tag, m[0]) : null
-  const any = (tag, s, ary) => find(tag, ary.find(a => s.slice(0, a.length) === a))
+  const newToken = (tag, code) => ({tag, code, pos, indent})
+  const find = (tag, m) => m ? newToken(tag, typeof m === 'string' ? m : m[0]) : null
   const rule = s =>
     find('id', s.match(/^[A-Za-z_][A-Za-z_0-9]*/)) ||
     find('num', s.match(/^[0-9]+/)) ||
     find('str', s.match(/^"[^"]*"/)) ||
     find('str', s.match(/^`[^`]*`/)) ||
-    any('sym', s, '+ - * / = [ ]'.split(' ')) ||
+    find('sym', syms.find(a => s.startsWith(a))) ||
     find('spaces', s.match(/^[ \t\r\n]+/))
   const tokens = []
   while (pos < len) {
@@ -28,11 +29,12 @@ function parse(tokens) {
   const len = tokens.length
   let pos = 0
 
+  const look = () => tokens[pos] || {}
   function consume(tag) {
     if (pos >= len) { throw new Error('Out of index: ' + pos) }
     const token = tokens[pos]
     pos++
-    if (tag && token.tag !== tag) { throw new Error('Unexpected tag: ' + dump(tag)) }
+    if (tag && token.tag !== tag) { throw new Error(`Unexpected ${tag}: ${dump(token)}`) }
     return token
   }
   function consumes(f) {
@@ -58,8 +60,18 @@ function parse(tokens) {
     if (sym.code !== '=') { throw new Error('define function should contains =: ' + dump(eq)) }
     sym.fname = fname
     sym.args = args
-    sym.body = parse_unit()
+    sym.body = parse_body()
     return sym
+  }
+  function parse_body() {
+    let l = parse_unit()
+    while (op2.includes(look().code)) {
+      let sym = parse_unit()
+      sym.lhs = l
+      sym.rhs = parse_unit()
+      l = sym
+    }
+    return l
   }
   function parse_unit() {
     const token = consume()
@@ -93,6 +105,11 @@ function generate(nodes) {
         switch (token.code) {
           case '=': return genFunc(token.fname.code, token.args, token.body)
           case '[': return '[' + token.list.map(gen).join(', ') + ']'
+          case '+':
+          case '-':
+          case '*':
+          case '/': return `${gen(token.lhs)} ${token.code} ${gen(token.rhs)}`
+          case '++': return `${gen(token.lhs)}.concat(${gen(token.rhs)})`
           default: throw Error('Gen sym error ' + dump(token))
         }
       default: throw Error('Gen error ' + dump(token))
@@ -141,6 +158,11 @@ function testAll() {
   eq(['a', 'b'], '["a" "b"]')
 
   // exp
+  eq(3, '1 + 2')
+  eq(7, '1 + 2 * 3')
+  eq(2, '4 / 2')
+  eq('ab', '"a" ++ "b"')
+  eq([1, 2], '[1] ++ [2]')
 
   // function
 
