@@ -2,11 +2,28 @@
 const print = (...args) => console.log(...args)
 const str = s => JSON.stringify(s)
 function tokenize(src) {
-  return [{tag:'id',code:'main'}, {tag:'sym',code:'='}, {tag:'num',code:'1'}]
+  const len = src.length
+  let pos = 0
+  let indent = 0
+  const newToken = (tag,code) => ({tag,code,pos,indent})
+  const find = (tag, m) => m ? newToken(tag, m[0]) : null
+  const rule = s =>
+    find('id', s.match(/^[A-Za-z_][A-Za-z_0-9]*/)) ||
+    find('num', s.match(/^[0-9]+/)) ||
+    find('sym', s.match(/^[+\-*/=]+/)) ||
+    find('spaces', s.match(/^[ \t\r\n]+/))
+  const tokens = []
+  while (pos < len) {
+    const token = rule(src.slice(pos))
+    pos += token.code.length
+    tokens.push(token)
+  }
+  return tokens.filter(x => x.tag !== 'spaces')
 }
 function parse(tokens) {
+  const len = tokens.length
   let pos = 0
-  let len = tokens.length
+
   function consume(tag) {
     if (pos >= len) { throw new Error('Out of index: ' + pos) }
     const token = tokens[pos]
@@ -78,7 +95,7 @@ function run(src) {
 function testAll() {
   const eq = (expect, exp) => {
     const src = 'main = ' + exp
-    const result = run(exp)
+    const result = run(src)
     const actual = result.actual
     if (expect === actual) {
       process.stdout.write('.')
@@ -93,7 +110,20 @@ function testAll() {
     }
   }
 
+  // value
   eq(1, '1')
+
+  // exp
+
+  // function
+
+  // struct
+
+  // enum
+
+  // effect
+
+  // control flow
   print('ok')
 }
 testAll()
