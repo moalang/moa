@@ -3,6 +3,13 @@ const print = (...args) => console.log(...args)
 const dump = s => JSON.stringify(s)
 const op2 = '&& || == != >= > <= < ++ + - * /'.split(' ')
 const syms = '= [ ] ( )'.split(' ')
+const range = (s,e,step) => {
+  const a = []
+  for (let i=s; i<e; i+=step) {
+    a.push(i)
+  }
+  return a
+}
 function tokenize(src) {
   const len = src.length
   let pos = 0
@@ -114,13 +121,17 @@ function generate(nodes) {
       return `const ${fname} = ${gen(body)}`
     }
   }
-  function genCall(argv) {
-    return argv ? '(' + argv.map(gen).join(', ') + ')' : ''
+  function genId(id, argv) {
+    if (id === 'if') {
+      const a = argv.map(gen)
+      return '(' + range(1, a.length, 2).map(i => `${a[i-1]} ? ${a[i]} : `).join('') + a[a.length-1] + ')'
+    } else {
+      return id + (argv ? '(' + argv.map(gen).join(', ') + ')' : '')
+    }
   }
   function gen(token) {
     switch (token.tag) {
-      case 'id':
-        return token.code + genCall(token.argv)
+      case 'id': return genId(token.code, token.argv)
       case 'num':
       case 'str': return token.code
       case 'op2':
@@ -205,13 +216,17 @@ function testAll() {
   eq(1, 'a', 'a=1')
   eq(3, 'add(1 2)', 'add a b = a + b')
 
+  // control flow
+  eq(1, 'if(true 1 lazy)')
+  eq(2, 'if(false lazy 2)')
+  eq(3, 'if(false lazy true 3 lazy)')
+  eq(3, 'if(false lazy false lazy 3)')
+
   // struct
 
   // enum
 
   // effect
-
-  // control flow
   print('ok')
 }
 testAll()
