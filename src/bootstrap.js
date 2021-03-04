@@ -44,8 +44,8 @@ function tokenize(src) {
   const len = src.length
   let pos = 0
   let indent = 0
-  let line = 1
-  const newToken = (tag, code) => ({tag, code, line, indent, pos})
+  let lineno = 1
+  const newToken = (tag, code) => ({tag, code, lineno, indent, pos})
   const reg = (tag, m) => m && newToken(tag, m[0])
   const any = (tag, m) => m && newToken(tag, m)
   const rule = s =>
@@ -65,7 +65,7 @@ function tokenize(src) {
     if (token.code.includes('\n')) {
       const lines = token.code.split('\n')
       indent = lines[lines.length - 1].length
-      line += lines.length - 1
+      lineno += lines.length - 1
     }
   }
   return tokens.filter(x => x.tag !== 'spaces')
@@ -82,10 +82,11 @@ function parse(tokens) {
     pos++
     return token
   }
-  function until(f) {
+  function until(f, g) {
+    g = g || parse_exp
     const exps = []
     while (pos < len && f(tokens[pos])) {
-      exps.push(parse_exp())
+      exps.push(g())
     }
     return exps
   }
@@ -103,7 +104,7 @@ function parse(tokens) {
       sym.struct = fields
     } else if (sym.code === '|') {
       const fields = until(t => t.indent > sym.indent)
-      const tags = seqBy(fields, t => t.line)
+      const tags = seqBy(fields, t => t.lineno)
       if (fields.length %2 !== 0) { throw new Error('Definition of struct should have even the number of fields: ' + dump(fields)) }
       sym.adt = tags
     } else {
@@ -112,20 +113,17 @@ function parse(tokens) {
     return sym
   }
   function is_define() {
-    const p = pos
-    const count = 0
+    let p = pos
     while (p < len && tokens[p].tag === 'id') {
-      count++
+      p++
     }
-    return count > 0 && p < len && tokens[p].code === '='
+    return p > pos && p < len && tokens[p].code === '='
   }
   function parse_body(base) {
-    if (look().line === base.line) {
+    if (look().lineno === base.lineno) {
       return [parse_exp()]
-    } else if (look().line > base.line) {
-      const exps = until(t => t.indent > base.indent)
-      print(exps)
-      die
+    } else if (look().lineno > base.lineno) {
+      return until(t => t.indent > base.indent, () => is_define() ? parse_define() : parse_exp())
     } else {
       throw new Error('Unexpected function body: ' + dump(base))
     }
@@ -195,16 +193,13 @@ function generate(nodes) {
   function genFunc(fname, args, exps) {
     if (exps.length === 0) {
       throw new Error('Empty exps: ' + fname)
-    } if (exps.length === 1) {
-      const exp = exps[0]
-      if (args.length > 0) {
-        return `const ${fname} = (${args.map(t => t.code).join(',')}) => ` + gen(exp)
-      } else {
-        return `const ${fname} = ${gen(exp)}`
-      }
-    } else {
-      die
     }
+
+    const lines = exps.map(gen)
+    const fbody = () => lines.slice(0, -1).join('\n') + '\nreturn ' + lines[lines.length - 1]
+    const exp = lines.length === 1 ? lines[0] : `(() => {${ fbody() }})()`
+    const body = args.length > 0 ? `(${args.map(t => t.code).join(',')}) => ${exp}` : exp
+    return `const ${fname} = ${body}`
   }
   function genStruct(fname, _args, struct) {
     const fields = range(1, struct.length, 2).map(i => struct[i - 1].code).join(',')
@@ -247,7 +242,7 @@ function run(src) {
   let actual = null
   let error = null
   try {
-    actual = Function("'use strict'\n" + runtime + '\n' + js + '\nreturn typeof main === "function" ? main() : main')()
+    actual = Function(runtime + '\n' + js + '\nreturn typeof main === "function" ? main() : main')()
   } catch (e) {
     error = e
   }
@@ -327,7 +322,7 @@ function testAll() {
   eq(true, 'match(v aint v.vint abool v.vbool)', 'v = abool(true)', 'adt|\n  aint vint int\n  abool vbool bool')
 
   // effect
-  //eq(3, '\n  a = 1\n  a + 2')
+  eq(3, '\n  a = 1\n  a + 2')
   print('ok')
 }
 testAll()
