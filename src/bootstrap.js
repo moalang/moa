@@ -32,11 +32,12 @@ const seqBy = (a,f) => {
 }
 const runtime = (function() {
   function __equals(a, b) {
-    switch (typeof(a)) {
-      case 'object': JSON.stringify(a) === JSON.stringify(b)
-      case 'function': a.toString() === b.toString()
-      default: return a == b
-    }
+    const t1 = typeof(a)
+    const t2 = typeof(b)
+    if (t1 === 'object' && t2 === 'function' && a.__tag) { return a.__tag === b.name }
+    if (t1 !== t2) { return false }
+    if (t1 === 'object') { return JSON.stringify(a) === JSON.stringify(b) }
+    return a == b
   }
 }).toString().split('\n').slice(1,-1).join('\n')
 function tokenize(src) {
@@ -81,36 +82,27 @@ function parse(tokens) {
     pos++
     return token
   }
-  function consumes(f) {
+  function until(f) {
     const tokens_ = []
     while (pos < len && f(tokens[pos])) {
-      tokens_.push(parse_unit())
+      tokens_.push(parse_exp())
     }
     return tokens_
   }
-  function until(f) {
-    const units = []
-    while (pos < len) {
-      const unit = parse_unit()
-      units.push(unit)
-      if (!f(unit)) { break }
-    }
-    return units
-  }
   function parse_define() {
     const fname = consume(t => t.tag === 'id')
-    const args = consumes(t => t.tag === 'id')
+    const args = until(t => t.tag === 'id')
     const sym = consume(t => t.code === '=' || t.code === ':' || t.code === '|')
     sym.fname = fname
     sym.args = args
     if (sym.code === '=') {
-      sym.body = parse_body()
+      sym.body = parse_exp()
     } else if (sym.code === ':') {
-      const fields = consumes(t => t.indent > sym.indent)
+      const fields = until(t => t.indent > sym.indent)
       if (fields.length %2 !== 0) { throw new Error('Definition of struct should have even the number of fields: ' + dump(fields)) }
       sym.struct = fields
     } else if (sym.code === '|') {
-      const fields = consumes(t => t.indent > sym.indent)
+      const fields = until(t => t.indent > sym.indent)
       const tags = seqBy(fields, t => t.line)
       if (fields.length %2 !== 0) { throw new Error('Definition of struct should have even the number of fields: ' + dump(fields)) }
       sym.adt = tags
@@ -119,12 +111,12 @@ function parse(tokens) {
     }
     return sym
   }
-  function parse_body() {
+  function parse_exp() {
     let l = parse_unit()
     while (op2.includes(look().code)) {
       let op = parse_unit()
       op.lhs = l
-      op.rhs = parse_unit()
+      op.rhs = parse_exp()
       l = op
     }
     return l
@@ -136,7 +128,8 @@ function parse(tokens) {
       case 'id':
         if (next.code === '(' && next.pos === token.pos + token.code.length) {
           consume(t => t.code === '(')
-          token.argv = until(t => t.code !== ')').slice(0, -1)
+          token.argv = until(t => t.code !== ')')
+          consume(t => t.code === ')')
         }
         return token
       case 'num':
@@ -145,10 +138,11 @@ function parse(tokens) {
       case 'sym':
           switch (token.code) {
             case '[':
-              token.list = until(u => u.code !== ']').slice(0, -1)
+              token.list = until(u => u.code !== ']')
+              consume(t => t.code === ']')
               return token
             case '(':
-              token.body = parse_body()
+              token.body = parse_exp()
               consume(t => t.code === ')')
               return token
             default: return token
@@ -186,33 +180,36 @@ function generate(nodes) {
       return `const ${fname} = ${gen(body)}`
     }
   }
-  function genStruct(fname, args, struct) {
-    const names = range(1, struct.length, 2).map(i => struct[i - 1].code).join(',')
-    return `const ${fname} = (${names}) => ({${names}})`
+  function genStruct(fname, _args, struct) {
+    const fields = range(1, struct.length, 2).map(i => struct[i - 1].code).join(',')
+    return `const ${fname} = (${fields}) => ({${fields}})`
   }
-  function genAdt(fname, args, adt) {
-    return adt.map(a => a[0].code).map(a => `const ${a} = v => ({__val: v, __tag: '${a}'})`).join('\n')
+  function genAdt(fname, _args, adt) {
+    const g = (tag, fields) => `const ${tag} = (${fields}) => ({${fields}, __tag: '${tag}'})`
+    const f = a => g(a[0].code, range(1, a.length, 2).map(i => a[i].code).join(', '))
+    return adt.map(f).join('\n')
   }
-  function gen(token) {
-    switch (token.tag) {
-      case 'id': return genId(token.code, token.argv)
+  function gen(node) {
+    if (!node) { throw new Error('node is not defined: ' + dump(node)) }
+    switch (node.tag) {
+      case 'id': return genId(node.code, node.argv)
       case 'num':
-      case 'str': return token.code
+      case 'str': return node.code
       case 'op2':
-        switch (token.code) {
-          case '++': return `${gen(token.lhs)}.concat(${gen(token.rhs)})`
-          default: return `${gen(token.lhs)} ${token.code} ${gen(token.rhs)}`
+        switch (node.code) {
+          case '++': return `${gen(node.lhs)}.concat(${gen(node.rhs)})`
+          default: return `${gen(node.lhs)} ${node.code} ${gen(node.rhs)}`
         }
       case 'sym':
-        switch (token.code) {
-          case '=': return genFunc(token.fname.code, token.args, token.body)
-          case ':': return genStruct(token.fname.code, token.args, token.struct)
-          case '|': return genAdt(token.fname.code, token.args, token.adt)
-          case '[': return '[' + token.list.map(gen).join(', ') + ']'
-          case '(': return '(' + gen(token.body) + ')'
-          default: throw Error('Gen sym error ' + dump(token))
+        switch (node.code) {
+          case '=': return genFunc(node.fname.code, node.args, node.body)
+          case ':': return genStruct(node.fname.code, node.args, node.struct)
+          case '|': return genAdt(node.fname.code, node.args, node.adt)
+          case '[': return '[' + node.list.map(gen).join(', ') + ']'
+          case '(': return '(' + gen(node.body) + ')'
+          default: throw Error('Gen sym error ' + dump(node))
         }
-      default: throw Error('Gen error ' + dump(token))
+      default: throw Error('Gen error ' + dump(node))
     }
   }
   return nodes.map(gen).join('\n')
@@ -232,6 +229,7 @@ function run(src) {
 }
 function testAll() {
   const eq = (expect, exp, ...funcs) => {
+    funcs.reverse()
     funcs.push('main = ' + exp)
     const src = funcs.join('\n')
     const result = run(src)
@@ -299,8 +297,8 @@ function testAll() {
   eq(1, 'struct("hi" 1).b', 'struct:\n   a string\n  b int')
 
   // adt
-  eq({__val: 1, __tag: 'aint'}, 'aint(1)', 'adt|\n  aint int\n  abool bool')
-  eq({__val: true, __tag: 'abool'}, 'abool(true)', 'adt|\n  aint int\n  abool bool')
+  eq(1, 'match(v aint v.vint abool v.vbool)', 'v = aint(1)', 'adt|\n  aint vint int\n  abool vbool bool')
+  eq(true, 'match(v aint v.vint abool v.vbool)', 'v = abool(true)', 'adt|\n  aint vint int\n  abool vbool bool')
 
   // effect
   print('ok')
