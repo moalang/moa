@@ -2,13 +2,33 @@
 const print = (...args) => console.log(...args)
 const dump = s => JSON.stringify(s)
 const op2 = '&& || == != >= > <= < ++ + - * / .'.split(' ')
-const syms = ': = [ ] ( )'.split(' ')
+const syms = ': | = [ ] ( )'.split(' ')
 const range = (s,e,step) => {
   const a = []
   for (let i=s; i<e; i+=step) {
     a.push(i)
   }
   return a
+}
+const seqBy = (a,f) => {
+  if (!a.length) { return [] }
+  const l = a.length
+  const ret = []
+  let sep = [a[0]]
+  let prev = f(a[0])
+  for (let i = 1; i<l; ++i) {
+    const v = a[i]
+    const key = f(v)
+    if (key === prev) {
+      sep.push(v)
+    } else {
+      ret.push(sep)
+      sep = [v]
+      prev = key
+    }
+  }
+  if (sep.length) { ret.push(sep) }
+  return ret
 }
 const runtime = (function() {
   function __equals(a, b) {
@@ -23,7 +43,8 @@ function tokenize(src) {
   const len = src.length
   let pos = 0
   let indent = 0
-  const newToken = (tag, code) => ({tag, code, pos, indent})
+  let line = 1
+  const newToken = (tag, code) => ({tag, code, line, indent, pos})
   const reg = (tag, m) => m && newToken(tag, m[0])
   const any = (tag, m) => m && newToken(tag, m)
   const rule = s =>
@@ -41,7 +62,9 @@ function tokenize(src) {
     pos += token.code.length
     tokens.push(token)
     if (token.code.includes('\n')) {
-      indent = token.code.split('\n').slice(-1)[0].length
+      const lines = token.code.split('\n')
+      indent = lines[lines.length - 1].length
+      line += lines.length - 1
     }
   }
   return tokens.filter(x => x.tag !== 'spaces')
@@ -77,7 +100,7 @@ function parse(tokens) {
   function parse_define() {
     const fname = consume(t => t.tag === 'id')
     const args = consumes(t => t.tag === 'id')
-    const sym = consume(t => t.code === '=' || t.code === ':')
+    const sym = consume(t => t.code === '=' || t.code === ':' || t.code === '|')
     sym.fname = fname
     sym.args = args
     if (sym.code === '=') {
@@ -86,6 +109,11 @@ function parse(tokens) {
       const fields = consumes(t => t.indent > sym.indent)
       if (fields.length %2 !== 0) { throw new Error('Definition of struct should have even the number of fields: ' + dump(fields)) }
       sym.struct = fields
+    } else if (sym.code === '|') {
+      const fields = consumes(t => t.indent > sym.indent)
+      const tags = seqBy(fields, t => t.line)
+      if (fields.length %2 !== 0) { throw new Error('Definition of struct should have even the number of fields: ' + dump(fields)) }
+      sym.adt = tags
     } else {
       throw new Error('Unexpected symbol: ' + dump(sym))
     }
@@ -162,6 +190,9 @@ function generate(nodes) {
     const names = range(1, struct.length, 2).map(i => struct[i - 1].code).join(',')
     return `const ${fname} = (${names}) => ({${names}})`
   }
+  function genAdt(fname, args, adt) {
+    return adt.map(a => a[0].code).map(a => `const ${a} = v => ({__val: v, __tag: '${a}'})`).join('\n')
+  }
   function gen(token) {
     switch (token.tag) {
       case 'id': return genId(token.code, token.argv)
@@ -176,6 +207,7 @@ function generate(nodes) {
         switch (token.code) {
           case '=': return genFunc(token.fname.code, token.args, token.body)
           case ':': return genStruct(token.fname.code, token.args, token.struct)
+          case '|': return genAdt(token.fname.code, token.args, token.adt)
           case '[': return '[' + token.list.map(gen).join(', ') + ']'
           case '(': return '(' + gen(token.body) + ')'
           default: throw Error('Gen sym error ' + dump(token))
@@ -262,11 +294,13 @@ function testAll() {
   eq(2, 'match(3 _ 2 3 4)')
 
   // struct
-  eq({a: 'hi', b: 1}, 'ab("hi" 1)', 'ab:\n   a string\n  b int')
-  eq('hi', 'ab("hi" 1).a', 'ab:\n   a string\n  b int')
-  eq(1, 'ab("hi" 1).b', 'ab:\n   a string\n  b int')
+  eq({a: 'hi', b: 1}, 'struct("hi" 1)', 'struct:\n   a string\n  b int')
+  eq('hi', 'struct("hi" 1).a', 'struct:\n   a string\n  b int')
+  eq(1, 'struct("hi" 1).b', 'struct:\n   a string\n  b int')
 
-  // enum
+  // adt
+  eq({__val: 1, __tag: 'aint'}, 'aint(1)', 'adt|\n  aint int\n  abool bool')
+  eq({__val: true, __tag: 'abool'}, 'abool(true)', 'adt|\n  aint int\n  abool bool')
 
   // effect
   print('ok')
