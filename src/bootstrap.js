@@ -2,7 +2,7 @@
 const print = (...args) => console.log(...args)
 const dump = s => JSON.stringify(s)
 const op2 = '&& || == != >= > <= < ++ + - * /'.split(' ')
-const syms = '= [ ] ( )'.split(' ')
+const syms = ': = [ ] ( )'.split(' ')
 const range = (s,e,step) => {
   const a = []
   for (let i=s; i<e; i+=step) {
@@ -40,6 +40,9 @@ function tokenize(src) {
     if (!token) { throw new Error('Failed to tokenize: ' + src.slice(pos)) }
     pos += token.code.length
     tokens.push(token)
+    if (token.code.includes('\n')) {
+      indent = token.code.split('\n').slice(-1)[0].length
+    }
   }
   return tokens.filter(x => x.tag !== 'spaces')
 }
@@ -71,13 +74,21 @@ function parse(tokens) {
     }
     return units
   }
-  function parse_function() {
+  function parse_define() {
     const fname = consume(t => t.tag === 'id')
     const args = consumes(t => t.tag === 'id')
-    const sym = consume(t => t.code === '=')
+    const sym = consume(t => t.code === '=' || t.code === ':')
     sym.fname = fname
     sym.args = args
-    sym.body = parse_body()
+    if (sym.code === '=') {
+      sym.body = parse_body()
+    } else if (sym.code === ':') {
+      const fields = consumes(t => t.indent > sym.indent)
+      if (fields.length %2 !== 0) { throw new Error('Definition of struct should have even the number of fields: ' + dump(fields)) }
+      sym.struct = fields
+    } else {
+      throw new Error('Unexpected symbol: ' + dump(sym))
+    }
     return sym
   }
   function parse_body() {
@@ -119,18 +130,11 @@ function parse(tokens) {
   }
   const defines = []
   while (pos < len) {
-    defines.push(parse_function())
+    defines.push(parse_define())
   }
   return defines
 }
 function generate(nodes) {
-  function genFunc(fname, args, body) {
-    if (args.length > 0) {
-      return `const ${fname} = (${args.map(t => t.code).join(',')}) => ` + gen(body)
-    } else {
-      return `const ${fname} = ${gen(body)}`
-    }
-  }
   function genId(id, argv) {
     if (id === 'if') {
       const a = argv.map(gen)
@@ -147,6 +151,17 @@ function generate(nodes) {
       return id + (argv ? '(' + argv.map(gen).join(', ') + ')' : '')
     }
   }
+  function genFunc(fname, args, body) {
+    if (args.length > 0) {
+      return `const ${fname} = (${args.map(t => t.code).join(',')}) => ` + gen(body)
+    } else {
+      return `const ${fname} = ${gen(body)}`
+    }
+  }
+  function genStruct(fname, args, struct) {
+    const names = range(1, struct.length, 2).map(i => struct[i - 1].code).join(',')
+    return `const ${fname} = (${names}) => ({${names}})`
+  }
   function gen(token) {
     switch (token.tag) {
       case 'id': return genId(token.code, token.argv)
@@ -160,6 +175,7 @@ function generate(nodes) {
       case 'sym':
         switch (token.code) {
           case '=': return genFunc(token.fname.code, token.args, token.body)
+          case ':': return genStruct(token.fname.code, token.args, token.struct)
           case '[': return '[' + token.list.map(gen).join(', ') + ']'
           case '(': return '(' + gen(token.body) + ')'
           default: throw Error('Gen sym error ' + dump(token))
@@ -191,8 +207,9 @@ function testAll() {
     if (dump(expect) === dump(actual)) {
       process.stdout.write('.')
     } else {
-      print('Failed: ', src)
+      print('Failed')
       print('js    : ', result.js)
+      print('src   : ', src)
       print('expect: ', expect)
       print('actual: ', actual)
       print('tokens: ', result.tokens)
@@ -245,6 +262,7 @@ function testAll() {
   eq(2, 'match(3 _ 2 3 4)')
 
   // struct
+  eq({a: 1, b: "hi"}, 'ab(1 "hi")', 'ab:\n   a int\n  b string')
 
   // enum
 
