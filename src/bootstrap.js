@@ -15,15 +15,16 @@ function tokenize(src) {
   let pos = 0
   let indent = 0
   const newToken = (tag, code) => ({tag, code, pos, indent})
-  const find = (tag, m) => m ? newToken(tag, typeof m === 'string' ? m : m[0]) : null
+  const reg = (tag, m) => m && newToken(tag, m[0])
+  const any = (tag, m) => m && newToken(tag, m)
   const rule = s =>
-    find('id', s.match(/^[A-Za-z_][A-Za-z_0-9]*/)) ||
-    find('num', s.match(/^[0-9]+/)) ||
-    find('str', s.match(/^"[^"]*"/)) ||
-    find('str', s.match(/^`[^`]*`/)) ||
-    find('op2', op2.find(a => s.startsWith(a))) ||
-    find('sym', syms.find(a => s.startsWith(a))) ||
-    find('spaces', s.match(/^[ \t\r\n]+/))
+    reg('id', s.match(/^[A-Za-z_][A-Za-z_0-9]*/)) ||
+    reg('num', s.match(/^[0-9]+/)) ||
+    reg('str', s.match(/^"[^"]*"/)) ||
+    reg('str', s.match(/^`[^`]*`/)) ||
+    any('op2', op2.find(a => s.startsWith(a))) ||
+    any('sym', syms.find(a => s.startsWith(a))) ||
+    reg('spaces', s.match(/^[ \t\r\n]+/))
   const tokens = []
   while (pos < len) {
     const token = rule(src.slice(pos))
