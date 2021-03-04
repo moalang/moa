@@ -1,7 +1,7 @@
 'use strict'
 const print = (...args) => console.log(...args)
 const dump = s => JSON.stringify(s)
-const op2 = '&& || == != >= > <= < ++ + - * /'.split(' ')
+const op2 = '&& || == != >= > <= < ++ + - * / .'.split(' ')
 const syms = ': = [ ] ( )'.split(' ')
 const range = (s,e,step) => {
   const a = []
@@ -262,7 +262,9 @@ function testAll() {
   eq(2, 'match(3 _ 2 3 4)')
 
   // struct
-  eq({a: 1, b: "hi"}, 'ab(1 "hi")', 'ab:\n   a int\n  b string')
+  eq({a: 'hi', b: 1}, 'ab("hi" 1)', 'ab:\n   a string\n  b int')
+  eq('hi', 'ab("hi" 1).a', 'ab:\n   a string\n  b int')
+  eq(1, 'ab("hi" 1).b', 'ab:\n   a string\n  b int')
 
   // enum
 
