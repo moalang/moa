@@ -10,6 +10,15 @@ const range = (s,e,step) => {
   }
   return a
 }
+const runtime = (function() {
+  function __equals(a, b) {
+    switch (typeof(a)) {
+      case 'object': JSON.stringify(a) === JSON.stringify(b)
+      case 'function': a.toString() === b.toString()
+      default: return a == b
+    }
+  }
+}).toString().split('\n').slice(1,-1).join('\n')
 function tokenize(src) {
   const len = src.length
   let pos = 0
@@ -125,7 +134,15 @@ function generate(nodes) {
   function genId(id, argv) {
     if (id === 'if') {
       const a = argv.map(gen)
-      return '(' + range(1, a.length, 2).map(i => `${a[i-1]} ? ${a[i]} : `).join('') + a[a.length-1] + ')'
+      const cases = range(1, a.length, 2).map(i => `${a[i-1]} ? ${a[i]} : `).join('')
+      return '(' + cases + a[a.length-1] + ')'
+    } else if (id === 'match') {
+      const a = argv.map(gen)
+      const cond = i => a[i-1] === '_' ? 'true' : `__equals(__m, ${a[i-1]})`
+      const cases = range(2, a.length, 2).map(i => `${cond(i)} ? ${a[i]} : `).join('')
+      const otherwise = '(() => { throw new Error("Failed to match")})()'
+      const js = cases + otherwise
+      return `(__m => ${js})(${a[0]})`
     } else {
       return id + (argv ? '(' + argv.map(gen).join(', ') + ')' : '')
     }
@@ -159,7 +176,7 @@ function run(src) {
   let actual = null
   let error = null
   try {
-    actual = Function("'use strict'\n" + js + '\nreturn typeof main === "function" ? main() : main')()
+    actual = Function("'use strict'\n" + runtime + '\n' + js + '\nreturn typeof main === "function" ? main() : main')()
   } catch (e) {
     error = e
   }
@@ -216,12 +233,16 @@ function testAll() {
   // function
   eq(1, 'a', 'a=1')
   eq(3, 'add(1 2)', 'add a b = a + b')
+  eq(6, 'add(1 add(2 3))', 'add a b = a + b')
 
   // control flow
   eq(1, 'if(true 1 lazy)')
   eq(2, 'if(false lazy 2)')
   eq(3, 'if(false lazy true 3 lazy)')
   eq(3, 'if(false lazy false lazy 3)')
+  eq(2, 'match(1 1 2 lazy lazy)')
+  eq(4, 'match(3 1 2 3 4)')
+  eq(2, 'match(3 _ 2 3 4)')
 
   // struct
 
