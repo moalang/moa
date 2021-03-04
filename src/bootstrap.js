@@ -83,11 +83,11 @@ function parse(tokens) {
     return token
   }
   function until(f) {
-    const tokens_ = []
+    const exps = []
     while (pos < len && f(tokens[pos])) {
-      tokens_.push(parse_exp())
+      exps.push(parse_exp())
     }
-    return tokens_
+    return exps
   }
   function parse_define() {
     const fname = consume(t => t.tag === 'id')
@@ -96,7 +96,7 @@ function parse(tokens) {
     sym.fname = fname
     sym.args = args
     if (sym.code === '=') {
-      sym.body = parse_exp()
+      sym.exps = parse_body(sym)
     } else if (sym.code === ':') {
       const fields = until(t => t.indent > sym.indent)
       if (fields.length %2 !== 0) { throw new Error('Definition of struct should have even the number of fields: ' + dump(fields)) }
@@ -110,6 +110,25 @@ function parse(tokens) {
       throw new Error('Unexpected symbol: ' + dump(sym))
     }
     return sym
+  }
+  function is_define() {
+    const p = pos
+    const count = 0
+    while (p < len && tokens[p].tag === 'id') {
+      count++
+    }
+    return count > 0 && p < len && tokens[p].code === '='
+  }
+  function parse_body(base) {
+    if (look().line === base.line) {
+      return [parse_exp()]
+    } else if (look().line > base.line) {
+      const exps = until(t => t.indent > base.indent)
+      print(exps)
+      die
+    } else {
+      throw new Error('Unexpected function body: ' + dump(base))
+    }
   }
   function parse_exp() {
     let l = parse_unit()
@@ -173,11 +192,18 @@ function generate(nodes) {
       return id + (argv ? '(' + argv.map(gen).join(', ') + ')' : '')
     }
   }
-  function genFunc(fname, args, body) {
-    if (args.length > 0) {
-      return `const ${fname} = (${args.map(t => t.code).join(',')}) => ` + gen(body)
+  function genFunc(fname, args, exps) {
+    if (exps.length === 0) {
+      throw new Error('Empty exps: ' + fname)
+    } if (exps.length === 1) {
+      const exp = exps[0]
+      if (args.length > 0) {
+        return `const ${fname} = (${args.map(t => t.code).join(',')}) => ` + gen(exp)
+      } else {
+        return `const ${fname} = ${gen(exp)}`
+      }
     } else {
-      return `const ${fname} = ${gen(body)}`
+      die
     }
   }
   function genStruct(fname, _args, struct) {
@@ -202,7 +228,7 @@ function generate(nodes) {
         }
       case 'sym':
         switch (node.code) {
-          case '=': return genFunc(node.fname.code, node.args, node.body)
+          case '=': return genFunc(node.fname.code, node.args, node.exps)
           case ':': return genStruct(node.fname.code, node.args, node.struct)
           case '|': return genAdt(node.fname.code, node.args, node.adt)
           case '[': return '[' + node.list.map(gen).join(', ') + ']'
@@ -301,6 +327,7 @@ function testAll() {
   eq(true, 'match(v aint v.vint abool v.vbool)', 'v = abool(true)', 'adt|\n  aint vint int\n  abool vbool bool')
 
   // effect
+  //eq(3, '\n  a = 1\n  a + 2')
   print('ok')
 }
 testAll()
