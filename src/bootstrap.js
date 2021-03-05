@@ -34,30 +34,27 @@ const seqBy = (a,f) => {
 }
 const runtime = (function() {
   function __equals(a, b) {
-    const t1 = typeof(a)
-    const t2 = typeof(b)
+    const t1 = typeof a
+    const t2 = typeof b
     if (t1 === 'object' && t2 === 'function' && a.__tag) { return a.__tag === b.name }
     if (t1 !== t2) { return false }
     if (t1 === 'object') { return JSON.stringify(a) === JSON.stringify(b) }
     return a == b
   }
   function __eff(o) {
-    while (typeof(o) === 'function') {
+    while (typeof o === 'function') {
       o = o()
     }
     return o
   }
-  function __F(o) {
-    this.f = typeof(o) === 'function' ? o : () => o
+  function __then(o, f) {
+    o = typeof o === 'function' && o.length === 0 ? o() : o
+    return o && o.__err ? o: (typeof f === 'function' ? f(o) : f)
   }
-  __F.prototype.then = function (f) { this.f = (v => v.__err ? v : f(v))(__eff(this.f)) }
-  __F.prototype.catch = function (f) { this.f = (v => v.__err ? f(v) : v)(__eff(this.f)) }
-  function __E(o) {
-    this.message = o.toString()
-    this.__err = true
+  function __catch(o, f) {
+    o = typeof o === 'function' && o.length === 0 ? o() : o
+    return o && o.__err ? (typeof f === 'function' ? f(o) : f) : o
   }
-  __E.prototype.then = function () { return this }
-  __E.prototype.catch = (f) => function () { console.log(this); return f(this) }
 }).toString().split('\n').slice(1,-1).join('\n')
 function tokenize(src) {
   const len = src.length
@@ -193,13 +190,16 @@ function parse(tokens) {
   return defines
 }
 function generate(nodes) {
+  const reservedIds= ['catch', 'then']
   function genId(id, argv) {
     if (id === 'if') {
       const a = argv.map(gen)
       const cases = range(1, a.length, 2).map(i => `${a[i-1]} ? ${a[i]} : `).join('')
       return '(' + cases + a[a.length-1] + ')'
     } if (id === 'error') {
-      return `(new __E(${gen(argv[0])}))`
+      return `({message: ${gen(argv[0])}.toString(), __err: true})`
+    } if (reservedIds.includes(id)) {
+      return `__${id}(${ argv.map(gen).join(', ') })`
     } else if (id === 'match') {
       const a = argv.map(gen)
       const cond = i => a[i-1] === '_' ? 'true' : `__equals(__m, ${a[i-1]})`
@@ -398,7 +398,10 @@ function testAll() {
 
   // error handling
   err('failed', 'error("failed")')
-  //eq('failed!', 'error("failed").catch(e => e.message + "!")')
+  eq('failed!', 'catch(error("failed") e => e.message + "!")')
+  err('failed', 'then(error("failed") v => v + 1)')
+  eq(2, 'then(1 v => v + 1)')
+  eq(1, 'catch(1 e => 2)')
 
   print('ok')
 }
