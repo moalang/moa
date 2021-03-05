@@ -47,13 +47,27 @@ const runtime = (function() {
     }
     return o
   }
-  function __then(o, f) {
-    o = typeof o === 'function' && o.length === 0 ? o() : o
-    return o && o.__err ? o: (typeof f === 'function' ? f(o) : f)
+  function __then(o, ...fs) {
+    for (const f of fs) {
+      o = typeof o === 'function' && o.length === 0 ? o() : o
+      if (o && o.__err) {
+        return o
+      } else {
+        o = f(o)
+      }
+    }
+    return o
   }
-  function __catch(o, f) {
-    o = typeof o === 'function' && o.length === 0 ? o() : o
-    return o && o.__err ? (typeof f === 'function' ? f(o) : f) : o
+  function __catch(o, ...fs) {
+    for (const f of fs) {
+      o = typeof o === 'function' && o.length === 0 ? o() : o
+      if (o && o.__err) {
+        o = f(o)
+      } else {
+        return o
+      }
+    }
+    return o
   }
 }).toString().split('\n').slice(1,-1).join('\n')
 function tokenize(src) {
@@ -197,7 +211,7 @@ function generate(nodes) {
       const cases = range(1, a.length, 2).map(i => `${a[i-1]} ? ${a[i]} : `).join('')
       return '(' + cases + a[a.length-1] + ')'
     } if (id === 'error') {
-      return `({message: ${gen(argv[0])}.toString(), __err: true})`
+      return `({message: (${gen(argv[0])}).toString(), __err: true})`
     } if (reservedIds.includes(id)) {
       return `__${id}(${ argv.map(gen).join(', ') })`
     } else if (id === 'match') {
@@ -400,8 +414,11 @@ function testAll() {
   err('failed', 'error("failed")')
   eq('failed!', 'catch(error("failed") e => e.message + "!")')
   err('failed', 'then(error("failed") v => v + 1)')
-  eq(2, 'then(1 v => v + 1)')
-  eq(1, 'catch(1 e => 2)')
+  eq(3, 'then(1 v => v + 2)')
+  eq(6, 'then(1 v => v + 2 v => v + 3)')
+  err('3', 'then(1 v => error(v + 2) v => v + 3)')
+  eq('1', 'catch(error(1) e => e e => e.message)')
+  eq(2, 'catch(error(1) _ => 2 e => e.message)')
 
   // effect with error handling
   err('failed', '\n  v <- f\n  v', 'f = error("failed")')
