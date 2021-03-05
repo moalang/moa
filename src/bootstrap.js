@@ -1,7 +1,8 @@
 'use strict'
 const print = (...args) => console.log(...args)
 const dump = s => JSON.stringify(s)
-const op2 = '&& || == != <- >= <= > < += -= *= /= %= ++ + - * / % .'.split(' ')
+const effOp2 = '+= -= *= /= %= <-'.split(' ')
+const op2 = effOp2.concat('&& || == != >= <= > < ++ + - * / % .'.split(' '))
 const syms = ': | = [ ] ( )'.split(' ')
 const range = (s,e,step) => {
   const a = []
@@ -38,6 +39,12 @@ const runtime = (function() {
     if (t1 !== t2) { return false }
     if (t1 === 'object') { return JSON.stringify(a) === JSON.stringify(b) }
     return a == b
+  }
+  function __eff(o) {
+    while (typeof(o) === 'function') {
+      o = o()
+    }
+    return o
   }
 }).toString().split('\n').slice(1,-1).join('\n')
 function tokenize(src) {
@@ -194,12 +201,39 @@ function generate(nodes) {
     if (exps.length === 0) {
       throw new Error('Empty exps: ' + fname)
     }
-
-    const lines = exps.map(gen)
-    const fbody = () => lines.slice(0, -1).join('\n') + '\nreturn ' + lines[lines.length - 1]
-    const exp = lines.length === 1 ? lines[0] : `(() => {${ fbody() }})()`
-    const body = args.length > 0 ? `(${args.map(t => t.code).join(',')}) => ${exp}` : exp
-    return `const ${fname} = ${body}`
+    const arg = args.map(t => t.code).join(',')
+    const isEff = exps.some(x => effOp2.includes(x.code))
+    if (isEff) {
+      const prefix = `const ${fname} = (${arg}) => `
+      if (exps.length === 1) {
+        return prefix + gen(exps[0])
+      } else {
+        const steps = ['let __ret'].concat(exps.map(genStep))
+        const body = '{\n  ' + steps.join('\n  ') + '\n  return __ret\n}'
+        return prefix + body
+      }
+    } else {
+      const prefix = `const ${fname} = ` + (arg || exps.length > 1 ? `(${arg}) => ` : '')
+      if (exps.length === 1) {
+        return prefix + gen(exps[0])
+      } else {
+        const lines = exps.map(gen)
+        const body = '{\n  ' + lines.slice(0, -1).join('\n') + '\n  return ' + lines[lines.length - 1] + '\n}'
+        return prefix + `${body}`
+      }
+    }
+  }
+  function genStep(node) {
+    const suffix =  '; if (__ret && __ret.__err) { return __ret }'
+    if (node.code === '=') {
+      return gen(node)
+    } if (node.code === '<-') {
+      const id = node.rhs.code
+      const exp = id === 'var' ? gen(node.rhs.argv[0]) : gen(node.rhs)
+      return `let ${node.lhs.code} = __ret = __eff(${exp})` + suffix
+    } else {
+      return `__ret = __eff(${gen(node)})` + suffix
+    }
   }
   function genStruct(fname, _args, struct) {
     const fields = range(1, struct.length, 2).map(i => struct[i - 1].code).join(',')
@@ -210,13 +244,6 @@ function generate(nodes) {
     const f = a => g(a[0].code, range(1, a.length, 2).map(i => a[i].code).join(', '))
     return adt.map(f).join('\n')
   }
-  function genAssign(lhs, rhs) {
-    if (rhs.code === 'var') {
-      return `let ${gen(lhs)} = ${gen(rhs.argv[0])}`
-    } else {
-      return `${gen(lhs)} = ${gen(rhs)}`
-    }
-  }
   function gen(node) {
     if (!node) { throw new Error('node is not defined: ' + dump(node)) }
     switch (node.tag) {
@@ -226,10 +253,10 @@ function generate(nodes) {
       case 'op2':
         switch (node.code) {
           case '++': return `${gen(node.lhs)}.concat(${gen(node.rhs)})`
-          case '<-': return genAssign(node.lhs, node.rhs)
           default: return `${gen(node.lhs)} ${node.code} ${gen(node.rhs)}`
         }
       case 'sym':
+        if(node.code==='=' && !node.fname) { print(node); console.dir(nodes,{depth:null}) }
         switch (node.code) {
           case '=': return genFunc(node.fname.code, node.args, node.exps)
           case ':': return genStruct(node.fname.code, node.args, node.struct)
@@ -274,6 +301,7 @@ function testAll() {
       print('tokens: ', result.tokens)
       print('nodes : ', result.nodes)
       print('error : ', result.error)
+      process.exit(100)
     }
   }
 
@@ -332,8 +360,10 @@ function testAll() {
   // effect
   eq(3, '\n  a = 1\n  a + 2')
   eq(1, '\n  a <- f\n  a', 'f = 1')
-  eq(4, '\n  a <- var(1)\n  a += 1\n  a*=2\n  a')
-  eq(1, '\n  a <- var(6)\n  a /= 2\n  a%=2\n  a')
+  eq(4, '\n  a <- var(1)\n  a += 1\n  a *= 2\n  a')
+  eq(1, '\n  a <- var(6)\n  a /= 2\n  a %= 2\n  a')
+  eq(3, '\n  a <- var(1)\n  f = a+=1\n  f\n  f\n  a')
+  eq(7, '\n  a <- var(1)\n  f =\n    a += 1\n    a += 2\n  f\n  f\n  a')
   print('ok')
 }
 testAll()
