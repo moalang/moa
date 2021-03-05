@@ -1,8 +1,9 @@
 'use strict'
+const die = (msg, obj) => { console.dir(obj, {depth: null}); return new Error(msg) }
 const print = (...args) => console.log(...args)
 const dump = s => JSON.stringify(s)
 const effOp2 = '+= -= *= /= %= <-'.split(' ')
-const op2 = effOp2.concat('&& || == != >= <= > < ++ + - * / % .'.split(' '))
+const op2 = effOp2.concat('&& || == != >= <= => > < ++ + - * / % . ,'.split(' '))
 const syms = ': | = [ ] ( )'.split(' ')
 const range = (s,e,step) => {
   const a = []
@@ -46,6 +47,17 @@ const runtime = (function() {
     }
     return o
   }
+  function __F(o) {
+    this.f = typeof(o) === 'function' ? o : () => o
+  }
+  __F.prototype.then = function (f) { this.f = (v => v.__err ? v : f(v))(__eff(this.f)) }
+  __F.prototype.catch = function (f) { this.f = (v => v.__err ? f(v) : v)(__eff(this.f)) }
+  function __E(o) {
+    this.message = o.toString()
+    this.__err = true
+  }
+  __E.prototype.then = function () { return this }
+  __E.prototype.catch = (f) => function () { console.log(this); return f(this) }
 }).toString().split('\n').slice(1,-1).join('\n')
 function tokenize(src) {
   const len = src.length
@@ -66,7 +78,7 @@ function tokenize(src) {
   const tokens = []
   while (pos < len) {
     const token = rule(src.slice(pos))
-    if (!token) { throw new Error('Failed to tokenize: ' + src.slice(pos)) }
+    if (!token) { throw die('Failed to tokenize: ', {at: src.slice(pos), pos}) }
     pos += token.code.length
     tokens.push(token)
     if (token.code.includes('\n')) {
@@ -83,9 +95,9 @@ function parse(tokens) {
 
   const look = () => tokens[pos] || {}
   function consume(f) {
-    if (pos >= len) { throw new Error('Out of index: ' + dump({len,pos,tokens})) }
+    if (pos >= len) { throw die('Out of index', {len,pos,tokens}) }
     const token = tokens[pos]
-    if (f && !f(token)) { throw new Error(`Unexpected ${f.toString()} ${dump(token)}`) }
+    if (f && !f(token)) { throw die('Unexpected token', {f: f.toString(), token, tokens}) }
     pos++
     return token
   }
@@ -107,15 +119,15 @@ function parse(tokens) {
       sym.exps = parse_body(sym)
     } else if (sym.code === ':') {
       const fields = until(t => t.indent > sym.indent)
-      if (fields.length %2 !== 0) { throw new Error('Definition of struct should have even the number of fields: ' + dump(fields)) }
+      if (fields.length %2 !== 0) { throw die('invalid struct', fields) }
       sym.struct = fields
     } else if (sym.code === '|') {
       const fields = until(t => t.indent > sym.indent)
       const tags = seqBy(fields, t => t.lineno)
-      if (fields.length %2 !== 0) { throw new Error('Definition of struct should have even the number of fields: ' + dump(fields)) }
+      if (fields.length %2 !== 0) { throw die('invalid adt', {tags, fields}) }
       sym.adt = tags
     } else {
-      throw new Error('Unexpected symbol: ' + dump(sym))
+      throw die('Unexpected symbol', sym)
     }
     return sym
   }
@@ -132,7 +144,7 @@ function parse(tokens) {
     } else if (look().lineno > base.lineno) {
       return until(t => t.indent > base.indent, () => is_define() ? parse_define() : parse_exp())
     } else {
-      throw new Error('Unexpected function body: ' + dump(base))
+      throw die('Unexpected function body', base)
     }
   }
   function parse_exp() {
@@ -171,7 +183,7 @@ function parse(tokens) {
               return token
             default: return token
           }
-      default: throw new Error('Unexpected token: ' + dump(token))
+      default: throw die('Unexpected token', token)
     }
   }
   const defines = []
@@ -186,6 +198,8 @@ function generate(nodes) {
       const a = argv.map(gen)
       const cases = range(1, a.length, 2).map(i => `${a[i-1]} ? ${a[i]} : `).join('')
       return '(' + cases + a[a.length-1] + ')'
+    } if (id === 'error') {
+      return `(new __E(${gen(argv[0])}))`
     } else if (id === 'match') {
       const a = argv.map(gen)
       const cond = i => a[i-1] === '_' ? 'true' : `__equals(__m, ${a[i-1]})`
@@ -199,7 +213,7 @@ function generate(nodes) {
   }
   function genFunc(fname, args, exps) {
     if (exps.length === 0) {
-      throw new Error('Empty exps: ' + fname)
+      throw die('Empty exps', fname)
     }
     const arg = args.map(t => t.code).join(',')
     const isEff = exps.some(x => effOp2.includes(x.code))
@@ -244,14 +258,27 @@ function generate(nodes) {
     const f = a => g(a[0].code, range(1, a.length, 2).map(i => a[i].code).join(', '))
     return adt.map(f).join('\n')
   }
+  function genComma(node) {
+    const vals = []
+    while (node.code === ',') {
+      if (node.lhs.tag !== 'id') { throw die('token should be id', node) }
+      vals.push(node.lhs.code)
+      node = node.rhs
+    }
+    if (node.code !== '=>') { throw die('unexpected token', node) }
+    vals.push(node.lhs.code)
+    const args = vals.join(',')
+    return `(${args}) => ${gen(node.rhs)}`
+  }
   function gen(node) {
-    if (!node) { throw new Error('node is not defined: ' + dump(node)) }
+    if (!node) { throw die('node is not defined', node) }
     switch (node.tag) {
       case 'id': return genId(node.code, node.argv)
       case 'num':
       case 'str': return node.code
       case 'op2':
         switch (node.code) {
+          case ',': return genComma(node)
           case '++': return `${gen(node.lhs)}.concat(${gen(node.rhs)})`
           default: return `${gen(node.lhs)} ${node.code} ${gen(node.rhs)}`
         }
@@ -284,13 +311,15 @@ function run(src) {
   return {tokens, nodes, js, actual, error}
 }
 function testAll() {
-  const eq = (expect, exp, ...funcs) => {
+  const err = (...args) => runTest((e,a) => a && a.__err && e === a.message, ...args)
+  const eq = (...args) => runTest((e,a) => dump(e) === dump(a), ...args)
+  const runTest = (cmp, expect, exp, ...funcs) => {
     funcs.reverse()
     funcs.push('main = ' + exp)
     const src = funcs.join('\n')
     const result = run(src)
     const actual = result.actual
-    if (dump(expect) === dump(actual)) {
+    if (cmp(expect, actual)) {
       process.stdout.write('.')
     } else {
       print('Failed')
@@ -337,7 +366,9 @@ function testAll() {
   // function
   eq(1, 'a', 'a=1')
   eq(3, 'add(1 2)', 'add a b = a + b')
-  eq(6, 'add(1 add(2 3))', 'add a b = a + b')
+  eq(1, 'f1(1)', 'f1 = a => a')
+  eq(3, 'f2(1 2)', 'f2 = a,b => a + b')
+  eq(6, 'f3(1 2 3)', 'f3 = a,b,c => a + b + c')
 
   // control flow
   eq(1, 'if(true 1 lazy)')
@@ -364,6 +395,11 @@ function testAll() {
   eq(1, '\n  a <- var(6)\n  a /= 2\n  a %= 2\n  a')
   eq(3, '\n  a <- var(1)\n  f = a+=1\n  f\n  f\n  a')
   eq(7, '\n  a <- var(1)\n  f =\n    a += 1\n    a += 2\n  f\n  f\n  a')
+
+  // error handling
+  err('failed', 'error("failed")')
+  //eq('failed!', 'error("failed").catch(e => e.message + "!")')
+
   print('ok')
 }
 testAll()
