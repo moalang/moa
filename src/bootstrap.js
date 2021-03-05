@@ -332,7 +332,8 @@ function testAll() {
   // effect
   eq(3, '\n  a = 1\n  a + 2')
   eq(1, '\n  a <- f\n  a', 'f = 1')
-  eq(2, '\n  a <- var(1)\n  a += 1\n  a', 'f = 1')
+  eq(4, '\n  a <- var(1)\n  a += 1\n  a*=2\n  a')
+  eq(1, '\n  a <- var(6)\n  a /= 2\n  a%=2\n  a')
   print('ok')
 }
 testAll()
