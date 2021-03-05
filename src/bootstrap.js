@@ -69,7 +69,7 @@ const runtime = (function() {
     }
     return o
   }
-}).toString().split('\n').slice(1,-1).join('\n')
+}).toString().split('\n').slice(1,-1).join('\n') + '\n'
 function tokenize(src) {
   const len = src.length
   let pos = 0
@@ -325,6 +325,10 @@ function run(src) {
   return {tokens, nodes, js, actual, error}
 }
 function testAll() {
+  testBootStrap()
+  testMoa()
+}
+function testBootStrap() {
   const err = (...args) => runTest((e,a) => a && a.__err && e === a.message, ...args)
   const eq = (...args) => runTest((e,a) => dump(e) === dump(a), ...args)
   const runTest = (cmp, expect, exp, ...funcs) => {
@@ -430,6 +434,38 @@ function testAll() {
 
   // effect combination
   eq(5, '\n  v <- var(1)\n  inc = v += 1\n  twice f =\n    f\n    f\n  twice(inc)\n  twice(inc)\n  v')
+
+  print('ok')
+}
+function testMoa() {
+  const moa = `compile src = src`.trim()
+  const compiler = runtime + run(moa).js
+  function eq(expect, exp, ...funcs) {
+    funcs.reverse()
+    funcs.push('main = ' + exp)
+    const src = funcs.join('\n')
+    const js = Function(compiler + `\nreturn compile(${dump(src)})`)()
+    const actual = Function(runtime + js + `\nreturn typeof main === "function" ? main() : main`)()
+    if (dump(expect) === dump(actual)) {
+      process.stdout.write('.')
+    } else {
+      print('Failed')
+      print('expect:', expect)
+      print('actual:', actual)
+      print('js    :', js)
+    }
+  }
+
+  // value
+  eq(1, '1')
+  eq('hi', '"hi"')
+  eq('"hi"', '`"hi"`')
+  eq([], '[]')
+  eq([1], '[1]')
+  //eq([1, 2], '[1 2]')
+  //eq(['a', 'b'], '["a" "b"]')
+  eq(true, 'true')
+  eq(false, 'false')
 
   print('ok')
 }
