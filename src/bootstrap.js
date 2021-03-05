@@ -216,7 +216,7 @@ function generate(nodes) {
       throw die('Empty exps', fname)
     }
     const arg = args.map(t => t.code).join(',')
-    const isEff = exps.some(x => effOp2.includes(x.code))
+    const isEff = exps.some(x => effOp2.includes(x.code)) || (exps.length >= 2 && exps.slice(0, -1).some(e => e.tag === 'id'))
     if (isEff) {
       const prefix = `const ${fname} = (${arg}) => `
       if (exps.length === 1) {
@@ -402,6 +402,14 @@ function testAll() {
   err('failed', 'then(error("failed") v => v + 1)')
   eq(2, 'then(1 v => v + 1)')
   eq(1, 'catch(1 e => 2)')
+
+  // effect with error handling
+  err('failed', '\n  v <- f\n  v', 'f = error("failed")')
+  eq(2, '\n  v <- catch(f _ => 2)\n  v', 'f = error("failed")')
+  eq(2, '\n  v = f\n  catch(v _ => 2)', 'f = error("failed")')
+  eq(2, '\n  v <- catch(f _ => 2)\n  v', 'f =\n  error("failed")\n  1')
+  eq(2, '\n  v = f\n  catch(v _ => 2)', 'f =\n  error("failed")\n  1')
+  err('failed', '\n  v <- f\n  0', 'f = g', 'g =\n  error("failed")\n  1')
 
   print('ok')
 }
