@@ -1,7 +1,7 @@
 'use strict'
 const print = (...args) => console.log(...args)
 const dump = s => JSON.stringify(s)
-const op2 = '&& || == != >= > <= < ++ + - * / .'.split(' ')
+const op2 = '&& || == != <- >= <= > < += -= *= /= %= ++ + - * / % .'.split(' ')
 const syms = ': | = [ ] ( )'.split(' ')
 const range = (s,e,step) => {
   const a = []
@@ -210,6 +210,13 @@ function generate(nodes) {
     const f = a => g(a[0].code, range(1, a.length, 2).map(i => a[i].code).join(', '))
     return adt.map(f).join('\n')
   }
+  function genAssign(lhs, rhs) {
+    if (rhs.code === 'var') {
+      return `let ${gen(lhs)} = ${gen(rhs.argv[0])}`
+    } else {
+      return `${gen(lhs)} = ${gen(rhs)}`
+    }
+  }
   function gen(node) {
     if (!node) { throw new Error('node is not defined: ' + dump(node)) }
     switch (node.tag) {
@@ -219,6 +226,7 @@ function generate(nodes) {
       case 'op2':
         switch (node.code) {
           case '++': return `${gen(node.lhs)}.concat(${gen(node.rhs)})`
+          case '<-': return genAssign(node.lhs, node.rhs)
           default: return `${gen(node.lhs)} ${node.code} ${gen(node.rhs)}`
         }
       case 'sym':
@@ -323,6 +331,8 @@ function testAll() {
 
   // effect
   eq(3, '\n  a = 1\n  a + 2')
+  eq(1, '\n  a <- f\n  a', 'f = 1')
+  eq(2, '\n  a <- var(1)\n  a += 1\n  a', 'f = 1')
   print('ok')
 }
 testAll()
