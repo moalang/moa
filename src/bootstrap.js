@@ -428,6 +428,9 @@ function testAll() {
   eq(2, '\n  v = f\n  catch(v _ => 2)', 'f =\n  error("failed")\n  1')
   err('failed', '\n  v <- f\n  0', 'f = g', 'g =\n  error("failed")\n  1')
 
+  // effect combination
+  eq(5, '\n  v <- var(1)\n  inc = v += 1\n  twice f =\n    f\n    f\n  twice(inc)\n  twice(inc)\n  v')
+
   print('ok')
 }
 testAll()
