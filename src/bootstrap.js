@@ -1,16 +1,27 @@
 'use strict'
-const die = (msg, obj) => { console.dir(obj, {depth: null}); return new Error(msg) }
+const debug = {}
+const die = (msg, obj) => {
+  console.log('#', msg)
+  console.dir(obj, {depth: null})
+  console.dir(debug, {depth: null})
+  return new Error(msg)
+}
 const print = (...args) => console.log(...args)
 const dump = s => JSON.stringify(s)
 const effOp2 = '+= -= *= /= %= <-'.split(' ')
-const op2 = effOp2.concat('&& || == != >= <= => > < ++ + - * / % . ,'.split(' '))
-const syms = ': | = [ ] ( )'.split(' ')
+const op2 = effOp2.concat('&& || == != >= <= => > < ++ + - * / % .'.split(' '))
+const syms = ': | = [ ] ( ) ,'.split(' ')
 const range = (s,e,step) => {
   const a = []
   for (let i=s; i<e; i+=step) {
     a.push(i)
   }
   return a
+}
+const dict = a => {
+  const d = {}
+  range(1, a.length, 2).map(i => d[a[i - 1]] = a[i])
+  return d
 }
 const seqBy = (a,f) => {
   if (!a.length) { return [] }
@@ -160,8 +171,17 @@ function parse(tokens) {
   }
   function parse_exp() {
     let l = parse_unit()
+    if (look().code === ',') {
+      const op = parse_unit()
+      op.array = [l, parse_unit()]
+      while (look().code === ',') {
+        pos++ // drop commma token
+        op.array.push(parse_unit())
+      }
+      l = op
+    }
     while (op2.includes(look().code)) {
-      let op = parse_unit()
+      const op = parse_unit()
       op.lhs = l
       op.rhs = parse_exp()
       l = op
@@ -209,7 +229,9 @@ function generate(nodes) {
   const reservedIds= ['catch', 'then']
   function genId(id, argv) {
     if (id === 'typeof') {
-      return '"' + argv[0].type + '"'
+      return '"' + argv[0].type.name + '"'
+    } else if (id === 'str') {
+      return '(' + gen(argv[0]) + ').toString()'
     } else if (id === 'if') {
       const a = argv.map(gen)
       const cases = range(1, a.length, 2).map(i => `${a[i-1]} ? ${a[i]} : `).join('')
@@ -276,18 +298,6 @@ function generate(nodes) {
     const f = a => g(a[0].code, range(1, a.length, 2).map(i => a[i].code).join(', '))
     return adt.map(f).join('\n')
   }
-  function genComma(node) {
-    const vals = []
-    while (node.code === ',') {
-      if (node.lhs.tag !== 'id') { throw die('token should be id', node) }
-      vals.push(node.lhs.code)
-      node = node.rhs
-    }
-    if (node.code !== '=>') { throw die('unexpected token', node) }
-    vals.push(node.lhs.code)
-    const args = vals.join(',')
-    return `(${args}) => ${gen(node.rhs)}`
-  }
   function gen(node) {
     if (!node) { throw die('node is not defined', node) }
     switch (node.tag) {
@@ -296,7 +306,6 @@ function generate(nodes) {
       case 'str': return node.code
       case 'op2':
         switch (node.code) {
-          case ',': return genComma(node)
           case '++': return `${gen(node.lhs)}.concat(${gen(node.rhs)})`
           default: return `${gen(node.lhs)} ${node.code} ${gen(node.rhs)}`
         }
@@ -308,6 +317,7 @@ function generate(nodes) {
           case '|': return genAdt(node.fname.code, node.args, node.adt)
           case '[': return '[' + node.list.map(gen).join(', ') + ']'
           case '(': return '(' + gen(node.body) + ')'
+          case ',': return '(' + node.array.map(gen).join(',') + ')'
           default: throw Error('Gen sym error ' + dump(node))
         }
       default: throw Error('Gen error ' + dump(node))
@@ -316,28 +326,105 @@ function generate(nodes) {
   return nodes.map(gen).join('\n')
 }
 function infer(nodes) {
-  const types = {}
+  const props = {
+    int: {},
+    str: {},
+    bool: {},
+    error: {},
+    TBD: {},
+  }
+  const tnames = {
+    true: 'bool',
+    false: 'bool',
+    typeof: 'str',
+  }
+  const checked = []
+  let envs = [{}]
+  function getAndSetType(node) {
+    const key = node.code
+    if (key === 'if') { return node.argv[1].tname }
+    if (key === 'match') { return node.argv[2].tname }
+    if (key === 'var') { return 'var:' + node.argv[0].tname }
+    if (key === 'catch' || key === 'then') { return node.argv[0].tname }
+    return (props[key] && key) || tnames[key] || findType(node)
+  }
+  function findType(node) {
+    const key = node.code
+    const argv = node.argv
+    for (const env of envs) {
+      if (key in env) {
+        if (key === 'TBD') {
+          if (!args.length) { throw die('findType', {key, argv}) }
+          console.dir(node, {depth:null})
+        }
+        return env[key]
+      }
+    }
+    throw die('Not found', {key, envs, node})
+  }
+  function putType(key, val) {
+    return envs[envs.length - 1][key] = val
+  }
+  function wrapType(f, d) {
+    envs.push(d)
+    const ret = f()
+    envs.pop()
+    return ret
+  }
   function inf(node) {
-    node.type = _type(node)
+    if (node.tname) { return }
+    checked.push(node)
+    return node.tname = _type(node)
   }
   function _same(lhs, rhs) {
-    if (inf(lhs) != inf(rhs)) { throw new die('_same', {lhs, rhs}) }
-    return lhs.type
+    const t1 = inf(lhs)
+    const t2 = inf(rhs)
+    if (t1 !== t2 && t1 !== ('var:' + t2)) { throw die('_same', {lhs, rhs}) }
+    return lhs.tname
   }
   function _struct(node) {
-    types[node.fname.code] = {args: node.args, struct: node.struct}
+    props[node.fname.code] = dict(node.struct.map(s => s.code))
     return node.fname.code
   }
-  function _enum(node) {
-    types[node.fname.code] = {args: node.args, adt: node.adt}
+  function _adt(node) {
+    const adt = {}
+    for (const a of node.adt) {
+      const id = a[0].code
+      adt[id] = props[id] = dict(a.slice(1).map(x => x.code))
+    }
+    props[node.fname.code] = adt
     return node.fname.code
+  }
+  function _prop(lhs, rhs) {
+    let key = inf(lhs)
+    let prop = props[key]
+    if (!prop) { throw die('No prop', {target: lhs.tname, id: rhs.code, props, lhs, rhs}) }
+    while (rhs.code === '.') {
+      key = rhs.lhs.code
+      prop = prop[key]
+      rhs = rhs.rhs
+    }
+    if (!prop) { throw die('No val', {prop, key: rhs.code, lhs, rhs}) }
+    return prop
+  }
+  function _func(node) {
+    if (node.args.length) {
+      return putType(node.fname.code, 'TBD')
+    } else {
+      return putType(node.fname.code, node.exps.map(inf).slice(-1)[0])
+    }
   }
   function _id(node) {
-    node.argv.map(inf)
-    if (node.code === 'typeof') {
-      return 'str'
+    if (node.code === 'match') {
+      inf(node.argv[0])
+      range(1, node.argv.length, 2).map(i => {
+        if (node.argv[i].code === '_') {
+          node.argv[i].tname = node.argv[0].tname
+        }
+      })
     }
-    return 'TBD'
+    node.argv.map(inf)
+    return getAndSetType(node)
   }
   function _type(node) {
     switch (node.tag) {
@@ -345,21 +432,33 @@ function infer(nodes) {
       case 'str':
       case 'bool': return node.tag
       case 'id': return _id(node)
-      case 'op2': return _same(node.lhs, node.rhs)
-      default:
+      case 'op2':
         switch (node.code) {
-          case 'true':
-          case 'false': return 'bool'
+          case '.': _prop(node.lhs, node.rhs)
+          case '=>': return 'TBD'
+          case '<-': return putType(node.lhs.code, node.lhs.tname = inf(node.rhs))
+          default: return _same(node.lhs, node.rhs)
+        }
+      case 'sym':
+        switch (node.code) {
           case '[': return 'TBD'
           case '(': return inf(node.body)
           case ':': return _struct(node)
-          case '|': return _struct(node)
-          case '=': return node.exps.map(inf).slice(-1)[0]
+          case '|': return _adt(node)
+          case '=': return _func(node)
           default: throw die('infType', node)
         }
+      default: throw die('infType', node)
     }
   }
+  function fix(node) {
+    const tname = node.tname.replace(/^var:/, '')
+    if (!(tname in props)) { throw die('fix', {node, props}) }
+    node.type = props[node.tname]
+  }
   nodes.map(inf)
+  Object.keys(props).map(tname => props[tname].name = tname)
+  checked.map(fix)
 }
 function run(src) {
   const tokens = tokenize(src)
@@ -385,7 +484,7 @@ function testBootStrap() {
   const runTest = (cmp, expect, exp, ...funcs) => {
     funcs.reverse()
     funcs.push('main = ' + exp)
-    const src = funcs.join('\n')
+    const src = debug.src = funcs.join('\n')
     const result = run(src)
     const actual = result.actual
     if (cmp(expect, actual)) {
@@ -440,11 +539,11 @@ function testBootStrap() {
   eq(6, 'f3(1 2 3)', 'f3 = a,b,c => a + b + c')
 
   // control flow
-  eq(1, 'if(true 1 lazy)')
-  eq(2, 'if(false lazy 2)')
-  eq(3, 'if(false lazy true 3 lazy)')
-  eq(3, 'if(false lazy false lazy 3)')
-  eq(2, 'match(1 1 2 lazy lazy)')
+  eq(1, 'if(true 1 99)')
+  eq(2, 'if(false 99 2)')
+  eq(3, 'if(false 99 true 3 99)')
+  eq(3, 'if(false 99 false 99 3)')
+  eq(2, 'match(1 1 2 99 99)')
   eq(4, 'match(3 1 2 3 4)')
   eq(2, 'match(3 _ 2 3 4)')
 
@@ -454,8 +553,8 @@ function testBootStrap() {
   eq(1, 'struct("hi" 1).b', 'struct:\n   a str\n  b int')
 
   // adt
-  eq(1, 'match(v aint v.vint abool v.vbool)', 'v = aint(1)', 'adt|\n  aint vint int\n  abool vbool bool')
-  eq(true, 'match(v aint v.vint abool v.vbool)', 'v = abool(true)', 'adt|\n  aint vint int\n  abool vbool bool')
+  eq('1', 'match(v aint str(v.vint) astr v.vstr)', 'v = aint(1)', 'adt|\n  aint vint int\n  astr vstr str')
+  eq('hi', 'match(v aint str(v.vint) astr v.vstr)', 'v = astr("hi")', 'adt|\n  aint vint int\n  astr vstr str')
 
   // effect
   eq(3, '\n  a = 1\n  a + 2')
