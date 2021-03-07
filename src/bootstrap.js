@@ -80,7 +80,7 @@ function tokenize(src) {
   const any = (tag, m) => m && newToken(tag, m)
   const rule = s =>
     reg('id', s.match(/^[A-Za-z_][A-Za-z_0-9]*/)) ||
-    reg('num', s.match(/^[0-9]+/)) ||
+    reg('int', s.match(/^[0-9]+/)) ||
     reg('str', s.match(/^"[^"]*"/)) ||
     reg('str', s.match(/^`[^`]*`/)) ||
     any('op2', op2.find(a => s.startsWith(a))) ||
@@ -177,9 +177,11 @@ function parse(tokens) {
           consume(t => t.code === '(')
           token.argv = until(t => t.code !== ')')
           consume(t => t.code === ')')
+        } else {
+          token.argv = []
         }
         return token
-      case 'num':
+      case 'int':
       case 'str':
       case 'op2': return token
       case 'sym':
@@ -206,7 +208,9 @@ function parse(tokens) {
 function generate(nodes) {
   const reservedIds= ['catch', 'then']
   function genId(id, argv) {
-    if (id === 'if') {
+    if (id === 'typeof') {
+      return '"' + argv[0].type + '"'
+    } else if (id === 'if') {
       const a = argv.map(gen)
       const cases = range(1, a.length, 2).map(i => `${a[i-1]} ? ${a[i]} : `).join('')
       return '(' + cases + a[a.length-1] + ')'
@@ -222,7 +226,7 @@ function generate(nodes) {
       const js = cases + otherwise
       return `(__m => ${js})(${a[0]})`
     } else {
-      return id + (argv ? '(' + argv.map(gen).join(', ') + ')' : '')
+      return id + (argv.length ? '(' + argv.map(gen).join(', ') + ')' : '')
     }
   }
   function genFunc(fname, args, exps) {
@@ -288,7 +292,7 @@ function generate(nodes) {
     if (!node) { throw die('node is not defined', node) }
     switch (node.tag) {
       case 'id': return genId(node.code, node.argv)
-      case 'num':
+      case 'int':
       case 'str': return node.code
       case 'op2':
         switch (node.code) {
@@ -311,9 +315,56 @@ function generate(nodes) {
   }
   return nodes.map(gen).join('\n')
 }
+function infer(nodes) {
+  const types = {}
+  function inf(node) {
+    node.type = _type(node)
+  }
+  function _same(lhs, rhs) {
+    if (inf(lhs) != inf(rhs)) { throw new die('_same', {lhs, rhs}) }
+    return lhs.type
+  }
+  function _struct(node) {
+    types[node.fname.code] = {args: node.args, struct: node.struct}
+    return node.fname.code
+  }
+  function _enum(node) {
+    types[node.fname.code] = {args: node.args, adt: node.adt}
+    return node.fname.code
+  }
+  function _id(node) {
+    node.argv.map(inf)
+    if (node.code === 'typeof') {
+      return 'str'
+    }
+    return 'TBD'
+  }
+  function _type(node) {
+    switch (node.tag) {
+      case 'int':
+      case 'str':
+      case 'bool': return node.tag
+      case 'id': return _id(node)
+      case 'op2': return _same(node.lhs, node.rhs)
+      default:
+        switch (node.code) {
+          case 'true':
+          case 'false': return 'bool'
+          case '[': return 'TBD'
+          case '(': return inf(node.body)
+          case ':': return _struct(node)
+          case '|': return _struct(node)
+          case '=': return node.exps.map(inf).slice(-1)[0]
+          default: throw die('infType', node)
+        }
+    }
+  }
+  nodes.map(inf)
+}
 function run(src) {
   const tokens = tokenize(src)
   const nodes = parse(tokens)
+  infer(nodes)
   const js = generate(nodes)
   let actual = null
   let error = null
@@ -398,9 +449,9 @@ function testBootStrap() {
   eq(2, 'match(3 _ 2 3 4)')
 
   // struct
-  eq({a: 'hi', b: 1}, 'struct("hi" 1)', 'struct:\n   a string\n  b int')
-  eq('hi', 'struct("hi" 1).a', 'struct:\n   a string\n  b int')
-  eq(1, 'struct("hi" 1).b', 'struct:\n   a string\n  b int')
+  eq({a: 'hi', b: 1}, 'struct("hi" 1)', 'struct:\n   a str\n  b int')
+  eq('hi', 'struct("hi" 1).a', 'struct:\n   a str\n  b int')
+  eq(1, 'struct("hi" 1).b', 'struct:\n   a str\n  b int')
 
   // adt
   eq(1, 'match(v aint v.vint abool v.vbool)', 'v = aint(1)', 'adt|\n  aint vint int\n  abool vbool bool')
@@ -434,6 +485,10 @@ function testBootStrap() {
 
   // effect combination
   eq(5, '\n  v <- var(1)\n  inc = v += 1\n  twice f =\n    f\n    f\n  twice(inc)\n  twice(inc)\n  v')
+
+  // type inference
+  eq('int', 'typeof(1)')
+  eq('str', 'typeof("hi")')
 
   print('ok')
 }
