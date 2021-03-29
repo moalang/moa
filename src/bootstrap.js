@@ -2,14 +2,8 @@ const print = (...a) => console.log(...a)
 const dump = o => console.dir(o,{depth:null})
 const str = o => JSON.stringify(o)
 const eq = (x,y) => str(x) === str(y)
-const fork = (target,branches) => branches.find((cond,body) => cond==='_' || eq(target,cond))[1]
 const dict = (kx,vx) => kx.reduce((d,k,i) => (d[k]=vx[i],d), {})
-const fail = (msg,o) => {
-  dump(o)
-  throw new Error(msg)
-}
-//const copy = o => typeof o === 'object' ? JSON.parse(JSON.stringify(o)) : o
-const copy = o => o
+const fail = (msg,o) => { dump(o); throw new Error(msg) }
 
 const tokenize = src => src.match(/[^ ()=+]+|./g).filter(x=>x.trim().length)
 const parse = src => {
@@ -26,7 +20,7 @@ const parse = src => {
 }
 const infer = (nodes,src) => {
   let tvarId = 0
-  const tvar = () => (name => ({name,var:true}))((tvarId++).toString())
+  const tvar = () => (name => ({name,var:true}))((++tvarId).toString())
   const tlambda = (...types) => ({types:types})
   const ttype = (name) => ({name})
   const tint = ttype('int')
@@ -68,10 +62,11 @@ const infer = (nodes,src) => {
     'if': tlambda(tbool, v1, v1, v1),
   }
   const local = (node, d, nonGeneric) => {
-    const bk = copy(env)
-    Object.keys(d).map(k => env[k]=d[k])
+    const keys = Object.keys(d)
+    const bk = {}
+    keys.map(k => (bk[k]=env[k], env[k]=d[k]))
     const ret = analyse(node, nonGeneric)
-    env = bk
+    keys.map(k => env[k] = bk[k])
     return ret
   }
   const prune = t => (t.var && t.instance) ? t.instance = prune(t.instance) : t
@@ -130,7 +125,7 @@ const _show = t => {
     return _show(t.instance)
   } else if (t.name) {
     return t.name
-  } else if (t.types && t.types.length) {
+  } else if (t.types) {
     return '(' + t.types.map(_show).join(' ') + ')'
   } else {
     fail("_show",t)
@@ -186,9 +181,7 @@ test('(= _ x y (x (y x)))', '((1 2) ((1 2) 1) 2)')
 //test('(= _ x y (x (y x) (y x)))', '((1 1 2) ((1 1 2) 1) 2)') // TODO: fix
 test('(= g h t f x (f h (t f x)))', '(1 ((1 2 3) 4 2) (1 2 3) 4 3)')
 
-
-
-// errors
+// type errors
 
 
 print('ok')
