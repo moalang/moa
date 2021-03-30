@@ -9,13 +9,13 @@ const eq = (x,y) => str(x) === str(y)
 const dict = (kx,vx) => kx.reduce((d,k,i) => (d[k]=vx[i],d), {})
 const fail = (msg,o) => { dump(o); throw new Error(msg) }
 
-const tokenize = src => src.match(/[^ ()=+]+|./g).filter(x=>x.trim().length)
+const tokenize = src => src.match(/[^ ()=+]+|./g).filter(x=>x.trim().length).map(code => ({code}))
 const parse = src => {
   const tokens = tokenize(src)
   let pos = 0
   const consume = f => f(tokens[pos++] || fail('EOF', {src,pos,tokens}))
-  const apply = acc => (t => t === ')' ? acc : apply((acc.push(t),acc)))(unit())
-  const unit = () => consume(t => t === '(' ? apply([]) : t)
+  const apply = acc => (t => t.code === ')' ? acc : apply((acc.push(t),acc)))(unit())
+  const unit = () => consume(t => t.code === '(' ? apply([]) : t)
   const nodes = []
   while (pos < tokens.length) {
     nodes.push(unit())
@@ -75,24 +75,24 @@ const infer = (nodes,src) => {
     return ret
   }
   const prune = t => (t.var && t.instance) ? t.instance = prune(t.instance) : t
-  const analyse = (node, nonGeneric) => _analyse(node, nonGeneric)
+  const analyse = (node, nonGeneric) => node.type = _analyse(node, nonGeneric)
   const _analyse = (node, nonGeneric) => {
     if (typeof node === 'object' && node.constructor === Array) {
       if (node.length === 0) { return tnil }
       let [head,...tail] = node
-      if (head === '=') {
+      if (head.code === '=') {
         if (tail.length < 2) { fail('Not enoug argument', {tail,node}) }
-        const name = tail[0]
+        const name = tail[0].code
         if (tail.length === 2) {
-          return env[name] = analyse(tail[1], nonGeneric)
+          return tail[0].type = env[name] = analyse(tail[1], nonGeneric)
         } else {
           const args = tail.slice(1,-1)
           const argt = args.map(_ => tvar())
+          args.map((a,i) => a.type = argt[i])
           const body = tail.slice(-1)[0]
-          const d = dict(args, argt)
+          const d = dict(args.map(t => t.code), argt)
           const ft = tlambda(...argt, local(body, d, nonGeneric.concat(argt.map(t=>t.name))))
-          env[name] = ft
-          return ft
+          return tail[0].type  = env[name] = ft
         }
       }
       if (tail.length) {
@@ -101,10 +101,10 @@ const infer = (nodes,src) => {
         unify(tlambda(...tail.map(t => analyse(t, nonGeneric)), rt), ft)
         return rt
       } else {
-        return analyse(head, nonGeneric)
+        return head.type = analyse(head, nonGeneric)
       }
     } else {
-      const v = node
+      const v = node.code
       if (v) {
         if (v.match(/^[0-9]+/)) {
           return tint
@@ -119,29 +119,49 @@ const infer = (nodes,src) => {
   return nodes.map(node => analyse(node, []))
 }
 
-const show = t => {
-  const s = _show(t)
+const showType = t => {
+  const show = t => {
+    if (t.instance) {
+      return show(t.instance)
+    } else if (t.name) {
+      return t.name
+    } else if (t.types) {
+      return '(' + t.types.map(show).join(' ') + ')'
+    } else {
+      fail("show",t)
+    }
+  }
+  const s = show(t)
   const o = {}
   const r = s.replace(/\d+/g, t => o[t]||=Object.keys(o).length+1)
   return r
 }
-const _show = t => {
-  if (t.instance) {
-    return _show(t.instance)
-  } else if (t.name) {
-    return t.name
-  } else if (t.types) {
-    return '(' + t.types.map(_show).join(' ') + ')'
-  } else {
-    fail("_show",t)
+
+const showNode = o => {
+  const show = o => {
+    if (typeof o === 'object' && o.constructor === Array) {
+      if (o.length === 0) {
+        return '()'
+      } else {
+        if (o[0].code === '=') {
+          return '(= ' + o.slice(1).map(show).join(' ') + ')'
+        } else {
+          return '(' + o.map(show).join(' ') + ')'
+        }
+      }
+    } else {
+      if (!o.type) { fail('untyped', o) }
+      return o.code + ':' + showType(o.type)
+    }
   }
+  return show(o)
 }
 
 function testType() {
   const test = (src,expect) => {
     const nodes = parse(src)
     const types = infer(nodes, src)
-    const actual = show(types.slice(-1)[0])
+    const actual = showType(types.slice(-1)[0])
     if (eq(actual,expect)) {
       process.stdout.write('.')
     } else {
