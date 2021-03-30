@@ -1,3 +1,7 @@
+// Thanks
+// https://github.com/reki2000/hyndley-milner-kotlin/blob/master/HindleyMilner.kt
+// http://www.fos.kuis.kyoto-u.ac.jp/~igarashi/class/isle4-10w/testcases.html
+
 const print = (...a) => console.log(...a)
 const dump = o => console.dir(o,{depth:null})
 const str = o => JSON.stringify(o)
@@ -20,6 +24,7 @@ const parse = src => {
 }
 const infer = (nodes,src) => {
   let tvarId = 0
+  const trace = x => (dump(x),x)
   const tvar = () => (name => ({name,var:true}))((++tvarId).toString())
   const tlambda = (...types) => ({types:types})
   const ttype = (name) => ({name})
@@ -132,56 +137,61 @@ const _show = t => {
   }
 }
 
-const test = (src,expect) => {
-  const nodes = parse(src)
-  const types = infer(nodes, src)
-  const actual = show(types.slice(-1)[0])
-  if (eq(actual,expect)) {
-    process.stdout.write('.')
-  } else {
-    console.log('Failed')
-    console.log('expect:',expect)
-    console.log('actual:',actual)
-    console.log('   src:',src)
-    console.log(' nodes:', nodes)
+function testType() {
+  const test = (src,expect) => {
+    const nodes = parse(src)
+    const types = infer(nodes, src)
+    const actual = show(types.slice(-1)[0])
+    if (eq(actual,expect)) {
+      process.stdout.write('.')
+    } else {
+      console.log('Failed')
+      console.log('expect:',expect)
+      console.log('actual:',actual)
+      console.log('   src:',src)
+      console.log(' nodes:', nodes)
+    }
   }
+
+  // primitives
+  test('1', 'int')
+  test('true', 'bool')
+  test('false', 'bool')
+
+  // embedded
+  test('(+ 1 1)', 'int')
+  test('(< 1 1)', 'bool')
+  test('(if true true true)', 'bool')
+  test('(if true 1 1)', 'int')
+
+  // call
+  test('(= f 1)(f)', 'int')
+  test('(= f a a)(f 1)', 'int')
+
+  // generics
+  test('(= f a a)', '(1 1)')
+  test('(= f a b a)', '(1 2 1)')
+  test('(= f a b b)', '(1 2 2)')
+  test('(= f a a)(f 1)(f true)', 'bool')
+  test('(= f x x) (if (f true) (f 1) (f 2))', 'int')
+
+  // combinations
+  test('(= f x (+ x 1))(= g x (+ x 2))(+ (f 1) (g 1))', 'int')
+  test('(= _ f g x (g (f x)))', '((1 2) (2 3) 1 3)')
+  test('(= _ x y z (x z (y z)))', '((1 2 3) (1 2) 1 3)')
+  test('(= _ b x (if (x b) x (= _ x b)))', '(1 (1 bool) (1 1))')
+  test('(= _ x (if true x (if x true false)))', '(bool bool)')
+  test('(= _ x y (if x x y))', '(bool bool bool)')
+  test('(= _ n ((= _ x (x (= _ y y))) (= _ f (f n))))', '(1 1)')
+  test('(= _ x y (x y))', '((1 2) 1 2)')
+  test('(= _ x y (x (y x)))', '((1 2) ((1 2) 1) 2)')
+  test('(= g h t f x (f h (t f x)))', '(1 ((1 2 3) 4 2) (1 2 3) 4 3)')
+  //test('(= _ x y (x (y x) (y x)))', '((1 1 2) ((1 1 2) 1) 2)') // TODO: fix
+
+  // type errors
+
+
+  print('ok')
 }
-// primitives
-test('1', 'int')
-test('true', 'bool')
-test('false', 'bool')
 
-// embedded
-test('(+ 1 1)', 'int')
-test('(< 1 1)', 'bool')
-test('(if true true true)', 'bool')
-test('(if true 1 1)', 'int')
-
-// call
-test('(= f 1)(f)', 'int')
-test('(= f a a)(f 1)', 'int')
-
-// generics
-test('(= f a a)', '(1 1)')
-test('(= f a b a)', '(1 2 1)')
-test('(= f a b b)', '(1 2 2)')
-test('(= f a a)(f 1)(f true)', 'bool')
-test('(= f x x) (if (f true) (f 1) (f 2))', 'int')
-
-// combinations
-test('(= f x (+ x 1))(= g x (+ x 2))(+ (f 1) (g 1))', 'int')
-test('(= _ f g x (g (f x)))', '((1 2) (2 3) 1 3)')
-test('(= _ x y z (x z (y z)))', '((1 2 3) (1 2) 1 3)')
-test('(= _ b x (if (x b) x (= _ x b)))', '(1 (1 bool) (1 1))')
-test('(= _ x (if true x (if x true false)))', '(bool bool)')
-test('(= _ x y (if x x y))', '(bool bool bool)')
-test('(= _ n ((= _ x (x (= _ y y))) (= _ f (f n))))', '(1 1)')
-test('(= _ x y (x y))', '((1 2) 1 2)')
-test('(= _ x y (x (y x)))', '((1 2) ((1 2) 1) 2)')
-//test('(= _ x y (x (y x) (y x)))', '((1 1 2) ((1 1 2) 1) 2)') // TODO: fix
-test('(= g h t f x (f h (t f x)))', '(1 ((1 2 3) 4 2) (1 2 3) 4 3)')
-
-// type errors
-
-
-print('ok')
+testType()
