@@ -9,12 +9,51 @@ const eq = (x, y) => str(x) === str(y)
 const dict = (kx, vx) => kx.reduce((d,k,i) => (d[k]=vx[i],d), {})
 const fail = (msg, o) => { throw new Error(msg + ' ' + str(o)) }
 
-const tokenize = src => src.match(/[^ ()=+]+|./g).filter(x=>x.trim().length).map(code => ({code}))
+const tokenize = src => {
+  const tokens = [{code:'('}]
+  let pos = 0
+  while (pos < src.length) {
+    const matched = src.slice(pos).match(/^[^ \n()=+]+|\n|./)
+    if (!matched) { fail('tokenize', {pos, src}) }
+    const code = matched[0]
+    if (code.match(/\n/)) {
+      tokens.push({code:')'})
+      tokens.push({code:'('})
+    }
+    if (code.trim()) {
+      tokens.push({code,pos})
+    }
+    pos += code.length
+  }
+  tokens.push({code:')'})
+  return tokens
+}
 const parse = src => {
   const tokens = tokenize(src)
   let pos = 0
+  const op2s = '+-*/<>'.split('')
+  const op2 = a => {
+    if (a.length === 0) { return a }
+    const l = a.length
+    const r = [a[0]]
+    for (let i=1; i<l; i++) {
+      const node = a[i]
+      const next = a[i+1]
+      if (node.code === '=') {
+        r.unshift(node)
+        r.push(op2(a.slice(i+1)))
+        break
+      } else if (op2s.includes(node.code) && next) {
+        r.push([node, r.pop(), next])
+        i+=1
+      } else {
+        r.push(node)
+      }
+    }
+    return r
+  }
   const consume = f => f(tokens[pos++] || fail('EOF', {src,pos,tokens}))
-  const apply = acc => (t => t.code === ')' ? acc : apply((acc.push(t),acc)))(unit())
+  const apply = acc => (t => t.code === ')' ? op2(acc) : apply((acc.push(t),acc)))(unit())
   const unit = () => consume(t => t.code === '(' ? apply([]) : t)
   const nodes = []
   while (pos < tokens.length) {
@@ -173,7 +212,14 @@ function testType() {
     }
   }
   const test = (src, expect) => {
-    const result = run(src)
+    let result
+    try {
+      result = run(src)
+    } catch (e) {
+      console.log('Failed')
+      console.log('  src:', src)
+      console.log('error:', e)
+    }
     const actual = showType(result.types.slice(-1)[0])
     if (eq(actual, expect)) {
       process.stdout.write('.')
@@ -186,39 +232,52 @@ function testType() {
     }
   }
 
+  // lisp style
+  test('+ 1 1', 'int')
+  test('< 1 1', 'bool')
+  test('= f 1\nf', 'int')
+  test('= f a a\nf 1', 'int')
+  test('= f a b a + b\nf 1 2', 'int')
+  test('(+ 1 1)', 'int')
+  test('(< 1 1)', 'bool')
+  test('(false)', 'bool')
+  test('((false))', 'bool')
+
   // primitives
   test('1', 'int')
   test('true', 'bool')
   test('false', 'bool')
 
   // embedded
-  test('(+ 1 1)', 'int')
-  test('(< 1 1)', 'bool')
-  test('(if true true true)', 'bool')
-  test('(if true 1 1)', 'int')
+  test('1 + 1', 'int')
+  test('1 < 1', 'bool')
+  test('if true true true', 'bool')
+  test('if true 1 1', 'int')
 
-  // call
-  test('(= f 1)(f)', 'int')
-  test('(= f a a)(f 1)', 'int')
+  // define
+  test('f = 1\nf', 'int')
+  test('f = 1\nf', 'int')
+  test('f a = a\nf 1', 'int')
+  test('f a b = a + b\nf 1 2', 'int')
 
   // generics
-  test('(= f a a)', '(1 1)')
-  test('(= f a b a)', '(1 2 1)')
-  test('(= f a b b)', '(1 2 2)')
-  test('(= f a a)(f 1)(f true)', 'bool')
-  test('(= f x x) (if (f true) (f 1) (f 2))', 'int')
+  test('f a = a', '(1 1)')
+  test('f a b = a', '(1 2 1)')
+  test('f a b = b', '(1 2 2)')
+  test('f a = a\nf 1\nf true', 'bool')
+  test('f x = x\nif (f true) (f 1) (f 2)', 'int')
 
   // combinations
-  test('(= f x (+ x 1))(= g x (+ x 2))(+ (f 1) (g 1))', 'int')
-  test('(= _ f g x (g (f x)))', '((1 2) (2 3) 1 3)')
-  test('(= _ x y z (x z (y z)))', '((1 2 3) (1 2) 1 3)')
-  test('(= _ b x (if (x b) x (= _ x b)))', '(1 (1 bool) (1 1))')
-  test('(= _ x (if true x (if x true false)))', '(bool bool)')
-  test('(= _ x y (if x x y))', '(bool bool bool)')
-  test('(= _ n ((= _ x (x (= _ y y))) (= _ f (f n))))', '(1 1)')
-  test('(= _ x y (x y))', '((1 2) 1 2)')
-  test('(= _ x y (x (y x)))', '((1 2) ((1 2) 1) 2)')
-  test('(= g h t f x (f h (t f x)))', '(1 ((1 2 3) 4 2) (1 2 3) 4 3)')
+  test('f x = x + 1\n(= g x (+ x 2))\n(+ (f 1) (g 1))', 'int')
+  test('_ f g x = g (f x)', '((1 2) (2 3) 1 3)')
+  test('_ x y z = x z (y z)', '((1 2 3) (1 2) 1 3)')
+  test('_ b x = if (x b) x (= _ x b)', '(1 (1 bool) (1 1))')
+  test('_ x = if true x (if x true false)', '(bool bool)')
+  test('_ x y = if x x y', '(bool bool bool)')
+  test('_ n = (_ x = (x (_ y = y))) (_ f = f n)', '(1 1)')
+  test('_ x y = x y', '((1 2) 1 2)')
+  test('_ x y = x (y x)', '((1 2) ((1 2) 1) 2)')
+  test('_ h t f x = f h (t f x)', '(1 ((1 2 3) 4 2) (1 2 3) 4 3)')
   //test('(= _ x y (x (y x) (y x)))', '((1 1 2) ((1 1 2) 1) 2)') // TODO: fix
 
   // type errors
