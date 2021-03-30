@@ -5,9 +5,9 @@
 const print = (...a) => console.log(...a)
 const dump = o => console.dir(o,{depth:null})
 const str = o => JSON.stringify(o)
-const eq = (x,y) => str(x) === str(y)
-const dict = (kx,vx) => kx.reduce((d,k,i) => (d[k]=vx[i],d), {})
-const fail = (msg,o) => { dump(o); throw new Error(msg) }
+const eq = (x, y) => str(x) === str(y)
+const dict = (kx, vx) => kx.reduce((d,k,i) => (d[k]=vx[i],d), {})
+const fail = (msg, o) => { throw new Error(msg + ' ' + str(o)) }
 
 const tokenize = src => src.match(/[^ ()=+]+|./g).filter(x=>x.trim().length).map(code => ({code}))
 const parse = src => {
@@ -41,7 +41,7 @@ const infer = (nodes,src) => {
     }
     return rec(type)
   }
-  const unify = (a,b) => {
+  const unify = (a, b) => {
     a = prune(a)
     b = prune(b)
     if (a.var) {
@@ -51,7 +51,7 @@ const infer = (nodes,src) => {
     } else if (b.var) {
       unify(b, a)
     } else {
-      if (a.name !== b.name) { fail('type name miss match', {a,b}) }
+      if (a.name !== b.name) { fail(`type miss match`, {a,b}) }
       if (a.types || b.types) {
         if (a.types.length !== b.types.length) { fail('types miss match', {a,b}) }
         a.types.map((t,i) => unify(t, b.types[i]))
@@ -128,7 +128,7 @@ const showType = t => {
     } else if (t.types) {
       return '(' + t.types.map(show).join(' ') + ')'
     } else {
-      fail("show",t)
+      fail("show", t)
     }
   }
   const s = show(t)
@@ -158,18 +158,31 @@ const showNode = o => {
 }
 
 function testType() {
-  const test = (src,expect) => {
+  const run = src => {
     const nodes = parse(src)
     const types = infer(nodes, src)
-    const actual = showType(types.slice(-1)[0])
-    if (eq(actual,expect)) {
+    return {nodes, types}
+  }
+  const reject = (src, expect) => {
+    try {
+      run(src)
+      console.log('Failed')
+      console.log('src:', src)
+    } catch (e) {
+      process.stdout.write('.')
+    }
+  }
+  const test = (src, expect) => {
+    const result = run(src)
+    const actual = showType(result.types.slice(-1)[0])
+    if (eq(actual, expect)) {
       process.stdout.write('.')
     } else {
       console.log('Failed')
-      console.log('expect:',expect)
-      console.log('actual:',actual)
-      console.log('   src:',src)
-      console.log(' nodes:', nodes)
+      console.log('expect:', expect)
+      console.log('actual:', actual)
+      console.log('   src:', src)
+      console.log(' nodes:', result.nodes)
     }
   }
 
@@ -209,7 +222,7 @@ function testType() {
   //test('(= _ x y (x (y x) (y x)))', '((1 1 2) ((1 1 2) 1) 2)') // TODO: fix
 
   // type errors
-
+  reject('(+ 1 true)')
 
   print('ok')
 }
