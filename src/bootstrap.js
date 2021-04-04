@@ -8,6 +8,7 @@ const str = o => JSON.stringify(o)
 const eq = (x, y) => str(x) === str(y)
 const dict = (kx, vx) => kx.reduce((d,k,i) => (d[k]=vx[i],d), {})
 const fail = (msg, o) => { throw new Error(msg + ' ' + str(o)) }
+const copy = o => JSON.parse(JSON.stringify(o))
 
 const tokenize = src => {
   const tokens = [{code:'('}]
@@ -41,10 +42,12 @@ const parse = src => {
       const next = a[i+1]
       if (node.code === '=') {
         r.unshift(node)
-        r.push(op2(a.slice(i+1)))
+        node.list = op2(a.slice(i+1))
+        r.push(node)
         break
       } else if (op2s.includes(node.code) && next) {
-        r.push([node, r.pop(), next])
+        node.list = [copy(node), r.pop(), next]
+        r.push(node)
         i+=1
       } else {
         r.push(node)
@@ -54,7 +57,7 @@ const parse = src => {
   }
   const consume = f => f(tokens[pos++] || fail('EOF', {src,pos,tokens}))
   const apply = acc => (t => t.code === ')' ? op2(acc) : apply((acc.push(t),acc)))(unit())
-  const unit = () => consume(t => t.code === '(' ? apply([]) : t)
+  const unit = () => consume(t => t.code === '(' ? (t.list = apply([]), t) : t)
   const nodes = []
   while (pos < tokens.length) {
     nodes.push(unit())
@@ -116,11 +119,12 @@ const infer = (nodes,src) => {
   const prune = t => (t.var && t.instance) ? t.instance = prune(t.instance) : t
   const analyse = (node, nonGeneric) => node.type = _analyse(node, nonGeneric)
   const _analyse = (node, nonGeneric) => {
-    if (typeof node === 'object' && node.constructor === Array) {
-      if (node.length === 0) { return tnil }
-      let [head,...tail] = node
+    if (node.list) {
+      const list = node.list
+      if (list.length === 0) { return tnil }
+      let [head,...tail] = list
       if (head.code === '=') {
-        if (tail.length < 2) { fail('Not enoug argument', {tail,node}) }
+        if (tail.length < 2) { fail('Not enoug argument', {tail,list}) }
         const name = tail[0].code
         if (tail.length === 2) {
           return tail[0].type = env[name] = analyse(tail[1], nonGeneric)
