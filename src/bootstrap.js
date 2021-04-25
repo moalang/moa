@@ -14,7 +14,7 @@ const tokenize = src => {
   const tokens = [{code:'('}]
   let pos = 0
   while (pos < src.length) {
-    const matched = src.slice(pos).match(/^[^ \n()=+]+|\n|./)
+    const matched = src.slice(pos).match(/^[^ \.\n()=+\[\]]+|\n|./)
     if (!matched) { fail('tokenize', {pos, src}) }
     const code = matched[0]
     if (code.match(/\n/)) {
@@ -32,7 +32,7 @@ const tokenize = src => {
 const parse = src => {
   const tokens = tokenize(src)
   let pos = 0
-  const op2s = '+-*/<>'.split('')
+  const op2s = '+-*/<>.'.split('')
   const op2 = a => {
     if (a.length === 0) { return a }
     const l = a.length
@@ -55,9 +55,14 @@ const parse = src => {
     }
     return r
   }
+  const pairs = {'(':')', '[':']'}
   const consume = f => f(tokens[pos++] || fail('EOF', {src,pos,tokens}))
-  const apply = acc => (t => t.code === ')' ? op2(acc) : apply((acc.push(t),acc)))(unit())
-  const unit = () => consume(t => t.code === '(' ? (t.list = apply([]), t) : t)
+  const apply = (p, acc) => (t => t.code === p ? op2(acc) : apply(p, (acc.push(t),acc)))(unit())
+  const unit = () => consume(t => {
+    const p = pairs[t.code]
+    if (p) { t.list = apply(p, []) }
+    return t
+  })
   const nodes = []
   while (pos < tokens.length) {
     nodes.push(unit())
@@ -71,6 +76,7 @@ const infer = (nodes,src) => {
   const tlambda = (...types) => ({types:types})
   const ttype = (name) => ({name})
   const tint = ttype('int')
+  const tstr = ttype('str')
   const tbool = ttype('bool')
   const tnil = ttype('nil')
   const fresh = (type, nonGeneric) => {
@@ -107,6 +113,7 @@ const infer = (nodes,src) => {
     '+': tlambda(tint, tint, tint),
     '<': tlambda(tint, tint, tbool),
     'if': tlambda(tbool, v1, v1, v1),
+    '__int_string': tlambda(tint, tstr),
   }
   const local = (node, d, nonGeneric) => {
     const keys = Object.keys(d)
@@ -137,6 +144,13 @@ const infer = (nodes,src) => {
           const ft = tlambda(...argt, local(body, d, nonGeneric.concat(argt.map(t=>t.name))))
           return tail[0].type  = env[name] = ft
         }
+      } else if (head.code === '.') {
+        const [dot, lhs, rhs] = head.list
+        const rt = tvar()
+        const ft = env['__' + analyse(lhs, nonGeneric).name + '_' + rhs.code]
+        const args = [lhs].concat(tail)
+        unify(tlambda(...args.map(t => analyse(t, nonGeneric)), rt), ft)
+        return dot.type = rt
       }
       if (tail.length) {
         const rt = tvar()
@@ -154,7 +168,7 @@ const infer = (nodes,src) => {
         } else if (env[v]) {
           return fresh(env[v], nonGeneric) || fail(`Not found ${v}`, node)
         } else {
-          fail("unkown", {v,src,node,env})
+          fail("unknown", {v,src,node,env})
         }
       }
     }
@@ -215,7 +229,7 @@ function testType() {
       process.stdout.write('.')
     }
   }
-  const test = (src, expect) => {
+  const inf = (src, expect) => {
     let result
     try {
       result = run(src)
@@ -235,54 +249,56 @@ function testType() {
       console.log(' nodes:', result.nodes)
     }
   }
-
   // lisp style
-  test('+ 1 1', 'int')
-  test('< 1 1', 'bool')
-  test('= f 1\nf', 'int')
-  test('= f a a\nf 1', 'int')
-  test('= f a b a + b\nf 1 2', 'int')
-  test('(+ 1 1)', 'int')
-  test('(< 1 1)', 'bool')
-  test('(false)', 'bool')
-  test('((false))', 'bool')
+  inf('+ 1 1', 'int')
+  inf('< 1 1', 'bool')
+  inf('= f 1\nf', 'int')
+  inf('= f a a\nf 1', 'int')
+  inf('= f a b a + b\nf 1 2', 'int')
+  inf('(+ 1 1)', 'int')
+  inf('(< 1 1)', 'bool')
+  inf('(false)', 'bool')
+  inf('((false))', 'bool')
 
   // primitives
-  test('1', 'int')
-  test('true', 'bool')
-  test('false', 'bool')
+  inf('1', 'int')
+  inf('true', 'bool')
+  inf('false', 'bool')
 
   // embedded
-  test('1 + 1', 'int')
-  test('1 < 1', 'bool')
-  test('if true true true', 'bool')
-  test('if true 1 1', 'int')
+  inf('1 + 1', 'int')
+  inf('1 < 1', 'bool')
+  inf('if true true true', 'bool')
+  inf('if true 1 1', 'int')
 
   // define
-  test('f = 1\nf', 'int')
-  test('f = 1\nf', 'int')
-  test('f a = a\nf 1', 'int')
-  test('f a b = a + b\nf 1 2', 'int')
+  inf('f = 1\nf', 'int')
+  inf('f = 1\nf', 'int')
+  inf('f a = a\nf 1', 'int')
+  inf('f a b = a + b\nf 1 2', 'int')
 
   // generics
-  test('f a = a', '(1 1)')
-  test('f a b = a', '(1 2 1)')
-  test('f a b = b', '(1 2 2)')
-  test('f a = a\nf 1\nf true', 'bool')
-  test('f x = x\nif (f true) (f 1) (f 2)', 'int')
+  inf('f a = a', '(1 1)')
+  inf('f a b = a', '(1 2 1)')
+  inf('f a b = b', '(1 2 2)')
+  inf('f a = a\nf 1\nf true', 'bool')
+  inf('f x = x\nif (f true) (f 1) (f 2)', 'int')
 
   // combinations
-  test('f x = x + 1\n(= g x (+ x 2))\n(+ (f 1) (g 1))', 'int')
-  test('_ f g x = g (f x)', '((1 2) (2 3) 1 3)')
-  test('_ x y z = x z (y z)', '((1 2 3) (1 2) 1 3)')
-  test('_ b x = if (x b) x (= _ x b)', '(1 (1 bool) (1 1))')
-  test('_ x = if true x (if x true false)', '(bool bool)')
-  test('_ x y = if x x y', '(bool bool bool)')
-  test('_ n = (_ x = (x (_ y = y))) (_ f = f n)', '(1 1)')
-  test('_ x y = x y', '((1 2) 1 2)')
-  test('_ x y = x (y x)', '((1 2) ((1 2) 1) 2)')
-  test('_ h t f x = f h (t f x)', '(1 ((1 2 3) 4 2) (1 2 3) 4 3)')
-  //test('(= _ x y (x (y x) (y x)))', '((1 1 2) ((1 1 2) 1) 2)') // TODO: fix
+  inf('f x = x + 1\n(= g x (+ x 2))\n(+ (f 1) (g 1))', 'int')
+  inf('_ f g x = g (f x)', '((1 2) (2 3) 1 3)')
+  inf('_ x y z = x z (y z)', '((1 2 3) (1 2) 1 3)')
+  inf('_ b x = if (x b) x (= _ x b)', '(1 (1 bool) (1 1))')
+  inf('_ x = if true x (if x true false)', '(bool bool)')
+  inf('_ x y = if x x y', '(bool bool bool)')
+  inf('_ n = (_ x = (x (_ y = y))) (_ f = f n)', '(1 1)')
+  inf('_ x y = x y', '((1 2) 1 2)')
+  inf('_ x y = x (y x)', '((1 2) ((1 2) 1) 2)')
+  inf('_ h t f x = f h (t f x)', '(1 ((1 2 3) 4 2) (1 2 3) 4 3)')
+  //inf('(= _ x y (x (y x) (y x)))', '((1 1 2) ((1 1 2) 1) 2)') // TODO: fix
+
+  // class
+  inf('1.string', 'str')
 
   // type errors
   reject('(+ 1 true)')
