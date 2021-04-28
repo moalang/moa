@@ -300,7 +300,7 @@ function testType() {
   inf('_ x y = x y', '((1 2) 1 2)')
   inf('_ x y = x (y x)', '((1 2) ((1 2) 1) 2)')
   inf('_ h t f x = f h (t f x)', '(1 ((1 2 3) 4 2) (1 2 3) 4 3)')
-  inf('(= _ x y (x (y x) (y x)))', '((1 1 2) ((1 1 2) 1) 2)') // TODO: fix
+  inf('_ x y = x (y x) (y x)', '((1 1 2) ((1 1 2) 1) 2)')
 
   // class
   inf('1.neg', 'int')
