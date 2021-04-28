@@ -4,7 +4,7 @@
 
 const print = (...a) => console.log(...a)
 const dump = o => console.dir(o,{depth:null})
-const str = o => JSON.stringify(o)
+const str = o => JSON.stringify(o, null, '  ')
 const eq = (x, y) => str(x) === str(y)
 const dict = (kx, vx) => kx.reduce((d,k,i) => (d[k]=vx[i],d), {})
 const fail = (msg, o) => { throw new Error(msg + ' ' + str(o)) }
@@ -104,7 +104,7 @@ const infer = (nodes,src) => {
     } else {
       if (a.name !== b.name) { fail(`type miss match`, {a,b}) }
       if (a.types || b.types) {
-        if (a.types.length !== b.types.length) { fail('types miss match', {a,b}) }
+        if (a.types.length !== b.types.length) { fail('types miss match', {a,b}) } // TODO
         a.types.map((t,i) => unify(t, b.types[i]))
       }
     }
@@ -234,23 +234,22 @@ function testType() {
     }
   }
   const inf = (src, expect) => {
-    let result
     try {
-      result = run(src)
+      let result = run(src)
+      const actual = showType(result.types.slice(-1)[0])
+      if (eq(actual, expect)) {
+        process.stdout.write('.')
+      } else {
+        console.log('Failed')
+        console.log('expect:', expect)
+        console.log('actual:', actual)
+        console.log('   src:', src)
+        console.log(' nodes:', result.nodes)
+      }
     } catch (e) {
       console.log('Failed')
       console.log('  src:', src)
       console.log('error:', e)
-    }
-    const actual = showType(result.types.slice(-1)[0])
-    if (eq(actual, expect)) {
-      process.stdout.write('.')
-    } else {
-      console.log('Failed')
-      console.log('expect:', expect)
-      console.log('actual:', actual)
-      console.log('   src:', src)
-      console.log(' nodes:', result.nodes)
     }
   }
 
@@ -301,6 +300,16 @@ function testType() {
   inf('_ x y = x (y x)', '((1 2) ((1 2) 1) 2)')
   inf('_ h t f x = f h (t f x)', '(1 ((1 2 3) 4 2) (1 2 3) 4 3)')
   inf('_ x y = x (y x) (y x)', '((1 1 2) ((1 1 2) 1) 2)')
+  inf('id x = x\nf y = id (y id)', '(((1 1) 2) 2)')
+  inf('f x = x\ng = if (f true) (f 1) (f 2)', 'int')
+  inf('f x = 3\ng = (f true) + (f 4)', 'int')
+  inf('f x = x\ng y = y\nh b = if b (f g) (g f)', '(bool (1 1))')
+  //inf('g1 x = x f\ng2 x = x f\nh b f z = if b (g1 z g2) (g2 z g1)', '(bool 1 (1 ((1 2) 2) 3) 3)')
+  //fun b -> fun f -> let g1 = fun x -> x f in let g2 = fun x -> x f in fun z -> if b then g1 z g2 else g2 z g1;;
+
+  // no support implicit curring
+  // - inf('_ x y z = x (z x) (y (z x y))', '(((1 2) 1) 2 3) (1 2) ((((1 2) 1) 2 3) (1 2) 1) 3')
+  // - inf('f x y = x\ng x y = f (x f)', '((1 2 1) 1) 3 2 1')
 
   // class
   inf('1.neg', 'int')
