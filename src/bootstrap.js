@@ -79,6 +79,9 @@ const infer = (nodes,src) => {
   const tstr = ttype('str')
   const tbool = ttype('bool')
   const tnil = ttype('nil')
+  const methods = {
+    int: {neg: tlambda(tint, tint), abs: tlambda(tint, tint)},
+  }
   const fresh = (type, nonGeneric) => {
     const d = {}
     const rec = t => {
@@ -108,12 +111,12 @@ const infer = (nodes,src) => {
   }
   const v1 = tvar()
   let env = {
+    __cache: {},
     'true': tbool,
     'false': tbool,
     '+': tlambda(tint, tint, tint),
     '<': tlambda(tint, tint, tbool),
     'if': tlambda(tbool, v1, v1, v1),
-    '__int_string': tlambda(tint, tstr),
   }
   const local = (node, d, nonGeneric) => {
     const keys = Object.keys(d)
@@ -146,16 +149,17 @@ const infer = (nodes,src) => {
         }
       } else if (head.code === '.') {
         const [dot, lhs, rhs] = head.list
-        const rt = tvar()
-        const ft = env['__' + analyse(lhs, nonGeneric).name + '_' + rhs.code]
         const args = [lhs].concat(tail)
+        const rt = tvar()
+        const ft = methods[analyse(lhs, nonGeneric).name][rhs.code]
         unify(tlambda(...args.map(t => analyse(t, nonGeneric)), rt), ft)
         return dot.type = rt
-      }
-      if (tail.length) {
-        const rt = tvar()
+      } else if (tail.length) {
+        const argv = tail.map(t => analyse(t, nonGeneric))
+        const ckey = str(argv)
+        const rt = (env.__cache[ckey] ||= tvar())
         const ft = analyse(head, nonGeneric)
-        unify(tlambda(...tail.map(t => analyse(t, nonGeneric)), rt), ft)
+        unify(tlambda(...argv, rt), ft)
         return rt
       } else {
         return head.type = analyse(head, nonGeneric)
@@ -249,6 +253,7 @@ function testType() {
       console.log(' nodes:', result.nodes)
     }
   }
+
   // lisp style
   inf('+ 1 1', 'int')
   inf('< 1 1', 'bool')
@@ -295,10 +300,11 @@ function testType() {
   inf('_ x y = x y', '((1 2) 1 2)')
   inf('_ x y = x (y x)', '((1 2) ((1 2) 1) 2)')
   inf('_ h t f x = f h (t f x)', '(1 ((1 2 3) 4 2) (1 2 3) 4 3)')
-  //inf('(= _ x y (x (y x) (y x)))', '((1 1 2) ((1 1 2) 1) 2)') // TODO: fix
+  inf('(= _ x y (x (y x) (y x)))', '((1 1 2) ((1 1 2) 1) 2)') // TODO: fix
 
   // class
-  inf('1.string', 'str')
+  inf('1.neg', 'int')
+  inf('1.abs', 'int')
 
   // type errors
   reject('(+ 1 true)')
