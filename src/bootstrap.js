@@ -42,8 +42,7 @@ const parse = src => {
       const next = a[i+1]
       if (node.code === '=') {
         r.unshift(node)
-        node.list = op2(a.slice(i+1))
-        r.push(node)
+        r.push({list: op2(a.slice(i+1))})
         break
       } else if (op2s.includes(node.code) && next) {
         node.list = [copy(node), r.pop(), next]
@@ -252,6 +251,9 @@ function testType() {
       console.log('error:', e)
     }
   }
+  // recursive
+  //inf('f x = f x', '(1 2)')
+  //return
 
   // lisp style
   inf('+ 1 1', 'int')
@@ -276,7 +278,6 @@ function testType() {
   inf('if true 1 1', 'int')
 
   // define
-  inf('f = 1\nf', 'int')
   inf('f = 1\nf', 'int')
   inf('f a = a\nf 1', 'int')
   inf('f a b = a + b\nf 1 2', 'int')
@@ -306,6 +307,8 @@ function testType() {
   inf('f x = x\ng y = y\nh b = if b (f g) (g f)', '(bool (1 1))')
   //inf('g1 x = x f\ng2 x = x f\nh b f z = if b (g1 z g2) (g2 z g1)', '(bool 1 (1 ((1 2) 2) 3) 3)')
   //fun b -> fun f -> let g1 = fun x -> x f in let g2 = fun x -> x f in fun z -> if b then g1 z g2 else g2 z g1;;
+  // recursive
+  //inf('f x = (f x)', '(1 2)')
 
   // no support implicit curring
   // - inf('_ x y z = x (z x) (y (z x y))', '(((1 2) 1) 2 3) (1 2) ((((1 2) 1) 2 3) (1 2) 1) 3')
