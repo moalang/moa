@@ -72,7 +72,9 @@ true       # bool
 
 Container
 ```
-[1 2 3] # list
+[1 2 3]       # list
+{1 2 3}       # set
+{one:1 two:2} # dict
 ```
 
 Anonymouse Function
@@ -115,8 +117,8 @@ add x y = x + y
 
 Exp
 ```
-1 + 2 + 3        == +(1 2 3)
-"a" ++ "b ++ "c" == ++("a" "b" "c")
+1 + 2 + 3        == (+ 1 2 3)
+"a" ++ "b ++ "c" == (++ "a" "b" "c")
 ```
 
 Control Flow
@@ -217,21 +219,26 @@ indent: br "  "
 - any bool true false int float byte bytes string list dict may some error var
 
 ### Core data types
-any:
-  string :: string
 bool|
-  true 
+  true
   false
 int:
   neg :: int
+  abs :: int
+  float :: float
 float:
   neg :: float
+  abs :: float
+  int :: int
 byte:
   int :: int
-bytes: -
+bytes:
+  list(byte)
 string:
   int   :: may(int)
   float :: may(float)
+tuple a+:
+  ...
 list a:
   size   :: int
   map b  :: (a b) [b]
@@ -243,15 +250,17 @@ dict k v:
   set  :: k v bool
 may a|
   some a
-  error: message string
-  then b  :: (a b) may(b)
-  catch b :: (error b) may(b)
-  alt     :: a a
-  log     :: any+ may(a)
-
-### Control flow
-throw - catch for normal case
-error - for critical problem like zero division, out of index which is raised by standard library
+  error string
+  then b :: (a b) may(b)
+  catch  :: may(a) may(a)
+  alt    :: a a
+# ideas
+Monad
+Eq
+Default
+Hash
+Ord
+Index
 
 ### Binary operators order
 ```
