@@ -79,7 +79,10 @@ const infer = (nodes,src) => {
   const tbool = ttype('bool')
   const tnil = ttype('nil')
   const methods = {
-    int: {neg: tlambda(tint, tint), abs: tlambda(tint, tint)},
+    int: {
+      neg: tlambda(tint, tint),
+      abs: tlambda(tint, tint)
+    },
   }
   const fresh = (type, nonGeneric) => {
     const d = {}
