@@ -103,7 +103,7 @@ const infer = (nodes,src) => {
     } else {
       if (a.name !== b.name) { fail(`type miss match`, {a,b}) }
       if (a.types || b.types) {
-        if (a.types.length !== b.types.length) { fail('types miss match', {a,b}) } // TODO
+        if (a.types.length !== b.types.length) { fail('types miss match', {a,b}) }
         a.types.map((t,i) => unify(t, b.types[i]))
       }
     }
@@ -144,7 +144,8 @@ const infer = (nodes,src) => {
           const body = tail.slice(-1)[0]
           const d = dict(args.map(t => t.code), argt)
           const ft = tlambda(...argt, local(body, d, nonGeneric.concat(argt.map(t=>t.name))))
-          return tail[0].type  = env[name] = ft
+          return tail[0].type = env[name] = ft
+
         }
       } else if (head.code === '.') {
         const [dot, lhs, rhs] = head.list
@@ -171,11 +172,19 @@ const infer = (nodes,src) => {
         } else if (env[v]) {
           return fresh(env[v], nonGeneric) || fail(`Not found ${v}`, node)
         } else {
-          fail("unknown", {v,src,node,env})
+          fail(`unknown "${v}"`, {v,src,node,env:Object.keys(env)})
         }
       }
     }
   }
+
+  // reserve for circulated reference
+  for (const node of nodes) {
+    if (node.list[0].code === '=') {
+      env[node.list[1].code] = tvar()
+    }
+  }
+  // type inference for each node
   return nodes.map(node => analyse(node, []))
 }
 
@@ -251,10 +260,6 @@ function testType() {
       console.log('error:', e)
     }
   }
-  // recursive
-  //inf('f x = f x', '(1 2)')
-  //return
-
   // lisp style
   inf('+ 1 1', 'int')
   inf('< 1 1', 'bool')
@@ -308,7 +313,8 @@ function testType() {
   //inf('g1 x = x f\ng2 x = x f\nh b f z = if b (g1 z g2) (g2 z g1)', '(bool 1 (1 ((1 2) 2) 3) 3)')
   //fun b -> fun f -> let g1 = fun x -> x f in let g2 = fun x -> x f in fun z -> if b then g1 z g2 else g2 z g1;;
   // recursive
-  //inf('f x = (f x)', '(1 2)')
+  inf('f x = (f x)', '(1 2)')
+  inf('f n = (g n)\ng n = (f n)', '(1 2)')
 
   // no support implicit curring
   // - inf('_ x y z = x (z x) (y (z x y))', '(((1 2) 1) 2 3) (1 2) ((((1 2) 1) 2 3) (1 2) 1) 3')
