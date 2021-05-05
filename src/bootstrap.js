@@ -235,8 +235,8 @@ function testType() {
   const reject = (src, expect) => {
     try {
       run(src)
-      console.log('Failed')
-      console.log('src:', src)
+      print('Failed')
+      print('src:', src)
     } catch (e) {
       process.stdout.write('.')
     }
@@ -248,16 +248,16 @@ function testType() {
       if (eq(actual, expect)) {
         process.stdout.write('.')
       } else {
-        console.log('Failed')
-        console.log('expect:', expect)
-        console.log('actual:', actual)
-        console.log('   src:', src)
-        console.log(' nodes:', result.nodes)
+        print('Failed')
+        print('expect:', expect)
+        print('actual:', actual)
+        print('   src:', src)
+        print(' nodes:', result.nodes)
       }
     } catch (e) {
-      console.log('Failed')
-      console.log('  src:', src)
-      console.log('error:', e)
+      print('Failed')
+      print('  src:', src)
+      print('error:', e)
     }
   }
   // lisp style
