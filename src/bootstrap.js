@@ -29,8 +29,7 @@ const tokenize = src => {
   tokens.push({code:')'})
   return tokens
 }
-const parse = src => {
-  const tokens = tokenize(src)
+const parse = tokens => {
   let pos = 0
   const op2s = '+-*/<>.'.split('')
   const op2 = a => {
@@ -42,10 +41,10 @@ const parse = src => {
       const next = a[i+1]
       if (node.code === '=') {
         r.unshift(node)
-        r.push({list: op2(a.slice(i+1))})
+        r.push({ary: op2(a.slice(i+1))})
         break
       } else if (op2s.includes(node.code) && next) {
-        node.list = [copy(node), r.pop(), next]
+        node.ary = [copy(node), r.pop(), next]
         r.push(node)
         i+=1
       } else {
@@ -55,11 +54,11 @@ const parse = src => {
     return r
   }
   const pairs = {'(':')', '[':']'}
-  const consume = f => f(tokens[pos++] || fail('EOF', {src,pos,tokens}))
+  const consume = f => f(tokens[pos++] || fail('EOF', {pos,tokens}))
   const apply = (p, acc) => (t => t.code === p ? op2(acc) : apply(p, (acc.push(t),acc)))(unit())
   const unit = () => consume(t => {
-    const p = pairs[t.code]
-    if (p) { t.list = apply(p, []) }
+    if (t.code === '(') { t.ary = apply(')', []) }
+    if (t.code === '[') { t.list = apply(']', []) }
     return t
   })
   const nodes = []
@@ -131,12 +130,12 @@ const infer = (nodes,src) => {
   const prune = t => (t.var && t.instance) ? t.instance = prune(t.instance) : t
   const analyse = (node, nonGeneric) => node.type = _analyse(node, nonGeneric)
   const _analyse = (node, nonGeneric) => {
-    if (node.list) {
-      const list = node.list
-      if (list.length === 0) { return tnil }
-      let [head,...tail] = list
+    if (node.ary) {
+      const ary = node.ary
+      if (ary.length === 0) { return tnil }
+      let [head,...tail] = ary
       if (head.code === '=') {
-        if (tail.length < 2) { fail('Not enoug argument', {tail,list}) }
+        if (tail.length < 2) { fail('Not enoug argument', {tail,ary}) }
         const name = tail[0].code
         if (tail.length === 2) {
           return tail[0].type = env[name] = analyse(tail[1], nonGeneric)
@@ -148,13 +147,13 @@ const infer = (nodes,src) => {
           const d = dict(args.map(t => t.code), argt)
           const ft = tlambda(...argt, local(body, d, nonGeneric.concat(argt.map(t=>t.name))))
           return tail[0].type = env[name] = ft
-
         }
       } else if (head.code === '.') {
-        const [dot, lhs, rhs] = head.list
+        const [dot, lhs, rhs] = head.ary
         const args = [lhs].concat(tail)
         const rt = tvar()
         const ft = methods[analyse(lhs, nonGeneric).name][rhs.code]
+        if (!ft) { fail(`method not found: ${lhs.type.name}`, {lhs,method:rhs.code}) }
         unify(tlambda(...args.map(t => analyse(t, nonGeneric)), rt), ft)
         return dot.type = rt
       } else if (tail.length) {
@@ -170,7 +169,18 @@ const infer = (nodes,src) => {
     } else {
       const v = node.code
       if (v) {
-        if (v.match(/^[0-9]+/)) {
+        if (v === '[') {
+          if (node.list.length === 0) { fail('empty list are not supported', node) }
+          const types = node.list.map(t => analyse(t, nonGeneric))
+          const g1 = types.reduce((a,b) => (unify(a,b),a))
+          const name = `list(${g1.name})`
+          const type = {name}
+          methods[name] = {
+            size: tlambda(type, tint),
+            get: tlambda(type, tint, {name: `maybe(${g1.name})`}),
+          }
+          return node.type = type
+        } else if (v.match(/^[0-9]+/)) {
           return tint
         } else if (env[v]) {
           return fresh(env[v], nonGeneric) || fail(`Not found ${v}`, node)
@@ -183,8 +193,8 @@ const infer = (nodes,src) => {
 
   // reserve for circulated reference
   for (const node of nodes) {
-    if (node.list[0].code === '=') {
-      env[node.list[1].code] = tvar()
+    if (node.ary[0].code === '=') {
+      env[node.ary[1].code] = tvar()
     }
   }
   // type inference for each node
@@ -231,11 +241,12 @@ const showNode = o => {
 
 function testType() {
   const run = src => {
-    const nodes = parse(src)
+    const tokens = tokenize(src)
+    const nodes = parse(tokens)
     const types = infer(nodes, src)
-    return {nodes, types}
+    return {tokens, nodes, types}
   }
-  const reject = (src, expect) => {
+  const reject = src => {
     try {
       run(src)
       print('Failed')
@@ -255,6 +266,7 @@ function testType() {
         print('expect:', expect)
         print('actual:', actual)
         print('   src:', src)
+        print('tokens:', result.tokens)
         print(' nodes:', result.nodes)
       }
     } catch (e) {
@@ -263,6 +275,8 @@ function testType() {
       print('error:', e)
     }
   }
+
+
   // lisp style
   inf('+ 1 1', 'int')
   inf('< 1 1', 'bool')
@@ -319,9 +333,17 @@ function testType() {
   inf('f x = (f x)', '(1 2)')
   inf('f n = (g n)\ng n = (f n)', '(1 2)')
 
-  // no support implicit curring
+  // not support implicit curring
   // - inf('_ x y z = x (z x) (y (z x y))', '(((1 2) 1) 2 3) (1 2) ((((1 2) 1) 2 3) (1 2) 1) 3')
   // - inf('f x y = x\ng x y = f (x f)', '((1 2 1) 1) 3 2 1')
+
+  // list
+  inf('[1]', 'list(int)')
+  inf('[1]', 'list(int)')
+  inf('[1 2]', 'list(int)')
+  inf('[true false]', 'list(bool)')
+  inf('[1].size', 'int')
+  inf('[1].get(0)', 'maybe(int)')
 
   // class
   inf('1.neg', 'int')
@@ -329,6 +351,7 @@ function testType() {
 
   // type errors
   reject('(+ 1 true)')
+  reject('[1 false]')
 
   print('ok')
 }
