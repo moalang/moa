@@ -293,6 +293,12 @@ function testType() {
   inf('true', 'bool')
   inf('false', 'bool')
 
+  // containers
+  //inf('[]', 'list(_)') // TODO: support empty list
+  inf('[1]', 'list(int)')
+  inf('[1 2]', 'list(int)')
+  inf('[true false]', 'list(bool)')
+
   // embedded
   inf('1 + 1', 'int')
   inf('1 < 1', 'bool')
@@ -327,31 +333,21 @@ function testType() {
   inf('f x = x\ng = if (f true) (f 1) (f 2)', 'int')
   inf('f x = 3\ng = (f true) + (f 4)', 'int')
   inf('f x = x\ng y = y\nh b = if b (f g) (g f)', '(bool (1 1))')
-  //inf('g1 x = x f\ng2 x = x f\nh b f z = if b (g1 z g2) (g2 z g1)', '(bool 1 (1 ((1 2) 2) 3) 3)')
-  //fun b -> fun f -> let g1 = fun x -> x f in let g2 = fun x -> x f in fun z -> if b then g1 z g2 else g2 z g1;;
+
   // recursive
   inf('f x = (f x)', '(1 2)')
   inf('f n = (g n)\ng n = (f n)', '(1 2)')
 
-  // not support implicit curring
-  // - inf('_ x y z = x (z x) (y (z x y))', '(((1 2) 1) 2 3) (1 2) ((((1 2) 1) 2 3) (1 2) 1) 3')
-  // - inf('f x y = x\ng x y = f (x f)', '((1 2 1) 1) 3 2 1')
-
-  // list
-  inf('[1]', 'list(int)')
-  inf('[1]', 'list(int)')
-  inf('[1 2]', 'list(int)')
-  inf('[true false]', 'list(bool)')
-  inf('[1].size', 'int')
-  inf('[1].get(0)', 'maybe(int)')
-
-  // class
+  // methods
   inf('1.neg', 'int')
   inf('1.abs', 'int')
+  inf('[1].size', 'int')
+  inf('[1].get(0)', 'maybe(int)')
 
   // type errors
   reject('(+ 1 true)')
   reject('[1 false]')
+  reject('f a b = a + b\ng = f 1') // implicit currying is not supported to prevent complex type error message
 
   print('ok')
 }
