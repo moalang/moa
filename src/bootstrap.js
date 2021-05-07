@@ -71,6 +71,7 @@ const infer = (nodes,src) => {
   let tvarId = 0
   const trace = x => (dump(x),x)
   const tvar = () => (name => ({name,var:true}))((++tvarId).toString())
+  const tgen = (name,...params) => ({name,params})
   const tlambda = (...types) => ({types:types})
   const ttype = (name) => ({name})
   const tint = ttype('int')
@@ -78,10 +79,14 @@ const infer = (nodes,src) => {
   const tbool = ttype('bool')
   const tnil = ttype('nil')
   const methods = {
-    int: {
-      neg: tlambda(tint, tint),
-      abs: tlambda(tint, tint)
-    },
+    int: (self) => ({
+      neg: tlambda(self, tint),
+      abs: tlambda(self, tint)
+    }),
+    list: (self) => ({
+      size: tlambda(self, tint),
+      get: tlambda(self, tint, tgen('maybe', self.params[0]))
+    })
   }
   const fresh = (type, nonGeneric) => {
     const d = {}
@@ -152,8 +157,8 @@ const infer = (nodes,src) => {
         const [dot, lhs, rhs] = head.ary
         const args = [lhs].concat(tail)
         const rt = tvar()
-        const ft = methods[analyse(lhs, nonGeneric).name][rhs.code]
-        if (!ft) { fail(`method not found: ${lhs.type.name}`, {lhs,method:rhs.code}) }
+        const type = analyse(lhs, nonGeneric)
+        const ft = methods[type.name](type)[rhs.code]
         unify(tlambda(...args.map(t => analyse(t, nonGeneric)), rt), ft)
         return dot.type = rt
       } else if (tail.length) {
@@ -170,16 +175,13 @@ const infer = (nodes,src) => {
       const v = node.code
       if (v) {
         if (v === '[') {
-          if (node.list.length === 0) { fail('empty list are not supported', node) }
-          const types = node.list.map(t => analyse(t, nonGeneric))
-          const g1 = types.reduce((a,b) => (unify(a,b),a))
-          const name = `list(${g1.name})`
-          const type = {name}
-          methods[name] = {
-            size: tlambda(type, tint),
-            get: tlambda(type, tint, {name: `maybe(${g1.name})`}),
+          if (node.list.length === 0) {
+            return node.type = tgen('list', tvar())
+          } else {
+            const types = node.list.map(t => analyse(t, nonGeneric))
+            const type = tgen('list', types.reduce((a,b) => (unify(a,b),a)))
+            return node.type = type
           }
-          return node.type = type
         } else if (v.match(/^[0-9]+/)) {
           return tint
         } else if (env[v]) {
@@ -206,7 +208,7 @@ const showType = t => {
     if (t.instance) {
       return show(t.instance)
     } else if (t.name) {
-      return t.name
+      return t.name + (t.params ? '(' + t.params.map(showType).join(' ') + ')' : '')
     } else if (t.types) {
       return '(' + t.types.map(show).join(' ') + ')'
     } else {
@@ -294,7 +296,7 @@ function testType() {
   inf('false', 'bool')
 
   // containers
-  //inf('[]', 'list(_)') // TODO: support empty list
+  inf('[]', 'list(1)')
   inf('[1]', 'list(int)')
   inf('[1 2]', 'list(int)')
   inf('[true false]', 'list(bool)')
