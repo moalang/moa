@@ -92,9 +92,10 @@ const infer = (nodes,src) => {
     const d = {}
     const rec = t => {
       const p = prune(t)
-      return p.var ?
-        (nonGeneric.includes(p.name) ? p : d[p.name]||=tvar()) :
-        (p.types ? ({types:p.types.map(rec)}) : ({name:p.name}))
+      return p.var ? (nonGeneric.includes(p.name) ? p : d[p.name]||=tvar()) :
+        p.types ? ({types: p.types.map(rec)}) :
+        p.params ? ({name: p.name, params: p.params.map(rec)}) :
+        p
     }
     return rec(type)
   }
@@ -123,6 +124,8 @@ const infer = (nodes,src) => {
     '+': tlambda(tint, tint, tint),
     '<': tlambda(tint, tint, tbool),
     'if': tlambda(tbool, v1, v1, v1),
+    'some': tlambda(v1, tgen('maybe', v1)),
+    'none': tgen('maybe', v1),
   }
   const local = (node, d, nonGeneric) => {
     const keys = Object.keys(d)
@@ -278,7 +281,6 @@ function testType() {
     }
   }
 
-
   // lisp style
   inf('+ 1 1', 'int')
   inf('< 1 1', 'bool')
@@ -300,6 +302,10 @@ function testType() {
   inf('[1]', 'list(int)')
   inf('[1 2]', 'list(int)')
   inf('[true false]', 'list(bool)')
+
+  // optional
+  inf('some(1)', 'maybe(int)')
+  inf('none', 'maybe(1)')
 
   // embedded
   inf('1 + 1', 'int')
