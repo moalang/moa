@@ -2,6 +2,7 @@
 // https://github.com/reki2000/hyndley-milner-kotlin/blob/master/HindleyMilner.kt
 // http://www.fos.kuis.kyoto-u.ac.jp/~igarashi/class/isle4-10w/testcases.html
 
+const write = s => process.stdout.write(s.toString())
 const print = (...a) => console.log(...a)
 const dump = o => console.dir(o,{depth:null})
 const str = o => JSON.stringify(o, null, '  ')
@@ -110,8 +111,18 @@ const infer = (nodes,src) => {
     } else {
       if (a.name !== b.name) { fail(`type miss match`, {a,b}) }
       if (a.types || b.types) {
-        if (a.types.length !== b.types.length) { fail('types miss match', {a,b}) }
-        a.types.map((t,i) => unify(t, b.types[i]))
+        if (a.types.length === b.types.length) {
+          a.types.map((t,i) => unify(t, b.types[i]))
+        } else {
+          if (a.types.length > b.types.length) { [a,b] = [b,a] }
+          const at = a.types.slice(-1)[0]
+          if (at.var) {
+            a.types.slice(0, -1).map((t,i) => unify(t, b.types[i]))
+            unify(at, {types: b.types.slice(a.types.length - 1)})
+          } else {
+            fail('types miss match', {a,b})
+          }
+        }
       }
     }
   }
@@ -271,7 +282,8 @@ function testType() {
         print('actual:', actual)
         print('   src:', src)
         print('tokens:', result.tokens)
-        print(' nodes:', result.nodes)
+        write(' nodes: ')
+        dump(result.nodes)
       }
     } catch (e) {
       print('Failed')
@@ -279,8 +291,6 @@ function testType() {
       print('error:', e)
     }
   }
-  //inf('[1].get 0', 'maybe(int)')
-  //return
 
   // lisp style
   inf('+ 1 1', 'int')
@@ -354,12 +364,14 @@ function testType() {
   inf('1.neg', 'int')
   inf('1.abs', 'int')
   inf('[1].size', 'int')
-  //inf('[1].get 0', 'maybe(int)')
+  inf('[1].get 0', 'maybe(int)')
+
+  // implicit curring
+  inf('f a b = a + b\ng = f 1', '(int int)')
 
   // type errors
   reject('(+ 1 true)')
   reject('[1 false]')
-  reject('f a b = a + b\ng = f 1') // implicit currying is not supported to prevent complex type error message
 
   print('ok')
 }
