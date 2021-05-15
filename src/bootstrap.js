@@ -44,8 +44,7 @@ const parse = tokens => {
         r.push({ary: op2(a.slice(i+1))})
         break
       } else if (op2s.includes(node.code) && next) {
-        node.ary = [copy(node), r.pop(), next]
-        r.push(node)
+        r.push({ary:[node, r.pop(), next]})
         i+=1
       } else {
         r.push(node)
@@ -157,13 +156,13 @@ const infer = (nodes,src) => {
           return tail[0].type = env[name] = ft
         }
       } else if (head.code === '.') {
-        const [dot, lhs, rhs] = head.ary
-        const args = [lhs].concat(tail)
+        const [lhs, rhs] = tail
+        const args = [lhs].concat(tail.slice(2))
         const rt = tvar()
         const type = analyse(lhs, nonGeneric)
         const ft = methods[type.name](type)[rhs.code]
         unify(tlambda(...args.map(t => analyse(t, nonGeneric)), rt), ft)
-        return dot.type = rt
+        return head.type = rt
       } else if (tail.length) {
         const argv = tail.map(t => analyse(t, nonGeneric))
         const ckey = str(argv)
@@ -280,6 +279,8 @@ function testType() {
       print('error:', e)
     }
   }
+  //inf('[1].get 0', 'maybe(int)')
+  //return
 
   // lisp style
   inf('+ 1 1', 'int')
@@ -287,6 +288,9 @@ function testType() {
   inf('= f 1\nf', 'int')
   inf('= f a a\nf 1', 'int')
   inf('= f a b a + b\nf 1 2', 'int')
+  inf('. 1 neg', 'int')
+  inf('. [1] size', 'int')
+  inf('. [1] get 0', 'maybe(int)')
   inf('(+ 1 1)', 'int')
   inf('(< 1 1)', 'bool')
   inf('(false)', 'bool')
@@ -350,7 +354,7 @@ function testType() {
   inf('1.neg', 'int')
   inf('1.abs', 'int')
   inf('[1].size', 'int')
-  inf('[1].get(0)', 'maybe(int)')
+  //inf('[1].get 0', 'maybe(int)')
 
   // type errors
   reject('(+ 1 true)')
