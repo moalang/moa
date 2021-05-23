@@ -2,7 +2,7 @@
 // https://github.com/reki2000/hyndley-milner-kotlin/blob/master/HindleyMilner.kt
 // http://www.fos.kuis.kyoto-u.ac.jp/~igarashi/class/isle4-10w/testcases.html
 
-const write = s => process.stdout.write(s.toString())
+const write = (...a) => a.map(o => process.stdout.write(o.toString()))
 const print = (...a) => console.log(...a)
 const dump = o => console.dir(o,{depth:null})
 const str = o => JSON.stringify(o, null, '  ')
@@ -15,7 +15,7 @@ const tokenize = src => {
   const tokens = [{code:'('}]
   let pos = 0
   while (pos < src.length) {
-    const matched = src.slice(pos).match(/^[^ \.\n()=+\[\]]+|\n|./)
+    const matched = src.slice(pos).match(/^[^ \.\n()\[\]]+|\n|./)
     if (!matched) { fail('tokenize', {pos, src}) }
     const code = matched[0]
     if (code.match(/\n/)) {
@@ -32,7 +32,7 @@ const tokenize = src => {
 }
 const parse = tokens => {
   let pos = 0
-  const op2s = '+-*/<>.'.split('')
+  const op2s = '=> == <= >= + - * / < > .'.split(' ')
   const op2 = a => {
     if (a.length === 0) { return a }
     const l = a.length
@@ -85,7 +85,7 @@ const infer = (nodes,src) => {
     }),
     list: (self) => ({
       size: tlambda(self, tint),
-      get: tlambda(self, tint, tgen('maybe', self.params[0]))
+      get: tlambda(self, tint, tgen('option', self.params[0]))
     })
   }
   const fresh = (type, nonGeneric) => {
@@ -134,8 +134,8 @@ const infer = (nodes,src) => {
     '+': tlambda(tint, tint, tint),
     '<': tlambda(tint, tint, tbool),
     'if': tlambda(tbool, v1, v1, v1),
-    'some': tlambda(v1, tgen('maybe', v1)),
-    'none': tgen('maybe', v1),
+    'some': tlambda(v1, tgen('option', v1)),
+    'none': tgen('option', v1),
   }
   const local = (node, d, nonGeneric) => {
     const keys = Object.keys(d)
@@ -166,6 +166,13 @@ const infer = (nodes,src) => {
           const ft = tlambda(...argt, local(body, d, nonGeneric.concat(argt.map(t=>t.name))))
           return tail[0].type = env[name] = ft
         }
+      } else if (head.code === '=>') {
+        const args = tail.slice(0, -1)
+        const argt = args.map(a => a.type = tvar())
+        const body = tail.slice(-1)[0]
+        const d = dict(args.map(t => t.code), argt)
+        const ft = tlambda(...argt, local(body, d, nonGeneric.concat(argt.map(t=>t.name))))
+        return body.type = ft
       } else if (head.code === '.') {
         const [lhs, rhs] = tail
         const args = [lhs].concat(tail.slice(2))
@@ -253,14 +260,19 @@ const showNode = o => {
   }
   return show(o)
 }
-
-function testType() {
-  const run = src => {
-    const tokens = tokenize(src)
-    const nodes = parse(tokens)
+const run = src => {
+  const tokens = tokenize(src)
+  const nodes = parse(tokens)
+  try {
     const types = infer(nodes, src)
     return {tokens, nodes, types}
+  } catch (e) {
+    e.nodes = nodes
+    throw e
   }
+}
+
+function testType() {
   const reject = src => {
     try {
       run(src)
@@ -289,22 +301,15 @@ function testType() {
       print('Failed')
       print('  src:', src)
       print('error:', e)
+      if (e.nodes) {
+        write('nodes:')
+        dump(e.nodes)
+      }
     }
   }
-
-  // lisp style
-  inf('+ 1 1', 'int')
-  inf('< 1 1', 'bool')
-  inf('= f 1\nf', 'int')
-  inf('= f a a\nf 1', 'int')
-  inf('= f a b a + b\nf 1 2', 'int')
-  inf('. 1 neg', 'int')
-  inf('. [1] size', 'int')
-  inf('. [1] get 0', 'maybe(int)')
-  inf('(+ 1 1)', 'int')
-  inf('(< 1 1)', 'bool')
-  inf('(false)', 'bool')
-  inf('((false))', 'bool')
+  //TODO
+  //inf('x => y => x', '(1 2 1)')
+  //return
 
   // primitives
   inf('1', 'int')
@@ -317,9 +322,23 @@ function testType() {
   inf('[1 2]', 'list(int)')
   inf('[true false]', 'list(bool)')
 
-  // optional
-  inf('some(1)', 'maybe(int)')
-  inf('none', 'maybe(1)')
+  // function
+  inf('id x = x\nid(1)', 'int')
+  inf('id x = x\nid 1', 'int')
+  inf('x => x', '(1 1)')
+
+  // methods
+  inf('1.neg', 'int')
+  inf('1.abs', 'int')
+  inf('[1].size', 'int')
+  inf('[1].get 0', 'option(int)')
+  inf('[1].get(0)', 'option(int)')
+
+  // option
+  inf('some(1)', 'option(int)')
+  inf('none', 'option(1)')
+  //inf('some(1).map(x => x + 1)', 'option(int)')
+  // TODO: implement helpers for option
 
   // embedded
   inf('1 + 1', 'int')
@@ -340,6 +359,9 @@ function testType() {
   inf('f x = x\nif (f true) (f 1) (f 2)', 'int')
 
   // combinations
+  // TODO: implement
+
+  // type inference
   inf('f x = x + 1\n(= g x (+ x 2))\n(+ (f 1) (g 1))', 'int')
   inf('_ f g x = g (f x)', '((1 2) (2 3) 1 3)')
   inf('_ x y z = x z (y z)', '((1 2 3) (1 2) 1 3)')
@@ -360,14 +382,22 @@ function testType() {
   inf('f x = (f x)', '(1 2)')
   inf('f n = (g n)\ng n = (f n)', '(1 2)')
 
-  // methods
-  inf('1.neg', 'int')
-  inf('1.abs', 'int')
-  inf('[1].size', 'int')
-  inf('[1].get 0', 'maybe(int)')
-
   // implicit curring
   inf('f a b = a + b\ng = f 1', '(int int)')
+
+  // lisp style
+  inf('+ 1 1', 'int')
+  inf('< 1 1', 'bool')
+  inf('= f 1\nf', 'int')
+  inf('= f a a\nf 1', 'int')
+  inf('= f a b a + b\nf 1 2', 'int')
+  inf('. 1 neg', 'int')
+  inf('. [1] size', 'int')
+  inf('. [1] get 0', 'option(int)')
+  inf('(+ 1 1)', 'int')
+  inf('(< 1 1)', 'bool')
+  inf('(false)', 'bool')
+  inf('((false))', 'bool')
 
   // type errors
   reject('(+ 1 true)')
