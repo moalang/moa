@@ -9,7 +9,6 @@ const str = o => JSON.stringify(o, null, '  ')
 const eq = (x, y) => str(x) === str(y)
 const dict = (kx, vx) => kx.reduce((d,k,i) => (d[k]=vx[i],d), {})
 const fail = (msg, o) => { throw new Error(msg + ' ' + str(o)) }
-const copy = o => JSON.parse(JSON.stringify(o))
 
 const tokenize = src => {
   const tokens = [{code:'('}]
@@ -307,9 +306,6 @@ function testType() {
       }
     }
   }
-  //TODO
-  //inf('x => y => x', '(1 2 1)')
-  //return
 
   // primitives
   inf('1', 'int')
