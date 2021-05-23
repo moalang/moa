@@ -96,9 +96,9 @@ bool|
   true
   false
 
-maybe a|
+option a|
   none
-  just a
+  some a
 
 ast|
   aint int
@@ -153,7 +153,7 @@ token:
   tag string
   code string
   pos int
-tokenize :: string may([token])
+tokenize :: string option([token])
 tokenize src =
   pos <- var(int)
   satisfy f =
@@ -216,27 +216,23 @@ indent: br "  "
 ## 4. Buildin
 
 ### Reserved
-- any bool true false int float byte bytes string list dict may some error var
+- any bool true false int float byte bytes string list dict option some none error var
 
 ### Core data types
 bool|
   true
   false
 int:
-  neg :: int
-  abs :: int
   float :: float
 float:
-  neg :: float
-  abs :: float
   int :: int
 byte:
   int :: int
 bytes:
   list(byte)
 string:
-  int   :: may(int)
-  float :: may(float)
+  int   :: option(int)
+  float :: option(float)
 tuple a+:
   ...
 list a:
@@ -246,13 +242,13 @@ list a:
   dict b :: [b] dict(a b)
 dict k v:
   size :: int
-  get  :: may(v)
+  get  :: option(v)
   set  :: k v bool
-may a|
+option a|
   some a
   error string
-  then b :: (a b) may(b)
-  catch  :: may(a) may(a)
+  then b :: (a b) option(b)
+  catch  :: option(a) option(a)
   alt    :: a a
 # ideas
 Monad
@@ -347,7 +343,7 @@ Symbols
   _                -- part of id
   " \ ` $          -- string `
 
-- maybe
+- option
   { }              -- map or statement?
   ?                -- variable arguments e.g. add x y z?0 = x+y+z
 
