@@ -6,7 +6,7 @@ function err(message, o) { dump(o); return new Error(message) }
 function tokenize(src) {
   let line = 1
   let indent = 0
-  return [...src.matchAll('[()\\[\\]:+\\-*/]|[ \n]+|[^ ()\\[\\]\\n :+\\-*/]+')].map(a => {
+  return [...src.matchAll('[()\\[\\]:+\\-*/.]|[ \n]+|[^ ()\\[\\]\\n :+\\-*/.]+')].map(a => {
     const br = (a[0].match(/\n/g) || []).length
     line += br
     if (br) { indent = a[0].split('\n').slice(-1).length }
@@ -45,7 +45,10 @@ function parse(tokens) {
   }
   function align(nodes) {
     for (let i=0; i<nodes.length; i++) {
-      const node = nodes[i]
+      let node = nodes[i]
+      if (node.apply) {
+        node = nodes[i] = align(node.apply)
+      }
       if (node.token === '=') {
         const name = nodes[0].token
         const args = nodes.slice(1, i).map(t => t.token)
@@ -58,11 +61,15 @@ function parse(tokens) {
     } else if (nodes.length >= 3) {
       const l = nodes[0]
       const op = nodes[1].token
-      const r = align(nodes.slice(2))
-      if (r.op && '*/'.includes(op) && '+-'.includes(r.op)) {
-        return {op: r.op, l: {op, l, r: r.l}, r: r.r}
+      if (op === '.') {
+        return {method: [l, ...nodes.slice(2)]}
       } else {
-        return {op, l, r}
+        const r = align(nodes.slice(2))
+        if (r.op && '*/'.includes(op) && '+-'.includes(r.op)) {
+          return {op: r.op, l: {op, l, r: r.l}, r: r.r}
+        } else {
+          return {op, l, r}
+        }
       }
     } else {
       return {apply: nodes}
@@ -102,9 +109,11 @@ function testParse() {
     } else if (node.list) {
       return '[' + node.list.map(toLisp).join(' ') + ']'
     } else if (node.body) {
-      return '(= ' + [node.name].concat(node.args).join(' ') + ' ' + toLisp(node.body) + ')'
+      return '(= ' + [node.name, ...node.args, toLisp(node.body)].join(' ') + ')'
     } else if (node.op) {
       return '(' + node.op + ' ' + toLisp(node.l) + ' ' + toLisp(node.r) + ')'
+    } else if (node.method) {
+      return '(. ' + node.method.map(toLisp).join(' ') + ')'
     } else {
       return node.token
     }
@@ -147,6 +156,11 @@ function testParse() {
   parser('(= f a b b)', 'f a b = b')
   parser('(= f 1)\n(= g 2)', 'f = 1\ng = 2')
   parser('(= f a (+ a 1))\n(= g (f (f 1)))', 'f a = a + 1\ng = f (f 1)')
+  parser('(. 1 abs)', '1.abs')
+  parser('(. "hi" size)', '"hi".size')
+  parser('(. (+ 1 2) abs)', '(1 + 2).abs')
+  parser('(. 1 pow 2)', '1.pow 2')
+  parser('(. 1 pow 2 3)', '1.pow 2 3')
 }
 function main() {
   testParse()
