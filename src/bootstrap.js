@@ -65,7 +65,7 @@ function parse(tokens) {
         return {op, l, r}
       }
     } else {
-      throw err('nodes', {nodes})
+      return {apply: nodes}
     }
   }
   const defs = []
@@ -94,11 +94,15 @@ function testParse() {
   }
   function toLisp(node) {
     if (node.apply) {
-      return '(' + node.apply.map(toLisp).join(' ') + ')'
+      if (node.apply.length === 1) {
+        return toLisp(node.apply[0])
+      } else {
+        return '(' + node.apply.map(toLisp).join(' ') + ')'
+      }
     } else if (node.list) {
       return '[' + node.list.map(toLisp).join(' ') + ']'
     } else if (node.body) {
-      return '(= ' + [node.name].concat(node.args).join(' ') + ' (' + toLisp(node.body) + '))'
+      return '(= ' + [node.name].concat(node.args).join(' ') + ' ' + toLisp(node.body) + ')'
     } else if (node.op) {
       return '(' + node.op + ' ' + toLisp(node.l) + ' ' + toLisp(node.r) + ')'
     } else {
@@ -133,13 +137,14 @@ function testParse() {
   value([1], '[1]')
   value([1, 2], '[1 2]')
   value([1, [true, false]], '[1 [true false]]')
-  parser('(= f (1))', 'f = 1')
-  parser('(= f a (a))', 'f a = a')
-  parser('(= f a b (b))', 'f a b = b')
-  parser('(= f (1))\n(= g (2))', 'f = 1\ng = 2')
   parser('(+ 1 2)', '1 + 2')
   parser('(+ 1 (* 2 3))', '1 + 2 * 3')
   parser('(+ (* 1 2) 3)', '1 * 2 + 3')
+  parser('(= f 1)', 'f = 1')
+  parser('(= f a a)', 'f a = a')
+  parser('(= f a b b)', 'f a b = b')
+  parser('(= f 1)\n(= g 2)', 'f = 1\ng = 2')
+  parser('(= f a (+ a 1))\n(= g (f (f 1)))', 'f a = a + 1\ng = f (f 1)')
 }
 function main() {
   testParse()
