@@ -6,7 +6,7 @@ function err(message, o) { dump(o); return new Error(message) }
 function tokenize(src) {
   let line = 1
   let indent = 0
-  return [...src.matchAll('[()\\[\\]:+\\-*/.]|[ \n]+|[^ ()\\[\\]\\n :+\\-*/.]+')].map(a => {
+  return [...src.matchAll('[()\\[\\]:+\\-*/.|]|[ \n]+|[^ ()\\[\\]\\n :+\\-*/.|]+')].map(a => {
     const br = (a[0].match(/\n/g) || []).length
     line += br
     if (br) { indent = a[0].split('\n').slice(-1).length }
@@ -95,10 +95,16 @@ function parse(tokens) {
   while (pos < tokens.length) {
     const node = unit()
     if (node.token === ':')  {
-      const fields = nest(node.indent).map(f => [f[0].token, f[1].token])
+      const fields = nest(node.indent).map(f => f.map(o => o.token))
       const name = stack[0].token
       const args = stack.slice(1).map(n => n.token)
       defs.push({name, args, fields})
+      stack = []
+    } else if (node.token === '|')  {
+      const enums = nest(node.indent).map(f => f.map(o => o.token))
+      const name = stack[0].token
+      const args = stack.slice(1).map(n => n.token)
+      defs.push({name, args, enums})
       stack = []
     } else if (node.line !== line) {
       if (stack.length) {
@@ -136,6 +142,8 @@ function testParse() {
       return '(. ' + node.method.map(toLisp).join(' ') + ')'
     } else if (node.fields) {
       return '(: ' + [node.name, ...node.args, ...node.fields.map(f => '(' + f.join(' ') + ')')].join(' ') + ')'
+    } else if (node.enums) {
+      return '(| ' + [node.name, ...node.args, ...node.enums.map(f => '(' + f.join(' ') + ')')].join(' ') + ')'
     } else {
       return node.token
     }
@@ -184,9 +192,10 @@ function testParse() {
   parser('(. 1 pow 2)', '1.pow 2')
   parser('(. 1 pow 2 3)', '1.pow 2 3')
   parser('(= int__double n (* n 2))\n(. 1 double)', 'int.double n = n * 2\n1.double')
-
   parser('(: v2 (x int) (y int))', 'v2:\n  x int\n  y int')
   parser('(: two a b (f1 a) (f2 b))', 'two a b:\n  f1 a\n  f2 b')
+  parser('(| b (t) (f))', 'b|\n  t \n  f')
+  parser('(| m a (j a) (n))', 'm a|\n  j a \n  n')
 }
 function main() {
   testParse()
