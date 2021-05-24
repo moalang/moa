@@ -50,9 +50,13 @@ function parse(tokens) {
         node = nodes[i] = align(node.apply)
       }
       if (node.token === '=') {
-        const name = nodes[0].token
-        const args = nodes.slice(1, i).map(t => t.token)
+        let name = nodes[0].token
+        let args = nodes.slice(1, i).map(t => t.token)
         const body = align(nodes.slice(i+1))
+        if (args.length && args[0] === '.') {
+          name += '__' + args[1]
+          args = args.slice(2)
+        }
         return {name, args, body}
       }
     }
@@ -109,11 +113,7 @@ function testParse() {
     } else if (node.list) {
       return '[' + node.list.map(toLisp).join(' ') + ']'
     } else if (node.body) {
-      if (node.args.length && node.args[0] === '.') {
-        return '(# ' + [node.name, ...node.args.slice(1), toLisp(node.body)].join(' ') + ')'
-      } else {
-        return '(= ' + [node.name, ...node.args, toLisp(node.body)].join(' ') + ')'
-      }
+      return '(= ' + [node.name, ...node.args, toLisp(node.body)].join(' ') + ')'
     } else if (node.op) {
       return '(' + node.op + ' ' + toLisp(node.l) + ' ' + toLisp(node.r) + ')'
     } else if (node.method) {
@@ -142,8 +142,6 @@ function testParse() {
   function parser(expect, src) {
     return eq(expect, src, nodes => nodes.map(toLisp).join('\n'))
   }
-  parser('(# int double n (* n 2))\n(. 1 double)', 'int.double n = n * 2\n1.double')
-  return
 
   value(1, '1')
   value('hi', '"hi"')
@@ -167,7 +165,7 @@ function testParse() {
   parser('(. (+ 1 2) abs)', '(1 + 2).abs')
   parser('(. 1 pow 2)', '1.pow 2')
   parser('(. 1 pow 2 3)', '1.pow 2 3')
-  parser('(# int double n (* n 2))\n(. 1 double)', 'int.double n = n * 2\n1.double')
+  parser('(= int__double n (* n 2))\n(. 1 double)', 'int.double n = n * 2\n1.double')
 }
 function main() {
   testParse()
