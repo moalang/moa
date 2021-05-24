@@ -109,7 +109,11 @@ function testParse() {
     } else if (node.list) {
       return '[' + node.list.map(toLisp).join(' ') + ']'
     } else if (node.body) {
-      return '(= ' + [node.name, ...node.args, toLisp(node.body)].join(' ') + ')'
+      if (node.args.length && node.args[0] === '.') {
+        return '(# ' + [node.name, ...node.args.slice(1), toLisp(node.body)].join(' ') + ')'
+      } else {
+        return '(= ' + [node.name, ...node.args, toLisp(node.body)].join(' ') + ')'
+      }
     } else if (node.op) {
       return '(' + node.op + ' ' + toLisp(node.l) + ' ' + toLisp(node.r) + ')'
     } else if (node.method) {
@@ -138,6 +142,8 @@ function testParse() {
   function parser(expect, src) {
     return eq(expect, src, nodes => nodes.map(toLisp).join('\n'))
   }
+  parser('(# int double n (* n 2))\n(. 1 double)', 'int.double n = n * 2\n1.double')
+  return
 
   value(1, '1')
   value('hi', '"hi"')
@@ -161,6 +167,7 @@ function testParse() {
   parser('(. (+ 1 2) abs)', '(1 + 2).abs')
   parser('(. 1 pow 2)', '1.pow 2')
   parser('(. 1 pow 2 3)', '1.pow 2 3')
+  parser('(# int double n (* n 2))\n(. 1 double)', 'int.double n = n * 2\n1.double')
 }
 function main() {
   testParse()
