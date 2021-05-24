@@ -6,7 +6,7 @@ function err(message, o) { dump(o); return new Error(message) }
 function tokenize(src) {
   let line = 1
   let indent = 0
-  return [...src.matchAll('[()\\[\\]]|[ \n]+|[^ ()\\[\\]\\n ]+')].map(a => {
+  return [...src.matchAll('[()\\[\\]:+\\-*/]|[ \n]+|[^ ()\\[\\]\\n :+\\-*/]+')].map(a => {
     const br = (a[0].match(/\n/g) || []).length
     line += br
     if (br) { indent = a[0].split('\n').slice(-1).length }
@@ -140,6 +140,8 @@ function testParse() {
   parser('(+ 1 2)', '1 + 2')
   parser('(+ 1 (* 2 3))', '1 + 2 * 3')
   parser('(+ (* 1 2) 3)', '1 * 2 + 3')
+  parser('(=> x x)', 'x => x')
+  parser('(=> x (=> y (+ x y)))', 'x => y => x + y')
   parser('(= f 1)', 'f = 1')
   parser('(= f a a)', 'f a = a')
   parser('(= f a b b)', 'f a b = b')

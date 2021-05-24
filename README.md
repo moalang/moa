@@ -80,7 +80,7 @@ Container
 Anonymouse Function
 ```
 a => a
-(a b) => a + b
+a => b => a + b
 ```
 
 Types
