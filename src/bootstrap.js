@@ -121,6 +121,31 @@ function parse(tokens) {
   }
   return defs
 }
+function exec(nodes) {
+  const env = {}
+  for (const node of nodes) {
+    env[node.name] = node
+  }
+  function op2(op, l, r) {
+    l = run(l)
+    r = run(r)
+    switch (op) {
+      case '+': return l + r
+      case '-': return l - r
+      case '*': return l * r
+      case '/': return l / r
+      default: throw err('unknown op', {op,l,r})
+    }
+  }
+  function run(node) {
+    if (node.op) {
+      return op2(node.op, node.l, node.r)
+    } else {
+      return node.value || run(node.body)
+    }
+  }
+  return run(env.main)
+}
 function testParse() {
   function toValue(node) {
     return node.list ? node.list.map(toValue) : node.value
@@ -148,7 +173,7 @@ function testParse() {
       return node.token
     }
   }
-  function eq(expect, src, f) {
+  function test(expect, src, f) {
     const tokens = tokenize(src)
     const nodes = parse(tokens)
     const actual = f(nodes)
@@ -163,10 +188,14 @@ function testParse() {
     }
   }
   function value(expect, src) {
-    return eq(expect, src, nodes => toValue(nodes[0]))
+    return test(expect, src, nodes => toValue(nodes[0]))
   }
   function parser(expect, src) {
-    return eq(expect, src, nodes => nodes.map(toLisp).join('\n'))
+    return test(expect, src, nodes => nodes.map(toLisp).join('\n'))
+  }
+  function eq(expect, exp, ...funcs) {
+    funcs.push('main = ' + exp)
+    return test(expect, funcs.join('\n'), nodes => exec(nodes))
   }
 
   value(1, '1')
@@ -196,6 +225,10 @@ function testParse() {
   parser('(: two a b (f1 a) (f2 b))', 'two a b:\n  f1 a\n  f2 b')
   parser('(| b (t) (f))', 'b|\n  t \n  f')
   parser('(| m a (j a) (n))', 'm a|\n  j a \n  n')
+  eq(1, '1')
+  eq(3, '1 + 2')
+  eq(7, '1 + 2 * 3')
+  eq(5, '1 * 2 + 3')
 }
 function main() {
   testParse()
