@@ -79,12 +79,28 @@ function parse(tokens) {
       return {apply: nodes}
     }
   }
+  function nest(indent) {
+    const all = []
+    while (pos < tokens.length && tokens[pos].indent > indent) {
+      const line = tokens[pos].line
+      const nodes = tokens.slice(pos).filter(x => x.line === line)
+      all.push(nodes)
+      pos += nodes.length
+    }
+    return all
+  }
   const defs = []
   let stack = []
   let line = 1
   while (pos < tokens.length) {
     const node = unit()
-    if (node.line !== line) {
+    if (node.token === ':')  {
+      const fields = nest(node.indent).map(f => [f[0].token, f[1].token])
+      const name = stack[0].token
+      const args = stack.slice(1).map(n => n.token)
+      defs.push({name, args, fields})
+      stack = []
+    } else if (node.line !== line) {
       if (stack.length) {
         defs.push(align(stack))
         line = node.line
@@ -118,6 +134,8 @@ function testParse() {
       return '(' + node.op + ' ' + toLisp(node.l) + ' ' + toLisp(node.r) + ')'
     } else if (node.method) {
       return '(. ' + node.method.map(toLisp).join(' ') + ')'
+    } else if (node.fields) {
+      return '(: ' + [node.name, ...node.args, ...node.fields.map(f => '(' + f.join(' ') + ')')].join(' ') + ')'
     } else {
       return node.token
     }
@@ -166,6 +184,9 @@ function testParse() {
   parser('(. 1 pow 2)', '1.pow 2')
   parser('(. 1 pow 2 3)', '1.pow 2 3')
   parser('(= int__double n (* n 2))\n(. 1 double)', 'int.double n = n * 2\n1.double')
+
+  parser('(: v2 (x int) (y int))', 'v2:\n  x int\n  y int')
+  parser('(: two a b (f1 a) (f2 b))', 'two a b:\n  f1 a\n  f2 b')
 }
 function main() {
   testParse()
