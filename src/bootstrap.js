@@ -44,21 +44,17 @@ function parse(tokens) {
     return node
   }
   function align(nodes) {
-    for (let i=0; i<nodes.length; i++) {
-      let node = nodes[i]
-      if (node.apply) {
-        node = nodes[i] = align(node.apply)
+    nodes = nodes.map(x => x.apply ? align(x.apply) : x)
+    const defIndex = nodes.findIndex(x => x.token === '=')
+    if (defIndex >= 1) {
+      let name = nodes[0].token
+      let args = nodes.slice(1, defIndex).map(t => t.token)
+      const body = align(nodes.slice(defIndex + 1))
+      if (args.length && args[0] === '.') {
+        name += '__' + args[1]
+        args = args.slice(2)
       }
-      if (node.token === '=') {
-        let name = nodes[0].token
-        let args = nodes.slice(1, i).map(t => t.token)
-        const body = align(nodes.slice(i+1))
-        if (args.length && args[0] === '.') {
-          name += '__' + args[1]
-          args = args.slice(2)
-        }
-        return {name, args, body}
-      }
+      return {name, args, body}
     }
     if (nodes.length === 1) {
       return nodes[0]
@@ -87,7 +83,7 @@ function parse(tokens) {
       all.push(nodes)
       pos += nodes.length
     }
-    return all
+    return all.map(f => f.map(o => o.token))
   }
   const defs = []
   let stack = []
@@ -95,13 +91,13 @@ function parse(tokens) {
   while (pos < tokens.length) {
     const node = unit()
     if (node.token === ':')  {
-      const fields = nest(node.indent).map(f => f.map(o => o.token))
+      const fields = nest(node.indent)
       const name = stack[0].token
       const args = stack.slice(1).map(n => n.token)
       defs.push({name, args, fields})
       stack = []
     } else if (node.token === '|')  {
-      const enums = nest(node.indent).map(f => f.map(o => o.token))
+      const enums = nest(node.indent)
       const name = stack[0].token
       const args = stack.slice(1).map(n => n.token)
       defs.push({name, args, enums})
