@@ -19,7 +19,7 @@ function test(expect, message, actual) {
 function tokenize(src) {
   let indent = 0
   let line = 1
-  return [...src.matchAll(/\s+|[a-zA-Z0-9_]+|[+\-*\/=><]+|./g)].map(s => {
+  return [...src.matchAll(/\s+|[a-zA-Z0-9_]+|[+\-*\/=><]+|".+?"|./g)].map(s => {
     const token = s[0]
     const br = (token.match(/\n/g) || []).length
     line += br
@@ -31,7 +31,8 @@ function tokenize(src) {
       index: s.index,
     }
     if (token[0].match(/^[a-zA-Z_]/)) { o.is_id = true }
-    else if (token[0].match(/^[0-9.]+$/)) { o.is_num = true }
+    else if (token[0].match(/^[0-9.]+$/)) { o.is_num = true; o.value = parseInt(o.token) }
+    else if (token[0].match(/^["'`]/)) { o.is_str = true; o.value = o.token.slice(1, -1) }
     else if (token[0].match(/^[=:|]$/)) { o.is_sym = true }
     else { o.is_op = true }
     return o
@@ -81,7 +82,7 @@ function evaluate(nodes) {
   }
   function run(node) {
     if (node.is_func) { return run(node.body) }
-    if (node.is_num) { return parseInt(node.token) }
+    if (node.value) { return node.value }
     throw err('Unknown node', {node})
   }
   return run(env.main)
@@ -101,8 +102,13 @@ function testTokenize() {
   t([
     { token: 'a', indent: 0, line: 1, index: 0, is_id: true },
     { token: '=', indent: 0, line: 1, index: 2, is_sym: true },
-    { token: '1', indent: 0, line: 1, index: 4, is_num: true }
+    { token: '1', indent: 0, line: 1, index: 4, is_num: true, value: 1 }
   ], 'a = 1')
+  t([
+    { token: 'a', indent: 0, line: 1, index: 0, is_id: true },
+    { token: '=', indent: 0, line: 1, index: 2, is_sym: true },
+    { token: '"a"', indent: 0, line: 1, index: 4, is_str: true, value: 'a' }
+  ], 'a = "a"')
   t([
     { token: 'struct', indent: 0, line: 1, index: 0, is_id: true },
     { token: 'a', indent: 0, line: 1, index: 7, is_id: true },
@@ -131,6 +137,7 @@ function testEvaluate() {
     test(expect, src, run(src).value)
   }
   t(1, '1')
+  t('hi', '"hi"')
 }
 
 // main
