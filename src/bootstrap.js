@@ -35,7 +35,7 @@ function tokenize(src) {
     if (token[0].match(/^[a-zA-Z_]/)) { o.id = o.token }
     else if (token[0].match(/^[0-9.]+$/)) { o.value = parseInt(o.token) }
     else if (token[0].match(/^["'`]/)) { o.value = o.token.slice(1, -1) }
-    else if (token[0].match(/^[=:|]$/)) { o.sym = o.token }
+    else if (token[0].match(/^[=:|()]$/)) { o.sym = o.token }
     else { o.op2 = o.token }
     return o
   }).filter(x => x.token.trim())
@@ -48,10 +48,9 @@ function parse(tokens) {
   }
   function unit() {
     const lhs = consume()
-    let ret = lhs
     while (true) {
       const next = consume()
-      if (!next) { return ret }
+      if (!next) { return lhs }
       if (next.op2) {
         const rhs = unit()
         if (rhs.op2) {
@@ -64,9 +63,15 @@ function parse(tokens) {
           }
         }
         return {op2: next.token, lhs, rhs}
+      } else if (next.sym === '(') {
+        if (lhs.index + lhs.token.length  === next.index) {
+          const args = until(t => t.sym !== ')', unit)
+          pos++ // consume ')' 
+          return { call: lhs.token, args }
+        }
       } else {
         pos--
-        return ret
+        return lhs
       }
     }
   }
@@ -102,30 +107,41 @@ function parse(tokens) {
   return nodes
 }
 function evaluate(nodes) {
-  const environment = function(parent) {
+  const environment = function(parent, keys=[], vals=[]) {
     this.get = key => this['__' + key] || parent + ['__' + key] || (() => { throw err('not found', {key,dit,parent}) })()
     this.put = (key,value) => this['__' + key] = value
+    this.new = (keys,vals) => {
+      const env = new environment(this)
+      keys.map((kv, i) => env['__' + kv] = vals[i])
+      return env
+    }
   }
   const root = new environment({})
   for (const node of nodes) {
     root.put(node.name, node)
   }
   function run(node, env) {
-    if (node.value) { return node.value }
+    if (node.value) { return node }
     if (node.body) { return run(node.body, env) }
     if (node.id) { return run(env.get(node.id), env) }
+    if (node.call) {
+      const func = env.get(node.call)
+      return run(func.body, env.new(func.args, node.args.map(arg => run(arg, env))))
+    }
     if (node.op2) {
+      const l = run(node.lhs, env).value
+      const r = run(node.rhs, env).value
       switch (node.op2) {
-        case '+': return run(node.lhs, env) + run(node.rhs, env)
-        case '-': return run(node.lhs, env) - run(node.rhs, env)
-        case '*': return run(node.lhs, env) * run(node.rhs, env)
-        case '/': return run(node.lhs, env) / run(node.rhs, env)
+        case '+': node.value = l + r; return node
+        case '-': node.value = l - r; return node
+        case '*': node.value = l * r; return node
+        case '/': node.value = l / r; return node
         default: throw err('Unknown operator', node)
       }
     }
     throw err('Unknown node', {node, env})
   }
-  return run(root.get('main').body, root)
+  return run(root.get('main').body, root).value
 }
 function run(src) {
   const tokens = tokenize(src)
@@ -168,7 +184,7 @@ function testParse() {
     return node.value ? node.value.toString() :
       node.id ? node.id :
       node.body ? node.name + node.args.map(x => ' ' + x).join('') + ' = ' + show(node.body) :
-      node.call ? node.name + '(' + node.args.map(show).join(' ') + ')' :
+      node.call ? node.call + '(' + node.args.map(show).join(' ') + ')' :
       node.op2 ? '(' + show(node.lhs) + ' ' + node.op2 + ' ' + show(node.rhs) + ')' :
       (() => { throw err('Unknown', {node}) })()
   }
@@ -181,6 +197,7 @@ function testParse() {
   t('f a = (a + 1)', 'f a = a + 1')
   t('f a = (a + (1 * 2))', 'f a = a + 1 * 2')
   t('f a = ((a * 1) + 2)', 'f a = a * 1 + 2')
+  t('f a = a\ng = f((1 + 2))\nh = g()', 'f a = a\ng = f(1 + 2)\nh = g()')
 }
 function testEvaluate() {
   function t(expect, exp, ...defs) {
@@ -193,7 +210,7 @@ function testEvaluate() {
   t(7, '1+2*3')
   t(5, '1*2+3')
   t(1, 'f', 'f=1')
-  //t(1, 'f(1)', 'f a = a + 1')
+  t(2, 'f(1)', 'f a = a + 1')
 }
 
 // main
