@@ -47,32 +47,35 @@ function parse(tokens) {
     return tokens[pos++]
   }
   function unit() {
-    const lhs = consume()
-    while (true) {
-      const next = consume()
-      if (!next) { return lhs }
-      if (next.op2) {
-        const rhs = unit()
-        if (rhs.op2) {
-          const o1 = next.token
-          const o2 = rhs.op2
-          if ('*/'.includes(o1) && '+-'.includes(o2)) {
-            return { op2: o2, lhs: { op2: o1, lhs, rhs: rhs.lhs }, rhs: rhs.rhs }
-          } else {
-            return { op2: o1, lhs, rhs }
-          }
-        }
-        return {op2: next.token, lhs, rhs}
-      } else if (next.sym === '(') {
-        if (lhs.index + lhs.token.length  === next.index) {
-          const args = until(t => t.sym !== ')', unit)
-          pos++ // consume ')' 
-          return { call: lhs.token, args }
+    return operator(consume())
+  }
+  function operator(lhs) {
+    const next = consume()
+    if (!next) { return lhs }
+    if (next.op2) {
+      const rhs = unit()
+      if (rhs.op2) {
+        const o1 = next.token
+        const o2 = rhs.op2
+        if ('*/'.includes(o1) && '+-'.includes(o2)) {
+          return operator({ op2: o2, lhs: { op2: o1, lhs, rhs: rhs.lhs }, rhs: rhs.rhs })
+        } else {
+          return operator({ op2: o1, lhs, rhs })
         }
       } else {
-        pos--
-        return lhs
+        return operator({op2: next.token, lhs, rhs})
       }
+    } else if (next.sym === '(') {
+      if (lhs.index + lhs.token.length  === next.index) {
+        const args = until(t => t.sym !== ')', unit)
+        pos++ // consume ')' 
+        return operator({ call: lhs.token, args })
+      }
+    } else if (next.id || next.sym === ')') {
+      pos-- // back track
+      return lhs
+    } else {
+      throw err('Unknown operator', {next})
     }
   }
   function until(f, g) {
@@ -107,16 +110,17 @@ function parse(tokens) {
   return nodes
 }
 function evaluate(nodes) {
-  const environment = function(parent, keys=[], vals=[]) {
-    this.get = key => this['__' + key] || parent + ['__' + key] || (() => { throw err('not found', {key,dit,parent}) })()
-    this.put = (key,value) => this['__' + key] = value
-    this.new = (keys,vals) => {
+  const environment = function(parent) {
+    const d = {}
+    this.get = key => d[key] || parent.get(key) || (() => { throw err('not found', {key,d,parent}) })()
+    this.put = (key,value) => d[key] = value
+    this.new = (keys,values) => {
       const env = new environment(this)
-      keys.map((kv, i) => env['__' + kv] = vals[i])
+      keys.map((kv, i) => env.put(kv, values[i]))
       return env
     }
   }
-  const root = new environment({})
+  const root = new environment({get:()=>null})
   for (const node of nodes) {
     root.put(node.name, node)
   }
@@ -194,10 +198,12 @@ function testParse() {
     test(expect, nodes.map(show).join('\n'), {src,nodes})
   }
   t('f = 1', 'f = 1')
+  t('f = (1 + (2 + (3 * (4 * 5))))', 'f = 1 + 2 + 3 * 4 * 5')
   t('f a = (a + 1)', 'f a = a + 1')
   t('f a = (a + (1 * 2))', 'f a = a + 1 * 2')
   t('f a = ((a * 1) + 2)', 'f a = a * 1 + 2')
   t('f a = a\ng = f((1 + 2))\nh = g()', 'f a = a\ng = f(1 + 2)\nh = g()')
+  t('f = (g(1) + h(2))', 'f = g(1) + h(2)')
 }
 function testEvaluate() {
   function t(expect, exp, ...defs) {
@@ -211,6 +217,7 @@ function testEvaluate() {
   t(5, '1*2+3')
   t(1, 'f', 'f=1')
   t(2, 'f(1)', 'f a = a + 1')
+  t(3, 'f(1) + g(1)', 'f a = a', 'g a = a + f(a)')
 }
 
 // main
