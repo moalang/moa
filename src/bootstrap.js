@@ -1,4 +1,5 @@
 'use strict'
+
 // helpers
 function write(...a) { a.map(o => process.stdout.write(o.toString())) }
 function puts(...a) { console.log(...a) }
@@ -21,7 +22,7 @@ function test(expect, actual, o) {
 function tokenize(src) {
   let indent = 0
   let line = 1
-  return [...src.matchAll(/\s+|[a-zA-Z0-9_]+|[+\-*\/=><]+|".+?"|./g)].map(s => {
+  return [...src.matchAll(/\s+|[a-zA-Z0-9_]+|[+\-*\/=><]+|".+?"|[\[\]()]|./g)].map(s => {
     const token = s[0]
     const br = (token.match(/\n/g) || []).length
     line += br
@@ -35,7 +36,7 @@ function tokenize(src) {
     if (token[0].match(/^[a-zA-Z_]/)) { o.id = o.token }
     else if (token[0].match(/^[0-9.]+$/)) { o.value = parseInt(o.token) }
     else if (token[0].match(/^["'`]/)) { o.value = o.token.slice(1, -1) }
-    else if (token[0].match(/^[=:|()]$/)) { o.sym = o.token }
+    else if (token[0].match(/^[=:|()\[\]]$/)) { o.sym = o.token }
     else { o.op2 = o.token }
     return o
   }).filter(x => x.token.trim())
@@ -49,29 +50,45 @@ function parse(tokens) {
   function unit() {
     return operator(consume())
   }
+  function drop(expect, value) {
+    const node = consume()
+    if (node.token !== expect) { throw err('Unexpected token', {node, expect}) }
+    return value
+  }
   function operator(lhs) {
+    if (lhs.sym === '[') {
+      return operator({ list: drop(']', until(t => t.sym !== ']', unit)) })
+    }
+    if (lhs.sym === '(') {
+      return drop(')', unit())
+    }
     const next = consume()
     if (!next) { return lhs }
     if (next.op2) {
-      const rhs = unit()
-      if (rhs.op2) {
-        const o1 = next.token
-        const o2 = rhs.op2
-        if ('*/'.includes(o1) && '+-'.includes(o2)) {
-          return operator({ op2: o2, lhs: { op2: o1, lhs, rhs: rhs.lhs }, rhs: rhs.rhs })
-        } else {
-          return operator({ op2: o1, lhs, rhs })
-        }
+      const o1 = next.op2
+      if (tokens[pos].sym === '(') {
+        const rhs = unit()
+        return operator({ op2: o1, lhs, rhs })
       } else {
-        return operator({op2: next.token, lhs, rhs})
+        const rhs = unit()
+        if (rhs.op2) {
+          const o2 = rhs.op2
+          if ('*/'.includes(o1) && '+-'.includes(o2)) {
+            return operator({ op2: o2, lhs: { op2: o1, lhs, rhs: rhs.lhs }, rhs: rhs.rhs })
+          } else {
+            return operator({ op2: o1, lhs, rhs })
+          }
+        } else {
+          return operator({op2: next.token, lhs, rhs})
+        }
       }
     } else if (next.sym === '(') {
       if (lhs.index + lhs.token.length  === next.index) {
-        const args = until(t => t.sym !== ')', unit)
-        pos++ // consume ')' 
-        return operator({ call: lhs.token, args })
+        return operator({ call: lhs.token, args: drop(')', until(t => t.sym !== ')', unit)) })
+      } else {
+        throw err('unsupported yet operator', {next})
       }
-    } else if (next.id || next.sym === ')') {
+    } else if (next.id || next.sym === ')' || next.sym === ']') {
       pos-- // back track
       return lhs
     } else {
@@ -126,6 +143,7 @@ function evaluate(nodes) {
   }
   function run(node, env) {
     if (node.value) { return node }
+    if (node.list) { node.value = node.list.map(x => run(x, env).value); return node }
     if (node.body) { return run(node.body, env) }
     if (node.id) { return run(env.get(node.id), env) }
     if (node.call) {
@@ -204,6 +222,7 @@ function testParse() {
   t('f a = ((a * 1) + 2)', 'f a = a * 1 + 2')
   t('f a = a\ng = f((1 + 2))\nh = g()', 'f a = a\ng = f(1 + 2)\nh = g()')
   t('f = (g(1) + h(2))', 'f = g(1) + h(2)')
+  t('f = (1 * (2 + 3))', 'f = 1*(2+3)')
 }
 function testEvaluate() {
   function t(expect, exp, ...defs) {
@@ -211,13 +230,31 @@ function testEvaluate() {
     const src = defs.join('\n')
     test(expect, run(src).value, src)
   }
+
+  // basic value
   t(1, '1')
   t('hi', '"hi"')
+  t([], '[]')
+
+  // expression
   t(7, '1+2*3')
   t(5, '1*2+3')
+
+  // function
   t(1, 'f', 'f=1')
   t(2, 'f(1)', 'f a = a + 1')
   t(3, 'f(1) + g(1)', 'f a = a', 'g a = a + f(a)')
+
+  // struct
+  // enum
+
+  // control flow
+  // pattern match for enum
+  // effect
+
+  // embedded function
+  // embedded string
+  // embedded number
 }
 
 // main
