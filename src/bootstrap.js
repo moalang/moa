@@ -50,9 +50,12 @@ function parse(tokens) {
   function unit() {
     return operator(consume())
   }
-  function drop(expect, value) {
+  function expect(token) {
+    return pos < len && tokens[pos].token === token
+  }
+  function drop(token, value) {
     const node = consume()
-    if (node.token !== expect) { throw err('Unexpected token', {node, expect}) }
+    if (node.token !== token) { throw err('Unexpected token', {node, expect}) }
     return value
   }
   function operator(lhs) {
@@ -67,8 +70,7 @@ function parse(tokens) {
     if (next.op2) {
       const o1 = next.op2
       if (tokens[pos].sym === '(') {
-        const rhs = unit()
-        return operator({ op2: o1, lhs, rhs })
+        return operator({ op2: o1, lhs, rhs: unit() })
       } else {
         const rhs = unit()
         if (rhs.op2) {
@@ -97,17 +99,17 @@ function parse(tokens) {
   }
   function until(f, g) {
     const a = []
-    while (f(tokens[pos])) {
+    while (pos < len && f(tokens[pos])) {
       a.push(g())
     }
     return a
   }
   function parse_define() {
-    const [name, ...args] = until(x => x.id, consume).map(t => t.token)
+    const [name, ...args] = until(t => t.id, consume).map(t => t.token)
     const sym = consume()
     switch (sym.token) {
       case '=': return {name, args, body: parse_body()}
-      case ':': return {name, args, struct: parse_struct()}
+      case ':': return {name, args, struct: parse_struct(2)}
       case '|': return {name, args, enum: parse_enum()}
       default: throw err('Unknown token', {sym,pos,tokens})
     }
@@ -115,9 +117,34 @@ function parse(tokens) {
   function parse_body() {
     return unit()
   }
-  function parse_struct() {
+  function parse_struct(indent) {
+    const fields = []
+    let line = 0
+    until(t => t.indent === indent, () => {
+      const t = consume()
+      if (line !== t.line) {
+        fields.push(t.id)
+        line = t.line
+      }
+    })
+    return fields
   }
   function parse_enum() {
+    const fields = []
+    let line = 0
+    until(t => t.indent === 2, () => {
+      const t = consume()
+      if (line !== t.line) {
+        if (expect(':')) {
+          drop(':')
+          fields.push([t.id, ...parse_struct(4)])
+        } else {
+          fields.push([t.id])
+        }
+        line = t.line
+      }
+    })
+    return fields
   }
 
   const nodes = []
@@ -208,6 +235,8 @@ function testParse() {
       node.body ? node.name + node.args.map(x => ' ' + x).join('') + ' = ' + show(node.body) :
       node.call ? node.call + '(' + node.args.map(show).join(' ') + ')' :
       node.op2 ? '(' + show(node.lhs) + ' ' + node.op2 + ' ' + show(node.rhs) + ')' :
+      node.struct ? [node.name, ...node.args].join(' ') + ': ' + node.struct.join(' ') :
+      node.enum ? [node.name, ...node.args].join(' ') + '| ' + node.enum.map(e => e.join(' ')).join(', ') :
       (() => { throw err('Unknown', {node}) })()
   }
   function t(expect, src) {
@@ -223,6 +252,11 @@ function testParse() {
   t('f a = a\ng = f((1 + 2))\nh = g()', 'f a = a\ng = f(1 + 2)\nh = g()')
   t('f = (g(1) + h(2))', 'f = g(1) + h(2)')
   t('f = (1 * (2 + 3))', 'f = 1*(2+3)')
+  t('struct: field1', 'struct:\n  field1 type1')
+  t('struct t1 t2: field1 field2', 'struct t1 t2:\n  field1 t1\n  field2 t2')
+  t('enum| tag', 'enum|\n  tag')
+  t('enum a| tag a', 'enum a|\n  tag:\n    a int')
+  t('enum a b| tag1, tag2 f1 f2', 'enum a b|\n  tag1\n  tag2:\n    f1 a\n    f2 b')
 }
 function testEvaluate() {
   function t(expect, exp, ...defs) {
