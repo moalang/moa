@@ -6,7 +6,7 @@ function puts(...a) { console.log(...a) }
 function dump(o) { console.dir(o, {depth: null}) }
 function eq(a, b) { return a === b || str(a) === str(b) }
 function str(o) { return JSON.stringify(o) }
-function err(msg, o) { puts(o); return new Error(msg) }
+function err(msg, o) { dump(o); return new Error(msg) }
 function newType(__type, keys, vals) { return keys.reduce((acc,k,i) => (acc[k]=vals[i], acc), {__type}) }
 function test(expect, actual, o) {
   if (eq(expect, actual)) {
@@ -109,7 +109,7 @@ function parse(tokens) {
     switch (sym.token) {
       case '=': return {name, args, body: parse_body()}
       case ':': return {name, args, struct: parse_struct(2)}
-      case '|': return {name, args, enum: parse_enum()}
+      case '|': return {name, args, adt: parse_adt()}
       default: throw err('Unknown token', {sym,pos,tokens})
     }
   }
@@ -128,7 +128,7 @@ function parse(tokens) {
     })
     return fields
   }
-  function parse_enum() {
+  function parse_adt() {
     const fields = []
     let line = 0
     until(t => t.indent === 2, () => {
@@ -165,7 +165,17 @@ function evaluate(nodes) {
   }
   const root = new environment({get:()=>null})
   for (const node of nodes) {
-    root.put(node.name, node)
+    if (node.adt) {
+      for (const [name,...adt] of node.adt) {
+        if (adt.length) {
+          root.put(name, {name, adt})
+        } else {
+          root.put(name, {value: {__type: name}})
+        }
+      }
+    } else {
+      root.put(node.name, node)
+    }
   }
   function run(node, env) {
     if (node.value) { return node }
@@ -179,6 +189,8 @@ function evaluate(nodes) {
         return run(def.body, env.new(def.args, argv))
       } else if (def.struct) {
         return {value: newType(def.name, def.struct, argv.map(a => a.value))}
+      } else if (def.adt) {
+        return {value: newType(def.name, def.adt, argv.map(a => a.value))}
       } else {
         throw err('Unknown apply', def)
       }
@@ -194,7 +206,7 @@ function evaluate(nodes) {
         default: throw err('Unknown operator', node)
       }
     }
-    throw err('Unknown node', {node, env})
+    throw err('Unknown node', {node, nodes})
   }
   return run(root.get('main').body, root).value
 }
@@ -242,7 +254,7 @@ function testParse() {
       node.call ? node.call + '(' + node.args.map(show).join(' ') + ')' :
       node.op2 ? '(' + show(node.lhs) + ' ' + node.op2 + ' ' + show(node.rhs) + ')' :
       node.struct ? [node.name, ...node.args].join(' ') + ': ' + node.struct.join(' ') :
-      node.enum ? [node.name, ...node.args].join(' ') + '| ' + node.enum.map(e => e.join(' ')).join(', ') :
+      node.adt ? [node.name, ...node.args].join(' ') + '| ' + node.adt.map(e => e.join(' ')).join(', ') :
       (() => { throw err('Unknown', {node}) })()
   }
   function t(expect, src) {
@@ -260,9 +272,9 @@ function testParse() {
   t('f = (1 * (2 + 3))', 'f = 1*(2+3)')
   t('struct: field1', 'struct:\n  field1 type1')
   t('struct t1 t2: field1 field2', 'struct t1 t2:\n  field1 t1\n  field2 t2')
-  t('enum| tag', 'enum|\n  tag')
-  t('enum a| tag a', 'enum a|\n  tag:\n    a int')
-  t('enum a b| tag1, tag2 f1 f2', 'enum a b|\n  tag1\n  tag2:\n    f1 a\n    f2 b')
+  t('adt| tag', 'adt|\n  tag')
+  t('adt a| tag a', 'adt a|\n  tag:\n    a int')
+  t('adt a b| tag1, tag2 f1 f2', 'adt a b|\n  tag1\n  tag2:\n    f1 a\n    f2 b')
 }
 function testEvaluate() {
   function t(expect, exp, ...defs) {
@@ -290,10 +302,12 @@ function testEvaluate() {
   t({__type: 's', a: 1}, 's(1)', 's:\n  a int')
   t({__type: 't', v1: 1, v2: 2}, 't(1 2)', 't a b:\n  v1 a\n  v2 b')
 
-  // enum
+  // adt
+  t({__type: 'a'}, 'a', 'e|\n  a\n  b')
+  t({__type: 'just', value: 1}, 'just(1)', 'maybe a|\n  just:\n    value a\n  none')
 
   // control flow
-  // pattern match for enum
+  // pattern match for adt
   // effect
 
   // embedded function
