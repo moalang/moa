@@ -7,6 +7,7 @@ function dump(o) { console.dir(o, {depth: null}) }
 function eq(a, b) { return a === b || str(a) === str(b) }
 function str(o) { return JSON.stringify(o) }
 function err(msg, o) { puts(o); return new Error(msg) }
+function newType(__type, keys, vals) { return keys.reduce((acc,k,i) => (acc[k]=vals[i], acc), {__type}) }
 function test(expect, actual, o) {
   if (eq(expect, actual)) {
     write('.')
@@ -90,11 +91,9 @@ function parse(tokens) {
       } else {
         throw err('unsupported yet operator', {next})
       }
-    } else if (next.id || next.sym === ')' || next.sym === ']') {
-      pos-- // back track
-      return lhs
     } else {
-      throw err('Unknown operator', {next})
+      pos--
+      return lhs
     }
   }
   function until(f, g) {
@@ -174,8 +173,15 @@ function evaluate(nodes) {
     if (node.body) { return run(node.body, env) }
     if (node.id) { return run(env.get(node.id), env) }
     if (node.call) {
-      const func = env.get(node.call)
-      return run(func.body, env.new(func.args, node.args.map(arg => run(arg, env))))
+      const def = env.get(node.call)
+      const argv = node.args.map(arg => run(arg, env))
+      if (def.body) {
+        return run(def.body, env.new(def.args, argv))
+      } else if (def.struct) {
+        return {value: newType(def.name, def.struct, argv.map(a => a.value))}
+      } else {
+        throw err('Unknown apply', def)
+      }
     }
     if (node.op2) {
       const l = run(node.lhs, env).value
@@ -278,8 +284,12 @@ function testEvaluate() {
   t(1, 'f', 'f=1')
   t(2, 'f(1)', 'f a = a + 1')
   t(3, 'f(1) + g(1)', 'f a = a', 'g a = a + f(a)')
+  t(3, 'add(1 2)', 'add a b = a + b')
 
   // struct
+  t({__type: 's', a: 1}, 's(1)', 's:\n  a int')
+  t({__type: 't', v1: 1, v2: 2}, 't(1 2)', 't a b:\n  v1 a\n  v2 b')
+
   // enum
 
   // control flow
@@ -287,8 +297,8 @@ function testEvaluate() {
   // effect
 
   // embedded function
-  // embedded string
-  // embedded number
+  // string method
+  // number method
 }
 
 // main
