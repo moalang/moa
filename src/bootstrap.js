@@ -34,7 +34,8 @@ function tokenize(src) {
       line,
       index: s.index,
     }
-    if (token[0].match(/^[a-zA-Z_]/)) { o.id = o.token }
+    if (token === 'true' || token === 'false') { o.value = token === 'true' }
+    else if (token[0].match(/^[a-zA-Z_]/)) { o.id = o.token }
     else if (token[0].match(/^[0-9.]+$/)) { o.value = parseInt(o.token) }
     else if (token[0].match(/^["'`]/)) { o.value = o.token.slice(1, -1) }
     else if (token[0].match(/^[=:|()\[\]]$/)) { o.sym = o.token }
@@ -178,21 +179,30 @@ function evaluate(nodes) {
     }
   }
   function run(node, env) {
-    if (node.value) { return node }
+    if ('value' in node) { return node }
     if (node.list) { node.value = node.list.map(x => run(x, env).value); return node }
     if (node.body) { return run(node.body, env) }
     if (node.id) { return run(env.get(node.id), env) }
     if (node.call) {
-      const def = env.get(node.call)
-      const argv = node.args.map(arg => run(arg, env))
-      if (def.body) {
-        return run(def.body, env.new(def.args, argv))
-      } else if (def.struct) {
-        return {value: newType(def.name, def.struct, argv.map(a => a.value))}
-      } else if (def.adt) {
-        return {value: newType(def.name, def.adt, argv.map(a => a.value))}
+      if (node.call === 'if') {
+        for (let i=0; i<node.args.length-1; i+=2) {
+          if (run(node.args[i], env).value) {
+            return run(node.args[i+1], env)
+          }
+        }
+        return run(node.args[node.args.length - 1], env)
       } else {
-        throw err('Unknown apply', def)
+        const def = env.get(node.call)
+        const argv = node.args.map(arg => run(arg, env))
+        if (def.body) {
+          return run(def.body, env.new(def.args, argv))
+        } else if (def.struct) {
+          return {value: newType(def.name, def.struct, argv.map(a => a.value))}
+        } else if (def.adt) {
+          return {value: newType(def.name, def.adt, argv.map(a => a.value))}
+        } else {
+          throw err('Unknown apply', def)
+        }
       }
     }
     if (node.op2) {
@@ -282,6 +292,8 @@ function testEvaluate() {
     const src = defs.join('\n')
     test(expect, run(src).value, src)
   }
+  t(2, 'if(false not_found 2)')
+  return
 
   // basic value
   t(1, '1')
@@ -307,6 +319,9 @@ function testEvaluate() {
   t({__type: 'none'}, 'none', 'maybe a|\n  just:\n    value a\n  none')
 
   // control flow
+  t(1, 'if(true 1 not_found)')
+  t(2, 'if(false not_found 2)')
+
   // pattern match for adt
   // effect
 
