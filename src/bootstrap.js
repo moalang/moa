@@ -299,12 +299,12 @@ function testEvaluate() {
   t(3, 'add(1 2)', 'add a b = a + b')
 
   // struct
-  t({__type: 's', a: 1}, 's(1)', 's:\n  a int')
-  t({__type: 't', v1: 1, v2: 2}, 't(1 2)', 't a b:\n  v1 a\n  v2 b')
+  t({__type: 'wrap', value: 1}, 'wrap(1)', 'wrap:\n  value int')
+  t({__type: 'vector2', x: 1, y: 2}, 'vector2(1 2)', 'vector2 a:\n  x a\n  y a')
 
   // adt
-  t({__type: 'a'}, 'a', 'e|\n  a\n  b')
   t({__type: 'just', value: 1}, 'just(1)', 'maybe a|\n  just:\n    value a\n  none')
+  t({__type: 'none'}, 'none', 'maybe a|\n  just:\n    value a\n  none')
 
   // control flow
   // pattern match for adt
