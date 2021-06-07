@@ -72,7 +72,7 @@ true       # bool
 
 Container
 ```
-[1 2 3]       # list
+[1 2 3]       # array
 {1 2 3}       # set
 {one:1 two:2} # dict
 ```
@@ -82,6 +82,11 @@ Anonymouse Function
 a => a
 a => b => a + b
 ```
+
+Condition
+1 -> exp
+tag -> exp
+tag(capture) -> capture
 
 Types
 ```
@@ -216,7 +221,23 @@ indent: br "  "
 ## 4. Buildin
 
 ### Reserved
-- any bool true false int float byte bytes string list dict option some none error var
+-- empty
+-- bool
+-- true
+-- false
+-- int
+-- float
+-- byte
+-- binary
+-- string
+-- function
+-- array
+-- dict
+-- option
+-- some
+-- none
+-- error
+-- mutable
 
 ### Core data types
 bool|
@@ -226,16 +247,10 @@ int:
   float :: float
 float:
   int :: int
-byte:
-  int :: int
-bytes:
-  list(byte)
 string:
   int   :: option(int)
   float :: option(float)
-tuple a+:
-  ...
-list a:
+array a:
   size   :: int
   map b  :: (a b) [b]
   keep   :: (a bool) [a]
@@ -250,6 +265,18 @@ option a|
   then b :: (a b) option(b)
   catch  :: option(a) option(a)
   alt    :: a a
+
+### Standard data types
+byte:
+  int :: int
+bytes:
+  array(byte)
+time:
+  year, month, day, hour, minute, second, yday, mday, wday :: int
+  locale
+date:
+  year, month, day, yday, mday, wday :: int
+
 # ideas
 Monad
 Eq
@@ -257,16 +284,6 @@ Default
 Hash
 Ord
 Index
-
-### Binary operators order
-```
-* // / %         # number (high)
-+ -              # number (low)
-> >= < <=  == != # comparision (high)
-|| && | &        # comparision (low)
-:= :             # define
-+= -= *= /= %= = # effect
-```
 
 ### IO
 
@@ -296,8 +313,7 @@ Accepted ideas
 - Generics
 - Functional programming
 - ADT
-- Exception
-- Macro for only special form
+- Monadic error handling
 
 Pending ideas
 - Global variables
@@ -326,22 +342,22 @@ Rejected ideas
 
 Symbols
 - used
-  #                -- comment
-  ( )              -- function call or grouping
-  [ ]              -- list
-  * + - / % ^ ++   -- arithmetic operators
-  < > <= >= == !=  -- compare operators
-  && ||            -- boolean operators
-  &&& |||          -- bit operators
-  .                -- property reference
-  :                -- define function
-  ::               -- define struct, interface and function prototype
-  :|               -- define ADT
-  =                -- set evaluated constant
-  :=               -- set evaluated variable
-  <-               -- override variable >
-  _                -- part of id
-  " \ ` $          -- string `
+> #                 -- comment
+> ( )               -- function call or grouping
+> [ ]               -- array
+> ->                -- condition
+> * + - / % ^ **    -- arithmetic operators
+> < > <= >= == !=   -- compare operators
+> && ||             -- boolean operators
+> .                 -- property access
+> :                 -- define function
+> ::                -- define struct
+> :|                -- define abstract data type
+> =                 -- assign variable
+> := += -= *= /= %= -- change variable
+> " ' ` $           -- make string
+> ;                 -- separator 1
+> ,                 -- separator 2
 
 - option
   { }              -- map or statement?
@@ -349,8 +365,5 @@ Symbols
 
 - unused
   !
-  '
-  ,
-  ;
   @
   ~
