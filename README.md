@@ -38,7 +38,7 @@ Run
 
 
 # main.moa
-add a b = a + b
+add a b: a + b
 ```
 
 Test
@@ -50,7 +50,7 @@ expect: 2
   fact: 4
 
 # test.moa
-test t =
+test t:
   t.eq(2 add(1 1))
   t.eq(2 add(2 2))
 ```
@@ -90,24 +90,24 @@ tag(capture) -> capture
 
 Types
 ```
-person:
+person::
   name string
   age int
 
-dict k v:
+dict k v::
   values [k v]
 
-bool|
+bool:|
   true
   false
 
-option a|
+option a:|
   none
   some a
 
-ast|
+ast:|
   aint int
-  aop2:
+  aop2::
     op string
     lhs ast
     rhs ast
@@ -115,9 +115,9 @@ ast|
 
 Function
 ```
-pi = 3
-inc x = x + 1
-add x y = x + y
+pi: 3
+inc x: x + 1
+add x y: x + y
 ```
 
 Exp
@@ -128,13 +128,13 @@ Exp
 
 Control Flow
 ```
-max a b = if(a > b a b)
+max a b: if(a > b a b)
 
-show m = match(m
+show m: match(m
   none "none"
   just v => ++("just " v))
 
-gcd a b = if(
+gcd a b: if(
   a < b gcd(b a)
   b ==  0 a
   gcd(b a/b))
@@ -142,41 +142,42 @@ gcd a b = if(
 
 Error Handling
 ```
-f = error("something failed")
-main =
-  r = f
+f: error("something failed")
+main:
+  r: f
   print(r)                       # print: error(something failed\n  f:1)
   print(r.alt(1))                # print: 1
   print(r.catch(e => e.message)) # print: something failed
-  e <- f                         # print: error, and exit(-1)
+  e = f                          # print: error, and exit(-1)
   print(e)                       # never reached
 ```
 
 Effect
 ```
-token:
+token::
   tag string
   code string
   pos int
-tokenize :: string option([token])
-tokenize src =
-  pos <- var(int)
-  satisfy f =
-    p <- pos
-    c <- src.at(p)
+tokenize::
+  string option([token])
+tokenize src:
+  pos = mutable(int)
+  satisfy f:
+    p = pos
+    c = src.at(p)
     guard(f(c))
     c
-  many f = (g acc = g.then(x => g(acc.push(x))).alt(acc))([])
-  many1 f =
-    x <- f
-    xs <- many(f)
-    [x] ++ xs
-  read_tag t f =
-    chars <- many1(satisfy(f))
-    p <- pos
+  many f: (g acc: g.then(x => g(acc.push(x))).alt(acc))([])
+  many1 f:
+    x = f
+    xs = many(f)
+    [x].concat(xs)
+  read_tag t f:
+    chars = many1(satisfy(f))
+    p = pos
     token(t chars.join("") p)
-  read_id = read_tag("id" c => "a" <= c <= "z")
-  read_num = read_tag("num" c => "0" <= c <= "9")
+  read_id: read_tag("id" c => "a" <= c <= "z")
+  read_num: read_tag("num" c => "0" <= c <= "9")
   many1(raed_id.alt(read_num))
 ```
 
@@ -184,14 +185,14 @@ tokenize src =
 
 ## 3. Syntax
 ```
-top: define | export | import
+top: define | import | export
 define: func | sign | data | adt
 func: id arg* "=" (line+ exp)
 sign: id+ "::" type+
 data: id+ ":" (br attr)+
 adt: id+ "|" (br id attr*)+
-export: "- " id ":" (indent define)+
-import: "- " id+
+import: "import " id+
+export: "export " id+
 
 arg:
 | id [*+?]?
@@ -289,16 +290,18 @@ Index
 
 Random
 ```
-- io
-main =
+import io
+
+main:
   n <- io.random(1 3)
   io.exit(n)
 ```
 
 Time
 ```
-- io
-main =
+import io
+
+main:
   now <- io.now
   io.print(now)
 ```

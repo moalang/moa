@@ -25,6 +25,9 @@ function isPrimitive(o) {
 function typeName(o) {
   return o.__type || typeof o
 }
+const global = {
+
+}
 const methods = {
   object: { // array
     size: a => a.length,
@@ -182,7 +185,7 @@ function evaluate(nodes) {
     }
     this.dump = () => Object.keys(d).concat(parent.dump())
   }
-  const root = new environment({get:()=>null, dump: () => []})
+  const root = new environment({get: key => global[key], dump: () => []})
   for (const node of nodes) {
     if (node.adt) {
       for (const [name,...adt] of node.adt) {
@@ -210,7 +213,7 @@ function evaluate(nodes) {
           }
         }
         return run(node.args[node.args.length - 1], env)
-      } else if (node.call === 'switch') {
+      } else if (node.call === 'match') {
         const target = run(node.args[0], env)
         for (const arg of node.args.slice(1)) {
           if (arg.lhs.id) {
@@ -374,16 +377,18 @@ function testEvaluate() {
   t(4, 'if(false not_found false not_found 4)')
 
   // pattern match
-  t(10, 'switch(1 1->10 2->20)')
-  t(20, 'switch(2 1->10 2->20)')
-  t(2, 'switch(none just(a)->a none->2)', 'may a:|\n  just::\n    value a\n  none')
-  t(1, 'switch(just(1) just(a)->a none->2)', 'may a:|\n  just::\n    value a\n  none')
+  t(10, 'match(1 1->10 2->20)')
+  t(20, 'match(2 1->10 2->20)')
+  t(2, 'match(none just(a)->a none->2)', 'may a:|\n  just::\n    value a\n  none')
+  t(1, 'match(just(1) just(a)->a none->2)', 'may a:|\n  just::\n    value a\n  none')
 
   // flow
 
   // embedded function
+
   // string methods
   t(5, '"hello".length')
+
   // array methods
   t(0, '[].size')
   t([1, 4], '[0 1+2].map(v => v + 1)')
