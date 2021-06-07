@@ -18,16 +18,20 @@ function test(expect, actual, o) {
     dump(o)
   }
 }
+function isPrimitive(o) {
+  const t = typeof o
+  return t === 'number' || t === 'string' || (t === 'object' && o.constructor === Array)
+}
 function typeName(o) {
   return o.__type || typeof o
 }
 const methods = {
   object: { // array
-    size: a => ({value: a.length}),
-    map: (a,f) => ({value: a.map(v => ({value: f(v)}))}),
+    size: a => a.length,
+    map: (a,f) => a.map(f),
   },
   string: {
-    length: s => ({value: s.length}),
+    length: s => s.length,
   },
 }
 
@@ -169,15 +173,16 @@ function parse(tokens) {
 function evaluate(nodes) {
   const environment = function(parent) {
     const d = {}
-    this.get = key => d[key] || parent.get(key) || (() => { throw err('not found', {key,d,parent}) })()
+    this.get = key => (key in d ? d[key] : parent.get(key) || (() => { throw err('not found', {key,d,names:this.dump()}) })())
     this.put = (key,value) => d[key] = value
     this.new = (keys,values) => {
       const env = new environment(this)
-      keys.map((kv, i) => env.put(kv, values[i]))
+      keys.map((key, i) => env.put(key, values[i]))
       return env
     }
+    this.dump = () => Object.keys(d).concat(parent.dump())
   }
-  const root = new environment({get:()=>null})
+  const root = new environment({get:()=>null, dump: () => []})
   for (const node of nodes) {
     if (node.adt) {
       for (const [name,...adt] of node.adt) {
@@ -192,20 +197,21 @@ function evaluate(nodes) {
     }
   }
   function run(node, env) {
-    if ('value' in node) { return node }
-    if (node.array) { node.value = node.array.map(x => run(x, env).value); return node }
+    if (isPrimitive(node)) { return node }
+    if ('value' in node) { return node.value }
+    if (node.array) { return node.array.map(x => run(x, env)) }
     if (node.body) { return run(node.body, env) }
     if (node.id) { return run(env.get(node.id), env) }
     if (node.call) {
       if (node.call === 'if') {
         for (let i=0; i<node.args.length-1; i+=2) {
-          if (run(node.args[i], env).value) {
+          if (run(node.args[i], env)) {
             return run(node.args[i+1], env)
           }
         }
         return run(node.args[node.args.length - 1], env)
       } else if (node.call === 'switch') {
-        const target = run(node.args[0], env).value
+        const target = run(node.args[0], env)
         for (const arg of node.args.slice(1)) {
           if (arg.lhs.id) {
             if (target.__type === arg.lhs.id) {
@@ -214,11 +220,11 @@ function evaluate(nodes) {
           } else if (arg.lhs.call) {
             if (target.__type === arg.lhs.call) {
               const keys = arg.lhs.args.map(a => a.id)
-              const values = Object.values(target).slice(1).map(value => ({value}))
+              const values = Object.values(target).slice(1)
               return run(arg.rhs, env.new(keys, values))
             }
           } else {
-            if (run(arg.lhs, env).value === target) {
+            if (run(arg.lhs, env) === target) {
               return run(arg.rhs, env)
             }
           }
@@ -230,9 +236,9 @@ function evaluate(nodes) {
         if (def.body) {
           return run(def.body, env.new(def.args, argv))
         } else if (def.struct) {
-          return {value: newType(def.name, def.struct, argv.map(a => a.value))}
+          return newType(def.name, def.struct, argv)
         } else if (def.adt) {
-          return {value: newType(def.name, def.adt, argv.map(a => a.value))}
+          return newType(def.name, def.adt, argv)
         } else {
           throw err('Unknown apply', def)
         }
@@ -240,30 +246,30 @@ function evaluate(nodes) {
     }
     if (node.op2) {
       if (node.op2 === '.') {
-        const obj = run(node.lhs, env).value
+        const obj = run(node.lhs, env)
         const name = node.rhs.id || node.rhs.call
-        const args = node.rhs.call ? node.rhs.args.map(a => run(a, env).value) : []
+        const args = node.rhs.call ? node.rhs.args.map(a => run(a, env)) : []
         const type = typeName(obj)
         if (!(type in methods)) { throw err('type is not found', {obj,type,name}) }
         if (!(name in methods[type])) { throw err('method is not found', {obj,type,name}) }
         return methods[type][name](obj, ...args)
       } else if (node.op2 === '=>') {
-        return {value: arg => run(node.rhs, env.new([node.lhs.id], [arg]))}
+        return arg => run(node.rhs, env.new([node.lhs.id], [arg]))
       } else {
-        const l = run(node.lhs, env).value
-        const r = run(node.rhs, env).value
+        const l = run(node.lhs, env)
+        const r = run(node.rhs, env)
         switch (node.op2) {
-          case '+': node.value = l + r; return node
-          case '-': node.value = l - r; return node
-          case '*': node.value = l * r; return node
-          case '/': node.value = l / r; return node
+          case '+': return l + r
+          case '-': return l - r
+          case '*': return l * r
+          case '/': return l / r
           default: throw err('Unknown operator', node)
         }
       }
     }
     throw err('Unknown node', {node, nodes})
   }
-  return run(root.get('main').body, root).value
+  return run(root.get('main').body, root)
 }
 function run(src) {
   const tokens = tokenize(src)
@@ -380,7 +386,7 @@ function testEvaluate() {
   t(5, '"hello".length')
   // array methods
   t(0, '[].size')
-  //t([1], '[0].map(v => v + 1)')
+  t([1, 4], '[0 1+2].map(v => v + 1)')
 }
 
 // main
