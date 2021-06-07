@@ -18,6 +18,18 @@ function test(expect, actual, o) {
     dump(o)
   }
 }
+function typeName(o) {
+  return o.__type || typeof o
+}
+const methods = {
+  object: { // array
+    size: a => ({value: a.length}),
+    map: (a,f) => ({value: a.map(v => ({value: f(v)}))}),
+  },
+  string: {
+    length: s => ({value: s.length}),
+  },
+}
 
 // main process
 function tokenize(src) {
@@ -36,8 +48,9 @@ function tokenize(src) {
     }
     if (token === 'true' || token === 'false') { o.value = token === 'true' }
     else if (token[0].match(/^[a-zA-Z_]/)) { o.id = o.token }
-    else if (token[0].match(/^[0-9.]+$/)) { o.value = parseInt(o.token) }
+    else if (token[0].match(/^[0-9]+$/)) { o.value = parseInt(o.token) }
     else if (token[0].match(/^["'`]/)) { o.value = o.token.slice(1, -1) }
+    else if (token === '=>') { o.op2 = o.token }
     else if (token[0].match(/^[=:|()\[\]]$/)) { o.sym = o.token }
     else { o.op2 = o.token }
     return o
@@ -62,7 +75,7 @@ function parse(tokens) {
   }
   function operator(lhs) {
     if (lhs.sym === '[') {
-      return operator({ list: drop(']', until(t => t.sym !== ']', unit)) })
+      return operator({ array: drop(']', until(t => t.sym !== ']', unit)) })
     }
     if (lhs.sym === '(') {
       return drop(')', unit())
@@ -180,7 +193,7 @@ function evaluate(nodes) {
   }
   function run(node, env) {
     if ('value' in node) { return node }
-    if (node.list) { node.value = node.list.map(x => run(x, env).value); return node }
+    if (node.array) { node.value = node.array.map(x => run(x, env).value); return node }
     if (node.body) { return run(node.body, env) }
     if (node.id) { return run(env.get(node.id), env) }
     if (node.call) {
@@ -226,14 +239,26 @@ function evaluate(nodes) {
       }
     }
     if (node.op2) {
-      const l = run(node.lhs, env).value
-      const r = run(node.rhs, env).value
-      switch (node.op2) {
-        case '+': node.value = l + r; return node
-        case '-': node.value = l - r; return node
-        case '*': node.value = l * r; return node
-        case '/': node.value = l / r; return node
-        default: throw err('Unknown operator', node)
+      if (node.op2 === '.') {
+        const obj = run(node.lhs, env).value
+        const name = node.rhs.id || node.rhs.call
+        const args = node.rhs.call ? node.rhs.args.map(a => run(a, env).value) : []
+        const type = typeName(obj)
+        if (!(type in methods)) { throw err('type is not found', {obj,type,name}) }
+        if (!(name in methods[type])) { throw err('method is not found', {obj,type,name}) }
+        return methods[type][name](obj, ...args)
+      } else if (node.op2 === '=>') {
+        return {value: arg => run(node.rhs, env.new([node.lhs.id], [arg]))}
+      } else {
+        const l = run(node.lhs, env).value
+        const r = run(node.rhs, env).value
+        switch (node.op2) {
+          case '+': node.value = l + r; return node
+          case '-': node.value = l - r; return node
+          case '*': node.value = l * r; return node
+          case '/': node.value = l / r; return node
+          default: throw err('Unknown operator', node)
+        }
       }
     }
     throw err('Unknown node', {node, nodes})
@@ -351,8 +376,11 @@ function testEvaluate() {
   // flow
 
   // embedded function
-  // string method
-  // number method
+  // string methods
+  t(5, '"hello".length')
+  // array methods
+  t(0, '[].size')
+  //t([1], '[0].map(v => v + 1)')
 }
 
 // main
