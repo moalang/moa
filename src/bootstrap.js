@@ -321,8 +321,10 @@ function testEvaluate() {
   // control flow
   t(1, 'if(true 1 not_found)')
   t(2, 'if(false not_found 2)')
+  t(3, 'if(false not_found true 3 not_found)')
+  t(4, 'if(false not_found false not_found 4)')
 
-  // pattern match for adt
+  // pattern match
   // effect
 
   // embedded function
