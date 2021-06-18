@@ -38,7 +38,7 @@ Run
 
 
 # main.moa
-add a b: a + b
+add a b = a + b
 ```
 
 Test
@@ -50,7 +50,7 @@ expect: 2
   fact: 4
 
 # test.moa
-test t:
+test t =
   t.eq(2 add(1 1))
   t.eq(2 add(2 2))
 ```
@@ -73,8 +73,7 @@ true       # bool
 Container
 ```
 [1 2 3]       # array
-{1 2 3}       # set
-{one:1 two:2} # dict
+{one 1 two 2} # dict
 ```
 
 Anonymouse Function
@@ -83,116 +82,97 @@ a => a
 a => b => a + b
 ```
 
-Condition
-1 -> exp
-tag -> exp
-tag(capture) -> capture
-
-Types
+Function
 ```
-person::
+pi = 3
+inc x = x + 1
+add a.num :: a a a
+add x y = x + y
+```
+
+Struct
+```
+person data:
   name string
   age int
 
-dict k v::
+dict k v data:
   values [k v]
+```
 
-bool:|
+ADT
+```
+bool adt|
   true
   false
 
-option a:|
+option a adt|
   none
   some a
 
-ast:|
+ast adt|
   aint int
-  aop2::
+  aop2 data:
     op string
     lhs ast
     rhs ast
 ```
 
-Function
+Condition?
 ```
-pi: 3
-inc x: x + 1
-add x y: x + y
+1 -> exp
+tag -> exp
+tag(capture) -> capture
 ```
 
 Exp
 ```
-1 + 2 + 3        == (+ 1 2 3)
-"a" ++ "b ++ "c" == (++ "a" "b" "c")
+1 + 2 * 3 == 7
 ```
 
 Control Flow
 ```
-max a b: if(a > b a b)
+max a b = if(a > b a b)
 
-show m: match(m
-  none "none"
-  just v => ++("just " v))
-
-gcd a b: if(
-  a < b gcd(b a)
-  b ==  0 a
+gcd a b = if(
+  a < b  gcd(b a)
+  b == 0 a
   gcd(b a/b))
+
+show m = match(m
+  none "none"
+  just ++("just " m))
 ```
 
 Error Handling
 ```
-f: error("something failed")
-main:
-  r: f
-  print(r)                       # print: error(something failed\n  f:1)
-  print(r.alt(1))                # print: 1
-  print(r.catch(e => e.message)) # print: something failed
-  e = f                          # print: error, and exit(-1)
+f = error("something failed")
+main =
+  print(f)                       # print: error(something failed\n  f:1)
+  print(f.alt(1))                # print: 1
+  print(f.catch(e => e.message)) # print: something failed
+  e <- f                         # print: error, and exit(-1)
   print(e)                       # never reached
 ```
 
 Effect
 ```
-token::
-  tag string
-  code string
-  pos int
-tokenize::
-  string option([token])
-tokenize src:
-  pos = mutable(int)
-  satisfy f:
-    p = pos
-    c = src.at(p)
-    guard(f(c))
-    c
-  many f: (g acc: g.then(x => g(acc.push(x))).alt(acc))([])
-  many1 f:
-    x = f
-    xs = many(f)
-    [x].concat(xs)
-  read_tag t f:
-    chars = many1(satisfy(f))
-    p = pos
-    token(t chars.join("") p)
-  read_id: read_tag("id" c => "a" <= c <= "z")
-  read_num: read_tag("num" c => "0" <= c <= "9")
-  many1(raed_id.alt(read_num))
+calc n =
+  sum <- 0
+  n.times(n => sum += n)
+  when(sum > 100 sum := 100)
+  sum
 ```
 
 
 
 ## 3. Syntax
 ```
-top: define | import | export
-define: func | sign | data | adt
+top: func | sign | data | adt
 func: id arg* "=" (line+ exp)
 sign: id+ "::" type+
-data: id+ ":" (br attr)+
-adt: id+ "|" (br id attr*)+
-import: "import " id+
-export: "export " id+
+data: id+ ":" (indent attr)+
+adt: id+ "|" (indent id (":" (indent2 attr)+)?)+
 
 arg:
 | id [*+?]?
@@ -217,28 +197,29 @@ br: "\n"
 attr: id type
 type: id | "[" type (":" type)? "]" | "(" type type+ ")"
 indent: br "  "
+indent2: br "    "
 ```
 
 ## 4. Buildin
 
 ### Reserved
--- empty
--- bool
--- true
--- false
--- int
--- float
--- byte
--- binary
--- string
--- function
--- array
--- dict
--- option
--- some
--- none
--- error
--- mutable
+- empty
+- bool
+- true
+- false
+- int
+- float
+- byte
+- bytes
+- string
+- function
+- array
+- dict
+- opt
+- some
+- none
+- error
+- mutable
 
 ### Core data types
 bool|
@@ -249,8 +230,8 @@ int:
 float:
   int :: int
 string:
-  int   :: option(int)
-  float :: option(float)
+  int   :: opt(int)
+  float :: opt(float)
 array a:
   size   :: int
   map b  :: (a b) [b]
@@ -258,14 +239,15 @@ array a:
   dict b :: [b] dict(a b)
 dict k v:
   size :: int
-  get  :: option(v)
+  get  :: opt(v)
   set  :: k v bool
-option a|
+opt a|
   some a
+  none
   error string
-  then b :: (a b) option(b)
-  catch  :: option(a) option(a)
-  alt    :: a a
+  then  :: b (a b) opt(b)
+  catch :: opt(a) opt(a)
+  alt   :: a a
 
 ### Standard data types
 byte:
@@ -290,18 +272,14 @@ Index
 
 Random
 ```
-import io
-
-main:
-  n <- io.random(1 3)
+main =
+  n <- io.random.int(1 3)
   io.exit(n)
 ```
 
 Time
 ```
-import io
-
-main:
+main =
   now <- io.now
   io.print(now)
 ```
@@ -345,26 +323,27 @@ Rejected ideas
 
 Symbols
 - used
-> #                 -- comment
-> ( )               -- function call or grouping
-> [ ]               -- array
-> ->                -- condition
-> * + - / % ^ **    -- arithmetic operators
-> < > <= >= == !=   -- compare operators
-> && ||             -- boolean operators
-> .                 -- property access
-> :                 -- define function
-> ::                -- define struct
-> :|                -- define abstract data type
-> =                 -- assign variable
-> := += -= *= /= %= -- change variable
-> " ' ` $           -- make string
-> ;                 -- separator 1
-> ,                 -- separator 2
+> #                          -- comment
+> ( )                        -- function call or grouping
+> [ ]                        -- array
+> { }                        -- map
+> ->                         -- condition
+> * + - / // % ^ **          -- arithmetic operators
+> < > <= >= == !=            -- compare operators
+> && ||                      -- boolean operators
+> .                          -- property access
+> :                          -- define function
+> ::                         -- define prototype for function
+> :::                        -- define struct?
+> |                          -- define abstract data type
+> =                          -- bind for monadic functions
+> := += -= *= /= %= ||= &&=  -- change variable
+> " ' ` $                    -- make string
+> ;                          -- separator 1
+> ,                          -- separator 2
 
 - option
-  { }              -- map or statement?
-  ?                -- variable arguments e.g. add x y z?0 = x+y+z
+  ?                  -- variable arguments e.g. add x y z?0 = x+y+z
 
 - unused
   !

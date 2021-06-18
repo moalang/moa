@@ -26,7 +26,9 @@ function typeName(o) {
   return o.__type || typeof o
 }
 const global = {
-
+  some: value => ({value, __type: 'some'}),
+  none: {__type: 'none'},
+  error: message => ({message, __type: 'error'}),
 }
 const methods = {
   object: { // array
@@ -42,7 +44,7 @@ const methods = {
 function tokenize(src) {
   let indent = 0
   let line = 1
-  return [...src.matchAll(/\s+|[a-zA-Z0-9_]+|->|::|:\||:|[+\-*\/=><]+|".+?"|[\[\]()]|./g)].map(s => {
+  return [...src.matchAll(/\s+|[a-zA-Z0-9_]+|->|<-|[|:]|[+\-*\/=><]+|".+?"|[\[\]()]|./g)].map(s => {
     const token = s[0]
     const br = (token.match(/\n/g) || []).length
     line += br
@@ -128,9 +130,9 @@ function parse(tokens) {
     const [name, ...args] = until(t => t.id, consume).map(t => t.token)
     const sym = consume()
     switch (sym.token) {
-      case ':': return {name, args, body: parse_body()}
-      case '::': return {name, args, struct: parse_struct(2)}
-      case ':|': return {name, args, adt: parse_adt()}
+      case '=': return {name, args, body: parse_body()}
+      case ':': return {name, args, struct: parse_struct(2)}
+      case '|': return {name, args, adt: parse_adt()}
       default: throw err('Unknown token', {sym,pos,tokens})
     }
   }
@@ -155,8 +157,8 @@ function parse(tokens) {
     until(t => t.indent === 2, () => {
       const t = consume()
       if (line !== t.line) {
-        if (expect('::')) {
-          drop('::')
+        if (expect(':')) {
+          drop(':')
           fields.push([t.id, ...parse_struct(4)])
         } else {
           fields.push([t.id])
@@ -288,37 +290,37 @@ function testTokenize() {
   }
   t([
     { token: 'a', indent: 0, line: 1, index: 0, id: 'a' },
-    { token: ':', indent: 0, line: 1, index: 1, sym: ':' },
-    { token: '1', indent: 0, line: 1, index: 3, value: 1 }
-  ], 'a: 1')
+    { token: '=', indent: 0, line: 1, index: 2, sym: '=' },
+    { token: '1', indent: 0, line: 1, index: 4, value: 1 }
+  ], 'a = 1')
   t([
     { token: 'a', indent: 0, line: 1, index: 0, id: 'a' },
-    { token: ':', indent: 0, line: 1, index: 1, sym: ':' },
-    { token: '"a"', indent: 0, line: 1, index: 3, value: 'a' }
-  ], 'a: "a"')
+    { token: '=', indent: 0, line: 1, index: 2, sym: '=' },
+    { token: '"a"', indent: 0, line: 1, index: 4, value: 'a' }
+  ], 'a = "a"')
   t([
     { token: 'struct', indent: 0, line: 1, index: 0, id: 'struct' },
     { token: 'a', indent: 0, line: 1, index: 7, id: 'a' },
-    { token: '::', indent: 0, line: 1, index: 8, sym: '::' },
-    { token: 'value', indent: 2, line: 2, index: 13, id: 'value' },
-    { token: 'a', indent: 2, line: 2, index: 19, id: 'a' },
-    { token: 'method', indent: 2, line: 3, index: 23, id: 'method' },
-    { token: 'offset', indent: 2, line: 3, index: 30, id: 'offset' },
-    { token: ':', indent: 2, line: 3, index: 36, sym: ':' },
-    { token: 'value', indent: 2, line: 3, index: 38, id: 'value' },
-    { token: '+', indent: 2, line: 3, index: 44, op2: '+' },
-    { token: 'offset', indent: 2, line: 3, index: 46, id: 'offset' }
-  ], 'struct a::\n  value a\n  method offset: value + offset')
+    { token: ':', indent: 0, line: 1, index: 8, sym: ':' },
+    { token: 'value', indent: 2, line: 2, index: 12, id: 'value' },
+    { token: 'a', indent: 2, line: 2, index: 18, id: 'a' },
+    { token: 'method', indent: 2, line: 3, index: 22, id: 'method' },
+    { token: 'offset', indent: 2, line: 3, index: 29, id: 'offset' },
+    { token: ':', indent: 2, line: 3, index: 35, sym: ':' },
+    { token: 'value', indent: 2, line: 3, index: 37, id: 'value' },
+    { token: '+', indent: 2, line: 3, index: 43, op2: '+' },
+    { token: 'offset', indent: 2, line: 3, index: 45, id: 'offset' }
+  ], 'struct a:\n  value a\n  method offset: value + offset')
 }
 function testParse() {
   function show(node) {
     return node.value ? node.value.toString() :
       node.id ? node.id :
-      node.body ? node.name + node.args.map(x => ' ' + x).join('') + ': ' + show(node.body) :
+      node.body ? node.name + node.args.map(x => ' ' + x).join('') + ' = ' + show(node.body) :
       node.call ? node.call + '(' + node.args.map(show).join(' ') + ')' :
       node.op2 ? '(' + show(node.lhs) + ' ' + node.op2 + ' ' + show(node.rhs) + ')' :
-      node.struct ? [node.name, ...node.args].join(' ') + ':: ' + node.struct.join(' ') :
-      node.adt ? [node.name, ...node.args].join(' ') + ':| ' + node.adt.map(e => e.join(' ')).join(', ') :
+      node.struct ? [node.name, ...node.args].join(' ') + ': ' + node.struct.join(' ') :
+      node.adt ? [node.name, ...node.args].join(' ') + '| ' + node.adt.map(e => e.join(' ')).join(', ') :
       (() => { throw err('Unknown', {node}) })()
   }
   function t(expect, src) {
@@ -326,23 +328,23 @@ function testParse() {
     const nodes = parse(tokens)
     test(expect, nodes.map(show).join('\n'), {src,nodes})
   }
-  t('f: 1', 'f: 1')
-  t('f: (1 + (2 + (3 * (4 * 5))))', 'f: 1 + 2 + 3 * 4 * 5')
-  t('f a: (a + 1)', 'f a: a + 1')
-  t('f a: (a + (1 * 2))', 'f a: a + 1 * 2')
-  t('f a: ((a * 1) + 2)', 'f a: a * 1 + 2')
-  t('f a: a\ng: f((1 + 2))\nh: g()', 'f a: a\ng: f(1 + 2)\nh: g()')
-  t('f: (g(1) + h(2))', 'f: g(1) + h(2)')
-  t('f: (1 * (2 + 3))', 'f: 1*(2+3)')
-  t('struct:: field1', 'struct::\n  field1 type1')
-  t('struct t1 t2:: field1 field2', 'struct t1 t2::\n  field1 t1\n  field2 t2')
-  t('adt:| tag', 'adt:|\n  tag')
-  t('adt a:| tag a', 'adt a:|\n  tag::\n    a int')
-  t('adt a b:| tag1, tag2 f1 f2', 'adt a b:|\n  tag1\n  tag2::\n    f1 a\n    f2 b')
+  t('f = 1', 'f = 1')
+  t('f = (1 + (2 + (3 * (4 * 5))))', 'f = 1 + 2 + 3 * 4 * 5')
+  t('f a = (a + 1)', 'f a = a + 1')
+  t('f a = (a + (1 * 2))', 'f a = a + 1 * 2')
+  t('f a = ((a * 1) + 2)', 'f a = a * 1 + 2')
+  t('f a = a\ng = f((1 + 2))\nh = g()', 'f a = a\ng = f(1 + 2)\nh = g()')
+  t('f = (g(1) + h(2))', 'f = g(1) + h(2)')
+  t('f = (1 * (2 + 3))', 'f = 1*(2+3)')
+  t('struct: field1', 'struct:\n  field1 type1')
+  t('struct t1 t2: field1 field2', 'struct t1 t2:\n  field1 t1\n  field2 t2')
+  t('adt| tag', 'adt|\n  tag')
+  t('adt a| tag a', 'adt a|\n  tag:\n    a int')
+  t('adt a b| tag1, tag2 f1 f2', 'adt a b|\n  tag1\n  tag2:\n    f1 a\n    f2 b')
 }
 function testEvaluate() {
   function t(expect, exp, ...defs) {
-    defs.push('main: ' + exp)
+    defs.push('main = ' + exp)
     const src = defs.join('\n')
     test(expect, run(src).value, src)
   }
@@ -350,6 +352,7 @@ function testEvaluate() {
   // basic value
   t(1, '1')
   t('hi', '"hi"')
+  t(true, 'true')
   t([], '[]')
 
   // expression
@@ -357,18 +360,18 @@ function testEvaluate() {
   t(5, '1*2+3')
 
   // function
-  t(1, 'f', 'f: 1')
-  t(2, 'f(1)', 'f a: a + 1')
-  t(3, 'f(1) + g(1)', 'f a: a', 'g a: a + f(a)')
-  t(3, 'add(1 2)', 'add a b: a + b')
+  t(1, 'f', 'f = 1')
+  t(2, 'f(1)', 'f a = a + 1')
+  t(3, 'f(1) + g(1)', 'f a = a', 'g a = a + f(a)')
+  t(3, 'add(1 2)', 'add a b = a + b')
 
   // struct
-  t({__type: 'wrap', value: 1}, 'wrap(1)', 'wrap::\n  value int')
-  t({__type: 'vector2', x: 1, y: 2}, 'vector2(1 2)', 'vector2 a::\n  x a\n  y a')
+  t({__type: 'wrap', value: 1}, 'wrap(1)', 'wrap:\n  value int')
+  t({__type: 'vector2', x: 1, y: 2}, 'vector2(1 2)', 'vector2 a:\n  x a\n  y a')
 
   // adt
-  t({__type: 'just', value: 1}, 'just(1)', 'may a:|\n  just::\n    value a\n  none')
-  t({__type: 'none'}, 'none', 'may a:|\n  just::\n    value a\n  none')
+  t({__type: 'just', value: 1}, 'just(1)', 'may a|\n  just:\n    value a\n  none')
+  t({__type: 'none'}, 'none', 'may a|\n  just:\n    value a\n  none')
 
   // control flow
   t(1, 'if(true 1 not_found)')
@@ -379,12 +382,14 @@ function testEvaluate() {
   // pattern match
   t(10, 'match(1 1->10 2->20)')
   t(20, 'match(2 1->10 2->20)')
-  t(2, 'match(none just(a)->a none->2)', 'may a:|\n  just::\n    value a\n  none')
-  t(1, 'match(just(1) just(a)->a none->2)', 'may a:|\n  just::\n    value a\n  none')
+  t(2, 'match(none just(a)->a none->2)', 'may a|\n  just:\n    value a\n  none')
+  t(1, 'match(just(1) just(a)->a none->2)', 'may a|\n  just:\n    value a\n  none')
+
+  // optinal
 
   // flow
 
-  // embedded function
+  // embedded ids
 
   // string methods
   t(5, '"hello".length')
