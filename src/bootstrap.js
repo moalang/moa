@@ -25,10 +25,9 @@ function isPrimitive(o) {
 function typeName(o) {
   return o.__type || typeof o
 }
-const global = {
-  some: value => ({value, __type: 'some'}),
-  none: {__type: 'none'},
-  error: message => ({message, __type: 'error'}),
+const functions = {
+  some: content => ({__type: 'some', content}),
+  error: message => ({__type: 'error', message}),
 }
 const methods = {
   object: { // array
@@ -37,6 +36,14 @@ const methods = {
   },
   string: {
     length: s => s.length,
+  },
+  some: {
+    map: (s,f) => (s.content = f(s.content), s),
+    alt: (s,_) => s
+  },
+  error: {
+    map: (e,_) => e,
+    alt: (_,a) => ({__type: 'some', content: a}),
   },
 }
 
@@ -178,16 +185,16 @@ function parse(tokens) {
 function evaluate(nodes) {
   const environment = function(parent) {
     const d = {}
-    this.get = key => (key in d ? d[key] : parent.get(key) || (() => { throw err('not found', {key,d,names:this.dump()}) })())
+    this.get = key => (key in d ? d[key] : parent ? parent.get(key) : (() => { throw err('not found', {key,d,names:this.dump()}) })())
     this.put = (key,value) => d[key] = value
     this.new = (keys,values) => {
       const env = new environment(this)
       keys.map((key, i) => env.put(key, values[i]))
       return env
     }
-    this.dump = () => Object.keys(d).concat(parent.dump())
+    this.dump = () => Object.keys(d).concat(parent ? parent.dump() : [])
   }
-  const root = new environment({get: key => global[key], dump: () => []})
+  const root = new environment()
   for (const node of nodes) {
     if (node.adt) {
       for (const [name,...adt] of node.adt) {
@@ -206,7 +213,7 @@ function evaluate(nodes) {
     if ('value' in node) { return node.value }
     if (node.array) { return node.array.map(x => run(x, env)) }
     if (node.body) { return run(node.body, env) }
-    if (node.id) { return run(env.get(node.id), env) }
+    if (node.id) { return node.id in functions ? functions[node.id] : run(env.get(node.id), env) }
     if (node.call) {
       if (node.call === 'if') {
         for (let i=0; i<node.args.length-1; i+=2) {
@@ -235,6 +242,9 @@ function evaluate(nodes) {
           }
         }
         throw err('Switch does not match', {target, node})
+      } else if (node.call in functions) {
+        const f = functions[node.call]
+        return f.apply(null, node.args.map(arg => run(arg, env)))
       } else {
         const def = env.get(node.call)
         const argv = node.args.map(arg => run(arg, env))
@@ -386,6 +396,12 @@ function testEvaluate() {
   t(1, 'match(just(1) just(a)->a none->2)', 'may a|\n  just:\n    value a\n  none')
 
   // optinal
+  t({__type: 'some', content: 1}, 'some(1)')
+  t({__type: 'error', message: 'hi'}, 'error("hi")')
+  t({__type: 'some', content: 3}, 'some(1).map(x => x + 2)')
+  t({__type: 'error', message: 'hi'}, 'error("hi").map(x => x + 2)')
+  t({__type: 'some', content: 1}, 'some(1).alt(2)')
+  t({__type: 'some', content: 2}, 'error("hi").alt(2)')
 
   // flow
 
