@@ -52,7 +52,7 @@ function tokenize(src) {
   const op2s = ':= += -= *= /= =>'.split(' ')
   let indent = 0
   let line = 1
-  return [...src.matchAll(/\s+|[a-zA-Z0-9_]+|[:+\-*/]=|->|<-|[|:]|[+\-*\/=><]+|".+?"|[\[\]()]|./g)].map(s => {
+  return [...src.matchAll(/\s+|(\[\])?[a-zA-Z0-9_]+|[:+\-*/]=|->|<-|[|:]|[+\-*\/=><]+|".+?"|[\[\]()]|./g)].map(s => {
     const token = s[0]
     const br = (token.match(/\n/g) || []).length
     line += br
@@ -64,11 +64,11 @@ function tokenize(src) {
       index: s.index,
     }
     if (token === 'true' || token === 'false') { o.value = token === 'true' }
-    else if (token[0].match(/^[a-zA-Z_]/)) { o.id = o.token }
-    else if (token[0].match(/^[0-9]+$/)) { o.value = parseInt(o.token) }
-    else if (token[0].match(/^["'`]/)) { o.value = o.token.slice(1, -1) }
+    else if (token.match(/^(\[\])?[a-zA-Z_]/)) { o.id = o.token }
+    else if (token.match(/^[0-9]+$/)) { o.value = parseInt(o.token) }
+    else if (token.match(/^["'`]/)) { o.value = o.token.slice(1, -1) }
     else if (op2s.includes(token)) { o.op2 = o.token }
-    else if (token[0].match(/^[=:|()\[\]]$/)) { o.sym = o.token }
+    else if (token.match(/^[=:|()\[\]]$/)) { o.sym = o.token }
     else { o.op2 = o.token }
     return o
   }).filter(x => x.token.trim())
@@ -347,6 +347,11 @@ function testTokenize() {
     { token: '+', indent: 2, line: 3, index: 43, op2: '+' },
     { token: 'offset', indent: 2, line: 3, index: 45, id: 'offset' }
   ], 'struct a:\n  value a\n  method offset: value + offset')
+  t([
+    { token: 'a', indent: 0, line: 1, index: 0, id: 'a' },
+    { token: '=', indent: 0, line: 1, index: 2, sym: '=' },
+    { token: '[]int', indent: 0, line: 1, index: 4, id: '[]int' }
+  ], 'a = []int')
 }
 function testParse() {
   function show(node) {
@@ -407,6 +412,7 @@ function testEvaluate() {
   // struct
   t({__type: 'wrap', value: 1}, 'wrap(1)', 'wrap:\n  value int')
   t({__type: 'vector2', x: 1, y: 2}, 'vector2(1 2)', 'vector2 a:\n  x a\n  y a')
+  t({__type: 'list', values: [1]}, 'list([1])', 'list:\n  values []int')
 
   // adt
   t({__type: 'just', value: 1}, 'just(1)', 'may a|\n  just:\n    value a\n  none')
