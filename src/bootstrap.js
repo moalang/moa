@@ -49,10 +49,10 @@ const methods = {
 
 // main process
 function tokenize(src) {
-  const op2s = ':= += -= *= /= =>'.split(' ')
+  const op2s = ':= += -= *= /= != =>'.split(' ')
   let indent = 0
   let line = 1
-  return [...src.matchAll(/\s+|(\[\])?[a-zA-Z0-9_]+|[:+\-*/]=|->|<-|[|:]|[+\-*\/=><]+|".+?"|[\[\]()]|./g)].map(s => {
+  return [...src.matchAll(/\s+|#.+|(\[\])?[a-zA-Z0-9_]+|&&|\|\||[:+\-*/!<>=]=|->|<-|[|:]|[+\-*\/=><]+|".+?"|[\[\]()]|./g)].map(s => {
     const token = s[0]
     const br = (token.match(/\n/g) || []).length
     line += br
@@ -63,7 +63,8 @@ function tokenize(src) {
       line,
       index: s.index,
     }
-    if (token === 'true' || token === 'false') { o.value = token === 'true' }
+    if (token[0] === '#') { o.token = '' }
+    else if (token === 'true' || token === 'false') { o.value = token === 'true' }
     else if (token.match(/^(\[\])?[a-zA-Z_]/)) { o.id = o.token }
     else if (token.match(/^[0-9]+$/)) { o.value = parseInt(o.token) }
     else if (token.match(/^["'`]/)) { o.value = o.token.slice(1, -1) }
@@ -90,7 +91,7 @@ function parse(tokens) {
   }
   function drop(token, value) {
     const node = consume()
-    if (node.token !== token) { throw err('Unexpected token', {node, expect}) }
+    if (node.token !== token) { throw err('Unexpected token', {node, value}) }
     return value
   }
   function operator(lhs) {
@@ -218,48 +219,48 @@ function evaluate(nodes) {
       root.put(node.name, node)
     }
   }
-  function run(node, env) {
+  function execute(node, env) {
     if (isPrimitive(node)) { return node }
     if ('value' in node) { return node.value }
-    if (node.array) { return node.array.map(x => run(x, env)) }
-    if (node.body) { return run(node.body, env) }
-    if (node.id) { return node.id in functions ? functions[node.id] : run(env.get(node.id), env) }
+    if (node.array) { return node.array.map(x => execute(x, env)) }
+    if (node.body) { return execute(node.body, env) }
+    if (node.id) { return node.id in functions ? functions[node.id] : execute(env.get(node.id), env) }
     if (node.call) {
       if (node.call === 'if') {
         for (let i=0; i<node.args.length-1; i+=2) {
-          if (run(node.args[i], env)) {
-            return run(node.args[i+1], env)
+          if (execute(node.args[i], env)) {
+            return execute(node.args[i+1], env)
           }
         }
-        return run(node.args[node.args.length - 1], env)
+        return execute(node.args[node.args.length - 1], env)
       } else if (node.call === 'match') {
-        const target = run(node.args[0], env)
+        const target = execute(node.args[0], env)
         for (const arg of node.args.slice(1)) {
           if (arg.lhs.id) {
             if (target.__type === arg.lhs.id) {
-              return run(arg.rhs, env)
+              return execute(arg.rhs, env)
             }
           } else if (arg.lhs.call) {
             if (target.__type === arg.lhs.call) {
               const keys = arg.lhs.args.map(a => a.id)
               const values = Object.values(target).slice(1)
-              return run(arg.rhs, env.new(keys, values))
+              return execute(arg.rhs, env.new(keys, values))
             }
           } else {
-            if (run(arg.lhs, env) === target) {
-              return run(arg.rhs, env)
+            if (execute(arg.lhs, env) === target) {
+              return execute(arg.rhs, env)
             }
           }
         }
         throw err('Switch does not match', {target, node})
       } else if (node.call in functions) {
         const f = functions[node.call]
-        return f.apply(null, node.args.map(arg => run(arg, env)))
+        return f.apply(null, node.args.map(arg => execute(arg, env)))
       } else {
         const def = env.get(node.call)
-        const argv = node.args.map(arg => run(arg, env))
+        const argv = node.args.map(arg => execute(arg, env))
         if (def.body) {
-          return run(def.body, env.new(def.args, argv))
+          return execute(def.body, env.new(def.args, argv))
         } else if (def.struct) {
           return newType(def.name, def.struct, argv)
         } else if (def.adt) {
@@ -271,20 +272,20 @@ function evaluate(nodes) {
     }
     if (node.op2) {
       if (node.op2 === '.') {
-        const obj = run(node.lhs, env)
+        const obj = execute(node.lhs, env)
         const name = node.rhs.id || node.rhs.call
-        const args = node.rhs.call ? node.rhs.args.map(a => run(a, env)) : []
+        const args = node.rhs.call ? node.rhs.args.map(a => execute(a, env)) : []
         const type = typeName(obj)
         if (!(type in methods)) { throw err('type is not found', {obj,type,name}) }
         if (!(name in methods[type])) { throw err('method is not found', {obj,type,name}) }
         return methods[type][name](obj, ...args)
       } else if (node.op2 === '=>') {
-        return arg => run(node.rhs, env.new([node.lhs.id], [arg]))
+        return arg => execute(node.rhs, env.new([node.lhs.id], [arg]))
       } else if (node.op2 === '<-') {
-        return env.put(node.lhs.id, run(node.rhs, env))
+        return env.put(node.lhs.id, execute(node.rhs, env))
       } else {
-        const l = run(node.lhs, env)
-        const r = run(node.rhs, env)
+        const l = execute(node.lhs, env)
+        const r = execute(node.rhs, env)
         switch (node.op2) {
           case '+': return l + r
           case '-': return l - r
@@ -301,7 +302,7 @@ function evaluate(nodes) {
     if (node.flow) {
       let ret
       for (const line of node.flow) {
-        ret = run(line, env)
+        ret = execute(line, env)
         if (ret.__type === 'error') {
           return ret
         }
@@ -310,7 +311,7 @@ function evaluate(nodes) {
     }
     throw err('Unknown node', {node, nodes})
   }
-  return run(root.get('main').body, root)
+  return execute(root.get('main').body, root)
 }
 function run(src) {
   const tokens = tokenize(src)
@@ -352,6 +353,7 @@ function testTokenize() {
     { token: '=', indent: 0, line: 1, index: 2, sym: '=' },
     { token: '[]int', indent: 0, line: 1, index: 4, id: '[]int' }
   ], 'a = []int')
+  t([], '# comment')
 }
 function testParse() {
   function show(node) {
@@ -449,12 +451,21 @@ function testEvaluate() {
   t(0, '[].size')
   t([1, 4], '[0 1+2].map(v => v + 1)')
 }
+function testMoa(base) {
+  const baseNodes = parse(tokenize(base))
+
+  function t(expect, src) {
+    const nodes = baseNodes.concat(parse(tokenize('main = compile_js(' + JSON.stringify(src) + ')')))
+    test(expect, evaluate(nodes).value, src)
+  }
+}
 
 // main
 function main() {
   testTokenize()
   testParse()
   testEvaluate()
+  //testMoa(require('fs').readFileSync('moa.moa', {encoding: 'utf-8'}))
   puts('ok')
 }
 main()
