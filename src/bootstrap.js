@@ -6,7 +6,7 @@ function puts(...a) { console.log(...a) }
 function dump(o) { console.dir(o, {depth: null}) }
 function eq(a, b) { return a === b || str(a) === str(b) }
 function str(o) { return JSON.stringify(o) }
-function err(msg, o) { dump(o); return new Error(msg) }
+function err(msg, o) { puts('Error:', msg); dump(o); return new Error(msg) }
 function newType(__type, keys, vals) { return keys.reduce((acc,k,i) => (acc[k]=vals[i], acc), {__type}) }
 function test(expect, actual, o) {
   if (eq(expect, actual)) {
@@ -20,12 +20,14 @@ function test(expect, actual, o) {
 }
 function isPrimitive(o) {
   const t = typeof o
-  return t === 'number' || t === 'string' || (t === 'object' && o.constructor === Array)
+  return t === 'number' || t === 'string' || (t === 'object' && o.constructor === Array) || ['some', 'error'].includes(o.__type)
 }
 function typeName(o) {
   return o.__type || typeof o
 }
 const functions = {
+  trace: o => (dump(o),o),
+  guard: cond => cond ? ({__type: 'some', content: true}) : ({__type: 'error', message: 'guard'}),
   some: content => ({__type: 'some', content}),
   error: message => ({__type: 'error', message}),
 }
@@ -33,9 +35,12 @@ const methods = {
   object: { // array
     size: a => a.length,
     map: (a,f) => a.map(f),
+    concat: (a,b) => a.concat(b),
   },
   string: {
     length: s => s.length,
+    at: (s,n) => n < s.length ? functions.some(s[n]) : functions.error('out of index'),
+    to_int: s => s.match(/^[0-9]+$/) ? functions.some(parseInt(s)) : functions.error('not a number'),
   },
   some: {
     map: (s,f) => (s.content = f(s.content), s),
@@ -63,7 +68,7 @@ function tokenize(src) {
   function any(tag, strings, f) {
     return token(tag, strings.find(s => s === left.slice(0, s.length)), f)
   }
-  const op2s = '<- -> := += -= *= /= == != => <= >= && || + - * / < > .'.split(' ')
+  const op2s = '<- -> := += -= *= /= == != => <= >= && || + - * / < >'.split(' ')
   const syms = '| : = ( ) [ ]'.split(' ')
   const tokens = []
   while (left) {
@@ -71,8 +76,9 @@ function tokenize(src) {
       any('value', ['true', 'false'], s => s === 'true') ||
       match('id', /^(\[\])*[a-zA-Z_]+[a-zA-Z0-9_]*/) ||
       any('sym', syms) ||
+      any('dot', ['.']) ||
       match('value', /^[0-9]+/, parseInt) ||
-      match('value', /^(["'`]).*\1/, s => s.slice(1, -1)) ||
+      match('value', /^(["'`])[^\1]*\1/, s => s.slice(1, -1)) ||
       match('comment', /^#.+/) ||
       match('spaces', /^[ \t\n]+/)
     if (!o) { throw err('unknown token', {src,left,tokens}) }
@@ -144,6 +150,11 @@ function parse(tokens) {
       } else {
         throw err('unsupported yet operator', {next})
       }
+    } else if (next.dot) {
+      const method = consume()
+      const args = check(t => t.token === '(' && method.index + method.token.length === t.index) ?
+        (consume(), drop(')', until(t => t.sym !== ')', unit))) : []
+      return operator({self: lhs, method, args})
     } else {
       pos--
       return lhs
@@ -157,16 +168,18 @@ function parse(tokens) {
     return a
   }
   function parse_line() {
-    return check(t => t.id, t => t.id || '=:|'.includes(t.sym)) ? parse_define() : unit()
+    return check(t => t.id, t => (t.id && t.line === tokens[pos].line) || '=:|'.includes(t.sym)) ? parse_define() : unit()
   }
   function parse_define() {
-    const [name, ...args] = until(t => t.id, consume).map(t => t.token)
+    const first = consume()
+    const name = first.token
+    const args = until(t => t.id && t.line === first.line, consume).map(t => t.token)
     const sym = consume()
     switch (sym.token) {
-      case '=': return {name, args, body: parse_body(sym)}
+      case '=': return {name, args, body: parse_body(first)}
       case ':': return {name, args, struct: parse_struct(2)}
       case '|': return {name, args, adt: parse_adt()}
-      default: throw err('Unknown token', {sym,pos,tokens})
+      default: throw err('Unknown token', {sym,pos,around:tokens.slice(pos,pos+3)})
     }
   }
   function parse_body(base) {
@@ -214,17 +227,17 @@ function parse(tokens) {
 function evaluate(nodes) {
   const environment = function(parent) {
     const d = {}
-    this.get = key => (key in d ? d[key] : parent ? parent.get(key) : (() => { throw err('not found', {key,d,names:this.dump()}) })())
+    this.get = key => (key in d ? d[key] : parent ? parent.get(key) : (() => { throw err('id not found', {key,keys:this.keys()}) })())
     this.put = (key,value) => d[key] = value
-    this.new = (keys,values) => {
+    this.local = (keys,values) => {
       const env = new environment(this)
       keys.map((key, i) => env.put(key, values[i]))
       return env
     }
-    this.dump = () => Object.keys(d).concat(parent ? parent.dump() : [])
+    this.keys = () => Object.keys(d).concat(parent ? parent.keys() : [])
   }
   const root = new environment()
-  for (const node of nodes) {
+  function define(node) {
     if (node.adt) {
       for (const [name,...adt] of node.adt) {
         if (adt.length) {
@@ -236,6 +249,23 @@ function evaluate(nodes) {
     } else {
       root.put(node.name, node)
     }
+  }
+  nodes.map(define)
+  function unwrap(o, env) {
+    o = execute(o, env)
+    if (o.flow) {
+      for (const line of o.flow) {
+        if (line.name) {
+          define(line)
+        } else {
+          o = unwrap(line, o.env || env)
+          if (o.__type === 'error') {
+            return o
+          }
+        }
+      }
+    }
+    return o.__type === 'some' ? o.content : o
   }
   function execute(node, env) {
     if (isPrimitive(node)) { return node }
@@ -262,7 +292,7 @@ function evaluate(nodes) {
             if (target.__type === arg.lhs.call) {
               const keys = arg.lhs.args.map(a => a.id)
               const values = Object.values(target).slice(1)
-              return execute(arg.rhs, env.new(keys, values))
+              return execute(arg.rhs, env.local(keys, values))
             }
           } else {
             if (execute(arg.lhs, env) === target) {
@@ -278,29 +308,34 @@ function evaluate(nodes) {
         const def = env.get(node.call)
         const argv = node.args.map(arg => execute(arg, env))
         if (def.body) {
-          return execute(def.body, env.new(def.args, argv))
+          return execute(def.body, env.local(def.args, argv))
+        } else if (typeof def === 'function') {
+          return def.apply(argv)
         } else if (def.struct) {
           return newType(def.name, def.struct, argv)
         } else if (def.adt) {
           return newType(def.name, def.adt, argv)
         } else {
-          throw err('Unknown apply', def)
+          throw err('Unknown apply', {node, def: def.toString(), keys: env.dump()})
         }
       }
     }
+    if (node.method) {
+      let obj = execute(node.self, env)
+      const name = node.method.id
+      const args = node.args.map(a => execute(a, env))
+      const type = typeName(obj)
+      if (!(type in methods)) { throw err('type not found', {node,obj,type,name}) }
+      if (!(name in methods[type])) { throw err('method not found', {node,obj,type,name}) }
+      return methods[type][name](obj, ...args)
+    }
     if (node.op2) {
-      if (node.op2 === '.') {
-        const obj = execute(node.lhs, env)
-        const name = node.rhs.id || node.rhs.call
-        const args = node.rhs.call ? node.rhs.args.map(a => execute(a, env)) : []
-        const type = typeName(obj)
-        if (!(type in methods)) { throw err('type is not found', {obj,type,name}) }
-        if (!(name in methods[type])) { throw err('method is not found', {obj,type,name}) }
-        return methods[type][name](obj, ...args)
-      } else if (node.op2 === '=>') {
-        return arg => execute(node.rhs, env.new([node.lhs.id], [arg]))
+      if (node.op2 === '=>') {
+        return arg => execute(node.rhs, env.local([node.lhs.id], [arg]))
       } else if (node.op2 === '<-') {
-        return env.put(node.lhs.id, execute(node.rhs, env))
+        const o = unwrap(node.rhs, env)
+        const v = o.__type === 'some' ? o.content : o
+        return env.put(node.lhs.id, v)
       } else {
         const l = execute(node.lhs, env)
         const r = execute(node.rhs, env)
@@ -318,18 +353,12 @@ function evaluate(nodes) {
       }
     }
     if (node.flow) {
-      let ret
-      for (const line of node.flow) {
-        ret = execute(line, env)
-        if (ret.__type === 'error') {
-          return ret
-        }
-      }
-      return ret
+      node.env = env
+      return node
     }
-    throw err('Unknown node', {node, nodes})
+    throw err('Unknown node', {node, dump: env.dump()})
   }
-  return execute(root.get('main').body, root)
+  return unwrap(root.get('main').body, root)
 }
 function run(src) {
   const tokens = tokenize(src)
@@ -343,21 +372,13 @@ function testTokenize() {
   function t(expect, src) {
     test(expect, tokenize(src), {src})
   }
+  t([{ token: 'true', value: true, line: 1, indent: 0, index: 0 }], 'true')
+  t([{ token: '"hi"', value: 'hi', line: 1, indent: 0, index: 0 }], '"hi"')
   t([
     { token: 'a', id: 'a', line: 1, indent: 0, index: 0 },
     { token: '=', sym: '=', line: 1, indent: 0, index: 2 },
     { token: '1', value: 1, line: 1, indent: 0, index: 4 }
   ], 'a = 1')
-  t([
-    { token: 'a', id: 'a', line: 1, indent: 0, index: 0 },
-    { token: '=', sym: '=', line: 1, indent: 0, index: 2 },
-    { token: 'true', value: true, line: 1, indent: 0, index: 4 }
-  ], 'a = true')
-  t([
-    { token: 'a', id: 'a', line: 1, indent: 0, index: 0 },
-    { token: '=', sym: '=', line: 1, indent: 0, index: 2 },
-    { token: '"a"', value: 'a', line: 1, indent: 0, index: 4 }
-  ], 'a = "a"')
   t([
     { token: 'struct', id: 'struct', line: 1, indent: 0, index: 0 },
     { token: 'a', id: 'a', line: 1, indent: 0, index: 7 },
@@ -388,6 +409,7 @@ function testParse() {
       node.struct ? [node.name, ...node.args].join(' ') + ': ' + node.struct.join(' ') :
       node.adt ? [node.name, ...node.args].join(' ') + '| ' + node.adt.map(e => e.join(' ')).join(', ') :
       node.flow ? node.flow.map(show).join(' ; ') :
+      node.self ? show(node.self) + '.' + node.method.id + (node.args.length ? '(' + node.args.map(show).join(' ') + ')' : '')  :
       (() => { throw err('Unknown', {node}) })()
   }
   function t(expect, src) {
@@ -410,6 +432,9 @@ function testParse() {
   t('adt a b| tag1, tag2 f1 f2', 'adt a b|\n  tag1\n  tag2:\n    f1 a\n    f2 b')
   t('f = (a <- 1) ; a', 'f =\n  a <- 1\n  a')
   t('f = (a <- 1) ; (a := 2) ; a', 'f =\n  a <- 1\n  a := 2\n  a')
+  t('f a = a\ng = f(1)', 'f a =\n  a\ng = f(1)')
+  t('f a = a.b.c', 'f a = a.b.c')
+  t('f a = a.b(1).c(2)', 'f a = a.b(1).c(2)')
 }
 function testEvaluate() {
   function t(expect, exp, ...defs) {
@@ -456,21 +481,25 @@ function testEvaluate() {
   t(1, 'match(just(1) just(a)->a none->2)', 'may a|\n  just:\n    value a\n  none')
 
   // optinal
-  t({__type: 'some', content: 1}, 'some(1)')
+  t(1, 'some(1)')
   t({__type: 'error', message: 'hi'}, 'error("hi")')
-  t({__type: 'some', content: 3}, 'some(1).map(x => x + 2)')
+  t(3, 'some(1).map(x => x + 2)')
   t({__type: 'error', message: 'hi'}, 'error("hi").map(x => x + 2)')
-  t({__type: 'some', content: 1}, 'some(1).alt(2)')
-  t({__type: 'some', content: 2}, 'error("hi").alt(2)')
+  t(1, 'some(1).alt(2)')
+  t(2, 'error("hi").alt(2)')
 
   // flow
   t(2, '\n  a <- 1\n  a += 1\n  a')
   t({__type: 'error', message: 'hi'}, '\n  a <- error("hi")\n  1')
+  t({__type: 'error', message: 'guard'}, '\n  guard(false)\n  1')
 
   // string methods
   t(5, '"hello".length')
+  t(12, '"12".to_int')
+  t({__type: 'error', message: 'not a number'}, '"1a".to_int')
 
   // array methods
+  t('i', '"hi".at(1)')
   t(0, '[].size')
   t([1, 4], '[0 1+2].map(v => v + 1)')
 }
@@ -479,8 +508,10 @@ function testMoa(base) {
 
   function t(expect, src) {
     const nodes = baseNodes.concat(parse(tokenize('main = compile_js(' + JSON.stringify(src) + ')')))
-    test(expect, evaluate(nodes).value, src)
+    test(expect, evaluate(nodes), src)
   }
+
+  t(1, '1')
 }
 
 // main
@@ -488,7 +519,7 @@ function main() {
   testTokenize()
   testParse()
   testEvaluate()
-  //testMoa(require('fs').readFileSync('moa.moa', {encoding: 'utf-8'}))
+  testMoa(require('fs').readFileSync('moa.moa', {encoding: 'utf-8'}))
   puts('ok')
 }
 main()
