@@ -49,9 +49,10 @@ const methods = {
 
 // main process
 function tokenize(src) {
+  const op2s = ':= += -= *= /= =>'.split(' ')
   let indent = 0
   let line = 1
-  return [...src.matchAll(/\s+|[a-zA-Z0-9_]+|->|<-|[|:]|[+\-*\/=><]+|".+?"|[\[\]()]|./g)].map(s => {
+  return [...src.matchAll(/\s+|[a-zA-Z0-9_]+|[:+\-*/]=|->|<-|[|:]|[+\-*\/=><]+|".+?"|[\[\]()]|./g)].map(s => {
     const token = s[0]
     const br = (token.match(/\n/g) || []).length
     line += br
@@ -66,7 +67,7 @@ function tokenize(src) {
     else if (token[0].match(/^[a-zA-Z_]/)) { o.id = o.token }
     else if (token[0].match(/^[0-9]+$/)) { o.value = parseInt(o.token) }
     else if (token[0].match(/^["'`]/)) { o.value = o.token.slice(1, -1) }
-    else if (token === '=>') { o.op2 = o.token }
+    else if (op2s.includes(token)) { o.op2 = o.token }
     else if (token[0].match(/^[=:|()\[\]]$/)) { o.sym = o.token }
     else { o.op2 = o.token }
     return o
@@ -77,6 +78,9 @@ function parse(tokens) {
   let pos = 0
   function consume() {
     return tokens[pos++]
+  }
+  function check(...fs) {
+    return fs.every((f,i) => (pos+i < len && f(tokens[pos+i])))
   }
   function unit() {
     return operator(consume())
@@ -133,18 +137,24 @@ function parse(tokens) {
     }
     return a
   }
+  function parse_line() {
+    return check(t => t.id, t => t.id || '=:|'.includes(t.sym)) ? parse_define() : unit()
+  }
   function parse_define() {
     const [name, ...args] = until(t => t.id, consume).map(t => t.token)
     const sym = consume()
     switch (sym.token) {
-      case '=': return {name, args, body: parse_body()}
+      case '=': return {name, args, body: parse_body(sym)}
       case ':': return {name, args, struct: parse_struct(2)}
       case '|': return {name, args, adt: parse_adt()}
       default: throw err('Unknown token', {sym,pos,tokens})
     }
   }
-  function parse_body() {
-    return unit()
+  function parse_body(base) {
+    return check(t => t.line === base.line) ? unit() : parse_flow(base)
+  }
+  function parse_flow(base) {
+    return {flow: until(t => t.indent > base.indent, parse_line)}
   }
   function parse_struct(indent) {
     const fields = []
@@ -270,6 +280,8 @@ function evaluate(nodes) {
         return methods[type][name](obj, ...args)
       } else if (node.op2 === '=>') {
         return arg => run(node.rhs, env.new([node.lhs.id], [arg]))
+      } else if (node.op2 === '<-') {
+        return env.put(node.lhs.id, run(node.rhs, env))
       } else {
         const l = run(node.lhs, env)
         const r = run(node.rhs, env)
@@ -278,9 +290,23 @@ function evaluate(nodes) {
           case '-': return l - r
           case '*': return l * r
           case '/': return l / r
+          case '+=': return env.put(node.lhs.id, l + r)
+          case '-=': return env.put(node.lhs.id, l - r)
+          case '*=': return env.put(node.lhs.id, l * r)
+          case '/=': return env.put(node.lhs.id, l / r)
           default: throw err('Unknown operator', node)
         }
       }
+    }
+    if (node.flow) {
+      let ret
+      for (const line of node.flow) {
+        ret = run(line, env)
+        if (ret.__type === 'error') {
+          return ret
+        }
+      }
+      return ret
     }
     throw err('Unknown node', {node, nodes})
   }
@@ -331,6 +357,7 @@ function testParse() {
       node.op2 ? '(' + show(node.lhs) + ' ' + node.op2 + ' ' + show(node.rhs) + ')' :
       node.struct ? [node.name, ...node.args].join(' ') + ': ' + node.struct.join(' ') :
       node.adt ? [node.name, ...node.args].join(' ') + '| ' + node.adt.map(e => e.join(' ')).join(', ') :
+      node.flow ? node.flow.map(show).join(' ; ') :
       (() => { throw err('Unknown', {node}) })()
   }
   function t(expect, src) {
@@ -351,6 +378,8 @@ function testParse() {
   t('adt| tag', 'adt|\n  tag')
   t('adt a| tag a', 'adt a|\n  tag:\n    a int')
   t('adt a b| tag1, tag2 f1 f2', 'adt a b|\n  tag1\n  tag2:\n    f1 a\n    f2 b')
+  t('f = (a <- 1) ; a', 'f =\n  a <- 1\n  a')
+  t('f = (a <- 1) ; (a := 2) ; a', 'f =\n  a <- 1\n  a := 2\n  a')
 }
 function testEvaluate() {
   function t(expect, exp, ...defs) {
@@ -404,8 +433,8 @@ function testEvaluate() {
   t({__type: 'some', content: 2}, 'error("hi").alt(2)')
 
   // flow
-
-  // embedded ids
+  t(2, '\n  a <- 1\n  a += 1\n  a')
+  t({__type: 'error', message: 'hi'}, '\n  a <- error("hi")\n  1')
 
   // string methods
   t(5, '"hello".length')
