@@ -49,30 +49,48 @@ const methods = {
 
 // main process
 function tokenize(src) {
-  const op2s = ':= += -= *= /= != =>'.split(' ')
+  const len = src.length
+  let left = src
   let indent = 0
   let line = 1
-  return [...src.matchAll(/\s+|#.+|(\[\])?[a-zA-Z0-9_]+|&&|\|\||[:+\-*/!<>=]=|->|<-|[|:]|[+\-*\/=><]+|".+?"|[\[\]()]|./g)].map(s => {
-    const token = s[0]
-    const br = (token.match(/\n/g) || []).length
-    line += br
-    if (br) { indent = token.split('\n').slice(-1)[0].length }
-    const o = {
-      token,
-      indent,
-      line,
-      index: s.index,
+  function token(tag, token, f) {
+    return token ? {token, [tag]: f ? f(token) : token} : false
+  }
+  function match(tag, r, f) {
+    const m = left.match(r)
+    return token(tag, m ? m[0] : m, f)
+  }
+  function any(tag, strings, f) {
+    return token(tag, strings.find(s => s === left.slice(0, s.length)), f)
+  }
+  const op2s = '<- -> := += -= *= /= == != => <= >= && || + - * / < > .'.split(' ')
+  const syms = '| : = ( ) [ ]'.split(' ')
+  const tokens = []
+  while (left) {
+    const o = any('op2', op2s) ||
+      any('value', ['true', 'false'], s => s === 'true') ||
+      match('id', /^(\[\])*[a-zA-Z_]+[a-zA-Z0-9_]*/) ||
+      any('sym', syms) ||
+      match('value', /^[0-9]+/, parseInt) ||
+      match('value', /^(["'`]).*\1/, s => s.slice(1, -1)) ||
+      match('comment', /^#.+/) ||
+      match('spaces', /^[ \t\n]+/)
+    if (!o) { throw err('unknown token', {src,left,tokens}) }
+    left = left.slice(o.token.length)
+    if (o.spaces) {
+      const br = (o.token.match(/\n/g) || []).length
+      line += br
+      if (br) {
+        indent = o.token.split('\n').slice(-1)[0].length
+      }
     }
-    if (token[0] === '#') { o.token = '' }
-    else if (token === 'true' || token === 'false') { o.value = token === 'true' }
-    else if (token.match(/^(\[\])?[a-zA-Z_]/)) { o.id = o.token }
-    else if (token.match(/^[0-9]+$/)) { o.value = parseInt(o.token) }
-    else if (token.match(/^["'`]/)) { o.value = o.token.slice(1, -1) }
-    else if (op2s.includes(token)) { o.op2 = o.token }
-    else if (token.match(/^[=:|()\[\]]$/)) { o.sym = o.token }
-    else { o.op2 = o.token }
-    return o
-  }).filter(x => x.token.trim())
+    o.line = line
+    o.indent = indent
+    o.index = len - left.length - o.token.length
+    if (o.comment || o.spaces) { continue }
+    tokens.push(o)
+  }
+  return tokens
 }
 function parse(tokens) {
   const len = tokens.length
@@ -326,32 +344,37 @@ function testTokenize() {
     test(expect, tokenize(src), {src})
   }
   t([
-    { token: 'a', indent: 0, line: 1, index: 0, id: 'a' },
-    { token: '=', indent: 0, line: 1, index: 2, sym: '=' },
-    { token: '1', indent: 0, line: 1, index: 4, value: 1 }
+    { token: 'a', id: 'a', line: 1, indent: 0, index: 0 },
+    { token: '=', sym: '=', line: 1, indent: 0, index: 2 },
+    { token: '1', value: 1, line: 1, indent: 0, index: 4 }
   ], 'a = 1')
   t([
-    { token: 'a', indent: 0, line: 1, index: 0, id: 'a' },
-    { token: '=', indent: 0, line: 1, index: 2, sym: '=' },
-    { token: '"a"', indent: 0, line: 1, index: 4, value: 'a' }
+    { token: 'a', id: 'a', line: 1, indent: 0, index: 0 },
+    { token: '=', sym: '=', line: 1, indent: 0, index: 2 },
+    { token: 'true', value: true, line: 1, indent: 0, index: 4 }
+  ], 'a = true')
+  t([
+    { token: 'a', id: 'a', line: 1, indent: 0, index: 0 },
+    { token: '=', sym: '=', line: 1, indent: 0, index: 2 },
+    { token: '"a"', value: 'a', line: 1, indent: 0, index: 4 }
   ], 'a = "a"')
   t([
-    { token: 'struct', indent: 0, line: 1, index: 0, id: 'struct' },
-    { token: 'a', indent: 0, line: 1, index: 7, id: 'a' },
-    { token: ':', indent: 0, line: 1, index: 8, sym: ':' },
-    { token: 'value', indent: 2, line: 2, index: 12, id: 'value' },
-    { token: 'a', indent: 2, line: 2, index: 18, id: 'a' },
-    { token: 'method', indent: 2, line: 3, index: 22, id: 'method' },
-    { token: 'offset', indent: 2, line: 3, index: 29, id: 'offset' },
-    { token: ':', indent: 2, line: 3, index: 35, sym: ':' },
-    { token: 'value', indent: 2, line: 3, index: 37, id: 'value' },
-    { token: '+', indent: 2, line: 3, index: 43, op2: '+' },
-    { token: 'offset', indent: 2, line: 3, index: 45, id: 'offset' }
+    { token: 'struct', id: 'struct', line: 1, indent: 0, index: 0 },
+    { token: 'a', id: 'a', line: 1, indent: 0, index: 7 },
+    { token: ':', sym: ':', line: 1, indent: 0, index: 8 },
+    { token: 'value', id: 'value', line: 2, indent: 2, index: 12 },
+    { token: 'a', id: 'a', line: 2, indent: 2, index: 18 },
+    { token: 'method', id: 'method', line: 3, indent: 2, index: 22 },
+    { token: 'offset', id: 'offset', line: 3, indent: 2, index: 29 },
+    { token: ':', sym: ':', line: 3, indent: 2, index: 35 },
+    { token: 'value', id: 'value', line: 3, indent: 2, index: 37 },
+    { token: '+', op2: '+', line: 3, indent: 2, index: 43 },
+    { token: 'offset', id: 'offset', line: 3, indent: 2, index: 45 }
   ], 'struct a:\n  value a\n  method offset: value + offset')
   t([
-    { token: 'a', indent: 0, line: 1, index: 0, id: 'a' },
-    { token: '=', indent: 0, line: 1, index: 2, sym: '=' },
-    { token: '[]int', indent: 0, line: 1, index: 4, id: '[]int' }
+    { token: 'a', id: 'a', line: 1, indent: 0, index: 0 },
+    { token: '=', sym: '=', line: 1, indent: 0, index: 2 },
+    { token: '[]int', id: '[]int', line: 1, indent: 0, index: 4 }
   ], 'a = []int')
   t([], '# comment')
 }
