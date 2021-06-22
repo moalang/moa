@@ -1,14 +1,14 @@
 'use strict'
 
 // helpers
-function write(...a) { a.map(o => process.stdout.write(o.toString())) }
-function puts(...a) { console.log(...a) }
-function dump(o) { console.dir(o, {depth: null}) }
-function eq(a, b) { return a === b || str(a) === str(b) }
-function str(o) { return JSON.stringify(o) }
-function err(msg, o) { puts('Error:', msg); dump(o); return new Error(msg) }
-function newType(__type, keys, vals) { return keys.reduce((acc,k,i) => (acc[k]=vals[i], acc), {__type}) }
-function test(expect, actual, o) {
+const write = (...a) => a.map(o => process.stdout.write(o.toString()))
+const puts = (...a) => console.log(...a)
+const dump = o => console.dir(o, {depth: null})
+const eq = (a, b) => a === b || str(a) === str(b)
+const str = o => JSON.stringify(o)
+const err = (msg, o) => (puts('Error:', msg), dump(o), new Error(msg))
+const newType = (__type, keys, vals) => keys.reduce((acc,k,i) => (acc[k]=vals[i], acc), {__type})
+const test = (expect, actual, o) => {
   if (eq(expect, actual)) {
     write('.')
   } else {
@@ -18,13 +18,11 @@ function test(expect, actual, o) {
     dump(o)
   }
 }
-function isPrimitive(o) {
+const isPrimitive = o => {
   const t = typeof o
   return t === 'number' || t === 'string' || (t === 'object' && o.constructor === Array) || ['some', 'error'].includes(o.__type)
 }
-function typeName(o) {
-  return o.__type || typeof o
-}
+const typeName = o => o.__type || typeof o
 const functions = {
   trace: o => (dump(o),o),
   guard: cond => cond ? ({__type: 'some', content: true}) : ({__type: 'error', message: 'guard'}),
@@ -53,21 +51,17 @@ const methods = {
 }
 
 // main process
-function tokenize(src) {
+const tokenize = src => {
   const len = src.length
   let left = src
   let indent = 0
   let line = 1
-  function token(tag, token, f) {
-    return token ? {token, [tag]: f ? f(token) : token} : false
-  }
-  function match(tag, r, f) {
+  const token = (tag, token, f) => token ? {token, [tag]: f ? f(token) : token} : false
+  const match = (tag, r, f) => {
     const m = left.match(r)
     return token(tag, m ? m[0] : m, f)
   }
-  function any(tag, strings, f) {
-    return token(tag, strings.find(s => s === left.slice(0, s.length)), f)
-  }
+  const any = (tag, strings, f) => token(tag, strings.find(s => s === left.slice(0, s.length)), f)
   const op2s = '<- -> := += -= *= /= == != => <= >= && || + - * / < >'.split(' ')
   const syms = '| : = ( ) [ ]'.split(' ')
   const tokens = []
@@ -98,28 +92,24 @@ function tokenize(src) {
   }
   return tokens
 }
-function parse(tokens) {
+const parse = tokens => {
   const len = tokens.length
   let pos = 0
-  function consume() {
-    return tokens[pos++]
-  }
-  function check(...fs) {
-    return fs.every((f,i) => (pos+i < len && f(tokens[pos+i])))
-  }
-  function until(f, g) {
+  const consume = () => tokens[pos++]
+  const check = (...fs) => fs.every((f,i) => (pos+i < len && f(tokens[pos+i])))
+  const until = (f, g) => {
     const a = []
     while (pos < len && f(tokens[pos])) {
       a.push(g())
     }
     return a
   }
-  function drop(token, value) {
+  const drop = (token, value) => {
     const node = consume()
     if (node.token !== token) { throw err('Unexpected token', {node, value}) }
     return value
   }
-  function operator(lhs) {
+  const operator = lhs => {
     if (lhs.sym === '[') {
       return operator({ array: drop(']', until(t => t.sym !== ']', parse_unit)) })
     }
@@ -161,13 +151,9 @@ function parse(tokens) {
       return lhs
     }
   }
-  function parse_unit() {
-    return operator(consume())
-  }
-  function parse_line() {
-    return check(t => t.id, t => (t.id && t.line === tokens[pos].line) || '=:|'.includes(t.sym)) ? parse_define() : parse_unit()
-  }
-  function parse_define() {
+  const parse_unit = () => operator(consume())
+  const parse_line = () => check(t => t.id, t => (t.id && t.line === tokens[pos].line) || '=:|'.includes(t.sym)) ? parse_define() : parse_unit()
+  const parse_define = () => {
     const first = consume()
     const name = first.token
     const args = until(t => t.id && t.line === first.line, consume).map(t => t.token)
@@ -179,13 +165,9 @@ function parse(tokens) {
       default: throw err('Unknown token', {sym,pos,around:tokens.slice(pos,pos+3)})
     }
   }
-  function parse_body(base) {
-    return check(t => t.line === base.line) ? parse_unit() : parse_flow(base)
-  }
-  function parse_flow(base) {
-    return {flow: until(t => t.indent > base.indent, parse_line)}
-  }
-  function parse_struct(indent) {
+  const parse_body = base => check(t => t.line === base.line) ? parse_unit() : parse_flow(base)
+  const parse_flow = base => ({flow: until(t => t.indent > base.indent, parse_line)})
+  const parse_struct = indent => {
     const fields = []
     let line = 0
     until(t => t.indent === indent, () => {
@@ -197,7 +179,7 @@ function parse(tokens) {
     })
     return fields
   }
-  function parse_adt() {
+  const parse_adt = () => {
     const fields = []
     let line = 0
     until(t => t.indent === 2, () => {
@@ -221,8 +203,8 @@ function parse(tokens) {
   }
   return nodes
 }
-function evaluate(nodes) {
-  const environment = function(parent) {
+const evaluate = nodes => {
+  function environment(parent) {
     const d = {}
     this.get = key => (key in d ? d[key] : parent ? parent.get(key) : (() => { throw err('id not found', {key,keys:this.keys()}) })())
     this.put = (key,value) => d[key] = value
@@ -234,7 +216,7 @@ function evaluate(nodes) {
     this.keys = () => Object.keys(d).concat(parent ? parent.keys() : [])
   }
   const root = new environment()
-  function define(node) {
+  const define = node => {
     if (node.adt) {
       for (const [name,...adt] of node.adt) {
         if (adt.length) {
@@ -248,7 +230,7 @@ function evaluate(nodes) {
     }
   }
   nodes.map(define)
-  function unwrap(o, env) {
+  const unwrap = (o, env) => {
     o = execute(o, env)
     if (o.flow) {
       for (const line of o.flow) {
@@ -264,7 +246,7 @@ function evaluate(nodes) {
     }
     return o.__type === 'some' ? o.content : o
   }
-  function execute(node, env) {
+  const execute = (node, env) => {
     if (isPrimitive(node)) { return node }
     if ('value' in node) { return node.value }
     if (node.array) { return node.array.map(x => execute(x, env)) }
@@ -357,7 +339,7 @@ function evaluate(nodes) {
   }
   return unwrap(root.get('main').body, root)
 }
-function run(src) {
+const run = src => {
   const tokens = tokenize(src)
   const nodes = parse(tokens)
   const value = evaluate(nodes)
@@ -365,7 +347,7 @@ function run(src) {
 }
 
 // tests
-function testTokenize() {
+const testTokenize = () => {
   function t(expect, src) {
     test(expect, tokenize(src), {src})
   }
@@ -396,9 +378,8 @@ function testTokenize() {
   ], 'a = []int')
   t([], '# comment')
 }
-function testParse() {
-  function show(node) {
-    return node.value ? node.value.toString() :
+const testParse = () => {
+  const show = node => node.value ? node.value.toString() :
       node.id ? node.id :
       node.body ? node.name + node.args.map(x => ' ' + x).join('') + ' = ' + show(node.body) :
       node.call ? node.call + '(' + node.args.map(show).join(' ') + ')' :
@@ -408,8 +389,7 @@ function testParse() {
       node.flow ? node.flow.map(show).join(' ; ') :
       node.self ? show(node.self) + '.' + node.method.id + (node.args.length ? '(' + node.args.map(show).join(' ') + ')' : '')  :
       (() => { throw err('Unknown', {node}) })()
-  }
-  function t(expect, src) {
+  const t = (expect, src) => {
     const tokens = tokenize(src)
     const nodes = parse(tokens)
     test(expect, nodes.map(show).join('\n'), {src,nodes})
@@ -433,8 +413,8 @@ function testParse() {
   t('f a = a.b.c', 'f a = a.b.c')
   t('f a = a.b(1).c(2)', 'f a = a.b(1).c(2)')
 }
-function testEvaluate() {
-  function t(expect, exp, ...defs) {
+const testEvaluate = () => {
+  const t = (expect, exp, ...defs) => {
     defs.push('main = ' + exp)
     const src = defs.join('\n')
     test(expect, run(src).value, src)
@@ -500,10 +480,10 @@ function testEvaluate() {
   t(0, '[].size')
   t([1, 4], '[0 1+2].map(v => v + 1)')
 }
-function testMoa(base) {
+const testMoa = base => {
   const baseNodes = parse(tokenize(base))
 
-  function t(expect, src) {
+  const t = (expect, src) => {
     const nodes = baseNodes.concat(parse(tokenize('main = compile_js(' + JSON.stringify(src) + ')')))
     test(expect, evaluate(nodes), src)
   }
@@ -512,7 +492,7 @@ function testMoa(base) {
 }
 
 // main
-function main() {
+const main = () => {
   testTokenize()
   testParse()
   testEvaluate()
