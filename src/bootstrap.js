@@ -107,11 +107,12 @@ function parse(tokens) {
   function check(...fs) {
     return fs.every((f,i) => (pos+i < len && f(tokens[pos+i])))
   }
-  function unit() {
-    return operator(consume())
-  }
-  function expect(token) {
-    return pos < len && tokens[pos].token === token
+  function until(f, g) {
+    const a = []
+    while (pos < len && f(tokens[pos])) {
+      a.push(g())
+    }
+    return a
   }
   function drop(token, value) {
     const node = consume()
@@ -120,19 +121,19 @@ function parse(tokens) {
   }
   function operator(lhs) {
     if (lhs.sym === '[') {
-      return operator({ array: drop(']', until(t => t.sym !== ']', unit)) })
+      return operator({ array: drop(']', until(t => t.sym !== ']', parse_unit)) })
     }
     if (lhs.sym === '(') {
-      return drop(')', unit())
+      return drop(')', parse_unit())
     }
     const next = consume()
     if (!next) { return lhs }
     if (next.op2) {
       const o1 = next.op2
       if (tokens[pos].sym === '(') {
-        return operator({ op2: o1, lhs, rhs: unit() })
+        return operator({ op2: o1, lhs, rhs: parse_unit() })
       } else {
-        const rhs = unit()
+        const rhs = parse_unit()
         if (rhs.op2) {
           const o2 = rhs.op2
           if ('*/'.includes(o1) && '+-'.includes(o2)) {
@@ -146,29 +147,25 @@ function parse(tokens) {
       }
     } else if (next.sym === '(') {
       if (lhs.index + lhs.token.length  === next.index) {
-        return operator({ call: lhs.token, args: drop(')', until(t => t.sym !== ')', unit)) })
+        return operator({ call: lhs.token, args: drop(')', until(t => t.sym !== ')', parse_unit)) })
       } else {
         throw err('unsupported yet operator', {next})
       }
     } else if (next.dot) {
       const method = consume()
       const args = check(t => t.token === '(' && method.index + method.token.length === t.index) ?
-        (consume(), drop(')', until(t => t.sym !== ')', unit))) : []
+        (consume(), drop(')', until(t => t.sym !== ')', parse_unit))) : []
       return operator({self: lhs, method, args})
     } else {
       pos--
       return lhs
     }
   }
-  function until(f, g) {
-    const a = []
-    while (pos < len && f(tokens[pos])) {
-      a.push(g())
-    }
-    return a
+  function parse_unit() {
+    return operator(consume())
   }
   function parse_line() {
-    return check(t => t.id, t => (t.id && t.line === tokens[pos].line) || '=:|'.includes(t.sym)) ? parse_define() : unit()
+    return check(t => t.id, t => (t.id && t.line === tokens[pos].line) || '=:|'.includes(t.sym)) ? parse_define() : parse_unit()
   }
   function parse_define() {
     const first = consume()
@@ -183,7 +180,7 @@ function parse(tokens) {
     }
   }
   function parse_body(base) {
-    return check(t => t.line === base.line) ? unit() : parse_flow(base)
+    return check(t => t.line === base.line) ? parse_unit() : parse_flow(base)
   }
   function parse_flow(base) {
     return {flow: until(t => t.indent > base.indent, parse_line)}
@@ -206,7 +203,7 @@ function parse(tokens) {
     until(t => t.indent === 2, () => {
       const t = consume()
       if (line !== t.line) {
-        if (expect(':')) {
+        if (check(t => t.token === ':')) {
           drop(':')
           fields.push([t.id, ...parse_struct(4)])
         } else {
