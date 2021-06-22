@@ -29,6 +29,7 @@ const tokenize = src => {
   tokens.push({code:')'})
   return tokens
 }
+
 const parse = tokens => {
   let pos = 0
   const op2s = '=> == <= >= + - * / < > .'.split(' ')
@@ -68,6 +69,7 @@ const parse = tokens => {
   }
   return nodes
 }
+
 const infer = (nodes,src) => {
   let tvarId = 0
   const trace = x => (dump(x),x)
@@ -203,10 +205,12 @@ const infer = (nodes,src) => {
         }
       } else if (node.code.match(/^[0-9]+/)) {
         return tint
+      } else if (node.code.match(/^["'`]/)) {
+        return tstr
       } else if (env[node.code]) {
         return fresh(env[node.code], nonGeneric) || fail(`Not found ${v}`, node)
       } else {
-        fail(`unknown "${node}"`, {src,node,env:Object.keys(env)})
+        fail(`unknown "${str(node)}"`, {src,node,env:Object.keys(env)})
       }
     }
   }
@@ -219,6 +223,33 @@ const infer = (nodes,src) => {
   }
   // type inference for each node
   return nodes.map(node => analyse(node, []))
+}
+
+const compile = nodes => {
+  const js = node => {
+    const ary = node.ary
+    const type = node.type.name
+    if (ary && ary.length === 1) {
+      return js(ary[0])
+    } else if (ary && ary[0].code === '=') {
+      const name = ary[1].code
+      const args = ary.slice(2, -1)
+      const body = ary[node.ary.length - 1]
+      if (args.length) {
+        fail('TBD')
+      } else {
+        return `const ${name} = ${js(body)}`
+      }
+    } else if (['int', 'str', 'bool'].includes(type)) {
+      return node.code
+    } else if (type === 'list') {
+      return '[' + node.list.map(js).join(',') + ']'
+      return node.code
+    } else {
+      fail('Unsupported node', node)
+    }
+  }
+  return nodes.map(js)
 }
 
 const showType = t => {
@@ -258,19 +289,19 @@ const showNode = o => {
   }
   return show(o)
 }
-const run = src => {
-  const tokens = tokenize(src)
-  const nodes = parse(tokens)
-  try {
-    const types = infer(nodes, src)
-    return {tokens, nodes, types}
-  } catch (e) {
-    e.nodes = nodes
-    throw e
-  }
-}
 
 function testType() {
+  const run = src => {
+    const tokens = tokenize(src)
+    const nodes = parse(tokens)
+    try {
+      const types = infer(nodes, src)
+      return {tokens, nodes, types}
+    } catch (e) {
+      e.nodes = nodes
+      throw e
+    }
+  }
   const reject = src => {
     try {
       run(src)
@@ -310,6 +341,7 @@ function testType() {
   inf('1', 'int')
   inf('true', 'bool')
   inf('false', 'bool')
+  inf('"hi"', 'str')
 
   // containers
   inf('[]', 'list(1)')
@@ -397,8 +429,40 @@ function testType() {
   // type errors
   reject('(+ 1 true)')
   reject('[1 false]')
+}
 
-  print('ok')
+const testJs = () => {
+  const run = src => {
+    const tokens = tokenize(src)
+    const nodes = parse(tokens)
+    infer(nodes, src)
+    const js = compile(nodes)
+    return {js, value: eval(js + '\ntypeof main === "function" ? main() : main')}
+  }
+  const t = (expect, src) => {
+    const {js, value} = run(src)
+    if (eq(expect, value)) {
+      process.stdout.write('.')
+    } else {
+      print('Failed')
+      print('expect:', expect)
+      print('actual:', value)
+      print('src:', src)
+      print('js:', js)
+    }
+  }
+
+  // primitives
+  t(1, 'main = 1')
+  t('hi', 'main = "hi"')
+  t(true, 'main = true')
+
+  // containers
+  t([], 'main = []')
+  t([1], 'main = [1]')
+  t([1, 2], 'main = [1 2]')
 }
 
 testType()
+testJs()
+print('ok')
