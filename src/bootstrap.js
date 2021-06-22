@@ -9,6 +9,7 @@ const str = o => JSON.stringify(o, null, '  ')
 const eq = (x, y) => str(x) === str(y)
 const dict = (kx, vx) => kx.reduce((d,k,i) => (d[k]=vx[i],d), {})
 const fail = (msg, o) => { throw new Error(msg + ' ' + str(o)) }
+const op2s = '=> == != <= >= || && + - * / < > .'.split(' ')
 
 const tokenize = src => {
   const tokens = [{code:'('}]
@@ -32,7 +33,6 @@ const tokenize = src => {
 
 const parse = tokens => {
   let pos = 0
-  const op2s = '=> == <= >= + - * / < > .'.split(' ')
   const sort_by_op2 = a => {
     if (a.length === 0) { return a }
     const l = a.length
@@ -112,7 +112,7 @@ const infer = (nodes,src) => {
     } else if (b.var) {
       unify(b, a)
     } else {
-      if (a.name !== b.name) { fail(`type miss match`, {a,b}) }
+      if (a.name !== b.name) { fail(`type miss match`, {a,b,src,nodes}) }
       if (a.types || b.types) {
         if (a.types.length === b.types.length) {
           a.types.map((t,i) => unify(t, b.types[i]))
@@ -135,7 +135,17 @@ const infer = (nodes,src) => {
     'true': tbool,
     'false': tbool,
     '+': tlambda(tint, tint, tint),
+    '-': tlambda(tint, tint, tint),
+    '*': tlambda(tint, tint, tint),
+    '/': tlambda(tint, tint, tint),
     '<': tlambda(tint, tint, tbool),
+    '>': tlambda(tint, tint, tbool),
+    '<=': tlambda(tint, tint, tbool),
+    '>=': tlambda(tint, tint, tbool),
+    '==': tlambda(v1, v1, tbool),
+    '!=': tlambda(v1, v1, tbool),
+    '||': tlambda(tbool, tbool, tbool),
+    '&&': tlambda(tbool, tbool, tbool),
     'if': tlambda(tbool, v1, v1, v1),
     'some': tlambda(v1, tgen('option', v1)),
     'none': tgen('option', v1),
@@ -229,22 +239,30 @@ const compile = nodes => {
   const js = node => {
     const ary = node.ary
     const type = node.type.name
-    if (ary && ary.length === 1) {
-      return js(ary[0])
-    } else if (ary && ary[0].code === '=') {
-      const name = ary[1].code
-      const args = ary.slice(2, -1)
-      const body = ary[node.ary.length - 1]
-      if (args.length) {
-        fail('TBD')
+    if (ary) {
+      if (ary.length === 0) {
+        fail('empty array')
+      }
+      if (ary.length === 1) {
+        return js(ary[0])
+      } else if (ary[0].code === '=') {
+        const name = ary[1].code
+        const args = ary.slice(2, -1)
+        const body = ary[node.ary.length - 1]
+        if (args.length) {
+          fail('TBD')
+        } else {
+          return `const ${name} = ${js(body)}`
+        }
+      } else if (op2s.includes(ary[0].code)) {
+        return js(ary[1]) + ary[0].code + js(ary[2])
       } else {
-        return `const ${name} = ${js(body)}`
+        fail('Unsupported node', ary)
       }
     } else if (['int', 'str', 'bool'].includes(type)) {
       return node.code
     } else if (type === 'list') {
       return '[' + node.list.map(js).join(',') + ']'
-      return node.code
     } else {
       fail('Unsupported node', node)
     }
@@ -461,6 +479,10 @@ const testJs = () => {
   t([], 'main = []')
   t([1], 'main = [1]')
   t([1, 2], 'main = [1 2]')
+
+  // operators
+  t(-3, 'main = 1 + 2 - 3 * 4 / 2')
+  t(true, 'main = (1 == 2) || (3 != 4)')
 }
 
 testType()
