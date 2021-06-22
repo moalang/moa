@@ -12,19 +12,19 @@ const fail = (msg, o) => { throw new Error(msg + ' ' + str(o)) }
 
 const tokenize = src => {
   const tokens = [{code:'('}]
-  let pos = 0
-  while (pos < src.length) {
-    const matched = src.slice(pos).match(/^[^ \.\n()\[\]]+|\n|./)
-    if (!matched) { fail('tokenize', {pos, src}) }
+  let left = src
+  while (left) {
+    const matched = left.match(/^[^ \.\n()\[\]]+|\n|./)
+    if (!matched) { fail('tokenize', {left, src}) }
     const code = matched[0]
     if (code.match(/\n/)) {
       tokens.push({code:')'})
       tokens.push({code:'('})
     }
     if (code.trim()) {
-      tokens.push({code,pos})
+      tokens.push({code})
     }
-    pos += code.length
+    left = left.slice(code.length)
   }
   tokens.push({code:')'})
   return tokens
@@ -32,7 +32,7 @@ const tokenize = src => {
 const parse = tokens => {
   let pos = 0
   const op2s = '=> == <= >= + - * / < > .'.split(' ')
-  const op2 = a => {
+  const sort_by_op2 = a => {
     if (a.length === 0) { return a }
     const l = a.length
     const r = [a[0]]
@@ -41,7 +41,7 @@ const parse = tokens => {
       const next = a[i+1]
       if (node.code === '=') {
         r.unshift(node)
-        r.push({ary: op2(a.slice(i+1))})
+        r.push({ary: sort_by_op2(a.slice(i+1))})
         break
       } else if (op2s.includes(node.code) && next) {
         r.push({ary:[node, r.pop(), next]})
@@ -54,15 +54,17 @@ const parse = tokens => {
   }
   const pairs = {'(':')', '[':']'}
   const consume = f => f(tokens[pos++] || fail('EOF', {pos,tokens}))
-  const apply = (p, acc) => (t => t.code === p ? op2(acc) : apply(p, (acc.push(t),acc)))(unit())
+  const apply = (p, acc) => (t => t.code === p ? sort_by_op2(acc) : apply(p, (acc.push(t),acc)))(unit())
   const unit = () => consume(t => {
-    if (t.code === '(') { t.ary = apply(')', []) }
-    if (t.code === '[') { t.list = apply(']', []) }
+    if (t.code === '(') { return {ary: apply(')', [])} }
+    if (t.code === '[') { return {list: apply(']', [])} }
+    delete t.pos
     return t
   })
+  const unnest = node => node.ary && node.ary.length === 1 ? unnest(node.ary[0]) : node
   const nodes = []
   while (pos < tokens.length) {
-    nodes.push(unit())
+    nodes.push(unnest(unit()))
   }
   return nodes
 }
@@ -191,30 +193,27 @@ const infer = (nodes,src) => {
         return head.type = analyse(head, nonGeneric)
       }
     } else {
-      const v = node.code
-      if (v) {
-        if (v === '[') {
-          if (node.list.length === 0) {
-            return node.type = tgen('list', tvar())
-          } else {
-            const types = node.list.map(t => analyse(t, nonGeneric))
-            const type = tgen('list', types.reduce((a,b) => (unify(a,b),a)))
-            return node.type = type
-          }
-        } else if (v.match(/^[0-9]+/)) {
-          return tint
-        } else if (env[v]) {
-          return fresh(env[v], nonGeneric) || fail(`Not found ${v}`, node)
+      if (node.list) {
+        if (node.list.length === 0) {
+          return node.type = tgen('list', tvar())
         } else {
-          fail(`unknown "${v}"`, {v,src,node,env:Object.keys(env)})
+          const types = node.list.map(t => analyse(t, nonGeneric))
+          const type = tgen('list', types.reduce((a,b) => (unify(a,b),a)))
+          return node.type = type
         }
+      } else if (node.code.match(/^[0-9]+/)) {
+        return tint
+      } else if (env[node.code]) {
+        return fresh(env[node.code], nonGeneric) || fail(`Not found ${v}`, node)
+      } else {
+        fail(`unknown "${node}"`, {src,node,env:Object.keys(env)})
       }
     }
   }
 
   // reserve for circulated reference
   for (const node of nodes) {
-    if (node.ary[0].code === '=') {
+    if (node.ary && node.ary[0].code === '=') {
       env[node.ary[1].code] = tvar()
     }
   }
