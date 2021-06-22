@@ -348,9 +348,7 @@ const run = src => {
 
 // tests
 const testTokenize = () => {
-  function t(expect, src) {
-    test(expect, tokenize(src), {src})
-  }
+  const t = (expect, src) => test(expect, tokenize(src), {src})
   t([{ token: 'true', value: true, line: 1, indent: 0, index: 0 }], 'true')
   t([{ token: '"hi"', value: 'hi', line: 1, indent: 0, index: 0 }], '"hi"')
   t([
