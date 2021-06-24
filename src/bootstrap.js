@@ -33,7 +33,7 @@ const tokenize = src => {
 
 const parse = tokens => {
   let pos = 0
-  const sort_by_op2 = a => {
+  const group = a => {
     if (a.length === 0) { return a }
     const l = a.length
     const r = [a[0]]
@@ -42,7 +42,7 @@ const parse = tokens => {
       const next = a[i+1]
       if (node.code === '=') {
         r.unshift(node)
-        r.push({ary: sort_by_op2(a.slice(i+1))})
+        r.push({ary: group(a.slice(i+1))})
         break
       } else if (op2s.includes(node.code) && next) {
         r.push({ary:[node, r.pop(), next]})
@@ -55,7 +55,7 @@ const parse = tokens => {
   }
   const pairs = {'(':')', '[':']'}
   const consume = f => f(tokens[pos++] || fail('EOF', {pos,tokens}))
-  const apply = (p, acc) => (t => t.code === p ? sort_by_op2(acc) : apply(p, (acc.push(t),acc)))(unit())
+  const apply = (p, acc) => (t => t.code === p ? group(acc) : apply(p, (acc.push(t),acc)))(unit())
   const unit = () => consume(t => {
     if (t.code === '(') { return {ary: apply(')', [])} }
     if (t.code === '[') { return {list: apply(']', [])} }
@@ -81,16 +81,7 @@ const infer = (nodes,src) => {
   const tstr = ttype('str')
   const tbool = ttype('bool')
   const tnil = ttype('nil')
-  const methods = {
-    int: (self) => ({
-      neg: tlambda(self, tint),
-      abs: tlambda(self, tint)
-    }),
-    list: (self) => ({
-      size: tlambda(self, tint),
-      get: tlambda(self, tint, tgen('option', self.params[0]))
-    })
-  }
+  const topt = a => tgen('option', a)
   const fresh = (type, nonGeneric) => {
     const d = {}
     const rec = t => {
@@ -112,7 +103,7 @@ const infer = (nodes,src) => {
     } else if (b.var) {
       unify(b, a)
     } else {
-      if (a.name !== b.name) { fail(`type miss match`, {a,b,src,nodes}) }
+      if (a.name !== b.name) { fail(`type miss match`, {a:showType(a),b:showType(b),src,nodes}) }
       if (a.types || b.types) {
         if (a.types.length === b.types.length) {
           a.types.map((t,i) => unify(t, b.types[i]))
@@ -130,6 +121,24 @@ const infer = (nodes,src) => {
     }
   }
   const v1 = tvar()
+  const v2 = tvar()
+  const methods = {
+    str: (self) => ({
+      at: tlambda(self, tint, tstr),
+    }),
+    int: (self) => ({
+      neg: tlambda(self, tint),
+      abs: tlambda(self, tint)
+    }),
+    list: (self) => ({
+      size: tlambda(self, tint),
+      get: tlambda(self, tint, topt(self.params[0]))
+    }),
+    option: (self) => ({
+      map: tlambda(self, tlambda(self.params[0], v1), topt(v1)),
+      alt: tlambda(self, self.params[0], self.params[0]),
+    })
+  }
   let env = {
     __cache: {},
     'true': tbool,
@@ -148,6 +157,7 @@ const infer = (nodes,src) => {
     '&&': tlambda(tbool, tbool, tbool),
     'if': tlambda(tbool, v1, v1, v1),
     'some': tlambda(v1, tgen('option', v1)),
+    'error': tlambda(v1, tgen('option', v2)),
     'none': tgen('option', v1),
   }
   const local = (node, d, nonGeneric) => {
@@ -190,8 +200,8 @@ const infer = (nodes,src) => {
         const [lhs, rhs] = tail
         const args = [lhs].concat(tail.slice(2))
         const rt = tvar()
-        const type = analyse(lhs, nonGeneric)
-        const ft = methods[type.name](type)[rhs.code]
+        const type = prune(analyse(lhs, nonGeneric))
+        const ft = methods[showTypeWithoutGenerics(type)](type)[rhs.code]
         unify(tlambda(...args.map(t => analyse(t, nonGeneric)), rt), ft)
         return head.type = rt
       } else if (tail.length) {
@@ -235,10 +245,17 @@ const infer = (nodes,src) => {
   return nodes.map(node => analyse(node, []))
 }
 
+const __int_neg = x => -1 * x
+const __list_size = x => x.length
+const __str_at = (s,i) => i < s.length ? s[i] : new err('out of index')
+const __option_map = (o,f) => o.__type === 'error' ? o : f(o)
+const __option_alt = (o,v) => o.__type === 'error' ? v : o
+
 const compile = nodes => {
+  const removeGenerics = t => showType(t).replace(/\(.+/, '')
   const js = node => {
     const ary = node.ary
-    const type = node.type.name
+    const type = showType(node.type)
     if (ary) {
       if (ary.length === 0) {
         fail('empty array')
@@ -247,27 +264,41 @@ const compile = nodes => {
         return js(ary[0])
       } else if (ary[0].code === '=') {
         const name = ary[1].code
-        const args = ary.slice(2, -1)
+        const args = ary.slice(2, -1).map(t => t.code)
         const body = ary[node.ary.length - 1]
         if (args.length) {
-          fail('TBD')
+          return `const ${name} = (${args.join(',')}) => ${js(body)}`
         } else {
           return `const ${name} = ${js(body)}`
         }
       } else if (op2s.includes(ary[0].code)) {
-        return js(ary[1]) + ary[0].code + js(ary[2])
+        if (ary[0].code === '.')  {
+          return `__${removeGenerics(ary[1].type)}_${ary[2].code}(${js(ary[1])})`
+        } else {
+          return js(ary[1]) + ary[0].code + js(ary[2])
+        }
       } else {
-        fail('Unsupported node', ary)
+        const args = ary.slice(1).map(js)
+        if (ary[0].code === 'if') {
+          const [cond,lhs,rhs] = args
+          return `${cond} ? ${lhs} : ${rhs}`
+        } else if (ary[0].code === 'some' && args.length === 1) {
+          return args[0]
+        } else if (ary[0].code === 'error') {
+          return `{message: ${args[0]}, __type: 'error'}`
+        } else {
+          return `${js(ary[0])}(${args.join(',')})`.replace(')(', ',') // TODO: type safe implement for uncarry
+        }
       }
     } else if (['int', 'str', 'bool'].includes(type)) {
       return node.code
-    } else if (type === 'list') {
+    } else if (type.startsWith('list(')) {
       return '[' + node.list.map(js).join(',') + ']'
     } else {
-      fail('Unsupported node', node)
+      return node.code
     }
   }
-  return nodes.map(js)
+  return nodes.map(js).join('\n')
 }
 
 const showType = t => {
@@ -287,6 +318,7 @@ const showType = t => {
   const r = s.replace(/\d+/g, t => o[t]||=Object.keys(o).length+1)
   return r
 }
+const showTypeWithoutGenerics = t => showType(t).replace(/\(.+/, '')
 
 const showNode = o => {
   const show = o => {
@@ -382,7 +414,7 @@ function testType() {
   // option
   inf('some(1)', 'option(int)')
   inf('none', 'option(1)')
-  //inf('some(1).map(x => x + 1)', 'option(int)')
+  inf('(some 1).map(x => x)', 'option(int)')
   // TODO: implement helpers for option
 
   // embedded
@@ -455,7 +487,13 @@ const testJs = () => {
     const nodes = parse(tokens)
     infer(nodes, src)
     const js = compile(nodes)
-    return {js, value: eval(js + '\ntypeof main === "function" ? main() : main')}
+    let value
+    try {
+      value = eval(js + '\ntypeof main === "function" ? main() : main')
+    } catch (e) {
+      value = e
+    }
+    return {js, value}
   }
   const t = (expect, src) => {
     const {js, value} = run(src)
@@ -465,8 +503,8 @@ const testJs = () => {
       print('Failed')
       print('expect:', expect)
       print('actual:', value)
-      print('src:', src)
-      print('js:', js)
+      print('src   :', src)
+      print('js    :', js)
     }
   }
 
@@ -483,6 +521,36 @@ const testJs = () => {
   // operators
   t(-3, 'main = 1 + 2 - 3 * 4 / 2')
   t(true, 'main = (1 == 2) || (3 != 4)')
+
+  // control flow
+  t(1, 'main = if true 1 main', 'bool')
+  t(2, 'main = if false main 2', 'bool')
+
+  // functions
+  t(3, 'f = 1\nmain = f + 2')
+  t(3, 'f a = a + 2\nmain = f 1')
+
+  // methods
+  t(-1, 'main = 1.neg')
+  t(1, 'main = [1].size')
+
+  // generics
+  t('i', 'id a = a\nmain = (id "hi").at(id 1)')
+
+  // recursive
+  t(120, 'f n = if (n > 1) (n * (f n - 1)) 1\nmain = f(5)')
+
+  // implicit curring: TODO
+  //t(7, 'add a b = a + b\ninc a = add 1\nmain = (inc 1) + (add 2 3)')
+
+  // option
+  t(1, 'main = some(1)')
+  t(3, 'main = (some 1).map(v => (v + 2))')
+  t(1, 'main = (error "hi").alt(1)')
+//  // option
+//  inf('some(1)', 'option(int)')
+//  inf('none', 'option(1)')
+//  //inf('some(1).map(x => x + 1)', 'option(int)')
 }
 
 testType()
