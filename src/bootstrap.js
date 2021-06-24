@@ -136,7 +136,7 @@ const infer = (nodes,src) => {
     }),
     option: (self) => ({
       map: tlambda(self, tlambda(self.params[0], v1), topt(v1)),
-      alt: tlambda(self, self.params[0], self.params[0]),
+      alt: tlambda(self, self.params[0], topt(self.params[0])),
     })
   }
   let env = {
@@ -415,7 +415,7 @@ function testType() {
   inf('some(1)', 'option(int)')
   inf('none', 'option(1)')
   inf('(some 1).map(x => x)', 'option(int)')
-  // TODO: implement helpers for option
+  inf('(some 1).alt(2)', 'option(int)')
 
   // embedded
   inf('1 + 1', 'int')
@@ -434,9 +434,6 @@ function testType() {
   inf('f a b = b', '(1 2 2)')
   inf('f a = a\nf 1\nf true', 'bool')
   inf('f x = x\nif (f true) (f 1) (f 2)', 'int')
-
-  // combinations
-  // TODO: implement
 
   // type inference
   inf('f x = x + 1\n(= g x (+ x 2))\n(+ (f 1) (g 1))', 'int')
@@ -461,6 +458,10 @@ function testType() {
 
   // implicit curring
   inf('f a b = a + b\ng = f 1', '(int int)')
+
+  // monadic statement
+  inf('f =\n  some(1)', 'option(int)')
+  inf('f =\n  error("hi")\n  some(1)', 'option(int)')
 
   // lisp style
   inf('+ 1 1', 'int')
@@ -540,17 +541,16 @@ const testJs = () => {
   // recursive
   t(120, 'f n = if (n > 1) (n * (f n - 1)) 1\nmain = f(5)')
 
-  // implicit curring: TODO
+  // TODO: implicit curring
   //t(7, 'add a b = a + b\ninc a = add 1\nmain = (inc 1) + (add 2 3)')
 
   // option
   t(1, 'main = some(1)')
   t(3, 'main = (some 1).map(v => (v + 2))')
   t(1, 'main = (error "hi").alt(1)')
-//  // option
-//  inf('some(1)', 'option(int)')
-//  inf('none', 'option(1)')
-//  //inf('some(1).map(x => x + 1)', 'option(int)')
+
+  // TODO: monadic statement
+  //t(1, 'main = if true 1 main', 'bool')
 }
 
 testType()
