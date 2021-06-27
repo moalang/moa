@@ -5,74 +5,161 @@
 const write = (...a) => a.map(o => process.stdout.write(o.toString()))
 const print = (...a) => console.log(...a)
 const dump = o => console.dir(o,{depth:null})
+const trace = x => (dump(x),x)
 const str = o => JSON.stringify(o, null, '  ')
 const eq = (x, y) => str(x) === str(y)
 const dict = (kx, vx) => kx.reduce((d,k,i) => (d[k]=vx[i],d), {})
 const fail = (msg, o) => { throw new Error(msg + ' ' + str(o)) }
-const op2s = '=> == != <= >= || && + - * / < > .'.split(' ')
+const op2s = '=> == != <= >= || && + - * / < >'.split(' ')
+const syms = '( ) [ ] ='.split(' ')
 
 const tokenize = src => {
-  const tokens = [{code:'('}]
+  let line=1
+  let indent=0
   let left = src
+  const tokens = []
+  const match = r => (m => m ? m[0] : m)(left.match(r))
+  const tags = (tag,code) => code ? ({code,[tag]:true,line,indent}) : null
+  let space = false
   while (left) {
-    const matched = left.match(/^[^ \.\n()\[\]]+|\n|./)
-    if (!matched) { fail('tokenize', {left, src}) }
-    const code = matched[0]
-    if (code.match(/\n/)) {
-      tokens.push({code:')'})
-      tokens.push({code:'('})
+    const token = tags('space', match(/^[ \n]+/)) ||
+      tags('dot', left[0] === '.' ? '.' : null) ||
+      tags('op2', op2s.find(s => left.startsWith(s))) ||
+      tags('sym', syms.find(s => left.startsWith(s))) ||
+      tags('str', match(/^(["'`]).*?\1/)) ||
+      tags('id', match(/^[a-zA-Z_]+/)) ||
+      tags('num', match(/^[0-9]+/)) ||
+      fail('tokenize', {left, src})
+    if (token.space) {
+      const brs=token.code.split('\n')
+      if (brs.length >= 2) {
+        line+=brs.length-1
+        indent=brs[brs.length-1].length
+      }
+    } else {
+      if (token.code === '=') {
+        let p = tokens.length - 1
+        while (p >= 0 && tokens[p].id && tokens[p].line === line) {
+          p-=1
+        }
+        tokens[p+1].define = true
+      } else if (token.code === '(' && !space) {
+        token.call = true
+      }
+      tokens.push(token)
     }
-    if (code.trim()) {
-      tokens.push({code})
-    }
-    left = left.slice(code.length)
+    left = left.slice(token.code.length)
+    space = token.space
   }
-  tokens.push({code:')'})
-  return tokens
+  return tokens.filter(t => !t.space)
 }
 
 const parse = tokens => {
   let pos = 0
-  const group = a => {
-    if (a.length === 0) { return a }
-    const l = a.length
-    const r = [a[0]]
-    for (let i=1; i<l; i++) {
-      const node = a[i]
-      const next = a[i+1]
-      if (node.code === '=') {
-        r.unshift(node)
-        r.push({ary: group(a.slice(i+1))})
-        break
-      } else if (op2s.includes(node.code) && next) {
-        r.push({ary:[node, r.pop(), next]})
-        i+=1
-      } else {
-        r.push(node)
-      }
-    }
-    return r
-  }
-  const pairs = {'(':')', '[':']'}
-  const consume = f => f(tokens[pos++] || fail('EOF', {pos,tokens}))
-  const apply = (p, acc) => (t => t.code === p ? group(acc) : apply(p, (acc.push(t),acc)))(unit())
-  const unit = () => consume(t => {
-    if (t.code === '(') { return {ary: apply(')', [])} }
-    if (t.code === '[') { return {list: apply(']', [])} }
-    delete t.pos
-    return t
-  })
-  const unnest = node => node.ary && node.ary.length === 1 ? unnest(node.ary[0]) : node
   const nodes = []
-  while (pos < tokens.length) {
-    nodes.push(unnest(unit()))
+  const consume = () => tokens[pos++] || fail('EOF', {pos,nodes,tokens})
+  const check = f => tokens[pos] && f(tokens[pos])
+  const drop = code => consume().code === code || fail('unexpected token', tokens[pos-1])
+  const until = (f,g) => {
+    const list = []
+    while (tokens[pos] && g(tokens[pos])) {
+      list.push(f())
+    }
+    return list
+  }
+  const nest = a => a.length === 1 ? a[0] : ({ary:a})
+  const top = () => {
+    if (check(t => t.define)) {
+      const {line, indent} = tokens[pos]
+      const args = until(consume, t => t.line === line && t.id)
+      drop('=')
+      if (check(t => t.line > line && t.indent > indent)) {
+        return {ary: [{code:'='}, ...args, nest([{code: 'do'},...until(exp, t => t.indent > indent)])]}
+      } else {
+        return {ary: [{code:'='}, ...args, nest(until(exp, t => t.line === line))]}
+      }
+    } else {
+      return exp()
+    }
+  }
+  const exp = () => combine(unit())
+  const combine = node => {
+    if (check(t => t.dot)) {
+      const dot = unit()
+      const id = consume()
+      return combine({ary: [dot, node, id]})
+    }
+    if (check(t => t.call)) {
+      drop('(')
+      node = {ary: [node, ...until(exp, t => t.code !== ')')]}
+      drop(')')
+      return combine(node)
+    }
+    if (check(t => t.op2)) {
+      return combine(({ary: [unit(), node, exp()]}))
+    }
+    return node
+  }
+  const unit = () => {
+    let node = consume()
+    if (node.code === '(') {
+      node = nest(until(top, t => t.code !== ')'))
+      drop(')')
+    } else if (node.code === '[') {
+      node = {ary: [{code: 'list'}, ...until(top, t => t.code !== ']')]}
+      drop(']')
+    }
+    return node
+  }
+  const strip = t => t.ary ? ({ary: t.ary.map(strip)}) : ({code: t.code})
+  const unnest = t => t.ary && t.ary.length === 1 ? unnest(t.ary[0]) : t
+  while (tokens[pos]) {
+    nodes.push(strip(unnest(top())))
   }
   return nodes
 }
 
+const showType = top => {
+  const show = t => {
+    if (t.instance) {
+      return show(t.instance)
+    } else if (t.name) {
+      return t.name + (t.params ? '(' + t.params.map(showType).join(' ') + ')' : '')
+    } else if (t.types) {
+      return '(' + t.types.map(show).join(' ') + ')'
+    } else {
+      return `failed to show ${str({t,top})}`
+    }
+  }
+  const s = show(top)
+  const o = {}
+  const r = s.replace(/\d+/g, t => o[t]||=Object.keys(o).length+1)
+  return r
+}
+const showTypeWithoutGenerics = t => showType(t).replace(/\(.+/, '')
+
+const showNode = o => {
+  const show = o => {
+    if (typeof o === 'object' && o.constructor === Array) {
+      if (o.length === 0) {
+        return '()'
+      } else {
+        if (o[0].code === '=') {
+          return '(= ' + o.slice(1).map(show).join(' ') + ')'
+        } else {
+          return '(' + o.map(show).join(' ') + ')'
+        }
+      }
+    } else {
+      if (!o.type) { fail('untyped', o) }
+      return o.code + ':' + showType(o.type)
+    }
+  }
+  return show(o)
+}
+
 const infer = (nodes,src) => {
   let tvarId = 0
-  const trace = x => (dump(x),x)
   const tvar = () => (name => ({name,var:true}))((++tvarId).toString())
   const tgen = (name,...params) => ({name,params})
   const tlambda = (...types) => ({types:types})
@@ -82,6 +169,7 @@ const infer = (nodes,src) => {
   const tbool = ttype('bool')
   const tnil = ttype('nil')
   const topt = a => tgen('option', a)
+  const tlist = a => tgen('list', a)
   const fresh = (type, nonGeneric) => {
     const d = {}
     const rec = t => {
@@ -115,6 +203,20 @@ const infer = (nodes,src) => {
             unify(at, {types: b.types.slice(a.types.length - 1)})
           } else {
             fail('types miss match', {a,b})
+          }
+        }
+      }
+      if (a.params || b.params) {
+        if (a.params.length === b.params.length) {
+          a.params.map((t,i) => unify(t, b.params[i]))
+        } else {
+          if (a.params.length > b.params.length) { [a,b] = [b,a] }
+          const at = a.params.slice(-1)[0]
+          if (at.var) {
+            a.params.slice(0, -1).map((t,i) => unify(t, b.params[i]))
+            unify(at, {params: b.params.slice(a.params.length - 1)})
+          } else {
+            fail('params miss match', {a,b})
           }
         }
       }
@@ -176,7 +278,7 @@ const infer = (nodes,src) => {
       if (ary.length === 0) { return tnil }
       let [head,...tail] = ary
       if (head.code === '=') {
-        if (tail.length < 2) { fail('Not enoug argument', {tail,ary}) }
+        if (tail.length < 2) { fail('Not enough argument', {tail,ary}) }
         const name = tail[0].code
         if (tail.length === 2) {
           return tail[0].type = env[name] = analyse(tail[1], nonGeneric)
@@ -204,6 +306,19 @@ const infer = (nodes,src) => {
         const ft = methods[showTypeWithoutGenerics(type)](type)[rhs.code]
         unify(tlambda(...args.map(t => analyse(t, nonGeneric)), rt), ft)
         return head.type = rt
+      } else if (head.code === 'list') {
+        if (tail.length === 0) {
+          return head.type = tlist
+        } else {
+          const types = tail.map(t => analyse(t, nonGeneric))
+          return head.type = tgen('list', types.reduce((a,b) => (unify(a,b),a)))
+        }
+      } else if (head.code === 'do') {
+        let t = tvar()
+        for (const node of tail) {
+          unify(t, analyse(node, nonGeneric))
+        }
+        return t
       } else if (tail.length) {
         const argv = tail.map(t => analyse(t, nonGeneric))
         const ckey = str(argv)
@@ -215,14 +330,8 @@ const infer = (nodes,src) => {
         return head.type = analyse(head, nonGeneric)
       }
     } else {
-      if (node.list) {
-        if (node.list.length === 0) {
-          return node.type = tgen('list', tvar())
-        } else {
-          const types = node.list.map(t => analyse(t, nonGeneric))
-          const type = tgen('list', types.reduce((a,b) => (unify(a,b),a)))
-          return node.type = type
-        }
+      if (node.code === 'list') {
+        return tgen('list', tvar())
       } else if (node.code.match(/^[0-9]+/)) {
         return tint
       } else if (node.code.match(/^["'`]/)) {
@@ -253,14 +362,31 @@ const __option_alt = (o,v) => o.__type === 'error' ? v : o
 
 const compile = nodes => {
   const removeGenerics = t => showType(t).replace(/\(.+/, '')
+  const monadic = node => {
+    let line = js(node)
+    if (line.startsWith('const ')) {
+      line = line.replace('=', '= __ =')
+    } else {
+      line = '__ = ' + line
+    }
+    return line + '; if (__.__type === "error") { return __ }'
+  }
   const js = node => {
     const ary = node.ary
     const type = showType(node.type)
     if (ary) {
       if (ary.length === 0) {
-        fail('empty array')
+        fail('empty array', nodes)
       }
-      if (ary.length === 1) {
+      if (ary[0].code === 'list') {
+        return '[' + ary.slice(1).map(js).join(',') + ']'
+      } else if (ary[0].code === 'do') {
+        if (ary.length === 2) {
+          return js(ary[1])
+        } else {
+          return '(() => {' + ary.slice(1).map(monadic).join('\n') + '\nreturn __})()'
+        }
+      } else if (ary.length === 1) {
         return js(ary[0])
       } else if (ary[0].code === '=') {
         const name = ary[1].code
@@ -271,12 +397,10 @@ const compile = nodes => {
         } else {
           return `const ${name} = ${js(body)}`
         }
+      } else if (ary[0].code === '.') {
+        return `__${removeGenerics(ary[1].type)}_${ary[2].code}(${js(ary[1])})`
       } else if (op2s.includes(ary[0].code)) {
-        if (ary[0].code === '.')  {
-          return `__${removeGenerics(ary[1].type)}_${ary[2].code}(${js(ary[1])})`
-        } else {
-          return js(ary[1]) + ary[0].code + js(ary[2])
-        }
+        return js(ary[1]) + ary[0].code + js(ary[2])
       } else {
         const args = ary.slice(1).map(js)
         if (ary[0].code === 'if') {
@@ -292,52 +416,11 @@ const compile = nodes => {
       }
     } else if (['int', 'str', 'bool'].includes(type)) {
       return node.code
-    } else if (type.startsWith('list(')) {
-      return '[' + node.list.map(js).join(',') + ']'
     } else {
       return node.code
     }
   }
   return nodes.map(js).join('\n')
-}
-
-const showType = t => {
-  const show = t => {
-    if (t.instance) {
-      return show(t.instance)
-    } else if (t.name) {
-      return t.name + (t.params ? '(' + t.params.map(showType).join(' ') + ')' : '')
-    } else if (t.types) {
-      return '(' + t.types.map(show).join(' ') + ')'
-    } else {
-      fail("show", t)
-    }
-  }
-  const s = show(t)
-  const o = {}
-  const r = s.replace(/\d+/g, t => o[t]||=Object.keys(o).length+1)
-  return r
-}
-const showTypeWithoutGenerics = t => showType(t).replace(/\(.+/, '')
-
-const showNode = o => {
-  const show = o => {
-    if (typeof o === 'object' && o.constructor === Array) {
-      if (o.length === 0) {
-        return '()'
-      } else {
-        if (o[0].code === '=') {
-          return '(= ' + o.slice(1).map(show).join(' ') + ')'
-        } else {
-          return '(' + o.map(show).join(' ') + ')'
-        }
-      }
-    } else {
-      if (!o.type) { fail('untyped', o) }
-      return o.code + ':' + showType(o.type)
-    }
-  }
-  return show(o)
 }
 
 function testType() {
@@ -408,14 +491,13 @@ function testType() {
   inf('1.neg', 'int')
   inf('1.abs', 'int')
   inf('[1].size', 'int')
-  inf('[1].get 0', 'option(int)')
   inf('[1].get(0)', 'option(int)')
 
   // option
   inf('some(1)', 'option(int)')
   inf('none', 'option(1)')
-  inf('(some 1).map(x => x)', 'option(int)')
-  inf('(some 1).alt(2)', 'option(int)')
+  inf('some(1).map(x => x)', 'option(int)')
+  inf('some(1).alt(2)', 'option(int)')
 
   // embedded
   inf('1 + 1', 'int')
@@ -436,17 +518,19 @@ function testType() {
   inf('f x = x\nif (f true) (f 1) (f 2)', 'int')
 
   // type inference
-  inf('f x = x + 1\n(= g x (+ x 2))\n(+ (f 1) (g 1))', 'int')
-  inf('_ f g x = g (f x)', '((1 2) (2 3) 1 3)')
+  inf('f x = x + 1\ng x = x + 2\nf(1) + g(1)', 'int')
+
+  inf('_ f g x = g(f(x))', '((1 2) (2 3) 1 3)')
   inf('_ x y z = x z (y z)', '((1 2 3) (1 2) 1 3)')
-  inf('_ b x = if (x b) x (= _ x b)', '(1 (1 bool) (1 1))')
+  inf('_ b x = if(x(b) x (x => b))', '(1 (1 bool) (1 1))')
   inf('_ x = if true x (if x true false)', '(bool bool)')
   inf('_ x y = if x x y', '(bool bool bool)')
-  inf('_ n = (_ x = (x (_ y = y))) (_ f = f n)', '(1 1)')
+  inf('_ n = (x => x(y => y))(f => f n)', '(1 1)')
   inf('_ x y = x y', '((1 2) 1 2)')
   inf('_ x y = x (y x)', '((1 2) ((1 2) 1) 2)')
   inf('_ h t f x = f h (t f x)', '(1 ((1 2 3) 4 2) (1 2 3) 4 3)')
   inf('_ x y = x (y x) (y x)', '((1 1 2) ((1 1 2) 1) 2)')
+  inf('id x = x\nf y = id(y(id))', '(((1 1) 2) 2)')
   inf('id x = x\nf y = id (y id)', '(((1 1) 2) 2)')
   inf('f x = x\ng = if (f true) (f 1) (f 2)', 'int')
   inf('f x = 3\ng = (f true) + (f 4)', 'int')
@@ -463,20 +547,6 @@ function testType() {
   inf('f =\n  some(1)', 'option(int)')
   inf('f =\n  error("hi")\n  some(1)', 'option(int)')
 
-  // lisp style
-  inf('+ 1 1', 'int')
-  inf('< 1 1', 'bool')
-  inf('= f 1\nf', 'int')
-  inf('= f a a\nf 1', 'int')
-  inf('= f a b a + b\nf 1 2', 'int')
-  inf('. 1 neg', 'int')
-  inf('. [1] size', 'int')
-  inf('. [1] get 0', 'option(int)')
-  inf('(+ 1 1)', 'int')
-  inf('(< 1 1)', 'bool')
-  inf('(false)', 'bool')
-  inf('((false))', 'bool')
-
   // type errors
   reject('(+ 1 true)')
   reject('[1 false]')
@@ -486,10 +556,10 @@ const testJs = () => {
   const run = src => {
     const tokens = tokenize(src)
     const nodes = parse(tokens)
-    infer(nodes, src)
-    const js = compile(nodes)
-    let value
+    let js, value
     try {
+      infer(nodes, src)
+      js = compile(nodes)
       value = eval(js + '\ntypeof main === "function" ? main() : main')
     } catch (e) {
       value = e
@@ -536,7 +606,7 @@ const testJs = () => {
   t(1, 'main = [1].size')
 
   // generics
-  t('i', 'id a = a\nmain = (id "hi").at(id 1)')
+  t('i', 'id a = a\nmain = id("hi").at(id(1))')
 
   // recursive
   t(120, 'f n = if (n > 1) (n * (f n - 1)) 1\nmain = f(5)')
@@ -549,8 +619,11 @@ const testJs = () => {
   t(3, 'main = (some 1).map(v => (v + 2))')
   t(1, 'main = (error "hi").alt(1)')
 
-  // TODO: monadic statement
-  //t(1, 'main = if true 1 main', 'bool')
+  // monadic statement
+  t(1, 'main =\n  1')
+  t(1, 'main =\n  some(1)')
+  t(2, 'main =\n  some(1)\n  some(2)')
+  t({message: 'hi', __type: 'error'}, 'main =\n  error("hi")\n  some(2)')
 }
 
 testType()
