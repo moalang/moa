@@ -210,14 +210,7 @@ const infer = (nodes,src) => {
         if (a.params.length === b.params.length) {
           a.params.map((t,i) => unify(t, b.params[i]))
         } else {
-          if (a.params.length > b.params.length) { [a,b] = [b,a] }
-          const at = a.params.slice(-1)[0]
-          if (at.var) {
-            a.params.slice(0, -1).map((t,i) => unify(t, b.params[i]))
-            unify(at, {params: b.params.slice(a.params.length - 1)})
-          } else {
-            fail('params miss match', {a,b})
-          }
+          fail('params miss match', {a,b})
         }
       }
     }
@@ -314,7 +307,7 @@ const infer = (nodes,src) => {
           return head.type = tgen('list', types.reduce((a,b) => (unify(a,b),a)))
         }
       } else if (head.code === 'do') {
-        let t = tvar()
+        let t = topt(tvar())
         for (const node of tail) {
           unify(t, analyse(node, nonGeneric))
         }
@@ -620,7 +613,6 @@ const testJs = () => {
   t(1, 'main = (error "hi").alt(1)')
 
   // monadic statement
-  t(1, 'main =\n  1')
   t(1, 'main =\n  some(1)')
   t(2, 'main =\n  some(1)\n  some(2)')
   t({message: 'hi', __type: 'error'}, 'main =\n  error("hi")\n  some(2)')
