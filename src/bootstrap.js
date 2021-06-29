@@ -69,8 +69,8 @@ const parse = tokens => {
   }
   const nest = a => a.length === 1 ? a[0] : ({ary:a})
   const top = () => {
+    const {line, indent} = tokens[pos]
     if (check(t => t.define)) {
-      const {line, indent} = tokens[pos]
       const args = until(consume, t => t.line === line && t.id)
       drop('=')
       if (check(t => t.line > line && t.indent > indent)) {
@@ -79,7 +79,7 @@ const parse = tokens => {
         return {ary: [{code:'='}, ...args, nest(until(exp, t => t.line === line))]}
       }
     } else {
-      return exp()
+      return nest(until(exp, t => t.line === line))
     }
   }
   const exp = () => combine(unit())
@@ -103,10 +103,10 @@ const parse = tokens => {
   const unit = () => {
     let node = consume()
     if (node.code === '(') {
-      node = nest(until(top, t => t.code !== ')'))
+      node = nest(until(exp, t => t.code !== ')'))
       drop(')')
     } else if (node.code === '[') {
-      node = {ary: [{code: 'list'}, ...until(top, t => t.code !== ']')]}
+      node = {ary: [{code: 'list'}, ...until(exp, t => t.code !== ']')]}
       drop(']')
     }
     return node
@@ -484,10 +484,11 @@ function testType() {
   inf('1.neg', 'int')
   inf('1.abs', 'int')
   inf('[1].size', 'int')
+  inf('[1].get 0', 'option(int)')
   inf('[1].get(0)', 'option(int)')
 
   // option
-  inf('some(1)', 'option(int)')
+  inf('some 1', 'option(int)')
   inf('none', 'option(1)')
   inf('some(1).map(x => x)', 'option(int)')
   inf('some(1).alt(2)', 'option(int)')
@@ -530,8 +531,8 @@ function testType() {
   inf('f x = x\ng y = y\nh b = if b (f g) (g f)', '(bool (1 1))')
 
   // recursive
-  inf('f x = (f x)', '(1 2)')
-  inf('f n = (g n)\ng n = (f n)', '(1 2)')
+  inf('f x = f x', '(1 2)')
+  inf('f n = g n\ng n = f n', '(1 2)')
 
   // implicit curring
   inf('f a b = a + b\ng = f 1', '(int int)')
