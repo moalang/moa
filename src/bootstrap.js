@@ -4,6 +4,8 @@ const dump = (label,o) => { write(label, ' '); console.dir(o,{depth:null}) }
 const str = o => JSON.stringify(o, null, '  ')
 const eq = (x, y) => str(x) === str(y)
 const fail = (message, obj) => { dump(message, obj || {}); throw new Error(message) }
+const dict = (ks,vs) => ks.reduce((d,k,i) => (d[k]=vs[i], d), {})
+
 const priorities = [
   '|| &&',
   '== !=',
@@ -129,6 +131,13 @@ const execute = nodes => {
         default: fail('Unknown op2', node)
       }
     }
+    if (node.type === 'func') {
+      if (node.args.length === 0) {
+        return node.value = run(node.body)
+      } else {
+        return node
+      }
+    }
     if (node.type === 'call') {
       if (node.body.code === 'if') {
         for (let i=0; i<node.argv.length; i+=2) {
@@ -138,7 +147,17 @@ const execute = nodes => {
         }
         return run(node.argv.slice(-1)[0])
       }
-      return node.value = f(node.argv.map(run))
+      const f = run(scope[node.body.code])
+      if (f.type === 'func') {
+        const d = dict(f.args, node.argv)
+        Object.assign(scope, d) // TODO: to use local scope
+        return run(f.body)
+      } else {
+        return f
+      }
+    }
+    if (node.tag === 'id') {
+      return run(scope[node.code])
     }
     fail('Failed to run', {node, nodes})
   }
@@ -146,7 +165,7 @@ const execute = nodes => {
 }
 
 const testJs = () => {
-  const t = (expect, exp, defs) => {
+  const t = (expect, exp, ...defs) => {
     const src = (defs || []).concat(['main = ' + exp]).join('\n')
     const tokens = tokenize(src)
     const nodes = parse(tokens)
@@ -196,6 +215,10 @@ const testJs = () => {
   t(1, 'if(true 1 main)')
   t(2, 'if(false main 2)')
   t(3, 'if(false main false main 3)')
+
+  // functions
+  t(3, 'f + 2', 'f = 1')
+  t(3, 'f(1)', 'f a = a + 2')
 /*
   // functions
   t(3, 'f = 1\nmain = f + 2')
