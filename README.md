@@ -63,28 +63,30 @@ test t =
 
 Primitives
 ```
-true       # bool
-1          # int 64bit signed integer
-1.0        # float 64bit
-"hi"       # string utf8
-`Hi $name` # $.. or ${..} will be evaluate as string
+true # bool
+1    # int
+1.0  # float
+"hi" # string
 ```
 
 Container
 ```
-[1 2 3]       # array
-{one 1 two 2} # dict
+a,b   # tuple
+one:1 # struct
+[1]   # array
 ```
 
 Anonymouse Function
 ```
 a => a
-a => b => a + b
+a,b => a + b
 ```
 
 Function
 ```
+pi :: float # signature is optional
 pi = 3
+inc :: int int
 inc x = x + 1
 add a.num :: a a a
 add x y = x + y
@@ -92,37 +94,57 @@ add x y = x + y
 
 Struct
 ```
-person data:
+person: # ":" + "\n" define struct
   name string
   age int
 
-dict k v data:
-  values [k v]
+dict k v:
+  values [k,v]
 ```
 
 ADT
 ```
-bool adt|
+bool| # "|" + "\n" define algebraic data type
   true
   false
 
-option a adt|
+option a|
   none
   some a
 
-ast adt|
+ast|
   aint int
-  aop2 data:
+  aop2:
     op string
     lhs ast
     rhs ast
 ```
 
-Condition?
+Type class
 ```
-1 -> exp
-tag -> exp
-tag(capture) -> capture
+.eq t:
+  eq :: t t bool
+  eq a b = a == b
+
+.error t:
+  message :: string
+  message e = string(e)
+
+.int t:
+  (+,-,*) :: t t t
+
+.num t.int:
+  (/) :: t t t
+  (//) :: t t int
+  (//) l r = int(l / r)
+
+.functor t:
+  fmap a b:: (a b) t(a) t(b)
+.applicative t.functor:
+  pure :: a t(a)
+.momad t.applicative:
+  return a :: a t(a)
+  bind a b :: t(a) (a t(b)) t(b)
 ```
 
 Exp
@@ -130,7 +152,7 @@ Exp
 1 + 2 * 3 == 7
 ```
 
-Control Flow
+Control Flow?
 ```
 max a b = if(a > b a b)
 
@@ -141,84 +163,79 @@ gcd a b = if(
 
 show m = match(m
   none "none"
-  just ++("just " m))
+  just v => "just " . v)
 ```
 
 Error Handling
 ```
-f = error("something failed")
-main =
-  print(f)                       # print: error(something failed\n  f:1)
-  print(f.alt(1))                # print: 1
-  print(f.catch(e => e.message)) # print: something failed
-  e <- f                         # print: error, and exit(-1)
-  print(e)                       # never reached
-```
+div :: int int try(int)
+div a b = if(
+  b == 0
+    error("zero division")
+  a / b)
 
-Effect
-```
-calc n =
-  sum <- 0
-  n.times(n => sum += n)
-  when(sum > 100 sum := 100)
-  sum
+main :: try(int)
+main =
+  n <- div(4 2) # n should be 2
+  m <- div(4 0) # right side expression should be failed by error
+  n + m         # never reached here
 ```
 
 
 
 ## 3. Syntax
 ```
-top: func | sign | data | adt
-func: id arg* "=" (line+ exp)
+top: func | sign | data | type | adt
+func: id+ "=" (line+ | exp)
 sign: id+ "::" type+
 data: id+ ":" (indent attr)+
-adt: id+ "|" (indent id (":" (indent2 attr)+)?)+
+type: "." id+ ":" (indent attr)+
+adt: id+ "|" (indent id body?)+
+body: id | ":" (indent2 attr)+
 
-arg:
-| id [*+?]?
-| "[" arg* "]"
-line: indent body ("if" exp)?
-body:
-| var id type
-| exp
-exp: unit (op2 exp)?
+line: indent exp
+exp: "(" unit? ")" | unit
 unit:
-| "(" exp+ ")" call?
-| "[" exp* "]"
+| op2 exp
+| value (call | prop)*
+value:
+| "()"         # generic empty
+| "[" exp* "]" # array
+| kv ("," kv)* # struct
 | num ("." num)?
 | '"' [^"] '"'
-| id call?
+| args "=>" exp
+| id
 call: "(" exp+ ")"
-op2: + - * / // % = += -= *= /= == != || && >= > <= < =>
+prop: "." id
+kv: id ":" exp
+op2: + - * / // % = += -= *= /= == != || && >= > <= <
+args: id ("," id)*
 
 id: [A-Za-z_][A-Za-z0-9_]
 num: [0-9]+
-br: "\n"
-attr: id type
-type: id | "[" type (":" type)? "]" | "(" type type+ ")"
-indent: br "  "
-indent2: br "    "
+attr: sign | id value
+type: "$" ? texp (, texp)* # "$" means mutable
+texp: id | "[" type "]" | "(" type type+ ")"
+indent: "\n  "
+indent2: "\n    "
 ```
 
 ## 4. Buildin
 
-### Reserved
-- empty
-- bool
-- true
-- false
-- int
-- float
-- byte
-- bytes
-- string
-- function
-- array
+### Embedded primitives
+- bool     : true, false
+- int      : 0
+- float    : 0.0
+- string   : "hello"
+- function : a => a
+- struct   : a:1
+
+### Embedded containers
+- array    : [1 2]
 - dict
-- opt
-- some
-- none
-- error
+- byte, bytes
+- opt, ok, none, error
 - mutable
 
 ### Core data types
@@ -261,8 +278,8 @@ date:
   year, month, day, yday, mday, wday :: int
 
 # ideas
-Monad
-Eq
+Monad   # => error monad?
+Eq      # .eq t: eq :: t t bool
 Default
 Hash
 Ord
@@ -325,27 +342,26 @@ Symbols
 - used
 > #                          -- comment
 > ( )                        -- function call or grouping
-> [ ]                        -- array
-> { }                        -- map
-> ->                         -- condition
 > * + - / // % ^ **          -- arithmetic operators
 > < > <= >= == !=            -- compare operators
 > && ||                      -- boolean operators
 > .                          -- property access
-> :                          -- define function
-> ::                         -- define prototype for function
-> :::                        -- define struct?
+> =                          -- define function
+> :                          -- define struct
 > |                          -- define abstract data type
-> =                          -- bind for monadic functions
+> ::                         -- define signature for function
 > := += -= *= /= %= ||= &&=  -- change variable
 > " ' ` $                    -- make string
-> ;                          -- separator 1
-> ,                          -- separator 2
+> ,                          -- tuple
 
 - option
-  ?                  -- variable arguments e.g. add x y z?0 = x+y+z
+> ?                  -- variable arguments e.g. add x y z?0 = x+y+z
+> ;                          -- separator 1?
+> ->                         -- condition?
+> [ ]                        -- array?
+> { }                        -- map?
 
 - unused
-  !
-  @
-  ~
+> !                          -- unwrap?
+> @
+> ~
