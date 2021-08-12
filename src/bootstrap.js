@@ -5,7 +5,6 @@ const str = o => JSON.stringify(o, null, '  ')
 const eq = (x, y) => str(x) === str(y)
 const fail = (message, obj) => { dump(message, obj || {}); throw new Error(message) }
 const dict = (ks,vs) => ks.reduce((d,k,i) => (d[k]=vs[i], d), {})
-
 const priorities = [
   '|| &&',
   '== != > < >= <=',
@@ -18,14 +17,15 @@ const priority = op => priorities.findIndex(ops => ops.includes(op))
 const tokenize = src => {
   let index = 0
   let line = 1
-  const match = (tag, reg, f) => (m => m && ({tag, index, line, code: m[0], value: f && f(m[0])}))(src.slice(index).match(reg))
-  const any = (tag, a) => (code => code && ({tag, index, line, code}))(a.find(v => src.slice(index).startsWith(v)))
+  let indent = 0
+  const match = (tag, reg, f) => (m => m && ({tag, index, line, indent, code: m[0], value: f && f(m[0])}))(src.slice(index).match(reg))
+  const any = (tag, a) => (code => code && ({tag, index, line, indent, code}))(a.find(v => src.slice(index).startsWith(v)))
   const next = () => match('int', /^[0-9]+/, parseInt) ||
     match('string', /^"[^"]*"+/, s => s.slice(1, -1)) ||
     match('id', /^(?:true|false)(?![a-zA-Z0-9_])/, s => s === 'true') ||
     match('id', /^[a-zA-Z_0-9]+/) ||
     any('op2', '|| && == >= <= != //'.split(' ').concat('+-*/.><'.split(''))) ||
-    any('sym', '[]()='.split('')) ||
+    any('sym', '[]()=:|'.split('')) ||
     match('space', /^[ \n]+/) ||
     fail('Failed to tokenize:', {src, index, around: src.slice(index)})
   const tokens = []
@@ -33,6 +33,7 @@ const tokenize = src => {
     const token = next()
     index += token.code.length
     line += (token.code.match(/\n/g) || []).length
+    indent = (m => m ? m[0].length - 1 : indent)(token.code.match(/\n *$/))
     tokens.push(token)
   }
   return tokens.filter(t => t.tag !== 'space')
@@ -49,7 +50,7 @@ const parse = tokens => {
     if (node.code === '(') {
       node = consume()
       guard(t => t.code === ')')
-      node.fixed = true
+      node.fixed = true // prevent to change priority
     }
     if (node.code === '[') {
       const values = until(t => t.code !== ']', consume)
@@ -88,12 +89,20 @@ const parse = tokens => {
     g && g()
     return matches
   }
+  const consumeFields = (indent) => {
+    const fields = until(t => t.indent > indent)
+    return [...Array(fields.length/2).keys()].map(i => fields[i*2].code)
+  }
+  const consumeAdtFields = () => []
   const top = () => {
     const {code, indent} = consume()
     const args = until(t => t.tag === 'id' && t.indent === indent).map(t => t.code)
-    guard(t => t.code === '=' && t.indent === indent)
-    const body = consume()
-    return newType('func', {id: code, args, body})
+    switch (consume().code) {
+      case '=': return newType('func', {id: code, args, body: consume()})
+      case ':': return newType('struct', {id: code, args, struct: consumeFields(0)})
+      case '|': return newType('adt', {id: code, args, adt: consumeAdtFields()})
+      default: fail('Unknown definition', {code, args, pos, tokens})
+    }
   }
 
   const nodes = []
@@ -107,6 +116,10 @@ const execute = nodes => {
   for (const node of nodes) {
     if (node.type === 'func') {
       scope[node.id] = node
+    } else if (node.type === 'struct') {
+      scope[node.id] = node
+    } else {
+      fail('Unknown node', node)
     }
   }
   const method = (env, o, node) => {
@@ -171,6 +184,8 @@ const execute = nodes => {
         case '&&': return l && r
         default: fail('Unknown op2', node)
       }
+    } else if (node.type === 'struct') {
+      return node
     } else if (node.type === 'func') {
       if (node.args.length === 0) {
         return run(env, node.body)
@@ -187,9 +202,11 @@ const execute = nodes => {
         return run(env, node.argv.slice(-1)[0])
       }
       const f = run(env, env[node.body.code])
+      const argv = node.argv.map(o => run(env, o))
       if (f.type === 'func') {
-        const argv = node.argv.map(o => run(env, o))
         return run(Object.assign({}, env, dict(f.args, argv)), f.body)
+      } else if (f.type === 'struct') {
+        return dict(f.struct, argv)
       } else {
         return f
       }
@@ -270,13 +287,15 @@ const testJs = () => {
 
   // recursive
   t(120, 'f(5)', 'f n = if((n > 1) (n * f(n - 1)) 1)')
+
+  // struct
+  t({a:1}, 's(1)', 's:\n  a int')
+  t({a:1,b:"b"}, 's(1 "b")', 's:\n  a int\n  b string')
+
+  // adt
+  // match
+
 /*
-  // recursive
-  t(120, 'f n = if (n > 1) (n * (f n - 1)) 1\nmain = f(5)')
-
-  // TODO: implicit curring
-  //t(7, 'add a b = a + b\ninc a = add 1\nmain = (inc 1) + (add 2 3)')
-
   // option
   t(1, 'main = some(1)')
   t(3, 'main = (some 1).map(v => (v + 2))')
