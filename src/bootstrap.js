@@ -93,7 +93,18 @@ const parse = tokens => {
     const fields = until(t => t.indent > indent)
     return [...Array(fields.length/2).keys()].map(i => fields[i*2].code)
   }
-  const consumeAdtFields = () => []
+  const consumeAdtFields = () => {
+    const tags = []
+    while (pos < tokens.length && tokens[pos].indent > 0) {
+      const tag = {type: 'tag', id: consume().code, fields: []}
+      if (pos < tokens.length && tokens[pos].code === ':') {
+        consume() // drop ':'
+        tag.fields = consumeFields(2)
+      }
+      tags.push(tag)
+    }
+    return tags
+  }
   const top = () => {
     const {code, indent} = consume()
     const args = until(t => t.tag === 'id' && t.indent === indent).map(t => t.code)
@@ -118,6 +129,10 @@ const execute = nodes => {
       scope[node.id] = node
     } else if (node.type === 'struct') {
       scope[node.id] = node
+    } else if (node.type === 'adt') {
+      for (const tag of node.adt) {
+        scope[tag.id] = tag
+      }
     } else {
       fail('Unknown node', node)
     }
@@ -186,6 +201,12 @@ const execute = nodes => {
       }
     } else if (node.type === 'struct') {
       return node
+    } else if (node.type === 'tag') {
+      if (node.fields.length === 0) {
+        return {_type: node.id}
+      } else {
+        return node
+      }
     } else if (node.type === 'func') {
       if (node.args.length === 0) {
         return run(env, node.body)
@@ -200,6 +221,14 @@ const execute = nodes => {
           }
         }
         return run(env, node.argv.slice(-1)[0])
+      } else if (node.body.code === 'match') {
+        const target = run(env, node.argv[0])
+        for (let i=1; i<node.argv.length; i+=2) {
+          if (target._type === node.argv[i].code) {
+            return run(env, node.argv[i + 1])
+          }
+        }
+        throw new Error('Unmatch' + str(target))
       }
       const f = run(env, env[node.body.code])
       const argv = node.argv.map(o => run(env, o))
@@ -207,6 +236,8 @@ const execute = nodes => {
         return run(Object.assign({}, env, dict(f.args, argv)), f.body)
       } else if (f.type === 'struct') {
         return dict(f.struct, argv)
+      } else if (f.type === 'tag') {
+        return Object.assign({_type: f.id}, dict(f.fields, argv))
       } else {
         return f
       }
@@ -289,12 +320,16 @@ const testJs = () => {
   t(120, 'f(5)', 'f n = if((n > 1) (n * f(n - 1)) 1)')
 
   // struct
-  t({a:1}, 's(1)', 's:\n  a int')
-  t({a:1,b:"b"}, 's(1 "b")', 's:\n  a int\n  b string')
+  t({a: 1}, 's(1)', 's:\n  a int')
+  t({a: 1, b: "b"}, 's(1 "b")', 's:\n  a int\n  b string')
 
   // adt
-  // match
+  t({_type: 'a'}, 'a', 't|\n  a')
+  t({_type: 'a', x: 1}, 'a(1)', 't|\n  a:\n    x int')
 
+  // match
+  t(1, 'match(a a 1 b 2)', 't|\n  a\n  b')
+  t(2, 'match(b a 1 b 2)', 't|\n  a\n  b')
 /*
   // option
   t(1, 'main = some(1)')
