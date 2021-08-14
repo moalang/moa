@@ -10,9 +10,11 @@ const priorities = [
   '== != > < >= <=',
   '+ -',
   '* / //',
+  '=>',
   '.',
 ].map(ops => ops.split(' '))
 const priority = op => priorities.findIndex(ops => ops.includes(op))
+const newType = (type,o) => Object.assign({type}, o)
 
 const tokenize = src => {
   let index = 0
@@ -24,7 +26,7 @@ const tokenize = src => {
     match('string', /^"[^"]*"+/, s => s.slice(1, -1)) ||
     match('id', /^(?:true|false)(?![a-zA-Z0-9_])/, s => s === 'true') ||
     match('id', /^[a-zA-Z_0-9]+/) ||
-    any('op2', '|| && == >= <= != //'.split(' ').concat('+-*/.><'.split(''))) ||
+    any('op2', '|| && == >= <= => != //'.split(' ').concat('+-*/.><'.split(''))) ||
     any('sym', '[]()=:|'.split('')) ||
     match('space', /^[ \n]+/) ||
     fail('Failed to tokenize:', {src, index, around: src.slice(index)})
@@ -40,7 +42,6 @@ const tokenize = src => {
 }
 const parse = tokens => {
   let pos = 0
-  const newType = (type,o) => Object.assign({type}, o)
   const next = () => tokens[pos++] || fail('EOT', tokens)
   const consume = () => {
     let node = next()
@@ -180,6 +181,10 @@ const execute = nodes => {
       return node.values.map(o => run(env, o))
     } else if (node.op2 === '.') {
       return method(env, run(env, node.lhs), node.rhs)
+    } else if (node.op2 === '=>') {
+      const args = [node.lhs.code]
+      const body = node.rhs
+      return newType('func', {id: '', args, body})
     } else if (node.op2) {
       const l = run(env, node.lhs)
       const r = run(env, node.rhs)
@@ -229,8 +234,16 @@ const execute = nodes => {
           }
         }
         throw new Error('Unmatch' + str(target))
+      } else if (node.body.code === 'then') {
+        const target = run(env, node.argv[0])
+        if (typeof target === 'object' && target.constructor === Error) {
+          throw target
+        } else {
+          const f = run(env, node.argv[1])
+          return run(Object.assign({}, env, dict(f.args, [target])), f.body)
+        }
       }
-      const f = run(env, env[node.body.code])
+      const f = run(env, node.body)
       const argv = node.argv.map(o => run(env, o))
       if (f.type === 'func') {
         return run(Object.assign({}, env, dict(f.args, argv)), f.body)
@@ -271,6 +284,7 @@ const testJs = () => {
   t(1, '1')
   t('hi', '"hi"')
   t(false, 'false')
+  t(1, '(a => a)(1)')
 
   // expression
   t(3, '1 + 2')
@@ -330,12 +344,13 @@ const testJs = () => {
   // match
   t(1, 'match(a a 1 b 2)', 't|\n  a\n  b')
   t(2, 'match(b a 1 b 2)', 't|\n  a\n  b')
-/*
-  // option
-  t(1, 'main = some(1)')
-  t(3, 'main = (some 1).map(v => (v + 2))')
-  t(1, 'main = (error "hi").alt(1)')
 
+  // option
+  t(3, 'then(1 v => (v + 2))')
+  //f("hi", 'then(error("hi") v => v')
+  //t(1, 'then(error("hi")).alt(1)')
+
+/*
   // monadic statement
   t(1, 'main =\n  some(1)')
   t(2, 'main =\n  some(1)\n  some(2)')

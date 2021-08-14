@@ -9,6 +9,7 @@ TODOs
 - Release iOS app
 - Release Android app
 
+
 https://keens.github.io/blog/2021/01/04/future_of_proguramming_languages/
 - "ただ、私は何のエラーが上がってくるか型で明示してほしいのと、例外はリスタート可能であってほしいと思っています。"
 - "、特に重要そうな部分は証明つけよっかってなるフローです。"

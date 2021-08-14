@@ -71,22 +71,26 @@ true # bool
 
 Container
 ```
-a,b   # tuple
-one:1 # struct
-[1]   # array
+a,b     # tuple
+[1]     # array
+a:1,b:2 # struct
+```
+
+Macro
+```
+if a :: (bool^ a^)+ a^ a # "^" is a mark to prevent evaluation
+if [] a = a
+if [a^ b^ ...c] d = a! ? b! : if(...c d)
 ```
 
 Anonymouse Function
 ```
-a => a
 a,b => a + b
 ```
 
 Function
 ```
-pi :: float # signature is optional
-pi = 3
-inc :: int int
+inc :: int int # signature is optional
 inc x = x + 1
 add a.num :: a a a
 add x y = x + y
@@ -108,16 +112,10 @@ bool| # "|" + "\n" define algebraic data type
   true
   false
 
-option a|
-  none
-  some a
-
-ast|
-  aint int
-  aop2:
-    op string
-    lhs ast
-    rhs ast
+result a|
+  success a
+  failure:
+    message string
 ```
 
 Type class
@@ -125,10 +123,6 @@ Type class
 .eq t:
   eq :: t t bool
   eq a b = a == b
-
-.error t:
-  message :: string
-  message e = string(e)
 
 .int t:
   (+,-,*) :: t t t
@@ -138,11 +132,7 @@ Type class
   (//) :: t t int
   (//) l r = int(l / r)
 
-.functor t:
-  fmap a b:: (a b) t(a) t(b)
-.applicative t.functor:
-  pure :: a t(a)
-.momad t.applicative:
+.monad t.(_ => _):
   return a :: a t(a)
   bind a b :: t(a) (a t(b)) t(b)
 ```
