@@ -15,6 +15,11 @@ const priorities = [
 ].map(ops => ops.split(' '))
 const priority = op => priorities.findIndex(ops => ops.includes(op))
 const newType = (type,o) => Object.assign({type}, o)
+const isPrimitive = o => (t =>
+  t === 'number' ||
+  t === 'string' ||
+  t === 'object' && (o.constructor === Array || o.constructor == Error)
+)(typeof o)
 
 const tokenize = src => {
   let index = 0
@@ -146,6 +151,11 @@ const execute = nodes => {
           return o.length
         }
       }
+      if (typeof o === 'object' && o.constructor === Error) {
+        if (id === 'message') {
+          return o.message
+        }
+      }
       if (typeof o === 'string') {
         if (id === 'size') {
           return o.length
@@ -171,8 +181,7 @@ const execute = nodes => {
     if (node === undefined) {
       return node
     }
-    const t = typeof node
-    if (t === 'number' || t === 'string' || (t === 'object' && node.constructor === Array)) {
+    if (isPrimitive(node)) {
       return node
     }
     if (node.value !== undefined) {
@@ -242,6 +251,16 @@ const execute = nodes => {
           const f = run(env, node.argv[1])
           return run(Object.assign({}, env, dict(f.args, [target])), f.body)
         }
+      } else if (node.body.code === 'catch') {
+        const target = run(env, node.argv[0])
+        if (typeof target === 'object' && target.constructor === Error) {
+          const f = run(env, node.argv[1])
+          return run(Object.assign({}, env, dict(f.args, [target])), f.body)
+        } else {
+          return target
+        }
+      } else if (node.body.code === 'error') {
+        return Error(run(env, node.argv[0]))
       }
       const f = run(env, node.body)
       const argv = node.argv.map(o => run(env, o))
@@ -259,16 +278,20 @@ const execute = nodes => {
     }
     fail('Failed to run', {node, nodes})
   }
-  return run(scope, scope.main.body)
+  try {
+    return run(scope, scope.main.body)
+  } catch (e) {
+    return e
+  }
 }
 
 const testJs = () => {
-  const t = (expect, exp, ...defs) => {
+  const test = (check, expect, exp, ...defs) => {
     const src = (defs || []).concat(['main = ' + exp]).join('\n')
     const tokens = tokenize(src)
     const nodes = parse(tokens)
     const result = execute(nodes)
-    if (eq(expect, result)) {
+    if (eq(expect, check(result))) {
       write('.')
     } else {
       print('expect:', expect)
@@ -279,6 +302,8 @@ const testJs = () => {
       throw new Error('Test was failed')
     }
   }
+  const t = (expect, exp, ...defs) => test(x => x, expect, exp, ...defs)
+  const f = (expect, exp, ...defs) => test(x => x.message, expect, exp, ...defs)
 
   // primitives
   t(1, '1')
@@ -347,8 +372,9 @@ const testJs = () => {
 
   // option
   t(3, 'then(1 v => (v + 2))')
-  //f("hi", 'then(error("hi") v => v')
-  //t(1, 'then(error("hi")).alt(1)')
+  f("hi", 'error("hi")')
+  f("hi", 'then(error("hi") v => v)')
+  t("hi", 'catch(error("hi") e => e.message)')
 
 /*
   // monadic statement
