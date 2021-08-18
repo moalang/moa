@@ -15,7 +15,7 @@ const priorities = [
   '.',
 ].map(ops => ops.split(' '))
 const priority = op => priorities.findIndex(ops => ops.includes(op))
-const newType = (type,indent,o) => Object.assign({type,indent}, o)
+const newType = (type,indent,o) => Object.assign({type,indent},o)
 const isPrimitive = o => (t =>
   t === 'number' ||
   t === 'string' ||
@@ -102,16 +102,17 @@ const parse = tokens => {
     return [...Array(fields.length/2).keys()].map(i => fields[i*2].code)
   }
   const consumeAdtFields = () => {
-    const tags = []
+    const types = []
     while (pos < tokens.length && tokens[pos].indent > 0) {
-      const tag = {type: 'tag', id: consume().code, fields: []}
+      const {indent, code} = consume()
+      const type = newType('tag', indent, {id: code, fields: []})
       if (pos < tokens.length && tokens[pos].code === ':') {
         consume() // drop ':'
-        tag.fields = consumeFields(2)
+        type.fields = consumeFields(2)
       }
-      tags.push(tag)
+      types.push(type)
     }
-    return tags
+    return types
   }
   const consumeFunctionBody = (indent) => {
     const lines = until(t => t.indent > indent)
@@ -155,8 +156,8 @@ const execute = nodes => {
     } else if (node.type === 'struct') {
       scope[node.id] = node
     } else if (node.type === 'adt') {
-      for (const tag of node.adt) {
-        scope[tag.id] = tag
+      for (const type of node.adt) {
+        scope[type.id] = type
       }
     } else {
       fail('Unknown node', {node, nodes})
@@ -404,7 +405,7 @@ const testJs = () => {
   f("err1", '\n  f(error("err1") error("err2"))', 'f a b = b')
 
   // modify variable
-  //t("3", '\n  a = 1\n  a += 2\n  a')
+  //t("3", '\n  a := 1\n  a += 2\n  a')
 }
 
 testJs()
