@@ -6,10 +6,11 @@ const eq = (x, y) => str(x) === str(y)
 const fail = (message, obj) => { dump(message, obj || {}); throw new Error(message) }
 const dict = (ks,vs) => ks.reduce((d,k,i) => (d[k]=vs[i], d), {})
 const priorities = [
+  ':= += -= *= /=',
   '|| &&',
   '== != > < >= <=',
   '+ -',
-  '* / //',
+  '* // /',
   '=>',
   '.',
 ].map(ops => ops.split(' '))
@@ -31,7 +32,7 @@ const tokenize = src => {
     match('string', /^"[^"]*"+/, s => s.slice(1, -1)) ||
     match('id', /^(?:true|false)(?![a-zA-Z0-9_])/, s => s === 'true') ||
     match('id', /^[a-zA-Z_0-9]+/) ||
-    any('op2', '|| && == >= <= => != //'.split(' ').concat('+-*/.><'.split(''))) ||
+    any('op2', priorities.flat()) ||
     any('sym', '[]()=:|'.split('')) ||
     match('space', /^[ \n]+/) ||
     fail('Failed to tokenize:', {src, index, around: src.slice(index)})
@@ -401,6 +402,9 @@ const testJs = () => {
   f("err", '\n  error("err")\n  2')
   f("err", '\n  error("err") + 1')
   f("err1", '\n  f(error("err1") error("err2"))', 'f a b = b')
+
+  // modify variable
+  //t("3", '\n  a = 1\n  a += 2\n  a')
 }
 
 testJs()
