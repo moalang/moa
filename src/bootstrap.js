@@ -16,10 +16,14 @@ const priorities = [
 ].map(ops => ops.split(' '))
 const priority = op => priorities.findIndex(ops => ops.includes(op))
 const newType = (type,indent,o) => Object.assign({type,indent},o)
+function struct(d) {
+  for (const k in d) {
+    this[k] = d[k]
+  }
+}
 const isPrimitive = o => (t =>
-  t === 'number' ||
-  t === 'string' ||
-  t === 'object' && (o.constructor === Array || o.constructor == Error)
+  t === 'number' || t === 'string' ||
+  (t === 'object' && (o.constructor === Array || o.constructor === Error || o.constructor === struct))
 )(typeof o)
 
 const tokenize = src => {
@@ -121,8 +125,6 @@ const parse = tokens => {
     const lines = until(t => t.indent > indent, top)
     if (lines.length === 0) {
       return consume()
-    } else if (lines.length === 1) {
-      return lines[0]
     } else {
       return newType('stmt', lines[0].indent, {lines})
     }
@@ -138,11 +140,10 @@ const parse = tokens => {
         case '|': consume(); return newType('adt', indent, {id: code, args, adt: consumeAdt()})
       }
     }
-    if (args.length === 0) {
-      return head
-    } else {
+    if (args.length > 0) {
       fail('invalid syntax', {head, args, pos, tokens})
     }
+    return head
   }
 
   const nodes = []
@@ -159,15 +160,9 @@ const execute = nodes => {
     local(d2) { return newSpace(d2, this) }
   })
   const space = newSpace({}, {
-    get(k) {
-      throw new Error(k + ' is not found')
-    },
-    put(k,v) {
-      throw new Error('never comming here')
-    },
-    update(k, v) {
-      throw new Error(k + ' is not found to udpate ' + set(v))
-    },
+    get(k) { throw new Error(k + ' is not found') },
+    put(k,v) { throw new Error('never comming here') },
+    update(k, v) { throw new Error(k + ' is not found to udpate ' + set(v)) },
   })
   for (const node of nodes) {
     if (node.type === 'func') {
@@ -183,39 +178,23 @@ const execute = nodes => {
     }
     node.defined = true
   }
+  const methods = {
+    'object': { // object is for array
+      size: o => o.length,
+      at: (o,i) => o[i],
+    },
+    'string': {
+      size: o => o.length,
+      at: (o,i) => o[i],
+    },
+  }
   const method = (env, o, node) => {
-    if (node.tag === 'id') {
-      const id = node.code
-      if (typeof o === 'object' && o.constructor === Array) {
-        if (id === 'size') {
-          return o.length
-        }
-      }
-      if (typeof o === 'object' && o.constructor === Error) {
-        if (id === 'message') {
-          return o.message
-        }
-      }
-      if (typeof o === 'string') {
-        if (id === 'size') {
-          return o.length
-        }
-      }
-    } else if (node.type === 'call') {
-      const id = node.body.code
-      const argv = node.argv
-      if (typeof o === 'object' && o.constructor === Array) {
-        if (id === 'at') {
-          return o[run(env, argv[0])]
-        }
-      }
-      if (typeof o === 'string') {
-        if (id === 'at') {
-          return o[run(env, argv[0])]
-        }
-      }
-    }
-    fail('Unknown method', {o,node})
+    let t = typeof o
+    t = t === 'object' ? t.type || t : t
+    const m = methods[t]
+    const argv = node.type === 'call' ? node.argv.map(a => run(env, a)) : []
+    const id = node.type === 'call' ? node.body.code : node.code
+    return m[id] ? m[id](o, ...argv) : id in o ? o[id] : fail('Unknown method', {m,id,o,node})
   }
   const run = (env, node) => {
     if (node === undefined) {
@@ -225,7 +204,7 @@ const execute = nodes => {
       return node
     } else if (node.value !== undefined) {
       return node.value
-    } else if (node.values) {
+    } else if (node.type === 'array') {
       return node.values.map(o => run(env, o))
     } else if (node.type === 'op2') {
       if (node.op2 === '.') {
@@ -311,7 +290,8 @@ const execute = nodes => {
           return run(env, node.argv[0])
         } catch (e) {
           const f = run(env, node.argv[1])
-          return run(env.local(dict(f.args, [e])), f.body)
+          const t = new struct({message: e.message})
+          return run(env.local(dict(f.args, [t])), f.body)
         }
       } else if (node.body.code === 'error') {
         throw new Error(run(env, node.argv[0]))
@@ -321,9 +301,9 @@ const execute = nodes => {
       if (f.type === 'func') {
         return run(env.local(dict(f.args, argv)), f.body)
       } else if (f.type === 'struct') {
-        return dict(f.struct, argv)
+        return new struct(dict(f.struct, argv))
       } else if (f.type === 'tag') {
-        return Object.assign({_type: f.id}, dict(f.fields, argv))
+        return new struct(Object.assign({_type: f.id}, dict(f.fields, argv)))
       } else {
         return f
       }
@@ -415,6 +395,7 @@ const testJs = () => {
   // struct
   t({a: 1}, 's(1)', 's:\n  a int')
   t({a: 1, b: "b"}, 's(1 "b")', 's:\n  a int\n  b string')
+  t(3, 's(1 2).a + s(1 2).b', 's:\n  a int\n  b int')
 
   // adt
   t({_type: 'a'}, 'a', 't|\n  a')
