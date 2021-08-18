@@ -22,7 +22,7 @@ function struct(d) {
   }
 }
 const isPrimitive = o => (t =>
-  t === 'number' || t === 'string' ||
+  t === 'number' || t === 'string' || t === 'function' ||
   (t === 'object' && (o.constructor === Array || o.constructor === Error || o.constructor === struct))
 )(typeof o)
 
@@ -112,7 +112,7 @@ const parse = tokens => {
     const types = []
     while (pos < tokens.length && tokens[pos].indent > 0) {
       const {indent, code} = consume()
-      const type = newType('tag', indent, {id: code, fields: []})
+      const type = newType('case', indent, {id: code, fields: []})
       if (pos < tokens.length && tokens[pos].code === ':') {
         consume() // drop ':'
         type.fields = consumeStruct(2)
@@ -247,9 +247,9 @@ const execute = nodes => {
       }
     } else if (node.type === 'struct') {
       return node
-    } else if (node.type === 'tag') {
+    } else if (node.type === 'case') {
       if (node.fields.length === 0) {
-        return {_type: node.id}
+        return {_case: node.id}
       } else {
         return node
       }
@@ -272,7 +272,7 @@ const execute = nodes => {
       } else if (node.body.code === 'match') {
         const target = run(env, node.argv[0])
         for (let i=1; i<node.argv.length; i+=2) {
-          if (target._type === node.argv[i].code) {
+          if (target._case === node.argv[i].code) {
             return run(env, node.argv[i + 1])
           }
         }
@@ -302,8 +302,8 @@ const execute = nodes => {
         return run(env.local(dict(f.args, argv)), f.body)
       } else if (f.type === 'struct') {
         return new struct(dict(f.struct, argv))
-      } else if (f.type === 'tag') {
-        return new struct(Object.assign({_type: f.id}, dict(f.fields, argv)))
+      } else if (f.type === 'case') {
+        return new struct(Object.assign({_case: f.id}, dict(f.fields, argv)))
       } else {
         return f
       }
@@ -398,8 +398,8 @@ const testJs = () => {
   t(3, 's(1 2).a + s(1 2).b', 's:\n  a int\n  b int')
 
   // adt
-  t({_type: 'a'}, 'a', 't|\n  a')
-  t({_type: 'a', x: 1}, 'a(1)', 't|\n  a:\n    x int')
+  t({_case: 'a'}, 'a', 't|\n  a')
+  t({_case: 'a', x: 1}, 'a(1)', 't|\n  a:\n    x int')
 
   // match
   t(1, 'match(a a 1 b 2)', 't|\n  a\n  b')
