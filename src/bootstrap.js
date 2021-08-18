@@ -74,9 +74,12 @@ const parse = tokens => {
       const lhs = node
       const rhs = consume()
       if (rhs.op2 && !lhs.fixed && !rhs.fixed && priority(op2) > priority(rhs.op2)) {
-        node = {op2: rhs.op2, lhs: {op2, lhs, rhs: rhs.lhs}, rhs: rhs.rhs}
+        node = newType('op2', node.indent, {
+          op2: rhs.op2,
+          lhs: newType('op2', node.indent, {op2, lhs, rhs: rhs.lhs}),
+          rhs: rhs.rhs})
       } else {
-        node = {op2, lhs, rhs}
+        node = newType('op2', node.indent, {op2, lhs, rhs})
       }
     }
     return node
@@ -208,13 +211,24 @@ const execute = nodes => {
       return node.value
     } else if (node.values) {
       return node.values.map(o => run(env, o))
-    } else if (node.op2 === '.') {
-      return method(env, run(env, node.lhs), node.rhs)
-    } else if (node.op2 === '=>') {
-      const args = [node.lhs.code]
-      const body = node.rhs
-      return newType('func', node.indent, {id: '', args, body})
-    } else if (node.op2) {
+    } else if (node.type === 'op2') {
+      if (node.op2 === '.') {
+        return method(env, run(env, node.lhs), node.rhs)
+      } else if (node.op2 === '=>') {
+        const args = [node.lhs.code]
+        const body = node.rhs
+        return newType('func', node.indent, {id: '', args, body})
+      } else if (':= += -= *= /='.split(' ').includes(node.op2)) {
+        const r = run(env, node.rhs)
+        switch (node.op2) {
+          case ':=': return env[node.lhs.code] = r
+          case '+=': return env[node.lhs.code] += r
+          case '-=': return env[node.lhs.code] -= r
+          case '*=': return env[node.lhs.code] *= r
+          case '/=': return env[node.lhs.code] /= r
+          default: fail('Unknown op2', node)
+        }
+      }
       const l = run(env, node.lhs)
       const r = run(env, node.rhs)
       switch (node.op2) {
@@ -405,7 +419,7 @@ const testJs = () => {
   f("err1", '\n  f(error("err1") error("err2"))', 'f a b = b')
 
   // modify variable
-  //t("3", '\n  a := 1\n  a += 2\n  a')
+  t(3, '\n  a := 1\n  a += 2\n  a')
 }
 
 testJs()
