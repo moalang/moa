@@ -104,7 +104,7 @@ const parse = tokens => {
     h && h()
     return matches
   }
-  const consumeStruct = (indent) => {
+  const consumeStruct = indent => {
     const fields = until(t => t.indent > indent, consume)
     return [...Array(fields.length/2).keys()].map(i => fields[i*2].code)
   }
@@ -121,7 +121,7 @@ const parse = tokens => {
     }
     return types
   }
-  const consumeBody = (indent) => {
+  const consumeBody = indent => {
     const lines = until(t => t.indent > indent, top)
     if (lines.length === 0) {
       return consume()
