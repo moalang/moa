@@ -246,14 +246,7 @@ const execute = nodes => {
         return node
       }
     } else if (node.type === 'stmt') {
-      let ret = null
-      for (const line of node.lines) {
-        ret = run(env, line)
-        if (typeof ret === 'object' && ret.constructor === Error) {
-          return ret
-        }
-      }
-      return ret
+      return node.lines.map(line => run(env, line)).slice(-1)[0]
     } else if (node.type === 'call') {
       if (node.body.code === 'if') {
         for (let i=0; i<node.argv.length; i+=2) {
@@ -271,23 +264,22 @@ const execute = nodes => {
         }
         throw new Error('Unmatch' + str(target))
       } else if (node.body.code === 'then') {
-        const target = run(env, node.argv[0])
-        if (typeof target === 'object' && target.constructor === Error) {
-          throw target
-        } else {
+        try {
+          const target = run(env, node.argv[0])
           const f = run(env, node.argv[1])
           return run(Object.assign({}, env, dict(f.args, [target])), f.body)
+        } catch (e) {
+          throw e
         }
       } else if (node.body.code === 'catch') {
-        const target = run(env, node.argv[0])
-        if (typeof target === 'object' && target.constructor === Error) {
+        try {
+          return run(env, node.argv[0])
+        } catch (e) {
           const f = run(env, node.argv[1])
-          return run(Object.assign({}, env, dict(f.args, [target])), f.body)
-        } else {
-          return target
+          return run(Object.assign({}, env, dict(f.args, [e])), f.body)
         }
       } else if (node.body.code === 'error') {
-        return Error(run(env, node.argv[0]))
+        throw new Error(run(env, node.argv[0]))
       }
       const f = run(env, node.body)
       const argv = node.argv.map(o => run(env, o))
@@ -407,6 +399,7 @@ const testJs = () => {
   t(1, '\n  1')
   t(2, '\n  1\n  2')
   f("err", '\n  error("err")\n  2')
+  f("err", '\n  error("err") + 1')
 }
 
 testJs()
