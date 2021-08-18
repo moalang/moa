@@ -14,7 +14,7 @@ const priorities = [
   '.',
 ].map(ops => ops.split(' '))
 const priority = op => priorities.findIndex(ops => ops.includes(op))
-const newType = (type,o) => Object.assign({type}, o)
+const newType = (type,indent,o) => Object.assign({type,indent}, o)
 const isPrimitive = o => (t =>
   t === 'number' ||
   t === 'string' ||
@@ -60,12 +60,13 @@ const parse = tokens => {
     }
     if (node.code === '[') {
       const values = until(t => t.code !== ']', consume)
-      node = newType('array', {values})
+      node = newType('array', node.indent, {values})
     }
     while (pos < tokens.length && tokens[pos].code === '(' && tokens[pos - 1].index + tokens[pos - 1].code.length === tokens[pos].index) {
-      pos += 1 // drop "("
+      const indent = tokens[pos].indent
+      pos+=1 // drop '('
       const argv = until(t => t.code !== ')', consume)
-      node = newType('call', {body: node, argv})
+      node = newType('call', indent, {body: node, argv})
     }
     if (pos < tokens.length && tokens[pos].tag === 'op2') {
       const op2 = consume().code
@@ -111,14 +112,31 @@ const parse = tokens => {
     }
     return tags
   }
+  const consumeFunctionBody = (indent) => {
+    const lines = until(t => t.indent > indent)
+    if (lines.length === 0) {
+      return consume()
+    } else if (lines.length === 1) {
+      return lines[0]
+    } else {
+      return newType('stmt', lines[0].indent, {lines})
+    }
+  }
   const top = () => {
-    const {code, indent} = consume()
+    const head = consume()
+    const {code, indent} = head
     const args = until(t => t.tag === 'id' && t.indent === indent).map(t => t.code)
-    switch (consume().code) {
-      case '=': return newType('func', {id: code, args, body: consume()})
-      case ':': return newType('struct', {id: code, args, struct: consumeFields(0)})
-      case '|': return newType('adt', {id: code, args, adt: consumeAdtFields()})
-      default: fail('Unknown definition', {code, args, pos, tokens})
+    if (pos < tokens.length) {
+      switch (tokens[pos].code) {
+        case '=': consume(); return newType('func', indent, {id: code, args, body: consumeFunctionBody(indent)})
+        case ':': consume(); return newType('struct', indent, {id: code, args, struct: consumeFields(0)})
+        case '|': consume(); return newType('adt', indent, {id: code, args, adt: consumeAdtFields()})
+      }
+    }
+    if (args.length === 0) {
+      return head
+    } else {
+      fail('invalid syntax', {pos, tokens})
     }
   }
 
@@ -140,7 +158,7 @@ const execute = nodes => {
         scope[tag.id] = tag
       }
     } else {
-      fail('Unknown node', node)
+      fail('Unknown node', {node, nodes})
     }
   }
   const method = (env, o, node) => {
@@ -193,7 +211,7 @@ const execute = nodes => {
     } else if (node.op2 === '=>') {
       const args = [node.lhs.code]
       const body = node.rhs
-      return newType('func', {id: '', args, body})
+      return newType('func', node.indent, {id: '', args, body})
     } else if (node.op2) {
       const l = run(env, node.lhs)
       const r = run(env, node.rhs)
@@ -227,6 +245,15 @@ const execute = nodes => {
       } else {
         return node
       }
+    } else if (node.type === 'stmt') {
+      let ret = null
+      for (const line of node.lines) {
+        ret = run(env, line)
+        if (typeof ret === 'object' && ret.constructor === Error) {
+          return ret
+        }
+      }
+      return ret
     } else if (node.type === 'call') {
       if (node.body.code === 'if') {
         for (let i=0; i<node.argv.length; i+=2) {
@@ -372,16 +399,14 @@ const testJs = () => {
 
   // option
   t(3, 'then(1 v => (v + 2))')
-  f("hi", 'error("hi")')
-  f("hi", 'then(error("hi") v => v)')
-  t("hi", 'catch(error("hi") e => e.message)')
+  f("err", 'error("err")')
+  f("err", 'then(error("err") v => v)')
+  t("err", 'catch(error("err") e => e.message)')
 
-/*
   // monadic statement
-  t(1, 'main =\n  some(1)')
-  t(2, 'main =\n  some(1)\n  some(2)')
-  t({message: 'hi', __type: 'error'}, 'main =\n  error("hi")\n  some(2)')
-  */
+  t(1, '\n  1')
+  t(2, '\n  1\n  2')
+  f("err", '\n  error("err")\n  2')
 }
 
 testJs()
