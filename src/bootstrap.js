@@ -400,6 +400,7 @@ const testJs = () => {
   t(2, '\n  1\n  2')
   f("err", '\n  error("err")\n  2')
   f("err", '\n  error("err") + 1')
+  f("err1", '\n  f(error("err1") error("err2"))', 'f a b = b')
 }
 
 testJs()
