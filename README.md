@@ -163,6 +163,16 @@ main =
   n + m         # never reached here
 ```
 
+Variable
+```
+main =
+  a <- 1
+  a += 2 # a will be 3
+  inc = a += 1
+  add n = a += n
+  inc    # a will be 4
+  add(3) # a will be 7
+```
 
 
 ## 3. Syntax
@@ -176,12 +186,11 @@ adt: id+ "|" (indent id body?)+
 body: id | ":" (indent2 attr)+
 
 line: indent exp
-exp: "(" unit? ")" | unit
+exp: unit (op2 exp)*
 unit:
-| op2 exp
 | value (call | prop)*
 value:
-| "()"         # generic empty
+| "(" unit ")"
 | "[" exp* "]" # array
 | kv ("," kv)* # struct
 | num ("." num)?
