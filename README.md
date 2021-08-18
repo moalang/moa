@@ -76,13 +76,6 @@ a,b     # tuple
 a:1,b:2 # struct
 ```
 
-Macro
-```
-if a :: (bool^ a^)+ a^ a # "^" is a mark to prevent evaluation
-if [] a = a
-if [a^ b^ ...c] d = a! ? b! : if(...c d)
-```
-
 Anonymouse Function
 ```
 a,b => a + b
@@ -142,7 +135,7 @@ Exp
 1 + 2 * 3 == 7
 ```
 
-Control Flow?
+Control Flow
 ```
 max a b = if(a > b a b)
 
@@ -160,8 +153,7 @@ Error Handling
 ```
 div :: int int try(int)
 div a b = if(
-  b == 0
-    error("zero division")
+  b == 0 error("zero division")
   a / b)
 
 main :: try(int)

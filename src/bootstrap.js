@@ -3,10 +3,10 @@ const print = (...a) => console.log(...a)
 const dump = (label,o) => { write(label, ' '); console.dir(o,{depth:null}) }
 const str = o => JSON.stringify(o, null, '  ')
 const eq = (x, y) => str(x) === str(y)
-const fail = (message, obj) => { dump(message, obj || {}); throw new Error(message) }
+const fail = (message,obj) => { dump(message, obj || {}); throw new Error(message) }
 const dict = (ks,vs) => ks.reduce((d,k,i) => (d[k]=vs[i], d), {})
 const priorities = [
-  ':= += -= *= /=',
+  '<- := += -= *= /=',
   '|| &&',
   '== != > < >= <=',
   '+ -',
@@ -60,13 +60,13 @@ const parse = tokens => {
       node.fixed = true // prevent to change priority
     }
     if (node.code === '[') {
-      const values = until(t => t.code !== ']', consume)
+      const values = until(t => t.code !== ']', consume, consume)
       node = newType('array', node.indent, {values})
     }
     while (pos < tokens.length && tokens[pos].code === '(' && tokens[pos - 1].index + tokens[pos - 1].code.length === tokens[pos].index) {
       const indent = tokens[pos].indent
       pos+=1 // drop '('
-      const argv = until(t => t.code !== ')', consume)
+      const argv = until(t => t.code !== ')', consume, consume)
       node = newType('call', indent, {body: node, argv})
     }
     if (pos < tokens.length && tokens[pos].tag === 'op2') {
@@ -85,11 +85,11 @@ const parse = tokens => {
     return node
   }
   const guard = f => (node => f(node) ? node : fail('Unexpected node:' + f.toString(), {node, pos, nodes}))(consume())
-  const until = (f, g) => {
+  const until = (f, g, h) => {
     const matches = []
     while (pos < tokens.length) {
       const bk = pos
-      const node = consume()
+      const node = g()
       if (f(node)) {
         matches.push(node)
       } else {
@@ -97,28 +97,28 @@ const parse = tokens => {
         break
       }
     }
-    g && g()
+    h && h()
     return matches
   }
-  const consumeFields = (indent) => {
-    const fields = until(t => t.indent > indent)
+  const consumeStruct = (indent) => {
+    const fields = until(t => t.indent > indent, consume)
     return [...Array(fields.length/2).keys()].map(i => fields[i*2].code)
   }
-  const consumeAdtFields = () => {
+  const consumeAdt = () => {
     const types = []
     while (pos < tokens.length && tokens[pos].indent > 0) {
       const {indent, code} = consume()
       const type = newType('tag', indent, {id: code, fields: []})
       if (pos < tokens.length && tokens[pos].code === ':') {
         consume() // drop ':'
-        type.fields = consumeFields(2)
+        type.fields = consumeStruct(2)
       }
       types.push(type)
     }
     return types
   }
-  const consumeFunctionBody = (indent) => {
-    const lines = until(t => t.indent > indent)
+  const consumeBody = (indent) => {
+    const lines = until(t => t.indent > indent, top)
     if (lines.length === 0) {
       return consume()
     } else if (lines.length === 1) {
@@ -129,19 +129,19 @@ const parse = tokens => {
   }
   const top = () => {
     const head = consume()
-    const {code, indent} = head
-    const args = until(t => t.tag === 'id' && t.indent === indent).map(t => t.code)
+    const {code, indent, line} = head
+    const args = until(t => t.tag === 'id' && t.line === line, consume).map(t => t.code)
     if (pos < tokens.length) {
       switch (tokens[pos].code) {
-        case '=': consume(); return newType('func', indent, {id: code, args, body: consumeFunctionBody(indent)})
-        case ':': consume(); return newType('struct', indent, {id: code, args, struct: consumeFields(0)})
-        case '|': consume(); return newType('adt', indent, {id: code, args, adt: consumeAdtFields()})
+        case '=': consume(); return newType('func', indent, {id: code, args, body: consumeBody(indent)})
+        case ':': consume(); return newType('struct', indent, {id: code, args, struct: consumeStruct(0)})
+        case '|': consume(); return newType('adt', indent, {id: code, args, adt: consumeAdt()})
       }
     }
     if (args.length === 0) {
       return head
     } else {
-      fail('invalid syntax', {pos, tokens})
+      fail('invalid syntax', {head, args, pos, tokens})
     }
   }
 
@@ -152,19 +152,36 @@ const parse = tokens => {
   return nodes
 }
 const execute = nodes => {
-  const scope = {}
+  const newSpace = (d, p) => ({
+    get(k) { return k in d ? d[k] : p.get(k) },
+    put(k, v) { d[k] = v },
+    update(k, v) { k in d ? d[k] = v : p.update(k, v) },
+    local(d2) { return newSpace(d2, this) }
+  })
+  const space = newSpace({}, {
+    get(k) {
+      throw new Error(k + ' is not found')
+    },
+    put(k,v) {
+      throw new Error('never comming here')
+    },
+    update(k, v) {
+      throw new Error(k + ' is not found to udpate ' + set(v))
+    },
+  })
   for (const node of nodes) {
     if (node.type === 'func') {
-      scope[node.id] = node
+      space.put(node.id, node.args.length === 0 ? node.body : node)
     } else if (node.type === 'struct') {
-      scope[node.id] = node
+      space.put(node.id, node)
     } else if (node.type === 'adt') {
       for (const type of node.adt) {
-        scope[type.id] = type
+        space.put(type.id, type)
       }
     } else {
       fail('Unknown node', {node, nodes})
     }
+    node.defined = true
   }
   const method = (env, o, node) => {
     if (node.tag === 'id') {
@@ -202,12 +219,11 @@ const execute = nodes => {
   }
   const run = (env, node) => {
     if (node === undefined) {
-      return node
+      throw new Error('node is undefined in ' + str(env))
     }
     if (isPrimitive(node)) {
       return node
-    }
-    if (node.value !== undefined) {
+    } else if (node.value !== undefined) {
       return node.value
     } else if (node.values) {
       return node.values.map(o => run(env, o))
@@ -218,14 +234,17 @@ const execute = nodes => {
         const args = [node.lhs.code]
         const body = node.rhs
         return newType('func', node.indent, {id: '', args, body})
+      } else if (node.op2 === '<-') {
+        return env.put(node.lhs.code, run(env, node.rhs))
       } else if (':= += -= *= /='.split(' ').includes(node.op2)) {
         const r = run(env, node.rhs)
+        const l = env.get(node.lhs.code)
         switch (node.op2) {
-          case ':=': return env[node.lhs.code] = r
-          case '+=': return env[node.lhs.code] += r
-          case '-=': return env[node.lhs.code] -= r
-          case '*=': return env[node.lhs.code] *= r
-          case '/=': return env[node.lhs.code] /= r
+          case ':=': return env.update(node.lhs.code, r)
+          case '+=': return env.update(node.lhs.code, l + r)
+          case '-=': return env.update(node.lhs.code, l - r)
+          case '*=': return env.update(node.lhs.code, l * r)
+          case '/=': return env.update(node.lhs.code, l / r)
           default: fail('Unknown op2', node)
         }
       }
@@ -256,11 +275,11 @@ const execute = nodes => {
         return node
       }
     } else if (node.type === 'func') {
-      if (node.args.length === 0) {
-        return run(env, node.body)
-      } else {
-        return node
+      if (!node.defined) {
+        env.put(node.id, node.args.length === 0 ? node.body : node)
+        node.defined = true
       }
+      return node
     } else if (node.type === 'stmt') {
       return node.lines.map(line => run(env, line)).slice(-1)[0]
     } else if (node.type === 'call') {
@@ -283,7 +302,7 @@ const execute = nodes => {
         try {
           const target = run(env, node.argv[0])
           const f = run(env, node.argv[1])
-          return run(Object.assign({}, env, dict(f.args, [target])), f.body)
+          return run(env.local(dict(f.args, [target])), f.body)
         } catch (e) {
           throw e
         }
@@ -292,7 +311,7 @@ const execute = nodes => {
           return run(env, node.argv[0])
         } catch (e) {
           const f = run(env, node.argv[1])
-          return run(Object.assign({}, env, dict(f.args, [e])), f.body)
+          return run(env.local(dict(f.args, [e])), f.body)
         }
       } else if (node.body.code === 'error') {
         throw new Error(run(env, node.argv[0]))
@@ -300,7 +319,7 @@ const execute = nodes => {
       const f = run(env, node.body)
       const argv = node.argv.map(o => run(env, o))
       if (f.type === 'func') {
-        return run(Object.assign({}, env, dict(f.args, argv)), f.body)
+        return run(env.local(dict(f.args, argv)), f.body)
       } else if (f.type === 'struct') {
         return dict(f.struct, argv)
       } else if (f.type === 'tag') {
@@ -309,12 +328,12 @@ const execute = nodes => {
         return f
       }
     } else if (node.tag === 'id') {
-      return run(env, env[node.code])
+      return run(env, env.get(node.code))
     }
     fail('Failed to run', {node, nodes})
   }
   try {
-    return run(scope, scope.main.body)
+    return run(space, space.get('main'))
   } catch (e) {
     return e
   }
@@ -419,7 +438,10 @@ const testJs = () => {
   f("err1", '\n  f(error("err1") error("err2"))', 'f a b = b')
 
   // modify variable
-  t(3, '\n  a := 1\n  a += 2\n  a')
+  t(3, '\n  a <- 1\n  a += 2\n  a')
+  t(1, '\n  a <- 1\n  a0(a)\n  a', 'a0 a = a := 0')
+  t(3, '\n  a <- 1\n  inc =\n    a += 1\n  inc\n  inc\n  a')
+  t(6, '\n  a <- 1\n  add n =\n    a += n\n  add(2)\n  add(3)\n  a')
 }
 
 testJs()
