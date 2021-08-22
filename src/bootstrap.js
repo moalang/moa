@@ -152,7 +152,8 @@ const parse = tokens => {
   }
   return nodes
 }
-const execute = nodes => {
+const execute = (nodes, opt) => {
+  opt ||= {}
   const newSpace = (d, p) => ({
     get(k) { return k in d ? d[k] : p.get(k) },
     put(k, v) { d[k] = v },
@@ -324,8 +325,8 @@ const execute = nodes => {
     fail('Failed to run', {node, nodes})
   }
   let stdout = ''
-  const stdin = ''
   const io = {
+    read: opt.stdin,
     print: (_,s) => stdout += s.toString() + "\n",
   }
   space.put('io', new struct(io))
@@ -338,11 +339,11 @@ const execute = nodes => {
 }
 
 const testJs = () => {
-  const test = (check, expect, exp, ...defs) => {
+  const test = (opt, check, expect, exp, ...defs) => {
     const src = (defs || []).concat(['main = ' + exp]).join('\n')
     const tokens = tokenize(src)
     const nodes = parse(tokens)
-    const result = execute(nodes)
+    const result = execute(nodes, opt)
     if (eq(expect, check(result))) {
       write('.')
     } else {
@@ -354,9 +355,10 @@ const testJs = () => {
       throw new Error('Test was failed')
     }
   }
-  const t = (expect, exp, ...defs) => test(x => x.ret, expect, exp, ...defs)
-  const f = (expect, exp, ...defs) => test(x => x.ret.message, expect, exp, ...defs)
-  const stdout = (expect, exp, ...defs) => test(x => x.stdout, expect, exp, ...defs)
+  const t = (expect, exp, ...defs) => test({}, x => x.ret, expect, exp, ...defs)
+  const f = (expect, exp, ...defs) => test({}, x => x.ret.message, expect, exp, ...defs)
+  const stdout = (expect, exp, ...defs) => test({}, x => x.stdout, expect, exp, ...defs)
+  const stdio = (stdin, expect, exp, ...defs) => test({stdin}, x => x.stdout, expect, exp, ...defs)
 
   // primitives
   t(1, '1')
@@ -446,6 +448,7 @@ const testJs = () => {
   // io
   stdout('hi\n', 'io.print("hi")')
   stdout('1\n', 'io.print(1)')
+  stdio('input', 'input\n', 'io.print(io.read)')
 }
 
 if (process.argv[2] === 'test') {
