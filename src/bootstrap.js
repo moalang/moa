@@ -179,7 +179,7 @@ const execute = nodes => {
     node.defined = true
   }
   const methods = {
-    'object': { // object is for array
+    'array': {
       size: o => o.length,
       at: (o,i) => o[i],
     },
@@ -189,12 +189,21 @@ const execute = nodes => {
     },
   }
   const method = (env, o, node) => {
-    let t = typeof o
-    t = t === 'object' ? t.type || t : t
-    const m = methods[t]
+    const t = typeof o
+    const obj = t === 'object' && (
+      o.constructor === Array ? methods.array :
+      o.constructor === struct ? o :
+      node.type || fail('No type information', {node, o})) || methods[t]
     const argv = node.type === 'call' ? node.argv.map(a => run(env, a)) : []
     const id = node.type === 'call' ? node.body.code : node.code
-    return m[id] ? m[id](o, ...argv) : id in o ? o[id] : fail('Unknown method', {m,id,o,node})
+    const m = obj[id]
+    if (typeof m === 'function') {
+      return m(o, ...argv)
+    } else if (argv.length === 0) {
+      return m
+    } else {
+      fail('Not method', {m, id, o, node})
+    }
   }
   const run = (env, node) => {
     if (node === undefined) {
@@ -304,18 +313,27 @@ const execute = nodes => {
         return new struct(dict(f.struct, argv))
       } else if (f.type === 'case') {
         return new struct(Object.assign({_case: f.id}, dict(f.fields, argv)))
+      } else if (typeof f === 'function') {
+        return f(...argv)
       } else {
-        return f
+        fail('Not callable', {f,argv})
       }
     } else if (node.tag === 'id') {
       return run(env, env.get(node.code))
     }
     fail('Failed to run', {node, nodes})
   }
+  let stdout = ''
+  const stdin = ''
+  const io = {
+    print: (_,s) => stdout += s.toString() + "\n",
+  }
+  space.put('io', new struct(io))
   try {
-    return run(space, space.get('main'))
-  } catch (e) {
-    return e
+    const ret = run(space, space.get('main'))
+    return {ret, stdout}
+  } catch (ret) {
+    return {ret, stdout}
   }
 }
 
@@ -328,16 +346,17 @@ const testJs = () => {
     if (eq(expect, check(result))) {
       write('.')
     } else {
+      print('src   :', src)
       print('expect:', expect)
       print('result:', result)
       dump('tokens :', tokens)
       dump('nodes  :', nodes)
-      print('src   :', src)
       throw new Error('Test was failed')
     }
   }
-  const t = (expect, exp, ...defs) => test(x => x, expect, exp, ...defs)
-  const f = (expect, exp, ...defs) => test(x => x.message, expect, exp, ...defs)
+  const t = (expect, exp, ...defs) => test(x => x.ret, expect, exp, ...defs)
+  const f = (expect, exp, ...defs) => test(x => x.ret.message, expect, exp, ...defs)
+  const stdout = (expect, exp, ...defs) => test(x => x.stdout, expect, exp, ...defs)
 
   // primitives
   t(1, '1')
@@ -423,7 +442,20 @@ const testJs = () => {
   t(1, '\n  a <- 1\n  a0(a)\n  a', 'a0 a = a := 0')
   t(3, '\n  a <- 1\n  inc =\n    a += 1\n  inc\n  inc\n  a')
   t(6, '\n  a <- 1\n  add n =\n    a += n\n  add(2)\n  add(3)\n  a')
+
+  // io
+  stdout('hi\n', 'io.print("hi")')
+  stdout('1\n', 'io.print(1)')
 }
 
-testJs()
-print('ok')
+if (process.argv[2] === 'test') {
+  testJs()
+  print('ok')
+} else {
+  const fs = require('fs')
+  const src = fs.readfileSync(process.argv[2], 'utf-8')
+  const tokens = tokenize(src)
+  const nodes = parse(tokens)
+  const result = execute(nodes)
+  print(result)
+}

@@ -1,6 +1,6 @@
 test:
 	@-clear && printf '\e[3J'
-	@-node bootstrap.js
+	@-node bootstrap.js test
 
 watch:
 	@make test
