@@ -1,0 +1,6 @@
+compile src = src
+
+main =
+  src <- io.read
+  llvm <- compile(src)
+  io.write(src)

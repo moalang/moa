@@ -327,7 +327,7 @@ const execute = (nodes, opt) => {
   let stdout = ''
   const io = {
     read: opt.stdin,
-    print: (_,s) => stdout += s.toString() + "\n",
+    write: (_,s) => stdout += s.toString(),
   }
   space.put('io', new struct(io))
   try {
@@ -446,17 +446,40 @@ const testJs = () => {
   t(6, '\n  a <- 1\n  add n =\n    a += n\n  add(2)\n  add(3)\n  a')
 
   // io
-  stdout('hi\n', 'io.print("hi")')
-  stdout('1\n', 'io.print(1)')
-  stdio('input', 'input\n', 'io.print(io.read)')
+  stdout('hi', 'io.write("hi")')
+  stdout('1', 'io.write(1)')
+  stdio('input', 'input', 'io.write(io.read)')
 }
 
+function testMoa(moa) {
+  const test = (expect, exp, ...defs) => {
+    const src = defs.concat('main='+exp).join('\n')
+    const tokens = tokenize(moa)
+    const nodes = parse(tokens)
+    const result = execute(nodes, {stdin: src})
+    if (eq(expect, result.stdout)) {
+      write('.')
+    } else {
+      print('src   :', src)
+      print('expect:', expect)
+      print('result:', result)
+      dump('tokens :', tokens)
+      dump('nodes  :', nodes)
+      throw new Error('Test was failed')
+    }
+  }
+
+  // TODO: fix fake
+  test('main=2', '2')
+}
+
+const fs = require('fs')
 if (process.argv[2] === 'test') {
   testJs()
+  testMoa(fs.readFileSync('moa.moa', 'utf-8'))
   print('ok')
 } else {
-  const fs = require('fs')
-  const src = fs.readfileSync(process.argv[2], 'utf-8')
+  const src = fs.readFileSync(process.argv[2], 'utf-8')
   const tokens = tokenize(src)
   const nodes = parse(tokens)
   const result = execute(nodes)
