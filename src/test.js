@@ -16,4 +16,5 @@ function t(expect, exp, ...defs) {
   }
 }
 t('', 'io.exit(0)')
+t('1', 'io.write(1)')
 print('ok')

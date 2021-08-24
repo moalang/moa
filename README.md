@@ -278,18 +278,16 @@ Index
 
 ### IO
 
-Random
-```
-main =
-  n <- io.random.int(1 3)
-  io.exit(n)
-```
-
-Time
 ```
 main =
   now <- io.now
-  io.print(now)
+  io.write(now)
+
+  input <- io.read
+  io.write(input)
+
+  n <- io.random.int(1 3)
+  io.exit(n)
 ```
 
 
