@@ -1,7 +1,8 @@
 test:
 	@-clear && printf '\e[3J'
 	@-node bootstrap.js test
-	@-node bootstrap.js exp "io.exit(0)" | lli
+	@-echo "main=io.exit(0)" | node bootstrap.js | lli
+	@-node test.js
 
 watch:
 	@make test

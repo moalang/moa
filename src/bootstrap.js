@@ -459,10 +459,10 @@ const testJs = () => {
 if (process.argv[2] === 'test') {
   testJs()
   print('ok')
-} else if (process.argv[2] === 'exp') {
+} else {
   const fs = require('fs')
   const src = fs.readFileSync('moa.moa', 'utf-8')
-  const target = 'main=' + process.argv[3]
+  const target = fs.readFileSync('/dev/stdin', 'utf-8')
   const tokens = tokenize(src)
   const nodes = parse(tokens)
   const result = execute(nodes, {stdin: target})
