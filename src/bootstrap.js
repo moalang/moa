@@ -34,6 +34,8 @@ const tokenize = src => {
   const any = (tag, a) => (code => code && ({tag, index, line, indent, code}))(a.find(v => src.slice(index).startsWith(v)))
   const next = () => match('int', /^[0-9]+/, parseInt) ||
     match('string', /^"[^"]*"+/, s => s.slice(1, -1)) ||
+    match('string', /^'[^']*'+/, s => s.slice(1, -1)) ||
+    match('string', /^`[^`]*`+/, s => s.slice(1, -1)) ||
     match('id', /^(?:true|false)(?![a-zA-Z0-9_])/, s => s === 'true') ||
     match('id', /^[a-zA-Z_0-9]+/) ||
     any('op2', priorities.flat()) ||
@@ -363,6 +365,8 @@ const testJs = () => {
   // primitives
   t(1, '1')
   t('hi', '"hi"')
+  t('hi', "'hi'")
+  t('h\ni', '`h\ni`')
   t(false, 'false')
   t(1, '(a => a)(1)')
 
@@ -435,6 +439,7 @@ const testJs = () => {
   // monadic statement
   t(1, '\n  1')
   t(2, '\n  1\n  2')
+  t(5, '\n  a <- f(1)\n  b <- f(a)\n  a + b', 'f v = v + 1')
   f("err", '\n  error("err")\n  2')
   f("err", '\n  error("err") + 1')
   f("err1", '\n  f(error("err1") error("err2"))', 'f a b = b')
@@ -451,37 +456,15 @@ const testJs = () => {
   stdio('input', 'input', 'io.write(io.read)')
 }
 
-function testMoa(moa) {
-  const test = (expect, exp, ...defs) => {
-    const src = defs.concat('main='+exp).join('\n')
-    const tokens = tokenize(moa)
-    const nodes = parse(tokens)
-    const result = execute(nodes, {stdin: src})
-    if (eq(expect, result.stdout)) {
-      write('.')
-    } else {
-      print('src   :', src)
-      print('expect:', expect)
-      print('result:', result)
-      dump('tokens :', tokens)
-      dump('nodes  :', nodes)
-      throw new Error('Test was failed')
-    }
-  }
-
-  // TODO: fix fake
-  test('main=2', '2')
-}
-
-const fs = require('fs')
 if (process.argv[2] === 'test') {
   testJs()
-  testMoa(fs.readFileSync('moa.moa', 'utf-8'))
   print('ok')
-} else {
-  const src = fs.readFileSync(process.argv[2], 'utf-8')
+} else if (process.argv[2] === 'exp') {
+  const fs = require('fs')
+  const src = fs.readFileSync('moa.moa', 'utf-8')
+  const target = 'main=' + process.argv[3]
   const tokens = tokenize(src)
   const nodes = parse(tokens)
-  const result = execute(nodes)
-  print(result)
+  const result = execute(nodes, {stdin: target})
+  print(result.stdout)
 }
