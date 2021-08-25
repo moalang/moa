@@ -1,18 +1,18 @@
 const write = (...a) => a.map(o => process.stdout.write(o.toString()))
+const warn = (...a) => a.map(o => process.stderr.write(o.toString()))
 const print = (...a) => console.log(...a)
-const dump = (label,o) => { write(label, ' '); console.dir(o,{depth:null}) }
+const dump = (...a) => { a.slice(0,-1).map(s => write(s, ' ')); console.dir(a.slice(-1),{depth:null}) }
 const str = o => JSON.stringify(o, null, '  ')
 const eq = (x, y) => str(x) === str(y)
 const fail = (message,obj) => { dump(message, obj || {}); throw new Error(message) }
 const dict = (ks,vs) => ks.reduce((d,k,i) => (d[k]=vs[i], d), {})
 const priorities = [
+  '=>',
   '<- := += -= *= /=',
   '|| &&',
   '== != > < >= <=',
   '+ -',
   '* // /',
-  '=>',
-  '.',
 ].map(ops => ops.split(' '))
 const priority = op => priorities.findIndex(ops => ops.includes(op))
 const newType = (type,indent,o) => Object.assign({type,indent},o)
@@ -39,6 +39,7 @@ const tokenize = src => {
     match('id', /^(?:true|false)(?![a-zA-Z0-9_])/, s => s === 'true') ||
     match('id', /^[a-zA-Z_0-9]+/) ||
     any('op2', priorities.flat()) ||
+    any('dot', ['.']) ||
     any('sym', '[]()=:|'.split('')) ||
     match('space', /^[ \n]+/) ||
     fail('Failed to tokenize:', {src, index, around: src.slice(index)})
@@ -74,6 +75,18 @@ const parse = tokens => {
       pos+=1 // drop '('
       const argv = until(t => t.code !== ')', consume, consume)
       node = newType('call', indent, {body: node, argv})
+    }
+    while (pos < tokens.length && tokens[pos].tag === 'dot') {
+      pos+=1 // drop '.'
+      const name = tokens[pos++].code
+      if (pos < tokens.length && tokens[pos].code === '(' && tokens[pos - 1].index + tokens[pos - 1].code.length === tokens[pos].index) {
+        const indent = tokens[pos].indent
+        pos+=1 // drop '('
+        const argv = until(t => t.code !== ')', consume, consume)
+        node = newType('method', node.indent, {target: node, name, argv})
+      } else {
+        node = newType('method', node.indent, {target: node, name, argv: []})
+      }
     }
     if (pos < tokens.length && tokens[pos].tag === 'op2') {
       const op2 = consume().code
@@ -183,29 +196,28 @@ const execute = (nodes, opt) => {
   }
   const methods = {
     'array': {
-      size: o => o.length,
-      at: (o,i) => o[i],
+      size: a => a.length,
+      at: (a,i) => a[i],
+      map: (a,f) => a.map(f),
     },
     'string': {
       size: o => o.length,
       at: (o,i) => o[i],
     },
   }
-  const method = (env, o, node) => {
-    const t = typeof o
-    const obj = t === 'object' && (
-      o.constructor === Array ? methods.array :
-      o.constructor === struct ? o :
-      node.type || fail('No type information', {node, o})) || methods[t]
-    const argv = node.type === 'call' ? node.argv.map(a => run(env, a)) : []
-    const id = node.type === 'call' ? node.body.code : node.code
-    const m = obj[id]
+  const method = (env, target, name, argv) => {
+    const t = typeof target
+    const table = t === 'object' && (
+      target.constructor === Array ? methods.array :
+      target.constructor === struct ? target :
+      node.type || fail('No type information', {node, target})) || methods[t]
+    const m = table[name]
     if (typeof m === 'function') {
-      return m(o, ...argv)
+      return m(target, ...argv)
     } else if (argv.length === 0) {
       return m
     } else {
-      fail('Not method', {m, id, o, node})
+      fail('Not method', {m, target, name, argv})
     }
   }
   const run = (env, node) => {
@@ -218,13 +230,13 @@ const execute = (nodes, opt) => {
       return node.value
     } else if (node.type === 'array') {
       return node.values.map(o => run(env, o))
+    } else if (node.type === 'method') {
+      return method(env, run(env, node.target), node.name, node.argv.map(a => run(env, a)))
     } else if (node.type === 'op2') {
-      if (node.op2 === '.') {
-        return method(env, run(env, node.lhs), node.rhs)
-      } else if (node.op2 === '=>') {
+      if (node.op2 === '=>') {
         const args = [node.lhs.code]
         const body = node.rhs
-        return newType('func', node.indent, {id: '', args, body})
+        return (...a) => run(env.local(dict(args, a)), body)
       } else if (node.op2 === '<-') {
         return env.put(node.lhs.code, run(env, node.rhs))
       } else if (':= += -= *= /='.split(' ').includes(node.op2)) {
@@ -293,7 +305,7 @@ const execute = (nodes, opt) => {
         try {
           const target = run(env, node.argv[0])
           const f = run(env, node.argv[1])
-          return run(env.local(dict(f.args, [target])), f.body)
+          return f(target)
         } catch (e) {
           throw e
         }
@@ -303,7 +315,7 @@ const execute = (nodes, opt) => {
         } catch (e) {
           const f = run(env, node.argv[1])
           const t = new struct({message: e.message})
-          return run(env.local(dict(f.args, [t])), f.body)
+          return f(t)
         }
       } else if (node.body.code === 'error') {
         throw new Error(run(env, node.argv[0]))
@@ -332,6 +344,7 @@ const execute = (nodes, opt) => {
     write: (_,s) => stdout += s.toString(),
   }
   space.put('io', new struct(io))
+  space.put('__debug', (...a) => warn('warn:', ...a.map(str)))
   try {
     const ret = run(space, space.get('main'))
     return {ret, stdout}
@@ -360,6 +373,7 @@ const testJs = () => {
   const t = (expect, exp, ...defs) => test({}, x => x.ret, expect, exp, ...defs)
   const f = (expect, exp, ...defs) => test({}, x => x.ret.message, expect, exp, ...defs)
   const stdout = (expect, exp, ...defs) => test({}, x => x.stdout, expect, exp, ...defs)
+  const stderr = (expect, exp, ...defs) => test({}, x => x.stderr, expect, exp, ...defs)
   const stdio = (stdin, expect, exp, ...defs) => test({stdin}, x => x.stdout, expect, exp, ...defs)
 
   // primitives
@@ -368,7 +382,7 @@ const testJs = () => {
   t('hi', "'hi'")
   t('h\ni', '`h\ni`')
   t(false, 'false')
-  t(1, '(a => a)(1)')
+  t(3, '(a => a + 2)(1)')
 
   // expression
   t(3, '1 + 2')
@@ -410,6 +424,9 @@ const testJs = () => {
   t(2, '"hi".size')
   t(2, 'id("hi").size', 'id a = a')
   t('i', '"hi".at(1)')
+  t([2, 3], '[1 2].map(x => x + 1)')
+  t(2, '[[1 2]].at(0).at(1)')
+  t('hi', '[[s("hi")]].at(0).at(0).name', 's:\n  name string')
 
   // generics
   t('i', 'id("hi").at(id(1))', 'id a = a')
@@ -466,5 +483,5 @@ if (process.argv[2] === 'test') {
   const tokens = tokenize(src)
   const nodes = parse(tokens)
   const result = execute(nodes, {stdin: target})
-  print(result.stdout)
+  print(result.stdout.replace(/\\n/g, '\n'))
 }

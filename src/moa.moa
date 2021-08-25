@@ -1,13 +1,37 @@
+type:
+  name string
+
+node|
+  id:
+    name string
+  call:
+    target node
+    argv array(node)
+  method:
+    target node
+    name string
+    argv array(node)
+  func:
+    name string
+    types array(node)
+    nodes array(node)
+
+emit s = io.write(s + "\n")
+
+tokenize src = []
+
+parse tokens = [
+  func("main" [type("i32")] [])
+]
+
+generate node =
+  rt <- node.types.at(0).name
+  emit("define dso_local " + rt + " @" + node.name + "() {")
+  emit("ret " + rt + " 0")
+  emit("}")
+
 main =
   src <- io.read
-  llvm <- compile(src)
-  io.write(llvm)
-
-compile src = `@.str = private unnamed_addr constant [3 x i8] c"hi\00", align 1
-
-define i32 @main() local_unnamed_addr #0 {
-  ;%1 = tail call i64 @"\01_write"(i32 1, i8* getelementptr inbounds ([3 x i8], [3 x i8]* @.str, i64 0, i64 0), i64 2) #2
-  ret i32 0
-}
-
-declare i64 @"\01_write"(i32, i8*, i64) local_unnamed_addr #1`
+  tokens <- tokenize(src)
+  nodes <- parse(tokens)
+  nodes.map(node => generate(node))

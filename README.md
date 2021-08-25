@@ -223,7 +223,7 @@ indent2: "\n    "
 - struct   : a:1
 
 ### Embedded containers
-- array    : [1 2]
+- array : [1 2]
 - dict
 - byte, bytes
 - opt, ok, none, error
