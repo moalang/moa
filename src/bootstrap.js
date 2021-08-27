@@ -197,12 +197,12 @@ const execute = (nodes, opt) => {
   const methods = {
     'array': {
       size: a => a.length,
-      at: (a,i) => a[i],
+      at: (a,i) => i >= 0 ? a[i] : a[a.length + i],
       map: (a,f) => a.map(f),
     },
     'string': {
-      size: o => o.length,
-      at: (o,i) => o[i],
+      size: s => s.length,
+      at: (s,i) => i >= 0 ? s[i] : s[a.length + i],
     },
   }
   const method = (env, target, name, argv) => {
@@ -282,7 +282,7 @@ const execute = (nodes, opt) => {
         env.put(node.id, node.args.length === 0 ? node.body : node)
         node.defined = true
       }
-      return node
+      return (...a) => run(env.local(dict(node.args, a)), node.body)
     } else if (node.type === 'stmt') {
       return node.lines.map(line => run(env, line)).slice(-1)[0]
     } else if (node.type === 'call') {
@@ -322,9 +322,7 @@ const execute = (nodes, opt) => {
       }
       const f = run(env, node.body)
       const argv = node.argv.map(o => run(env, o))
-      if (f.type === 'func') {
-        return run(env.local(dict(f.args, argv)), f.body)
-      } else if (f.type === 'struct') {
+      if (f.type === 'struct') {
         return new struct(dict(f.struct, argv))
       } else if (f.type === 'case') {
         return new struct(Object.assign({_case: f.id}, dict(f.fields, argv)))
@@ -425,6 +423,7 @@ const testJs = () => {
   t(2, 'id("hi").size', 'id a = a')
   t('i', '"hi".at(1)')
   t([2, 3], '[1 2].map(x => x + 1)')
+  t([2, 3], '[1 2].map(inc)', 'inc n = n + 1')
   t(2, '[[1 2]].at(0).at(1)')
   t('hi', '[[s("hi")]].at(0).at(0).name', 's:\n  name string')
 
