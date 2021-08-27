@@ -29,17 +29,21 @@ parse tokens = [
   func("main" [] type("i32") [])
 ]
 
-generate node = match(node
-  func generate_func)
+generate_llvm node =
+  gen_func node =
+    rt <- node.ret.name
+    emit("define dso_local " + rt + " @" + node.name + "() {")
+    emit("ret " + rt + " 0")
+    emit("}")
+  match(node func gen_func)
 
-generate_func node =
-  rt <- node.ret.name
-  emit("define dso_local " + rt + " @" + node.name + "() {")
-  emit("ret " + rt + " 0")
-  emit("}")
+generate_js node =
+  emit("process.stdout.write('1')")
 
 main =
   src <- io.read
   tokens <- tokenize(src)
   nodes <- parse(tokens)
-  nodes.map(node => generate(node))
+  if(io.argv(1) == "js"
+    nodes.map(node => generate_js(node))
+    nodes.map(node => generate_llvm(node)))

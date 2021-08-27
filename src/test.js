@@ -1,25 +1,32 @@
 const {execSync} = require('child_process');
 const write = s => process.stdout.write(s)
 const print = (...a) => console.log(...a)
-function t(expect, exp, ...defs) {
+function test(lang, run, expect, exp, ...defs) {
   const src = defs.concat(['main='+exp]).join('\n')
-  const llvm = execSync('node bootstrap.js', {input: src}).toString()
+  const dst = execSync('node bootstrap.js ' + lang, {input: src}).toString()
   try {
-    const stdout = execSync('lli', {input: llvm}).toString()
+    const stdout = run(dst)
     if (stdout === expect) {
       write('.')
     } else {
       print('src   :', src)
       print('expect:', expect)
       print('stdout:', stdout)
-      print('llvm  :', llvm)
+      print('dst   :', dst)
       process.exit(1)
     }
   } catch (e) {
     print('src :', src)
-    print('llvm:', llvm)
+    print('dst:', dst)
     throw e
   }
 }
-t('', '1')
+function llvm(...args) {
+  test('', llvm => execSync('lli', {input: llvm}).toString(), ...args)
+}
+function js(...args) {
+  test('js', js => execSync('node', {input: js}).toString(), ...args)
+}
+llvm('', '1')
+js('1', 'io.write(1)')
 print('ok')

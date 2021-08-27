@@ -339,11 +339,12 @@ const execute = (nodes, opt) => {
   }
   let stdout = ''
   const io = {
+    argv: (_,i) => (opt.argv && opt.argv[i]) || '',
     read: opt.stdin,
     write: (_,s) => stdout += s.toString(),
   }
   space.put('io', new struct(io))
-  space.put('__debug', (...a) => warn('warn:', ...a.map(str)))
+  space.put('__debug', (...a) => warn('warn:', ...a.map(str), '\n'))
   try {
     const ret = run(space, space.get('main'))
     return {ret, stdout}
@@ -373,7 +374,7 @@ const testJs = () => {
   const f = (expect, exp, ...defs) => test({}, x => x.ret.message, expect, exp, ...defs)
   const stdout = (expect, exp, ...defs) => test({}, x => x.stdout, expect, exp, ...defs)
   const stderr = (expect, exp, ...defs) => test({}, x => x.stderr, expect, exp, ...defs)
-  const stdio = (stdin, expect, exp, ...defs) => test({stdin}, x => x.stdout, expect, exp, ...defs)
+  const stdio = (opt, expect, exp, ...defs) => test(opt, x => x.stdout, expect, exp, ...defs)
 
   // primitives
   t(1, '1')
@@ -471,7 +472,8 @@ const testJs = () => {
   // io
   stdout('hi', 'io.write("hi")')
   stdout('1', 'io.write(1)')
-  stdio('input', 'input', 'io.write(io.read)')
+  stdio({stdin: 'input'}, 'input', 'io.write(io.read)')
+  stdio({argv: ['a.moa', 'hi']}, 'hi', 'io.write(io.argv(1))')
 }
 
 if (process.argv[2] === 'test') {
@@ -483,6 +485,6 @@ if (process.argv[2] === 'test') {
   const target = fs.readFileSync('/dev/stdin', 'utf-8')
   const tokens = tokenize(src)
   const nodes = parse(tokens)
-  const result = execute(nodes, {stdin: target})
+  const result = execute(nodes, {stdin: target, argv: process.argv.slice(1)})
   print(result.stdout.replace(/\\n/g, '\n'))
 }
