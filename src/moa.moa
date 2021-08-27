@@ -1,6 +1,10 @@
 type:
   name string
 
+arg:
+  name string
+  type type
+
 node|
   id:
     name string
@@ -13,7 +17,8 @@ node|
     argv array(node)
   func:
     name string
-    types array(node)
+    args array(arg)
+    ret type
     nodes array(node)
 
 emit s = io.write(s + "\n")
@@ -21,11 +26,14 @@ emit s = io.write(s + "\n")
 tokenize src = []
 
 parse tokens = [
-  func("main" [type("i32")] [])
+  func("main" [] type("i32") [])
 ]
 
-generate node =
-  rt <- node.types.at(0).name
+generate node = match(node
+  func generate_func)
+
+generate_func node =
+  rt <- node.ret.name
   emit("define dso_local " + rt + " @" + node.name + "() {")
   emit("ret " + rt + " 0")
   emit("}")

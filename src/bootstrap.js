@@ -297,7 +297,8 @@ const execute = (nodes, opt) => {
         const target = run(env, node.argv[0])
         for (let i=1; i<node.argv.length; i+=2) {
           if (target._case === node.argv[i].code) {
-            return run(env, node.argv[i + 1])
+            const v = run(env, node.argv[i + 1])
+            return typeof v === 'function' ? v(target) : v
           }
         }
         throw new Error('Unmatch' + str(target))
@@ -445,6 +446,7 @@ const testJs = () => {
   // match
   t(1, 'match(a a 1 b 2)', 't|\n  a\n  b')
   t(2, 'match(b a 1 b 2)', 't|\n  a\n  b')
+  t(3, 'match(b(2) a 1 b inc)', 't|\n  a\n  b:\n    num int', 'inc o = o.num + 1')
 
   // option
   t(3, 'then(1 v => (v + 2))')
