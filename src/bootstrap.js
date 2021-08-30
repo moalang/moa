@@ -21,9 +21,16 @@ function struct(d) {
     this[k] = d[k]
   }
 }
+function userError(message) {
+  this.message = message
+  this.if = cond => cond && this
+  this.unless = cond => !cond && this
+  this.catch = (o,f) => isUserError(o) && o.message === message ? f(o) : o
+}
+const isUserError = o => typeof o === 'object' && o.constructor === userError
 const isPrimitive = o => (t =>
   t === 'number' || t === 'string' || t === 'function' ||
-  (t === 'object' && (o.constructor === Array || o.constructor === Error || o.constructor === struct))
+  (t === 'object' && (o.constructor === Array || o.constructor === userError || o.constructor === struct))
 )(typeof o)
 
 const tokenize = src => {
@@ -210,14 +217,15 @@ const execute = (nodes, opt) => {
     const table = t === 'object' && (
       target.constructor === Array ? methods.array :
       target.constructor === struct ? target :
-      node.type || fail('No type information', {node, target})) || methods[t]
+      target.constructor === userError ? target :
+      fail('No type information', {target, name, argv})) || methods[t]
     const m = table[name]
     if (typeof m === 'function') {
       return m(target, ...argv)
     } else if (argv.length === 0) {
       return m
     } else {
-      fail('Not method', {m, target, name, argv})
+      fail('Not method', {table, name, argv, m, target})
     }
   }
   const run = (env, node) => {
@@ -284,7 +292,14 @@ const execute = (nodes, opt) => {
       }
       return (...a) => run(env.local(dict(node.args, a)), node.body)
     } else if (node.type === 'stmt') {
-      return node.lines.map(line => run(env, line)).slice(-1)[0]
+      let ret
+      for (const line of node.lines) {
+        ret = run(env, line)
+        if (isUserError(ret)) {
+          return ret
+        }
+      }
+      return ret
     } else if (node.type === 'call') {
       if (node.body.code === 'if') {
         for (let i=0; i<node.argv.length; i+=2) {
@@ -303,23 +318,13 @@ const execute = (nodes, opt) => {
         }
         throw new Error('Unmatch' + str(target))
       } else if (node.body.code === 'then') {
-        try {
-          const target = run(env, node.argv[0])
-          const f = run(env, node.argv[1])
-          return f(target)
-        } catch (e) {
-          throw e
-        }
+        const target = run(env, node.argv[0])
+        return isUserError(target) ? target : run(env, node.argv[1])(target)
       } else if (node.body.code === 'catch') {
-        try {
-          return run(env, node.argv[0])
-        } catch (e) {
-          const f = run(env, node.argv[1])
-          const t = new struct({message: e.message})
-          return f(t)
-        }
+        const target = run(env, node.argv[0])
+        return isUserError(target) ? run(env, node.argv[1])(target) : target
       } else if (node.body.code === 'error') {
-        throw new Error(run(env, node.argv[0]))
+        return new userError(run(env, node.argv[0]))
       }
       const f = run(env, node.body)
       const argv = node.argv.map(o => run(env, o))
@@ -451,17 +456,17 @@ const testJs = () => {
 
   // option
   t(3, 'then(1 v => (v + 2))')
-  f("err", 'error("err")')
-  f("err", 'then(error("err") v => v)')
-  t("err", 'catch(error("err") e => e.message)')
+  f('failure', 'error("failure")')
+  f('failure', 'then(error("failure") v => v)')
+  t('failure', 'catch(error("failure") e => e.message)')
 
   // monadic statement
   t(1, '\n  1')
   t(2, '\n  1\n  2')
   t(5, '\n  a <- f(1)\n  b <- f(a)\n  a + b', 'f v = v + 1')
-  f("err", '\n  error("err")\n  2')
-  f("err", '\n  error("err") + 1')
-  f("err1", '\n  f(error("err1") error("err2"))', 'f a b = b')
+  f("failure", '\n  error("failure")\n  2')
+  f('error.if', '\n  e.if(true)\n  1', 'e = error("error.if")')
+  t(1, '\n  e.unless(true)\n  1', 'e = error("error.unless")')
 
   // modify variable
   t(3, '\n  a <- 1\n  a += 2\n  a')
