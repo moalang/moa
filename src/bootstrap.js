@@ -25,7 +25,6 @@ function userError(message) {
   this.message = message
   this.if = cond => cond && this
   this.unless = cond => !cond && this
-  this.catch = (o,f) => isUserError(o) && o.message === message ? f(o) : o
 }
 const isUserError = o => typeof o === 'object' && o.constructor === userError
 const isPrimitive = o => (t =>
@@ -311,7 +310,11 @@ const execute = (nodes, opt) => {
       } else if (node.body.code === 'match') {
         const target = run(env, node.argv[0])
         for (let i=1; i<node.argv.length; i+=2) {
-          if (target._case === node.argv[i].code) {
+          const code = node.argv[i].code
+          const cond = code === '_' ||
+                       target._case === code ||
+                       eq(target, run(env, node.argv[i]))
+          if (cond) {
             const v = run(env, node.argv[i + 1])
             return typeof v === 'function' ? v(target) : v
           }
@@ -449,16 +452,17 @@ const testJs = () => {
   t({_case: 'a'}, 'a', 't|\n  a')
   t({_case: 'a', x: 1}, 'a(1)', 't|\n  a:\n    x int')
 
-  // match
-  t(1, 'match(a a 1 b 2)', 't|\n  a\n  b')
-  t(2, 'match(b a 1 b 2)', 't|\n  a\n  b')
-  t(3, 'match(b(2) a 1 b inc)', 't|\n  a\n  b:\n    num int', 'inc o = o.num + 1')
-
   // option
   t(3, 'then(1 v => (v + 2))')
   f('failure', 'error("failure")')
   f('failure', 'then(error("failure") v => v)')
   t('failure', 'catch(error("failure") e => e.message)')
+
+  // match
+  t(1, 'match(a a 1 b 2)', 't|\n  a\n  b')
+  t(2, 'match(b a 1 b 2)', 't|\n  a\n  b')
+  t(3, 'match(b(2) a 1 b inc)', 't|\n  a\n  b:\n    num int', 'inc o = o.num + 1')
+  t(1, 'match(e1 e1 1 e2 2 _ 3)', 'e1 = error(1)', 'e2 = error(2)')
 
   // monadic statement
   t(1, '\n  1')
