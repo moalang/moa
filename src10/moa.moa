@@ -23,7 +23,22 @@ node|
 
 emit s = io.write(s + "\n")
 
-tokenize src = []
+tokenize src =
+  pos <- 0
+  tokens <- []
+  miss = error("miss")
+  satisfy f =
+    miss.if(pos >= src.size)
+    c <- src.at(0)
+    miss.if(f(c))
+    c
+  many f = many_acc(f [])
+  many_acc f acc = match(f
+    miss acc
+    _ many_acc(f acc.concat([r])))
+  __debug(src)
+  __debug(tokens)
+  tokens
 
 parse tokens = [
   func("main" [] type("i32") [])
@@ -38,6 +53,7 @@ generate_llvm node =
   match(node func gen_func)
 
 generate_js node =
+  __debug(node)
   emit("process.stdout.write('1')")
 
 main =
