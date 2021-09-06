@@ -42,6 +42,8 @@ const generate = nodes => {
       const head = node[0]
       if (head === '=') {
         return 'const ' + node[1] + ' = (' + node[2].join(',') + ') => ' + body(node[3])
+      } else if (head === '.') {
+        return node[1] + '.' +  node[2][0] + '(' + node[2].slice(1).map(compile).join(', ') + ')'
       } else if (node.length === 1) {
         return compile(head)
       } else {
@@ -53,17 +55,14 @@ const generate = nodes => {
   }
   return nodes.map(compile).join('\n')
 }
-const inference = nodes => {
-  return nodes
-}
 const run = (src, env) => {
   const tokens = tokenize(src)
   const nodes = parse(tokens)
-  const typedNodes = inference(nodes)
-  const js = generate(typedNodes)
+  const js = generate(nodes)
   const stdout = []
-  const io = {
+  global.io = {
     write: (...a) => stdout.push(a.map(o => o.toString()).join(' ')),
+    read: () => env.stdin,
   }
   let ret
   try {
@@ -76,7 +75,6 @@ const run = (src, env) => {
     stdout: stdout.join(''),
     tokens,
     nodes,
-    typedNodes,
     ret: ret
   }
 }
@@ -98,8 +96,7 @@ function testAll() {
   const out = (...a) => test({}, (r => r.stdout), ...a)
   t(1, '1')
   t('hi', '"hi"')
-  //out('1', 'io.print(1)')
-  //t(1, '\n  f 1\n  2',  'f = 1 + 2', 'g a b = (a * b) + (1 / 2)')
+  out('1', 'io.write(1)')
   //t(1, 'struct("hello" 38)', 'struct a:\n  name string\n  age a')
   //t(1, 'f1(1)', 'adt a:\n  f1 int\n  f2 a')
 }
