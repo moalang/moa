@@ -8,7 +8,7 @@ const isDefine = o => typeof o === 'string' && '=:|'.includes(o)
 const isOp = o => typeof o === 'string' && '+-*/.'.includes(o[0])
 const isBr = o => typeof o === 'string' && o[0] === '\n'
 const isArray = o => typeof o === 'object' && o.constructor === Array
-const tokenize = src => [...src.matchAll(/[ \n]+|[()]|[+\-*\/=:|.]+|"[^"]*"|[0-9]+|[a-zA-Z_]+/g)].map(t => t[0].replace(/^ +/, '')).filter(t => t)
+const tokenize = src => [...src.matchAll(/[ \n]+|[()]|[+\-*\/=:|.]+|"[^"]*"|[0-9]+|[a-zA-Z_]+\(?/g)].map(t => t[0].replace(/^ +/, '')).filter(t => t)
 const fail = (msg, ...a) => { dump(msg, ...a);  throw new Error(msg) }
 const field = (target, name) => newType('field', {target, name})
 const parse = tokens => {
@@ -25,6 +25,7 @@ const parse = tokens => {
   const many = (acc, f, g) => pos < len && f(tokens[pos]) ? many(acc.concat([g(tokens[pos])]), f, g) : group([], acc)
   const unit = t => t === ')' ? t :
     t === '(' ? [[next(many([], t => t !== ')', consume))]] :
+    t.endsWith('(') ? [[next(many([t.slice(0, -1)], t => t !== ')', consume))]] :
     t.match(/^[0-9]+$/) ? parseInt(t) :
     t
   const consume = () => pos < len ? unit(tokens[pos++]) : fail('EOF', {pos,len,tokens})
@@ -97,6 +98,7 @@ function testAll() {
   t(1, '1')
   t('hi', '"hi"')
   out('1', 'io.write 1')
+  out('hi 1', 'io.write("hi" 1)')
   //t(1, 'struct("hello" 38)', 'struct a:\n  name string\n  age a')
   //t(1, 'f1(1)', 'adt a:\n  f1 int\n  f2 a')
 }
