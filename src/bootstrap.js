@@ -18,7 +18,7 @@ const parse = tokens => {
   const next = v => (++pos, v)
   const group = (l, r) => r.length === 0 ? l :
     l.length > 1 && isDefine(last(l, 1)) ? [last(l, 1), l[0], l.slice(1, -1), group([], r)] :
-    l.length > 1 && isOp(last(l, 1)) ? [last(l, 1), l[0], unnest(group([], r))] :
+    l.length > 1 && isOp(last(l, 1)) ? [last(l, 1), l[0]].concat(unnest(group([], r))) :
     l.length > 1 && isBr(last(l, 1)) ? [unnest(l.slice(0, -1)), group([], r)] :
     l.length === 1 && isBr(l[0]) ? group([], r) :
     group(l.concat(r[0]), r.slice(1))
@@ -43,7 +43,7 @@ const generate = nodes => {
       if (head === '=') {
         return 'const ' + node[1] + ' = (' + node[2].join(',') + ') => ' + body(node[3])
       } else if (head === '.') {
-        return node[1] + '.' +  node[2][0] + '(' + node[2].slice(1).map(compile).join(', ') + ')'
+        return node[1] + '.' +  node[2] + '(' + node.slice(3).map(compile).join(', ') + ')'
       } else if (node.length === 1) {
         return compile(head)
       } else {
@@ -96,7 +96,7 @@ function testAll() {
   const out = (...a) => test({}, (r => r.stdout), ...a)
   t(1, '1')
   t('hi', '"hi"')
-  out('1', 'io.write(1)')
+  out('1', 'io.write 1')
   //t(1, 'struct("hello" 38)', 'struct a:\n  name string\n  age a')
   //t(1, 'f1(1)', 'adt a:\n  f1 int\n  f2 a')
 }
