@@ -8,7 +8,7 @@ const isDefine = o => typeof o === 'string' && '=:|'.includes(o)
 const isOp = o => typeof o === 'string' && '+-*/.'.includes(o[0])
 const isBr = o => typeof o === 'string' && o[0] === '\n'
 const isArray = o => typeof o === 'object' && o.constructor === Array
-const tokenize = src => [...src.matchAll(/[ \n]+|[()]|[+\-*\/=:|.]+|"[^"]*"|[0-9]+|[a-zA-Z_]+\(?/g)].map(t => t[0].replace(/^ +/, '')).filter(t => t)
+const tokenize = src => [...src.matchAll(/[ \n]+|[()]|[+\-*\/=:|.]+|"[^"]*"|[0-9]+|[a-zA-Z_][a-zA-Z_0-9]*\(?/g)].map(t => t[0].replace(/^ +/, '')).filter(t => t)
 const fail = (msg, ...a) => { dump(msg, ...a);  throw new Error(msg) }
 const field = (target, name) => newType('field', {target, name})
 const parse = tokens => {
@@ -26,7 +26,6 @@ const parse = tokens => {
   const unit = t => t === ')' ? t :
     t === '(' ? [[next(many([], t => t !== ')', consume))]] :
     t.endsWith('(') ? [[next(many([t.slice(0, -1)], t => t !== ')', consume))]] :
-    t.match(/^[0-9]+$/) ? parseInt(t) :
     t
   const consume = () => pos < len ? unit(tokens[pos++]) : fail('EOF', {pos,len,tokens})
   const unnest = o => isArray(o) && o.length === 1 ? unnest(o[0]) : o
@@ -35,23 +34,26 @@ const parse = tokens => {
 const generate = nodes => {
   const body = node => isArray(node) && isArray(node[0]) && node.length > 1 ? statement(node) : compile(node)
   const compile = node => {
-    if (typeof node === 'string') {
-      return node
-    } else if (typeof node === 'number') {
-      return node
-    } else if (isArray(node)) {
+    if (isArray(node)) {
       const head = node[0]
       if (head === '=') {
         return 'const ' + node[1] + ' = (' + node[2].join(',') + ') => ' + body(node[3])
+      } else if (head === ':') {
+        const field = node[3].map(f => f[0]).join(',')
+        return 'const ' + node[1] + ' = (' + field + ') => ({' + field + '})'
+      } else if (head === '|') {
+        dump(node)
+        const adt = ''
+        return adt.join('\n') + 'const ' + node[1] + ' = ({' + node[3].map(t => t[0] + ':' + t[0]).join(',') + '})'
       } else if (head === '.') {
         return node[1] + '.' +  node[2] + '(' + node.slice(3).map(compile).join(', ') + ')'
       } else if (node.length === 1) {
         return compile(head)
       } else {
-        fail('Unable to compile to javascript', {head, node})
+        return compile(head) + '(' + node.slice(1).map(compile).join(', ') + ')'
       }
     } else {
-      fail('Unable to compile to javascript', node)
+      return node
     }
   }
   return nodes.map(compile).join('\n')
@@ -99,8 +101,8 @@ function testAll() {
   t('hi', '"hi"')
   out('1', 'io.write 1')
   out('hi 1', 'io.write("hi" 1)')
-  //t(1, 'struct("hello" 38)', 'struct a:\n  name string\n  age a')
-  //t(1, 'f1(1)', 'adt a:\n  f1 int\n  f2 a')
+  t({name: "hello", age: 38}, 'struct("hello" 38)', 'struct a:\n  name string\n  age a')
+  //t({_tag: 'f1', f1: 1}, 'f1(1)', 'adt a|\n  f1:\n    value int\n  f2:\n    value a')
 }
 
 if (process.argv[2] === 'test') {
