@@ -22,26 +22,16 @@ const parse = tokens => {
   const check = f => pos < len && f(tokens[pos])
   const many = (acc, f) => check(t => (v => many(acc.concat([v]), f))(f(t))) || acc
 
-  const dynamic = s => s
   const value = () => {
     const t = tokens[pos++]
     switch (t) {
       case '(': return many([], t => t === ')' ? !++pos : exp())
       case '[': return many(['array'], t => t === ']' ? !++pos : exp())
       case '{': return many(['struct'], t => t === '}' ? !++pos : exp())
-      case '"': return t.slice(1, -1)
-      case '`': return dynamic(t.slice(1, -1))
       default: return t
     }
   }
-  const block = () => {
-    if (check(t => t[0] === '\n')) {
-      const indent = tokens[pos]
-      return many([], t => t === indent && ++pos && top())
-    } else {
-      return exp()
-    }
-  }
+  const block = () => check(indent => indent[0] === '\n' && many([], t => t === indent && ++ pos && top())) || exp()
   const suffix = v => {
     switch (tokens[pos]) {
       case '.': return ++pos && suffix(['.', v, tokens[pos]])
@@ -50,10 +40,7 @@ const parse = tokens => {
     }
   }
   const atom = () => check(t => t === ':' && ++pos && block()) || suffix(value())
-  const exp = () => {
-    const a = atom()
-    return check(t => isOp2(t) && [t, a, ++pos && exp()]) || a
-  }
+  const exp = () => (a => check(t => isOp2(t) && [t, a, ++pos && exp()]) || a)(atom())
   const top = () => many([], exp)
   return many([], top)
 }
@@ -63,10 +50,7 @@ const generate = nodes => {
       if (node.length === 0) { fail('empty node', {nodes}) }
       const head = node[0]
       if (head === 'def') {
-        const name = node[1]
-        const args = node.slice(2, -1)
-        const body = js(node[node.length - 1])
-        return 'const ' + name + ' = ' + '(' + args.join(',') + ') => ' + body
+        return 'const ' + node[1] + ' = ' + '(' + node.slice(2, -1).join(',') + ') => ' + js(node[node.length - 1])
       } else {
         return node
       }
