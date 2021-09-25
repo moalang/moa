@@ -1,50 +1,74 @@
-const dump = (...a) => console.dir(a.length === 1 ? a[0] : a, {depth: null})
-const print = (...a) => console.log(...a)
-const write = (...a) => a.map(an => process.stdout.write(an.toString()))
-const trace = (...a) => (dump(...a),a[a.length-1])
+'use strict'
+const write = (...a) => process.stdout.write(a.map(t => t.toString()).join(' '))
+const puts = (...a) => console.log(...a)
+const dump = o => console.dir(o, {depth: null})
+const trace = (...a) => (puts(...a), a[a.length - 1])
 const str = o => JSON.stringify(o)
-const eq = (a,b) => JSON.stringify(a) === JSON.stringify(b)
-const isDefine = o => typeof o === 'string' && '=:|'.includes(o)
-const isMethod = o => typeof o === 'string' && o[0] === '.'
-const isOp = o => typeof o === 'string' && '+-*/.'.includes(o[0])
-const isBr = o => typeof o === 'string' && o[0] === '\n'
+const eq = (l, r) => str(l) === str(r)
+const fail = (label, o) => { throw new Error(label + ' ' + str(o)) }
 const isArray = o => typeof o === 'object' && o.constructor === Array
-const tokenize = src => [...src.matchAll(/[ \n]+|[()]|[+\-*\/=:|]+|"[^"]*"|[0-9]+|.?[a-zA-Z_][a-zA-Z_0-9]*\(?/g)].map(t => t[0].replace(/^ +/, '')).filter(t => t)
-const fail = (msg, ...a) => { dump(msg, ...a);  throw new Error(msg) }
-const field = (target, name) => newType('field', {target, name})
+
+const run = src => {
+  const tokens = tokenize(src)
+  const nodes = parse(tokens)
+  const js = generate(nodes) + '\nreturn main()'
+  return Function(js)()
+}
+const tokenize = src => src.match(/[()[]:=]|[+\-\*\/!=<>|&]+|\n *| +|[0-9]+(?:\.[0-9]+)?|\.?[a-zA-Z_]+[a-zA-Z_0-9]*\(?/g).filter(t => !t.match(/^ *$/))
 const parse = tokens => {
   let pos = 0
-  const last = (a, i) => a[a.length - 1 - (i || 0)]
   const len = tokens.length
-  const next = v => (++pos, v)
-  const define = a => (i => i === -1 ? a : [a[i], a[0], a.slice(1, i), a.slice(i+1)])(a.findIndex(isDefine))
-  const predict = f => pos < len && f(tokens[pos])
-  const many = (acc, f, g) => pos < len && f(tokens[pos]) ? many(acc.concat([g(tokens[pos])]), f, g) : define(acc)
-  const unit = t => t === ')' ? t :
-    t === '(' ? [[next(many([], t => t !== ')', consume))]] :
-    t.endsWith('(') ? [[next(many([t.slice(0, -1)], t => t !== ')', consume))]] :
-    predict(isMethod) ? ['.', t, next(tokens[pos].slice(1))] :
-    isBr(t) ? many([], u => !isBr(u) && u !== t, consume) :
-    t
-  const consume = () => pos < len ? unit(tokens[pos++]) : fail('EOF', {pos,len,tokens})
-  const unnest = o => isArray(o) && o.length === 1 ? unnest(o[0]) : o
-  return many([], () => true, () => next([many([], t => t !== '\n', consume)]))
+  const isOp2 = t => '+-*/=!|&>'.includes(t[0])
+  const check = f => pos < len && f(tokens[pos])
+  const many = (acc, f) => check(t => (v => many(acc.concat([v]), f))(f(t))) || acc
+
+  const dynamic = s => s
+  const value = () => {
+    const t = tokens[pos++]
+    switch (t) {
+      case '(': return many([], t => t === ')' ? !++pos : exp())
+      case '[': return many(['array'], t => t === ']' ? !++pos : exp())
+      case '{': return many(['struct'], t => t === '}' ? !++pos : exp())
+      case '"': return t.slice(1, -1)
+      case '`': return dynamic(t.slice(1, -1))
+      default: return t
+    }
+  }
+  const block = () => {
+    if (check(t => t[0] === '\n')) {
+      const indent = tokens[pos]
+      return many([], t => t === indent && ++pos && top())
+    } else {
+      return exp()
+    }
+  }
+  const suffix = v => {
+    switch (tokens[pos]) {
+      case '.': return ++pos && suffix(['.', v, tokens[pos]])
+      case '(': return ++pos && many([], t => t === ')' ? !++pos : exp())
+      default: return v
+    }
+  }
+  const atom = () => check(t => t === ':' && ++pos && block()) || suffix(value())
+  const exp = () => {
+    const a = atom()
+    return check(t => isOp2(t) && [t, a, ++pos && exp()]) || a
+  }
+  const top = () => many([], exp)
+  return many([], top)
 }
 const generate = nodes => {
   const js = node => {
     if (isArray(node)) {
+      if (node.length === 0) { fail('empty node', {nodes}) }
       const head = node[0]
-      if (head === '=') {
-        return 'const ' + node[1] + ' = (' + node[2].join(',') + ') => ' + js(node[3])
-      } else if (head === ':') {
-        const field = node[3].map(f => f[0]).join(',')
-        return 'const ' + node[1] + ' = (' + field + ') => ({' + field + '})'
-      } else if (head === '.') {
-        return node[1] + '.' +  node[2]
-      } else if (node.length === 1) {
-        return js(head)
+      if (head === 'def') {
+        const name = node[1]
+        const args = node.slice(2, -1)
+        const body = js(node[node.length - 1])
+        return 'const ' + name + ' = ' + '(' + args.join(',') + ') => ' + body
       } else {
-        return js(head) + '(' + node.slice(1).map(js).join(', ') + ')'
+        return node
       }
     } else {
       return node
@@ -52,53 +76,21 @@ const generate = nodes => {
   }
   return nodes.map(js).join('\n')
 }
-const run = (src, env) => {
-  const tokens = tokenize(src)
-  const nodes = parse(tokens)
-  const js = generate(nodes)
-  const stdout = []
-  global.io = {
-    write: (...a) => stdout.push(a.map(o => o.toString()).join(' ')),
-    read: () => env.stdin,
-  }
-  let ret
-  try {
-    ret = Function(js + '\nreturn main()')()
-  } catch (e) {
-    ret = e
-  }
-  return {
-    js: js,
-    stdout: stdout.join(''),
-    tokens,
-    nodes,
-    ret: ret
-  }
-}
-function testAll() {
-  const test = (env, f, expect, exp, ...defs) => {
-    const src = defs.concat(['main=' + exp]).join('\n')
-    const result = run(src, env)
-    if (eq(expect, f(result))) {
+
+const test = () => {
+  const t = (expect, exp, ...defs) => {
+    const src = defs.concat('def main: ' + exp).join('\n')
+    const actual = run(src)
+    if (eq(expect, actual)) {
       write('.')
     } else {
-      print('src: ', src)
-      print('expect: ', expect)
-      print('actual: ', str(f(result)))
-      dump('result: ', result)
-      process.exit(1)
+      puts('src:', src)
+      puts('expect:', expect)
+      puts('actual:', actual)
     }
   }
-  const t = (...a) => test({}, (r => r.ret), ...a)
-  const out = (...a) => test({}, (r => r.stdout), ...a)
   t(1, '1')
-  t('hi', '"hi"')
-  out('1', 'io.write 1')
-  out('hi 1', 'io.write "hi" 1')
-  t({name: "hello", age: 38}, 'struct("hello" 38)', 'struct a:\n  name string\n  age a')
+  puts('ok')
 }
 
-if (process.argv[2] === 'test') {
-  testAll()
-  print('ok')
-}
+test()

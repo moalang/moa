@@ -45,14 +45,14 @@ Test
 ```
 > moa test
 .x Failed
-test.moa:5|  eq(2 add(2 2))
+test.moa:3|  t.eq 2 add(1 2)
 expect: 2
-  fact: 4
+  fact: 3
 
 # test.moa
 test t =
-  t.eq(2 add(1 1))
-  t.eq(2 add(2 2))
+  t.eq 2 add(1 1)
+  t.eq 2 add(1 2)
 ```
 
 
@@ -69,11 +69,11 @@ true # bool
 "hi" # string
 ```
 
-Container
+Containers
 ```
-a,b     # tuple
-[1]     # array
-a:1,b:2 # struct
+(a,b)   # tuple
+[1 2]   # array
+{x y=0} # data
 ```
 
 Anonymouse Function
@@ -89,64 +89,65 @@ add a.num :: a a a
 add x y = x + y
 ```
 
+Exp
+```
+1 + 2 * 3 == 7
+function arg1 arg2:
+  block arguments
+```
+
 Struct
 ```
-person: # ":" + "\n" define struct
+struct person:
   name string
   age int
 
-dict k v:
+struct dict k v:
   values [k,v]
 ```
 
 ADT
 ```
-bool| # "|" + "\n" define algebraic data type
+adt bool:
   true
   false
 
-result a|
-  success a
-  failure:
-    message string
+adt tree a:
+  leaf a
+  node tree(a) tree(a)
 ```
 
 Type class
 ```
-.eq t:
+class eq t:
   eq :: t t bool
   eq a b = a == b
 
-.int t:
-  (+,-,*) :: t t t
+struct vector2:
+  x int
+  y int
 
-.num t.int:
-  (/) :: t t t
-  (//) :: t t int
-  (//) l r = int(l / r)
-
-.monad t.(_ => _):
-  return a :: a t(a)
-  bind a b :: t(a) (a t(b)) t(b)
-```
-
-Exp
-```
-1 + 2 * 3 == 7
+extend vector2 eq:
+  eq l r = l.x == r.x && l.y == r.y
 ```
 
 Control Flow
 ```
 max a b = if(a > b a b)
 
-gcd a b = if(
-  a < b  gcd(b a)
-  b == 0 a
-  gcd(b a/b))
+gcd a b = if:
+  a < b  -> gcd(b a)
+  b == 0 -> a
+  _      -> gcd(b a/b)
 
-show m = match(m
-  none "none"
-  just v => "just " . v)
+show m = match m:
+  none   -> "none"
+  just v -> "just " ++ v
+
+ten = for i 1...9, j 1...9:
+  print "$i x $j = ${i*j}"
+  if i == 9:
+    print "--\n"
 ```
 
 Error Handling
@@ -177,39 +178,30 @@ main =
 
 ## 3. Syntax
 ```
-top: func | sign | data | type | adt
-func: id+ "=" (line+ | exp)
-sign: id+ "::" type+
-data: id+ ":" (indent attr)+
-type: "." id+ ":" (indent attr)+
-adt: id+ "|" (indent id body?)+
-body: id | ":" (indent2 attr)+
-
-line: indent exp
-exp: unit (op2 exp)*
-unit:
-| value (call | prop)*
+top: exp+
+exp: atom (op2 exp)*
+atom:
+| ":" block
+| value suffix*
+suffix:
+| "(" top ")"
+| "." id
 value:
-| "(" unit ")"
-| "[" exp* "]" # array
-| kv ("," kv)* # struct
-| num ("." num)?
-| '"' [^"] '"'
-| args "=>" exp
 | id
-call: "(" exp+ ")"
-prop: "." id
-kv: id ":" exp
-op2: + - * / // % = += -= *= /= == != || && >= > <= <
-args: id ("," id)*
+| num ("." num)?
+| "(" top ")"
+| "[" top? "]"          # array
+| "{" (id ":" exp)* "}" # struct
+| " [^"]* "             # string
+| ` [^`]* `             # dynamic string
+block:
+| (indent top)+
+| exp
 
 id: [A-Za-z_][A-Za-z0-9_]
 num: [0-9]+
-attr: sign | id value
-type: "$" ? texp (, texp)* # "$" means mutable
-texp: id | "[" type "]" | "(" type type+ ")"
-indent: "\n  "
-indent2: "\n    "
+op2: + - * / // % = += -= *= /= == != || && >= > <= < ->
+indent: "\n" " "+
 ```
 
 ## 4. Buildin
@@ -269,9 +261,8 @@ date:
   year, month, day, yday, mday, wday :: int
 
 # ideas
-Monad   # => error monad?
-Eq      # .eq t: eq :: t t bool
-Default
+Monad # => error monad?
+Eq    # .eq t: eq :: t t bool
 Hash
 Ord
 Index
