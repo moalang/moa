@@ -2,7 +2,6 @@
 
 // TODO
 // - syntax sugar: do (a) (b) to do:\n  a\n  b
-// - syntax sugar: (* (+ 1 2) 3) to 1 + 2 * 3
 
 const puts = (...a) => console.log(...a)
 const dump = o => console.dir(o, {depth: null})
@@ -51,6 +50,15 @@ const parse = tokens => {
       stack.push(a)
     } else if (token === ')') {
       stack = stack.slice(0, -1)
+    } else if (isOp2(token)) {
+      const a = stack[stack.length - 1]
+      if (a.length) {
+        const lhs = a[a.length - 1]
+        a[a.length - 1] = token
+        a.push(lhs)
+      } else {
+        stack[stack.length - 1].push(token)
+      }
     } else {
       stack[stack.length - 1].push(token)
     }
@@ -79,7 +87,7 @@ const generate = nodes => {
         return `(${gen(node[1])}).${node[2]}`
       default:
         if (isOp2(node[0])) {
-          return node[1] + node[0] + node[2]
+          return gen(node[1]) + node[0] + gen(node[2])
         } else if (isArray(node)) {
           if (node.length === 1) {
               return gen(node[0])
@@ -118,13 +126,13 @@ const test = () => {
   }
   // primitives
   t(1, '1')
-  t(3, '+ 1 2')
+  t(3, '1 + 2')
   t([1, 2], 'array 1 2')
   t({1: 2, 3: 4}, 'dict 1 2 3 4')
 
   // function
-  t(3, 'add 1 2', '(def add a b (+ a b))')
-  t(6, 'calc 2 3', '(def calc a b (do (def mul a b (* a b)) (mul a b)))')
+  t(3, 'add 1 2', '(def add a b (a + b))')
+  t(6, 'calc 2 3', '(def calc a b (do (def mul a b (a * b)) (mul a b)))')
 
   // struct
   t({x:1, y:2}, 'vector2 1 2', '(struct vector2 ((x int) (y int)))')
@@ -134,12 +142,12 @@ const test = () => {
   t(1, 'do (let a 1) (a)')
 
   // variable
-  t(3, 'do (var a 1) (+= a 2) (a)')
+  t(3, 'do (var a 1) (a += 2) (a)')
 
   // branch
   t(1, 'if true 1 2')
   t(2, 'if false 1 2')
-  t(2, 'if (== 1 2) 1 2')
+  t(2, 'if (true && (1 == 2)) 1 2')
 
 //  // option
 //  t(3, 'then(1 v => (v + 2))')
