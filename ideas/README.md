@@ -71,9 +71,9 @@ true # bool
 
 Containers
 ```
-(a,b) # tuple
-[1 2] # array
-{x y} # data
+(a,b)   # tuple
+[1 2]   # array
+{x y=0} # data
 ```
 
 Anonymouse Function
@@ -92,6 +92,8 @@ add x y = x + y
 Exp
 ```
 1 + 2 * 3 == 7
+function arg1 arg2:
+  block arguments
 ```
 
 Struct
@@ -115,9 +117,9 @@ adt tree a:
   node tree(a) tree(a)
 ```
 
-Interface
+Type class
 ```
-interface eq t:
+class eq t:
   eq :: t t bool
   eq a b = a == b
 
@@ -142,7 +144,7 @@ show m = match m:
   none   -> "none"
   just v -> "just " ++ v
 
-ten = for i 1...9: for j 1...9:
+ten = for i 1...9, j 1...9:
   print "$i x $j = ${i*j}"
   if i == 9:
     print "--\n"

@@ -1,0 +1,33 @@
+# Syntax for moa
+top: exp+
+exp: atom (op2 exp)*
+atom:
+| ":" block
+| value suffix*
+suffix:
+| "(" top ")"
+| "." id
+value:
+| id
+| num ("." num)?
+| "(" top ")"
+| "[" top? "]"          # array
+| "{" (id ":" exp)* "}" # struct
+| " [^"]* "             # string
+| ` [^`]* `             # dynamic string
+block:
+| (indent top)+
+| exp
+
+id: [A-Za-z_][A-Za-z0-9_]
+num: [0-9]+
+op2: + - * / // % = += -= *= /= == != || && >= > <= < ->
+indent: "\n" " "+
+
+
+# Syntax of lisp
+top: unit
+unit:
+| "("
+| ")"
+| [^ ]+
