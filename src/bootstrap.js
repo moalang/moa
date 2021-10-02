@@ -12,46 +12,25 @@ const isArray = o => typeof o === 'object' && o.constructor === Array
 const op2 = '. + - * / += -= *= /= == != && ||'.split(' ')
 const isOp2 = t => op2.includes(t)
 const fail = (msg, o) => {dump(o); throw new Error(msg)}
-const dict = a => {
-  const kvs = []
-  for (let i=0; i<a.length; i+=2) {
-    kvs.push(`[${a[i]}]:${a[i+1]}`)
-  }
-  return `{${kvs.join(',')}}`
-}
 
 const tokenize = src => src.split(/([0-9]+|[a-zA-Z_][a-zA-Z_0-9]*|[ \n]+|[.+\-*/=!&|]+|.)/).map(toToken).filter(t => t)
-const toToken = t => {
-  const pos = t.lastIndexOf('\n')
-  if (pos === -1) {
-    return t.trim()
-  } else {
-    return t.slice(pos)
-  }
-}
+const toToken = t => t.includes('\n') ? t.slice(t.lastIndexOf('\n')) : t.trim()
 const parse = tokens => {
   const len = tokens.length
   let pos = 0
   const consume = f => pos < len ? f(tokens[pos++]) : fail('EOT', {f: f.toString(),tokens})
   const next = v => (++pos, v)
-  const infix = a => {
-    let b = []
-    for (let i=0; i<a.length; i++) {
-      if (isOp2(a[i+1]) && a[i+2]) {
-        b.push([a[i+1], a[i], a[i+2]])
-        i += 2
-      } else {
-        b.push(a[i])
-      }
-    }
-    return b
-  }
   const many = (f, g, a) => {
     a = a || []
     while (pos < len && g(tokens[pos])) {
-      a.push(f(tokens[pos]))
+      const t = f(tokens[pos])
+      if (isOp2(t) && a.length && pos < len && g(tokens[pos])) {
+        a[a.length - 1] = [t, a[a.length - 1], f(tokens[pos])]
+      } else {
+        a.push(t)
+      }
     }
-    return infix(a)
+    return a
   }
   const block = () => tokens[pos][0] === '\n' ? lines(tokens[pos++]) : [line()]
   const unit = () => consume(t =>
@@ -63,6 +42,7 @@ const parse = tokens => {
   return lines('\n')
 }
 const generate = nodes => {
+  const dict = a => '{' + [...Array(a.length / 2).keys()].map(i => i * 2).map(i => `[${a[i]}]:${a[i+1]}`) + '}'
   const addReturn = a => (a[a.length-1] = `return ${a[a.length-1]}`,a)
   const statement = a => `{${addReturn(a.map(gen)).join(';')}}`
   const gen = node => {
@@ -83,12 +63,10 @@ const generate = nodes => {
       default:
         if (isOp2(node[0])) {
           return gen(node[1]) + node[0] + gen(node[2])
+        } else if (node.length === 1) {
+          return gen(node[0])
         } else {
-          if (node.length === 1) {
-              return gen(node[0])
-          } else {
-              return node[0] + `(${node.slice(1).map(gen)})`
-          }
+          return node[0] + `(${node.slice(1).map(gen)})`
         }
     }
   }
