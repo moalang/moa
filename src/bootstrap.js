@@ -1,7 +1,7 @@
 'use strict'
 
 // TODO
-// - syntax sugar: do (a) (b) to do:\n  a\n  b
+// - fix tests
 
 const puts = (...a) => console.log(...a)
 const dump = o => console.dir(o, {depth: null})
@@ -13,10 +13,11 @@ const op2 = '. + - * / += -= *= /= == != && ||'.split(' ')
 const isOp2 = t => op2.includes(t)
 const fail = (msg, o) => {dump(o); throw new Error(msg)}
 const dict = a => {
-  const length = Math.floor(a.length / 2)
-  const d = {}
-  Array.from({length}, (_, i) => d[a[i*2]] = a[i*2+1])
-  return d
+  const kvs = []
+  for (let i=0; i<a.length; i+=2) {
+    kvs.push(a[i] + ':' + a[i+1])
+  }
+  return `{${kvs.join(',')}}`
 }
 
 const tokenize = src => {
@@ -58,7 +59,6 @@ const tokenize = src => {
 const parse = tokens => {
   const len = tokens.length
   let pos = 0
-  let lastIndent = 0
   const consume = f => pos < len ? f(tokens[pos++]) : fail('EOT', {f: f.toString(),tokens})
   const next = v => (++pos, v)
   const infix = a => {
@@ -74,8 +74,8 @@ const parse = tokens => {
     }
     return b
   }
-  const many = (f, g) => {
-    const a = []
+  const many = (f, g, a) => {
+    a = a || []
     while (pos < len && g(tokens[pos])) {
       const node = f(tokens[pos])
       if (!node) {
@@ -95,16 +95,14 @@ const parse = tokens => {
     }
   }
   const unit = () => consume(t =>
-    t === ')' ? t :
     t === '(' ? next(many(unit, t => t !== ')')) :
     t === ':' ? block() :
     t)
-  const lines = indent =>  many(line, t => pos === 0 || tokens[pos-1] === indent || (t === indent && ++pos))
+  const lines = indent => many(line, t => t === indent && ++pos, [line()])
   const line = () => many(unit, t => t[0] !== '\n')
   return lines('\n')
 }
 const generate = nodes => {
-  const value = v => typeof v === 'string' && v.match(/^[0-9](\.[0-9]+)?$/) ? parseInt(v) : v
   const addReturn = a => (a[a.length-1] = `return ${a[a.length-1]}`,a)
   const statement = a => `{${addReturn(a.map(gen)).join(';')}}`
   const gen = node => {
@@ -117,7 +115,7 @@ const generate = nodes => {
         const names = node[node.length - 1].map(field => field[0]).join(',')
         return `const ${node[1]} = (${names}) => ({${names}})`
       case 'array': return `[${node.slice(1).map(gen).join(',')}]`
-      case 'dict': return `(${str(dict(node.slice(1).map(gen)))})`
+      case 'dict': return `(${dict(node.slice(1).map(gen))})`
       case 'var': return `let ${node[1]} = ${gen(node.slice(2))}`
       case 'let': return `const ${node[1]} = ${gen(node.slice(2))}`
       case 'if': return `(${gen(node[1])} ? ${gen(node[2])} : ${gen(node[3])})`
@@ -133,7 +131,7 @@ const generate = nodes => {
               return node[0] + `(${node.slice(1).map(gen)})`
           }
         } else {
-          return value(node)
+          return node
         }
     }
   }
