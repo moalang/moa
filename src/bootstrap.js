@@ -15,7 +15,7 @@ const fail = (msg, o) => {dump(o); throw new Error(msg)}
 const dict = a => {
   const kvs = []
   for (let i=0; i<a.length; i+=2) {
-    kvs.push(a[i] + ':' + a[i+1])
+    kvs.push(`[${a[i]}]:${a[i+1]}`)
   }
   return `{${kvs.join(',')}}`
 }
@@ -50,11 +50,7 @@ const parse = tokens => {
   const many = (f, g, a) => {
     a = a || []
     while (pos < len && g(tokens[pos])) {
-      const node = f(tokens[pos])
-      if (!node) {
-        return a
-      }
-      a.push(node)
+      a.push(f(tokens[pos]))
     }
     return infix(a)
   }
@@ -79,32 +75,29 @@ const generate = nodes => {
   const addReturn = a => (a[a.length-1] = `return ${a[a.length-1]}`,a)
   const statement = a => `{${addReturn(a.map(gen)).join(';')}}`
   const gen = node => {
-    if (isArray(node) && node.length === 1) {
-      return gen(node[0])
+    if (!isArray(node)) {
+      return node
     }
     switch (node[0]) {
-      case 'def': return `const ${node[1]} = (${node.slice(2, -1).join(',')}) => ${statement(node[node.length - 1])}`
+      case 'def': return `const ${node[1]} = (${node.slice(2, -1)}) => ${statement(node[node.length - 1])}`
       case 'struct':
-        const names = node[node.length - 1].map(field => field[0]).join(',')
+        const names = node[node.length - 1].map(field => field[0])
         return `const ${node[1]} = (${names}) => ({${names}})`
-      case 'array': return `[${node.slice(1).map(gen).join(',')}]`
+      case 'array': return `[${node.slice(1).map(gen)}]`
       case 'dict': return `(${dict(node.slice(1).map(gen))})`
       case 'var': return `let ${node[1]} = ${gen(node.slice(2))}`
       case 'let': return `const ${node[1]} = ${gen(node.slice(2))}`
       case 'if': return `(${gen(node[1])} ? ${gen(node[2])} : ${gen(node[3])})`
-      case '.':
-        return `(${gen(node[1])}).${node[2]}`
+      case '.': return `(${gen(node[1])}).${node[2]}`
       default:
         if (isOp2(node[0])) {
           return gen(node[1]) + node[0] + gen(node[2])
-        } else if (isArray(node)) {
+        } else {
           if (node.length === 1) {
               return gen(node[0])
           } else {
               return node[0] + `(${node.slice(1).map(gen)})`
           }
-        } else {
-          return node
         }
     }
   }
@@ -140,7 +133,7 @@ const test = () => {
   t(1, '1')
   t(3, '1 + 2')
   t([1, 2], 'array 1 2')
-  t({1: 2, 3: 4}, 'dict 1 2 3 4')
+  t({1: 2, 3: 4}, 'dict 1 2 1+2 1+3')
 
   // function
   t(3, 'add 1 2', 'def add a b: a + b')
