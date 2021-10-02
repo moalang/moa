@@ -20,41 +20,14 @@ const dict = a => {
   return `{${kvs.join(',')}}`
 }
 
-const tokenize = src => {
-  let pos = 0
-  let string = ''
-  const len = src.length
-  const stack = []
-  const push = () => {
-    if (string.length) {
-      stack.push(string)
-      string = ''
-    }
+const tokenize = src => src.split(/([0-9]+|[a-zA-Z_][a-zA-Z_0-9]*|[ \n]+|[.+\-*/=!&|]+|.)/).map(toToken).filter(t => t)
+const toToken = t => {
+  const pos = t.lastIndexOf('\n')
+  if (pos === -1) {
+    return t.trim()
+  } else {
+    return t.slice(pos)
   }
-  while (pos < len) {
-    const c = src[pos++]
-    if ('():'.includes(c)) {
-      push()
-      string = c
-      push()
-    } else if (c === '\n') {
-      push()
-      --pos
-      while (src[pos] === '\n') {
-        string = src[pos++]
-        while (src[pos] === ' ') {
-          string += src[pos++]
-        }
-      }
-      push()
-    } else if (' ' === c) {
-      push()
-    } else {
-      string += c
-    }
-  }
-  push()
-  return stack
 }
 const parse = tokens => {
   const len = tokens.length
