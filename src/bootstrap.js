@@ -36,13 +36,12 @@ const parse = tokens => {
   const next = v => (++pos, v)
   const infix = a => {
     let b = []
-    let i = 0
-    while (i < a.length) {
+    for (let i=0; i<a.length; i++) {
       if (isOp2(a[i+1]) && a[i+2]) {
         b.push([a[i+1], a[i], a[i+2]])
-        i += 3
+        i += 2
       } else {
-        b.push(a[i++])
+        b.push(a[i])
       }
     }
     return b
@@ -54,15 +53,7 @@ const parse = tokens => {
     }
     return infix(a)
   }
-  const block = () => {
-    const t = tokens[pos]
-    if (t[0] === '\n') {
-      ++pos
-      return lines(t)
-    } else {
-      return [line()]
-    }
-  }
+  const block = () => tokens[pos][0] === '\n' ? lines(tokens[pos++]) : [line()]
   const unit = () => consume(t =>
     t === '(' ? next(many(unit, t => t !== ')')) :
     t === ':' ? block() :
