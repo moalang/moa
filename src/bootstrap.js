@@ -63,10 +63,8 @@ const generate = nodes => {
       default:
         if (isOp2(node[0])) {
           return gen(node[1]) + node[0] + gen(node[2])
-        } else if (node.length === 1) {
-          return gen(node[0])
         } else {
-          return node[0] + `(${node.slice(1).map(gen)})`
+          return gen(node[0]) + (node.length === 1 ? '' : `(${node.slice(1).map(gen)})`)
         }
     }
   }
