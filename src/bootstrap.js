@@ -16,15 +16,14 @@ const fail = (msg, o) => {dump(o); throw new Error(msg)}
 const tokenize = src => src.split(/([0-9]+|[a-zA-Z_][a-zA-Z_0-9]*|[ \n]+|[.+\-*/=!&|]+|.)/).map(toToken).filter(t => t)
 const toToken = t => t.includes('\n') ? t.slice(t.lastIndexOf('\n')) : t.trim()
 const parse = tokens => {
-  const len = tokens.length
   let pos = 0
-  const consume = f => pos < len ? f(tokens[pos++]) : fail('EOT', {f: f.toString(),tokens})
+  const consume = f => pos < tokens.length ? f(tokens[pos++]) : fail('EOT', {f: f.toString(),tokens})
   const next = v => (++pos, v)
   const many = (f, g, a) => {
     a = a || []
-    while (pos < len && g(tokens[pos])) {
+    while (pos < tokens.length && g(tokens[pos])) {
       const t = f(tokens[pos])
-      if (isOp2(t) && a.length && pos < len && g(tokens[pos])) {
+      if (isOp2(t) && a.length && pos < tokens.length && g(tokens[pos])) {
         a[a.length - 1] = [t, a[a.length - 1], f(tokens[pos])]
       } else {
         a.push(t)
@@ -98,9 +97,13 @@ const test = () => {
 
   // primitives
   t(1, '1')
-  t(3, '1 + 2')
   t([1, 2], 'array 1 2')
   t({1: 2, 3: 4}, 'dict 1 2 1+2 1+3')
+
+  // exp
+  t(3, '1 + 2')
+  t(7, '1 + 2 * 3')
+  t(5, '1 * 2 + 3')
 
   // function
   t(3, 'add 1 2', 'def add a b: a + b')
@@ -108,11 +111,10 @@ const test = () => {
 
   // struct
   t({x:1, y:2}, 'vector2 1 2', 'struct vector2:\n  x int\n  y int')
-  t(2, '(vector2 1 2) . y', 'struct vector2:\n  x int\n  y int')
-  t(2, '. (vector2 1 2) y', '(struct vector2 ((x int) (y int)))')
+  t(2, '(vector2 1 2).y', 'struct vector2:\n  x int\n  y int')
 
   // constant
-  t(1, '\n  let a 1\n  a')
+  t(2, '\n  let a inc 1\n  a', 'def inc a: a + 1')
 
   // variable
   t(3, '\n  var a 1\n  a += 2\n  a')
