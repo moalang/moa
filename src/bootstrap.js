@@ -1,7 +1,8 @@
 'use strict'
 
 // TODO
-// - fix tests
+// - error handling
+// - stdio
 
 const puts = (...a) => console.log(...a)
 const dump = o => console.dir(o, {depth: null})
@@ -152,33 +153,8 @@ const test = () => {
   t(3, '\n  var n 0\n  if true:\n    n+=1\n    n+=2\n  n')
 
   // error handling
-  //t(3, '\n  var n 0\n  if true:\n    n+=1\n    n+=2\n  n')
 
-//  // option
-//  t(3, 'then(1 v => (v + 2))')
-//  f('failure', 'error("failure")')
-//  f('failure', 'then(error("failure") v => v)')
-//  t('failure', 'catch(error("failure") e => e.message)')
-//
-//  // match
-//  t(1, 'match(a a 1 b 2)', 't|\n  a\n  b')
-//  t(2, 'match(b a 1 b 2)', 't|\n  a\n  b')
-//  t(3, 'match(b(2) a 1 b inc)', 't|\n  a\n  b:\n    num int', 'inc o = o.num + 1')
-//  t(1, 'match(e1 e1 1 e2 2 _ 3)', 'e1 = error(1)', 'e2 = error(2)')
-//
-//  // monadic statement
-//  t(1, '\n  1')
-//  t(2, '\n  1\n  2')
-//  t(5, '\n  a <- f(1)\n  b <- f(a)\n  a + b', 'f v = v + 1')
-//  f("failure", '\n  error("failure")\n  2')
-//  f('error.if', '\n  e.if(true)\n  1', 'e = error("error.if")')
-//  t(1, '\n  e.unless(true)\n  1', 'e = error("error.unless")')
-//
-//  // modify variable
-//  t(3, '\n  a <- 1\n  a += 2\n  a')
-//  t(1, '\n  a <- 1\n  a0(a)\n  a', 'a0 a = a := 0')
-//  t(3, '\n  a <- 1\n  inc =\n    a += 1\n  inc\n  inc\n  a')
-//  t(6, '\n  a <- 1\n  add n =\n    a += n\n  add(2)\n  add(3)\n  a')
+  // stdio
 
   puts('ok')
 }
