@@ -9,7 +9,7 @@ const trace = (...a) => (puts(...a), a[a.length - 1])
 const str = JSON.stringify
 const eq = (a,b) => str(a) === str(b)
 const isArray = o => typeof o === 'object' && o.constructor === Array
-const op2 = '. + - * / += -= *= /= == != && ||'.split(' ')
+const op2 = '. + - * / += -= *= /= == != < > <= >= && ||'.split(' ')
 const isOp2 = t => op2.includes(t)
 const fail = (msg, o) => {dump(o); throw new Error(msg)}
 
@@ -43,13 +43,14 @@ const parse = tokens => {
 const generate = nodes => {
   const dict = a => '{' + [...Array(a.length / 2).keys()].map(i => i * 2).map(i => `[${a[i]}]:${a[i+1]}`) + '}'
   const addReturn = a => (a[a.length-1] = `return ${a[a.length-1]}`,a)
-  const statement = a => `{${addReturn(a.map(gen)).join(';')}}`
+  const statement = a => `{${a.map(gen).join(';')}}`
+  const exps = a => `{${addReturn(a.map(gen)).join(';')}}`
   const gen = node => {
     if (!isArray(node)) {
       return node
     }
     switch (node[0]) {
-      case 'def': return `const ${node[1]} = (${node.slice(2, -1)}) => ${statement(node[node.length - 1])}`
+      case 'def': return `const ${node[1]} = (${node.slice(2, -1)}) => ${exps(node[node.length - 1])}`
       case 'struct':
         const names = node[node.length - 1].map(field => field[0])
         return `const ${node[1]} = (${names}) => ({${names}})`
@@ -57,7 +58,24 @@ const generate = nodes => {
       case 'dict': return `(${dict(node.slice(1).map(gen))})`
       case 'var': return `let ${node[1]} = ${gen(node.slice(2))}`
       case 'let': return `const ${node[1]} = ${gen(node.slice(2))}`
-      case 'if': return `(${gen(node[1])} ? ${gen(node[2])} : ${gen(node[3])})`
+      case 'if':
+        if (node.length === 4) {
+          return `(${gen(node[1])} ? ${gen(node[2])} : ${gen(node[3])})`
+        } else if (node.length === 3) {
+          return `if (${gen(node[1])}) ${statement(node[2])}`
+        } else {
+          fail('Unknown format of if', {node})
+        }
+      case 'for':
+        if (node.length === 4) {
+          const a = gen(node[1])
+          const b = gen(node[2])
+          const c = statement(node[3])
+          return `for (let ${a}=0; ${a}<${b}; ++${a}) {${c}}`
+        } else {
+          fail('Unknown format of for', {node})
+        }
+      case 'while': return `while (${gen(node.slice(1, -1))}) {${statement(node[node.length - 1])}}`
       case '.': return `(${gen(node[1])}).${node[2]}`
       default:
         if (isOp2(node[0])) {
@@ -123,6 +141,18 @@ const test = () => {
   t(1, 'if true 1 2')
   t(2, 'if false 1 2')
   t(2, 'if (true && (1 == 2)) 1 2')
+
+  // for block
+  t(3, '\n  var n 0\n  for i 3: n+=1\n  n')
+
+  // while block
+  t(3, '\n  var n 0\n  while n < 3: n+=1\n  n')
+
+  // branch block
+  t(3, '\n  var n 0\n  if true:\n    n+=1\n    n+=2\n  n')
+
+  // error handling
+  //t(3, '\n  var n 0\n  if true:\n    n+=1\n    n+=2\n  n')
 
 //  // option
 //  t(3, 'then(1 v => (v + 2))')
