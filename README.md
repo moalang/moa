@@ -7,7 +7,7 @@ Moa is an open source programming language which helps programming for fun!
 Set up
 ```
 mkdir -p ~/moa/bin
-curl https://github.com/moa/releases/mac/latest > ~/moa/bin/moa
+curl https://github.com/moa/bin/moa > ~/moa/bin/moa
 export PATH=$PATH:~/moa/bin
 ```
 

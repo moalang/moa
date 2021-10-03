@@ -95,7 +95,7 @@ const test = () => {
     const js = generate(nodes)
     let actual
     try {
-      actual  = Function(js + '\nreturn main()')()
+      actual = Function(js + '\nreturn main()')()
     } catch(e) {
       actual = e.message
       puts(e.stack)
@@ -180,8 +180,15 @@ const test = () => {
 //  t(3, '\n  a <- 1\n  inc =\n    a += 1\n  inc\n  inc\n  a')
 //  t(6, '\n  a <- 1\n  add n =\n    a += n\n  add(2)\n  add(3)\n  a')
 
-
-
   puts('ok')
 }
-test()
+
+if (module.parent) {
+  const src = require('fs').readFileSync('/dev/stdin', 'utf8').trim()
+  const tokens = tokenize(src)
+  const nodes = parse(tokens)
+  const js = generate(nodes)
+  puts(js + '\nmain()')
+} else {
+  test()
+}
