@@ -3,6 +3,7 @@
 // TODO
 // - error handling
 // - stdio
+// - API for int, string, array, dictionary and error
 
 const puts = (...a) => console.log(...a)
 const dump = o => console.dir(o, {depth: null})
@@ -14,7 +15,7 @@ const op2 = '. + - * / += -= *= /= == != < > <= >= && ||'.split(' ')
 const isOp2 = t => op2.includes(t)
 const fail = (msg, o) => {dump(o); throw new Error(msg)}
 
-const tokenize = src => src.split(/([0-9]+|[a-zA-Z_][a-zA-Z_0-9]*|[ \n]+|[.+\-*/=!&|]+|.)/).map(toToken).filter(t => t)
+const tokenize = src => src.split(/([0-9]+|[a-zA-Z_][a-zA-Z_0-9]*|[ \n]+|[.+\-*/=!&|]+|"[^"]*"|`[^"]*`|.)/).map(toToken).filter(t => t)
 const toToken = t => t.includes('\n') ? t.slice(t.lastIndexOf('\n')) : t.trim()
 const parse = tokens => {
   let pos = 0
@@ -79,7 +80,9 @@ const generate = nodes => {
       case 'while': return `while (${gen(node.slice(1, -1))}) {${statement(node[node.length - 1])}}`
       case '.': return `(${gen(node[1])}).${node[2]}`
       default:
-        if (isOp2(node[0])) {
+        if (node[0] === '/') {
+          return `(__d => __d == 0 ? error('Zero division error') : ${gen(node[1])} / __d)(${gen(node[2])})`
+        } else if (isOp2(node[0])) {
           return gen(node[1]) + node[0] + gen(node[2])
         } else {
           return gen(node[0]) + (node.length === 1 ? '' : `(${node.slice(1).map(gen)})`)
@@ -88,73 +91,97 @@ const generate = nodes => {
   }
   return nodes.map(gen).join('\n')
 }
+const run = (src, stdin) => {
+  const tokens = tokenize(src)
+  const nodes = parse(tokens)
+  const js = generate(nodes)
+
+  const stdlib = `let __stdout = ''
+const error = msg => { throw new Error(msg) }
+const io = {
+  print: o => __stdout += o.toString() + '\\n',
+  stdin: ${str(stdin)},
+}`
+
+  let result
+  try {
+    result = Function(stdlib + '\n' + js + '\nreturn {ret: main(), stdout: __stdout}')()
+  } catch(e) {
+    result = {ret: e.message, stdout: ''}
+  }
+  return {ret: result.ret, stdout: result.stdout, tokens, nodes, js}
+}
+
 const test = () => {
-  const t = (expect, exp, ...defs) => {
+  const exp = (expect, exp, ...defs) => test(o => o.ret, expect, exp, ...defs)
+  const out = (expect, exp, ...defs) => test(o => o.stdout, expect, exp, ...defs)
+  const test = (f, expect, exp, ...defs) => {
     const src = defs.concat([`def main: ${exp}`]).join('\n')
-    const tokens = tokenize(src)
-    const nodes = parse(tokens)
-    const js = generate(nodes)
-    let actual
-    try {
-      actual = Function(js + '\nreturn main()')()
-    } catch(e) {
-      actual = e.message
-      puts(e.stack)
-    }
-    if (eq(expect, actual)) {
+    const result = run(src)
+    if (eq(expect, f(result))) {
       process.stdout.write('.')
     } else {
       puts('src:', src)
-      puts('js:', js)
+      puts('js:', result.js)
       puts('expect:', expect)
-      puts('actual:', actual)
-      puts('tokens:', tokens)
-      dump(nodes)
+      puts('return:', result.ret)
+      puts('tokens:', result.tokens)
+      dump(result.nodes)
       process.exit(1)
     }
   }
 
   // primitives
-  t(1, '1')
-  t([1, 2], 'array 1 2')
-  t({1: 2, 3: 4}, 'dict 1 2 1+2 1+3')
+  exp(1, '1')
+  exp('hi', '"hi"')
+  exp([1, 2], 'array 1 2')
+  exp({1: 2, 3: 4}, 'dict 1 2 1+2 1+3')
 
   // exp
-  t(3, '1 + 2')
-  t(7, '1 + 2 * 3')
-  t(5, '1 * 2 + 3')
+  exp(3, '1 + 2')
+  exp(7, '1 + 2 * 3')
+  exp(5, '1 * 2 + 3')
 
   // function
-  t(3, 'add 1 2', 'def add a b: a + b')
-  t(6, 'calc 2 3', 'def calc a b:\n  def mul a b: a * b\n  mul a b')
+  exp(3, 'add 1 2', 'def add a b: a + b')
+  exp(6, 'calc 2 3', 'def calc a b:\n  def mul a b: a * b\n  mul a b')
 
   // struct
-  t({x:1, y:2}, 'vector2 1 2', 'struct vector2:\n  x int\n  y int')
-  t(2, '(vector2 1 2).y', 'struct vector2:\n  x int\n  y int')
+  exp({x:1, y:2}, 'vector2 1 2', 'struct vector2:\n  x int\n  y int')
+  exp(2, '(vector2 1 2).y', 'struct vector2:\n  x int\n  y int')
 
   // constant
-  t(2, '\n  let a inc 1\n  a', 'def inc a: a + 1')
+  exp(2, '\n  let a inc 1\n  a', 'def inc a: a + 1')
 
   // variable
-  t(3, '\n  var a 1\n  a += 2\n  a')
+  exp(3, '\n  var a 1\n  a += 2\n  a')
 
   // branch
-  t(1, 'if true 1 2')
-  t(2, 'if false 1 2')
-  t(2, 'if (true && (1 == 2)) 1 2')
+  exp(1, 'if true 1 2')
+  exp(2, 'if false 1 2')
+  exp(2, 'if (true && (1 == 2)) 1 2')
 
   // for block
-  t(3, '\n  var n 0\n  for i 3: n+=1\n  n')
+  exp(3, '\n  var n 0\n  for i 3: n+=1\n  n')
 
   // while block
-  t(3, '\n  var n 0\n  while n < 3: n+=1\n  n')
+  exp(3, '\n  var n 0\n  while n < 3: n+=1\n  n')
 
   // branch block
-  t(3, '\n  var n 0\n  if true:\n    n+=1\n    n+=2\n  n')
+  exp(3, '\n  var n 0\n  if true:\n    n+=1\n    n+=2\n  n')
 
   // error handling
+  exp('Zero division error', '\n  1/0\n  1')
+  exp('error', '\n  error "error"\n  1')
 
   // stdio
+  out('hello\nworld\n', '\n  io.print "hello"\n  io.print "world"')
+
+  // API for int
+  // API for string
+  // API for array
+  // API for dictionary
+  // API for error
 
   puts('ok')
 }
