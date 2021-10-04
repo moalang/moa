@@ -113,11 +113,12 @@ const io = {
 }
 
 const test = () => {
-  const exp = (expect, exp, ...defs) => test(o => o.ret, expect, exp, ...defs)
-  const out = (expect, exp, ...defs) => test(o => o.stdout, expect, exp, ...defs)
-  const test = (f, expect, exp, ...defs) => {
+  const exp = (expect, exp, ...defs) => test(o => o.ret, '', expect, exp, ...defs)
+  const stdin = (expect, stdin, exp, ...defs) => test(o => o.ret, stdin, expect, exp, ...defs)
+  const stdout = (expect, exp, ...defs) => test(o => o.stdout, '', expect, exp, ...defs)
+  const test = (f, stdin, expect, exp, ...defs) => {
     const src = defs.concat([`def main: ${exp}`]).join('\n')
-    const result = run(src)
+    const result = run(src, stdin)
     if (eq(expect, f(result))) {
       process.stdout.write('.')
     } else {
@@ -175,7 +176,8 @@ const test = () => {
   exp('error', '\n  error "error"\n  1')
 
   // stdio
-  out('hello\nworld\n', '\n  io.print "hello"\n  io.print "world"')
+  stdin('standard input', 'standard input', 'io.stdin')
+  stdout('hello\nworld\n', '\n  io.print "hello"\n  io.print "world"')
 
   // API for int
   // API for string
