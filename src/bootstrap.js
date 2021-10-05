@@ -2,7 +2,6 @@
 
 // TODO
 // - error handling
-// - stdio
 // - API for int, string, array, dictionary and error
 
 const puts = (...a) => console.log(...a)
@@ -11,11 +10,11 @@ const trace = (...a) => (puts(...a), a[a.length - 1])
 const str = JSON.stringify
 const eq = (a,b) => str(a) === str(b)
 const isArray = o => typeof o === 'object' && o.constructor === Array
-const op2 = '. + - * / += -= *= /= == != < > <= >= && ||'.split(' ')
+const op2 = '. + - * / += -= *= /= == != => < > <= >= && ||'.split(' ')
 const isOp2 = t => op2.includes(t)
 const fail = (msg, o) => {dump(o); throw new Error(msg)}
 
-const tokenize = src => src.split(/([0-9]+|[a-zA-Z_][a-zA-Z_0-9]*|[ \n]+|[.+\-*/=!&|]+|"[^"]*"|`[^"]*`|.)/).map(toToken).filter(t => t)
+const tokenize = src => src.split(/([0-9]+|[a-zA-Z_][a-zA-Z_0-9]*(?:,[a-zA-Z_][a-zA-Z_0-9]*)*|[ \n]+|[.+\-*/=!&|>]+|"[^"]*"|`[^"]*`|.)/).map(toToken).filter(t => t)
 const toToken = t => t.includes('\n') ? t.slice(t.lastIndexOf('\n')) : t.trim()
 const parse = tokens => {
   let pos = 0
@@ -26,7 +25,11 @@ const parse = tokens => {
     while (pos < tokens.length && g(tokens[pos])) {
       const t = f(tokens[pos])
       if (isOp2(t) && a.length && pos < tokens.length && g(tokens[pos])) {
-        a[a.length - 1] = [t, a[a.length - 1], f(tokens[pos])]
+        if (t === '=>') {
+          a[a.length - 1] = [t, a[a.length - 1], many(f, g, [])]
+        } else {
+          a[a.length - 1] = [t, a[a.length - 1], f(tokens[pos])]
+        }
       } else {
         a.push(t)
       }
@@ -78,10 +81,12 @@ const generate = nodes => {
           fail('Unknown format of for', {node})
         }
       case 'while': return `while (${gen(node.slice(1, -1))}) {${statement(node[node.length - 1])}}`
-      case '.': return `(${gen(node[1])}).${node[2]}`
+      case '.': return `__dot(() => ${gen(node[1])}, '${node[2]}')`
       default:
         if (node[0] === '/') {
           return `(__d => __d == 0 ? error('Zero division error') : ${gen(node[1])} / __d)(${gen(node[2])})`
+        } else if (node[0] === '=>') {
+          return `((${node[1]}) => ${gen(node.slice(2))})`
         } else if (isOp2(node[0])) {
           return gen(node[1]) + node[0] + gen(node[2])
         } else {
@@ -101,6 +106,31 @@ const error = msg => { throw new Error(msg) }
 const io = {
   print: o => __stdout += o.toString() + '\\n',
   stdin: ${str(stdin)},
+}
+const __dot = (f, label) => {
+  if (label === 'then') {
+    return -1
+  } else {
+    const o = f()
+    const t = typeof o
+    if (t === 'string') {
+      switch (label) {
+      case 'size': return o.length
+      }
+    } else if (t === 'number') {
+    } else if (t === 'object') {
+      if (o.constructor === Array) {
+        switch (label) {
+        case 'size': return o.length
+        }
+      } else if (label in o) {
+        return o[label]
+      } else {
+        error('Unknown field ' + t + ' in ' + JSON.stringify(o))
+      }
+    }
+    error('Unknown reference ' + t + ' with ' + label)
+  }
 }`
 
   let result
@@ -137,6 +167,9 @@ const test = () => {
   exp('hi', '"hi"')
   exp([1, 2], 'array 1 2')
   exp({1: 2, 3: 4}, 'dict 1 2 1+2 1+3')
+  exp(1, '(n => n) 1')
+  exp(3, '(a,b => a + b) 1 2')
+  exp(6, '(a,b,c => a + b + c) 1 2 3')
 
   // exp
   exp(3, '1 + 2')
@@ -179,11 +212,18 @@ const test = () => {
   stdin('standard input', 'standard input', 'io.stdin')
   stdout('hello\nworld\n', '\n  io.print "hello"\n  io.print "world"')
 
-  // API for int
-  // API for string
-  // API for array
-  // API for dictionary
-  // API for error
+  // int
+  // string
+  exp(2, '"hi".size')
+
+  // array
+  exp(3, '(array 1 2 3).size')
+
+  // dictionary
+
+  // error
+  //exp(3, '1.then(n => n + 2)')
+  //exp('fail', 'error("fail").then(n => n + 2)')
 
   puts('ok')
 }
