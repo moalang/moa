@@ -25,8 +25,8 @@ const parse = tokens => {
     while (pos < tokens.length && g(tokens[pos])) {
       const t = f(tokens[pos])
       if (isOp2(t) && a.length && pos < tokens.length && g(tokens[pos])) {
-        if (t === '=>') {
-          a[a.length - 1] = [t, a[a.length - 1], many(f, g, [])]
+        if ('. =>'.includes(t)) {
+          a[a.length - 1] = many(f, g, [t, a[a.length - 1]])
         } else {
           a[a.length - 1] = [t, a[a.length - 1], f(tokens[pos])]
         }
@@ -48,7 +48,7 @@ const parse = tokens => {
 const generate = nodes => {
   const dict = a => '{' + [...Array(a.length / 2).keys()].map(i => i * 2).map(i => `[${a[i]}]:${a[i+1]}`) + '}'
   const addReturn = a => (a[a.length-1] = `return ${a[a.length-1]}`,a)
-  const statement = a => `{${a.map(gen).join(';')}}`
+  const statement = a => a.length === 1 ? gen(a[0]) : `{${a.map(gen).join(';')}}`
   const exps = a => `{${addReturn(a.map(gen)).join(';')}}`
   const gen = node => {
     if (!isArray(node)) {
@@ -81,7 +81,7 @@ const generate = nodes => {
           fail('Unknown format of for', {node})
         }
       case 'while': return `while (${gen(node.slice(1, -1))}) {${statement(node[node.length - 1])}}`
-      case '.': return `__dot(() => ${gen(node[1])}, '${node[2]}')`
+      case '.': return `__dot(() => ${gen(node[1])}, '${node[2]}', [${node.slice(3).map(gen)}])`
       default:
         if (node[0] === '/') {
           return `(__d => __d == 0 ? error('Zero division error') : ${gen(node[1])} / __d)(${gen(node[2])})`
@@ -107,31 +107,44 @@ const io = {
   print: o => __stdout += o.toString() + '\\n',
   stdin: ${str(stdin)},
 }
-const __dot = (f, label) => {
-  if (label === 'then') {
-    return -1
-  } else {
-    const o = f()
-    const t = typeof o
-    if (t === 'string') {
-      switch (label) {
-      case 'size': return o.length
+const __dot = (f, label, args) => {
+  const ref = () => {
+    if (label === 'then') {
+      return g => g(f())
+    } else if (label === 'catch') {
+      return g => {
+        try {
+          return f()
+        } catch (e) {
+          return g(e)
+        }
       }
-    } else if (t === 'number') {
-    } else if (t === 'object') {
-      if (o.constructor === Array) {
+    } else {
+      const o = f()
+      const t = typeof o
+      if (t === 'string') {
         switch (label) {
         case 'size': return o.length
         }
-      } else if (label in o) {
-        return o[label]
-      } else {
-        error('Unknown field ' + t + ' in ' + JSON.stringify(o))
+      } else if (t === 'number') {
+      } else if (t === 'object') {
+        if (o.constructor === Array) {
+          switch (label) {
+          case 'size': return o.length
+          }
+        } else if (label in o) {
+          return o[label]
+        } else {
+          error('Unknown field ' + t + ' in ' + JSON.stringify(o))
+        }
       }
+      error('Unknown reference ' + t + ' with ' + label)
     }
-    error('Unknown reference ' + t + ' with ' + label)
   }
-}`
+  const o = ref()
+  return typeof o === 'function' && args.length ? o(...args) : o 
+}
+`
 
   let result
   try {
@@ -207,6 +220,10 @@ const test = () => {
   // error handling
   exp('Zero division error', '\n  1/0\n  1')
   exp('error', '\n  error "error"\n  1')
+  exp(3, '1.then(n => n + 2)')
+  exp(1, '1.catch(n => n + 2)')
+  exp('fail', '(error "fail").then(n => n + 2)')
+  exp('ok', '(error "fail").catch(e => "ok")')
 
   // stdio
   stdin('standard input', 'standard input', 'io.stdin')
@@ -220,10 +237,6 @@ const test = () => {
   exp(3, '(array 1 2 3).size')
 
   // dictionary
-
-  // error
-  //exp(3, '1.then(n => n + 2)')
-  //exp('fail', 'error("fail").then(n => n + 2)')
 
   puts('ok')
 }
