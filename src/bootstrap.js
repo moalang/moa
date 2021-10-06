@@ -1,7 +1,6 @@
 'use strict'
 
 // TODO
-// - error handling
 // - API for int, string, array, dictionary and error
 
 const puts = (...a) => console.log(...a)
@@ -39,6 +38,7 @@ const parse = tokens => {
   const block = () => tokens[pos][0] === '\n' ? lines(tokens[pos++]) : [line()]
   const unit = () => consume(t =>
     t === '(' ? next(many(unit, t => t !== ')')) :
+    t === '[' ? next(many(unit, t => t !== ']', ['array'])) :
     t === ':' ? block() :
     t)
   const lines = indent => many(line, t => t === indent && ++pos, [line()])
@@ -87,6 +87,8 @@ const generate = nodes => {
           return `(__d => __d == 0 ? error('Zero division error') : ${gen(node[1])} / __d)(${gen(node[2])})`
         } else if (node[0] === '=>') {
           return `((${node[1]}) => ${gen(node.slice(2))})`
+        } else if (node[0] === '-' && node.length === 2) {
+          return '-' + gen(node[1])
         } else if (isOp2(node[0])) {
           return gen(node[1]) + node[0] + gen(node[2])
         } else {
@@ -179,6 +181,7 @@ const test = () => {
   exp(1, '1')
   exp('hi', '"hi"')
   exp([1, 2], 'array 1 2')
+  exp([1, 2], '[1 2]')
   exp({1: 2, 3: 4}, 'dict 1 2 1+2 1+3')
   exp(1, '(n => n) 1')
   exp(3, '(a,b => a + b) 1 2')
@@ -230,6 +233,10 @@ const test = () => {
   stdout('hello\nworld\n', '\n  io.print "hello"\n  io.print "world"')
 
   // int
+  exp(-1, '(-1)')
+  exp(0, '-1 + 1')
+  exp(0, 'add 1 (-1)', 'def add a b: a + b')
+
   // string
   exp(2, '"hi".size')
 
