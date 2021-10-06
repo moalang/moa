@@ -46,7 +46,7 @@ const parse = tokens => {
   return lines('\n')
 }
 const generate = nodes => {
-  const dict = a => '{' + [...Array(a.length / 2).keys()].map(i => i * 2).map(i => `[${a[i]}]:${a[i+1]}`) + '}'
+  const map = a => 'new __map({' + [...Array(a.length / 2).keys()].map(i => i * 2).map(i => `[${a[i]}]:${a[i+1]}`) + '})'
   const addReturn = a => (a[a.length-1] = `return ${a[a.length-1]}`,a)
   const statement = a => a.length === 1 ? gen(a[0]) : `{${a.map(gen).join(';')}}`
   const exps = a => `{${addReturn(a.map(gen)).join(';')}}`
@@ -60,7 +60,7 @@ const generate = nodes => {
         const names = node[node.length - 1].map(field => field[0])
         return `const ${node[1]} = (${names}) => ({${names}})`
       case 'array': return `[${node.slice(1).map(gen)}]`
-      case 'dict': return `(${dict(node.slice(1).map(gen))})`
+      case 'map': return `(${map(node.slice(1).map(gen))})`
       case 'var': return `let ${node[1]} = ${gen(node.slice(2))}`
       case 'let': return `const ${node[1]} = ${gen(node.slice(2))}`
       case 'if':
@@ -109,6 +109,11 @@ const io = {
   print: o => __stdout += o.toString() + '\\n',
   stdin: ${str(stdin)},
 }
+function __map(o) { this.o = o }
+__map.prototype.get = function(k) { return this.o[k] }
+__map.prototype.set = function(k, v) { this.o[k] = v }
+const __unwrap = o => typeof o === 'object' && o.constructor === __map ? o.o : o
+
 const __dot = (f, label, args) => {
   const ref = () => {
     if (label === 'then') {
@@ -129,13 +134,18 @@ const __dot = (f, label, args) => {
         case 'size': return o.length
         }
       } else if (t === 'number') {
+        // no methods
       } else if (t === 'object') {
         if (o.constructor === Array) {
           switch (label) {
           case 'size': return o.length
           }
         } else if (label in o) {
-          return o[label]
+          if (args.length === 0) {
+            return o[label]
+          } else {
+            return o[label](...args)
+          }
         } else {
           error('Unknown field ' + t + ' in ' + JSON.stringify(o))
         }
@@ -150,7 +160,7 @@ const __dot = (f, label, args) => {
 
   let result
   try {
-    result = Function(stdlib + '\n' + js + '\nreturn {ret: main(), stdout: __stdout}')()
+    result = Function(stdlib + '\n' + js + '\nreturn {ret: __unwrap(main()), stdout: __stdout}')()
   } catch(e) {
     result = {ret: e.message, stdout: ''}
   }
@@ -182,7 +192,7 @@ const test = () => {
   exp('hi', '"hi"')
   exp([1, 2], 'array 1 2')
   exp([1, 2], '[1 2]')
-  exp({1: 2, 3: 4}, 'dict 1 2 1+2 1+3')
+  exp({1: 2, 3: 4}, 'map 1 2 1+2 1+3')
   exp(1, '(n => n) 1')
   exp(3, '(a,b => a + b) 1 2')
   exp(6, '(a,b,c => a + b + c) 1 2 3')
@@ -243,7 +253,9 @@ const test = () => {
   // array
   exp(3, '(array 1 2 3).size')
 
-  // dictionary
+  // map
+  exp(1, '(map "a" 1 "b" 2).get "a"')
+  exp(2, '\n  var d map\n  d.set 1 2\n  d.get 1')
 
   puts('ok')
 }
