@@ -1,7 +1,7 @@
 'use strict'
 
 // TODO
-// - API for int, string, array, dictionary and error
+// - extends standard APIs
 
 const puts = (...a) => console.log(...a)
 const dump = o => console.dir(o, {depth: null})
@@ -9,6 +9,8 @@ const trace = (...a) => (puts(...a), a[a.length - 1])
 const str = JSON.stringify
 const eq = (a,b) => str(a) === str(b)
 const isArray = o => typeof o === 'object' && o.constructor === Array
+const op2Assign = '+= -= *= /= ='.split(' ')
+const isAssign = t => op2Assign.includes(t)
 const op2 = '. + - * / += -= *= /= == != => < > <= >= && ||'.split(' ')
 const isOp2 = t => op2.includes(t)
 const fail = (msg, o) => {dump(o); throw new Error(msg)}
@@ -52,7 +54,11 @@ const generate = nodes => {
   const exps = a => `{${addReturn(a.map(gen)).join(';')}}`
   const gen = node => {
     if (!isArray(node)) {
-      return node
+      if (node[0].match(/^[a-zA-Z_]/)) {
+        return `__ref(${node})`
+      } else {
+        return node
+      }
     }
     switch (node[0]) {
       case 'def': return `const ${node[1]} = (${node.slice(2, -1)}) => ${exps(node[node.length - 1])}`
@@ -73,8 +79,8 @@ const generate = nodes => {
         }
       case 'for':
         if (node.length === 4) {
-          const a = gen(node[1])
-          const b = gen(node[2])
+          const a = node[1]
+          const b = node[2]
           const c = statement(node[3])
           return `for (let ${a}=0; ${a}<${b}; ++${a}) {${c}}`
         } else {
@@ -90,7 +96,8 @@ const generate = nodes => {
         } else if (node[0] === '-' && node.length === 2) {
           return '-' + gen(node[1])
         } else if (isOp2(node[0])) {
-          return gen(node[1]) + node[0] + gen(node[2])
+          const lhs = isAssign(node[0]) ? node[1] : gen(node[1])
+          return lhs + node[0] + gen(node[2])
         } else {
           return gen(node[0]) + (node.length === 1 ? '' : `(${node.slice(1).map(gen)})`)
         }
@@ -113,6 +120,7 @@ function __map(o) { this.o = o }
 __map.prototype.get = function(k) { return this.o[k] }
 __map.prototype.set = function(k, v) { this.o[k] = v }
 const __unwrap = o => typeof o === 'object' && o.constructor === __map ? o.o : o
+const __ref = o => typeof o === 'function' && o.toString().startsWith('()') ? o() : o
 
 const __dot = (f, label, args) => {
   const ref = () => {
@@ -203,6 +211,7 @@ const test = () => {
   exp(5, '1 * 2 + 3')
 
   // function
+  exp(1, 'one', 'def one: 1')
   exp(3, 'add 1 2', 'def add a b: a + b')
   exp(6, 'calc 2 3', 'def calc a b:\n  def mul a b: a * b\n  mul a b')
 
@@ -215,6 +224,7 @@ const test = () => {
 
   // variable
   exp(3, '\n  var a 1\n  a += 2\n  a')
+  exp(3, '\n  var a 1\n  def inc: a += 1\n  inc\n  inc\n  a')
 
   // branch
   exp(1, 'if true 1 2')
