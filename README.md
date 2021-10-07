@@ -38,7 +38,7 @@ Run
 
 
 # main.moa
-add a b = a + b
+def add a b: a + b
 ```
 
 Test
@@ -50,9 +50,9 @@ expect: 2
   fact: 3
 
 # test.moa
-test t =
-  t.eq 2 add(1 1)
-  t.eq 2 add(1 2)
+test t:
+  t.eq 2 (add 1 1)
+  t.eq 2 (add 1 2)
 ```
 
 
@@ -73,7 +73,7 @@ Containers
 ```
 (a,b) # tuple
 [1 2] # array
-{x y} # data
+{x y} # struct
 ```
 
 Anonymouse Function
@@ -83,10 +83,8 @@ a,b => a + b
 
 Function
 ```
-inc :: int int # signature is optional
-inc x = x + 1
-add a.num :: a a a
-add x y = x + y
+def inc x: x + 1
+def add x y: x + y
 ```
 
 Exp
@@ -104,45 +102,20 @@ struct dict k v:
   values [k,v]
 ```
 
-ADT
-```
-adt bool:
-  true
-  false
-
-adt tree a:
-  leaf a
-  node tree(a) tree(a)
-```
-
-Interface
-```
-interface eq t:
-  eq :: t t bool
-  eq a b = a == b
-
-struct vector2:
-  x int
-  y int
-
-extend vector2 eq:
-  eq l r = l.x == r.x && l.y == r.y
-```
-
 Control Flow
 ```
-max a b = if(a > b a b)
+def max a b: if(a > b a b)
 
-gcd a b = if:
-  a < b  -> gcd(b a)
-  b == 0 -> a
-  _      -> gcd(b a/b)
+def gcd a b: if:
+  a < b  (gcd b a)
+  b == 0 a
+  _      (gcd b a/b)
 
-show m = match m:
-  none   -> "none"
-  just v -> "just " ++ v
+def show m: match m:
+  none      "none"
+  just v => "just " ++ v
 
-ten = for i 1...9: for j 1...9:
+def ten: for i 1...9: for j 1...9:
   print "$i x $j = ${i*j}"
   if i == 9:
     print "--\n"
@@ -150,25 +123,23 @@ ten = for i 1...9: for j 1...9:
 
 Error Handling
 ```
-div :: int int try(int)
-div a b = if(
-  b == 0 error("zero division")
+def div a b: (if b == 0
+  (error "zero division")
   a / b)
 
-main :: try(int)
-main =
-  n <- div(4 2) # n should be 2
-  m <- div(4 0) # right side expression should be failed by error
-  n + m         # never reached here
+def main:
+  let n (div 4 2) # n should be 2
+  let m (div 4 0) # right side expression should be failed by error
+  n + m           # never reached here
 ```
 
 Variable
 ```
-main =
-  a <- 1
+def main:
+  var a 1
   a += 2 # a will be 3
-  inc = a += 1
-  add n = a += n
+  def inc: a += 1
+  def add n: a += n
   inc    # a will be 4
   add(3) # a will be 7
 ```
@@ -198,7 +169,7 @@ block:
 
 id: [A-Za-z_][A-Za-z0-9_]
 num: [0-9]+
-op2: + - * / // % = += -= *= /= == != || && >= > <= < ->
+op2: + - * / // % = += -= *= /= == != || && >= > <= <
 indent: "\n" " "+
 ```
 
@@ -268,15 +239,15 @@ Index
 ### IO
 
 ```
-main =
-  now <- io.now
-  io.write(now)
+def main:
+  let now io.now
+  io.print now
 
-  input <- io.read
-  io.write(input)
+  let input io.read
+  io.print input
 
-  n <- io.random.int(1 3)
-  io.exit(n)
+  n <- (io.random.int 1 3)
+  io.exit n
 ```
 
 
@@ -324,22 +295,21 @@ Symbols
 > < > <= >= == !=            -- compare operators
 > && ||                      -- boolean operators
 > .                          -- property access
-> =                          -- define function
-> :                          -- define struct
-> |                          -- define abstract data type
-> ::                         -- define signature for function
-> := += -= *= /= %= ||= &&=  -- change variable
+> = += -= *= /= %= ||= &&=   -- change variable
 > " ' ` $                    -- make string
 > ,                          -- tuple
+> [ ]                        -- array
+> { }                        -- struct
 
 - option
-> ?                  -- variable arguments e.g. add x y z?0 = x+y+z
-> ;                          -- separator 1?
+> ?                          -- variable arguments e.g. add x y z?0 = x+y+z
+> ;                          -- separator?
 > ->                         -- condition?
-> [ ]                        -- array?
-> { }                        -- map?
 
 - unused
 > !                          -- unwrap?
 > @
 > ~
+> :
+> |
+> &
