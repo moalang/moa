@@ -12,7 +12,7 @@ const op2 = '. + - * / % += -= *= /= %= == != => < > <= >= && ||'.split(' ')
 const isOp2 = t => op2.includes(t)
 const fail = (msg, o) => {dump(o); throw new Error(msg)}
 
-const tokenize = src => src.split(/([0-9]+|[a-zA-Z_][a-zA-Z_0-9]*(?:,[a-zA-Z_][a-zA-Z_0-9]*)*|[ \n]+|[.+\-*/=!&|>]+|"[^"]*"|`[^"]*`|.)/).map(toToken).filter(t => t)
+const tokenize = src => src.split(/([0-9]+|[a-zA-Z_][a-zA-Z_0-9]*(?:,[a-zA-Z_][a-zA-Z_0-9]*)*|[ \n]+|[.+\-*/=!&|>]+|"[^"]*"|`[^"]*`|(?:#.*\n)|.)/).filter(t => t[0] !== '#').map(toToken).filter(t => t)
 const toToken = t => t.includes('\n') ? t.slice(t.lastIndexOf('\n')) : t.trim()
 const parse = tokens => {
   let pos = 0
@@ -274,6 +274,9 @@ const test = () => {
   exp(2, '\n  var d map\n  d.set 1 2\n  d.get 1')
   exp(['a', 'b'], '(map "a" 1 "b" 2).keys')
   exp([1, 2], '(map "a" 1 "b" 2).values')
+
+  // comment
+  exp(1, 'one', '# comment', 'def one: 1')
 
   puts('ok')
 }
