@@ -1,8 +1,5 @@
 'use strict'
 
-// TODO
-// - extends standard APIs
-
 const puts = (...a) => console.log(...a)
 const dump = o => console.dir(o, {depth: null})
 const trace = (...a) => (puts(...a), a[a.length - 1])
@@ -11,7 +8,7 @@ const eq = (a,b) => str(a) === str(b)
 const isArray = o => typeof o === 'object' && o.constructor === Array
 const op2Assign = '+= -= *= /= ='.split(' ')
 const isAssign = t => op2Assign.includes(t)
-const op2 = '. + - * / += -= *= /= == != => < > <= >= && ||'.split(' ')
+const op2 = '. + - * / % += -= *= /= %= == != => < > <= >= && ||'.split(' ')
 const isOp2 = t => op2.includes(t)
 const fail = (msg, o) => {dump(o); throw new Error(msg)}
 
@@ -117,8 +114,13 @@ const io = {
   stdin: ${str(stdin)},
 }
 function __map(o) { this.o = o }
-__map.prototype.get = function(k) { return this.o[k] }
-__map.prototype.set = function(k, v) { this.o[k] = v }
+__map.prototype = {
+  get(k) { return this.o[k] },
+  set(k, v) { this.o[k] = v },
+  get keys() { return Object.keys(this.o) },
+  get values() { return Object.values(this.o) },
+}
+__map.prototype.constructor = __map
 const __unwrap = o => typeof o === 'object' && o.constructor === __map ? o.o : o
 const __ref = o => typeof o === 'function' && o.toString().startsWith('()') ? o() : o
 
@@ -147,6 +149,8 @@ const __dot = (f, label, args) => {
         if (o.constructor === Array) {
           switch (label) {
           case 'size': return o.length
+          case 'map': return o[label](...args)
+          case 'filter': return o[label](...args)
           }
         } else if (label in o) {
           if (args.length === 0) {
@@ -261,11 +265,15 @@ const test = () => {
   exp(2, '"hi".size')
 
   // array
-  exp(3, '(array 1 2 3).size')
+  exp(2, '[1 2].size')
+  exp([2, 3], '[1 2].map(n => n + 1)')
+  exp([1, 3], '[1 2 3].filter(n => n % 2 == 1)')
 
   // map
   exp(1, '(map "a" 1 "b" 2).get "a"')
   exp(2, '\n  var d map\n  d.set 1 2\n  d.get 1')
+  exp(['a', 'b'], '(map "a" 1 "b" 2).keys')
+  exp([1, 2], '(map "a" 1 "b" 2).values')
 
   puts('ok')
 }
