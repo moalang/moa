@@ -1,2 +1,2 @@
-#!env node
+#!/usr/bin/env node
 require(process.cwd() + '/../src/bootstrap.js')

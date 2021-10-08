@@ -102,12 +102,7 @@ const generate = nodes => {
   }
   return nodes.map(gen).join('\n')
 }
-const run = (src, stdin) => {
-  const tokens = tokenize(src)
-  const nodes = parse(tokens)
-  const js = generate(nodes)
-
-  const stdlib = `let __stdout = ''
+const stdlib = stdin => `let __stdout = ''
 const error = msg => { throw new Error(msg) }
 const io = {
   print: o => __stdout += o.toString() + '\\n',
@@ -169,10 +164,13 @@ const __dot = (f, label, args) => {
   return typeof o === 'function' && args.length ? o(...args) : o 
 }
 `
-
+const run = (src, stdin) => {
+  const tokens = tokenize(src.trim())
+  const nodes = parse(tokens)
+  const js = stdlib(stdin) + generate(nodes) + '\nreturn {ret: __unwrap(main()), stdout: __stdout}'
   let result
   try {
-    result = Function(stdlib + '\n' + js + '\nreturn {ret: __unwrap(main()), stdout: __stdout}')()
+    result = Function(js)()
   } catch(e) {
     result = {ret: e.message, stdout: ''}
   }
@@ -282,11 +280,11 @@ const test = () => {
 }
 
 if (module.parent) {
-  const src = require('fs').readFileSync('/dev/stdin', 'utf8').trim()
-  const tokens = tokenize(src)
-  const nodes = parse(tokens)
-  const js = generate(nodes)
-  puts(js + '\nmain()')
+  const fs = require('fs')
+  const stdin = fs.readFileSync('/dev/stdin', 'utf8')
+  const src = fs.readFileSync(process.argv[3], 'utf8')
+  const result = run(src, stdin)
+  process.stdout.write(result.stdout)
 } else {
   test()
 }
