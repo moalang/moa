@@ -24,7 +24,12 @@ const parse = tokens => {
       const t = f(tokens[pos])
       if (isOp2(t) && a.length && pos < tokens.length && g(tokens[pos])) {
         if (a.length === 1 && t === '.') {
-          a[a.length - 1] = many(f, g, [t, a[a.length - 1]])
+          const ref = [t, a[a.length - 1], tokens[pos++]]
+          if (isOp2(tokens[pos])) {
+            a[a.length - 1] = ref
+          } else {
+            a[a.length - 1] = ref.concat(many(f, g))
+          }
         } else if (t === '=>') {
           a[a.length - 1] = many(f, g, [t, a[a.length - 1]])
         } else {
@@ -49,8 +54,8 @@ const parse = tokens => {
 const generate = nodes => {
   const map = a => 'new __map({' + [...Array(a.length / 2).keys()].map(i => i * 2).map(i => `[${a[i]}]:${a[i+1]}`) + '})'
   const addReturn = a => (a[a.length-1] = `return ${a[a.length-1]}`,a)
-  const statement = a => a.length === 1 ? gen(a[0]) : `{${a.map(gen).join(';')}}`
-  const exps = a => `{${addReturn(a.map(gen)).join(';')}}`
+  const statement = a => a.length === 1 ? gen(a[0]) : `{\n  ${a.map(gen).join('  \n')}\n}`
+  const exps = a => `{\n  ${addReturn(a.map(gen)).join('\n  ')}\n}`
   const gen = node => {
     if (!isArray(node)) {
       if (node[0].match(/^[a-zA-Z_]/)) {
@@ -139,6 +144,7 @@ const __dot = (f, label, args) => {
       if (t === 'string') {
         switch (label) {
         case 'size': return o.length
+        case 'at': return i => o[i]
         }
       } else if (t === 'number') {
         // no methods
@@ -169,14 +175,14 @@ const __dot = (f, label, args) => {
 const run = (src, stdin) => {
   const tokens = tokenize(src.trim())
   const nodes = parse(tokens)
-  const js = stdlib(stdin) + generate(nodes) + '\nreturn {ret: __unwrap(main()), stdout: __stdout}'
-  let result
+  const js = generate(nodes)
+  const runtime = stdlib(stdin) + js + '\nreturn {ret: __unwrap(main()), stdout: __stdout}'
+  let result = {tokens, nodes, js}
   try {
-    result = Function(js)()
+    return Object.assign(result, Function(runtime)())
   } catch(e) {
-    result = {ret: e.message, stdout: ''}
+    return Object.assign(result, {ret: e.message, stdout: '', error: e})
   }
-  return {ret: result.ret, stdout: result.stdout, tokens, nodes, js}
 }
 
 const test = () => {
@@ -213,6 +219,7 @@ const test = () => {
   exp(3, '1 + 2')
   exp(7, '1 + 2 * 3')
   exp(5, '1 * 2 + 3')
+  exp(true, '[1 2].size == 2')
 
   // function
   exp(1, 'one', 'def one: 1')
@@ -264,6 +271,7 @@ const test = () => {
 
   // string
   exp(2, '"hi".size')
+  exp('i', '"hi".at(1)')
 
   // array
   exp(2, '[1 2].size')
@@ -287,6 +295,11 @@ if (module.parent) {
   const src = fs.readFileSync(process.argv[2], 'utf8')
   const result = run(src, src)
   process.stdout.write(result.stdout)
+  if (result.error) {
+    console.error(result.error)
+    console.log(result.js)
+    process.exit(1)
+  }
 } else {
   test()
 }
