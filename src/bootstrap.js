@@ -23,7 +23,9 @@ const parse = tokens => {
     while (pos < tokens.length && g(tokens[pos])) {
       const t = f(tokens[pos])
       if (isOp2(t) && a.length && pos < tokens.length && g(tokens[pos])) {
-        if ('. =>'.includes(t)) {
+        if (a.length === 1 && t === '.') {
+          a[a.length - 1] = many(f, g, [t, a[a.length - 1]])
+        } else if (t === '=>') {
           a[a.length - 1] = many(f, g, [t, a[a.length - 1]])
         } else {
           a[a.length - 1] = [t, a[a.length - 1], f(tokens[pos])]
@@ -77,7 +79,7 @@ const generate = nodes => {
       case 'for':
         if (node.length === 4) {
           const a = node[1]
-          const b = node[2]
+          const b = gen(node[2])
           const c = statement(node[3])
           return `for (let ${a}=0; ${a}<${b}; ++${a}) {${c}}`
         } else {
@@ -235,6 +237,7 @@ const test = () => {
 
   // for block
   exp(3, '\n  var n 0\n  for i 3: n+=1\n  n')
+  exp(2, '\n  var n 0\n  for i [1 2].size: n+=1\n  n')
 
   // while block
   exp(3, '\n  var n 0\n  while n < 3: n+=1\n  n')
