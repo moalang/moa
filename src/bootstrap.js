@@ -53,7 +53,7 @@ const parse = tokens => {
 }
 const generate = nodes => {
   const map = a => 'new __map({' + [...Array(a.length / 2).keys()].map(i => i * 2).map(i => `[${a[i]}]:${a[i+1]}`) + '})'
-  const addReturn = a => (a[a.length-1] = `return ${a[a.length-1]}`,a)
+  const addReturn = a => (!a[a.length-1].match(/^if|for/) ? a[a.length-1] = `return ${a[a.length-1]}` : 0,a)
   const statement = a => a.length === 1 ? gen(a[0]) : `{\n  ${a.map(gen).join('  \n')}\n}`
   const exps = a => `{\n  ${addReturn(a.map(gen)).join('\n  ')}\n}`
   const gen = node => {
@@ -126,6 +126,7 @@ __map.prototype = {
 __map.prototype.constructor = __map
 const __unwrap = o => typeof o === 'object' && o.constructor === __map ? o.o : o
 const __ref = o => typeof o === 'function' && o.toString().startsWith('()') ? o() : o
+const not = o => !o
 
 const __dot = (f, label, args) => {
   const ref = () => {
@@ -179,7 +180,7 @@ const run = (src, stdin) => {
   const nodes = parse(tokens)
   const js = generate(nodes)
   const runtime = stdlib(stdin) + js + '\nreturn {ret: __unwrap(main()), stdout: __stdout}'
-  let result = {tokens, nodes, js}
+  let result = {tokens, nodes, js, runtime}
   try {
     return Object.assign(result, Function(runtime)())
   } catch(e) {
@@ -300,7 +301,8 @@ if (module.parent) {
   process.stdout.write(result.stdout)
   if (result.error) {
     console.error(result.error)
-    console.log(result.js)
+    console.log('--')
+    console.log(result.runtime)
     process.exit(1)
   }
 } else {
