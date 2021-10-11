@@ -6,7 +6,7 @@ const trace = (...a) => (puts(...a), a[a.length - 1])
 const str = JSON.stringify
 const eq = (a,b) => str(a) === str(b)
 const isArray = o => typeof o === 'object' && o.constructor === Array
-const op2Assign = '+= -= *= /= ='.split(' ')
+const op2Assign = '= += -= *= /= ='.split(' ')
 const isAssign = t => op2Assign.includes(t)
 const op2 = '+ - * / % += -= *= /= %= == != < > <= >= && ||'.split(' ')
 const isOp2 = t => op2.includes(t)
@@ -33,7 +33,7 @@ const parse = tokens => {
         } else {
           a[a.length - 1] = dot
         }
-      } else if (isOp2(t) && a.length) {
+      } else if ((isOp2(t) || isAssign(t)) && a.length) {
         a[a.length - 1] = [t, a[a.length - 1], f(tokens[pos])]
       } else {
         a.push(t)
@@ -99,9 +99,10 @@ const generate = nodes => {
           return `((${node[1]}) => ${gen(node.slice(2))})`
         } else if (node[0] === '-' && node.length === 2) {
           return '-' + gen(node[1])
+        } else if (isAssign(node[0])) {
+          return node[1] + node[0] + gen(node[2])
         } else if (isOp2(node[0])) {
-          const lhs = isAssign(node[0]) ? node[1] : gen(node[1])
-          return lhs + node[0] + gen(node[2])
+          return gen(node[1]) + node[0] + gen(node[2])
         } else {
           return gen(node[0]) + (node.length === 1 ? '' : `(${node.slice(1).map(gen)})`)
         }
@@ -154,6 +155,7 @@ const __dot = (f, label, args) => {
           case 'size': return o.length
           case 'map': return o[label](...args)
           case 'filter': return o[label](...args)
+          case 'push': return o[label](...args)
           }
         } else if (label in o) {
           if (args.length === 0) {
@@ -220,6 +222,7 @@ const test = () => {
   exp(7, '1 + 2 * 3')
   exp(5, '1 * 2 + 3')
   exp(true, '[1 2].size == [3 4].size')
+  exp(1, '\n  var n 0\n  n = 1\n  n')
 
   // function
   exp(1, 'one', 'def one: 1')
