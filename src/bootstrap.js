@@ -112,8 +112,15 @@ const generate = nodes => {
 }
 const stdlib = stdin => `let __stdout = ''
 const error = msg => { throw new Error(msg) }
+const __literal = o => (t =>
+  t === 'string' ? o :
+  t === 'object' ? (
+    o.constructor === Array ? '[' + o.map(__literal).join(' ') + ']' :
+    JSON.stringify(o)
+  ) : o.toString()
+)(typeof o)
 const io = {
-  print: o => __stdout += o.toString() + '\\n',
+  print: o => __stdout += __literal(o) + '\\n',
   stdin: ${str(stdin)},
 }
 function __map(o) { this.o = o }
@@ -267,6 +274,7 @@ const test = () => {
   // stdio
   stdin('standard input', 'standard input', 'io.stdin')
   stdout('hello\nworld\n', '\n  io.print "hello"\n  io.print "world"')
+  stdout('[1 2]\n', '\n  io.print [1 2]')
 
   // int
   exp(-1, '(-1)')
