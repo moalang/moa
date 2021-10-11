@@ -1,6 +1,6 @@
 test:
 	@-clear
-	@-node bootstrap.js test && moa run mini.moa < mini.moa
+	@-(cd src && node bootstrap.js test && minimoa mini.moa)
 
 watch:
 	@make test

@@ -281,9 +281,8 @@ const test = () => {
 
 if (module.parent) {
   const fs = require('fs')
-  const stdin = fs.readFileSync('/dev/stdin', 'utf8')
-  const src = fs.readFileSync(process.argv[3], 'utf8')
-  const result = run(src, stdin)
+  const src = fs.readFileSync(process.argv[2], 'utf8')
+  const result = run(src, src)
   process.stdout.write(result.stdout)
 } else {
   test()

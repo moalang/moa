@@ -11,50 +11,48 @@ curl https://github.com/moa/bin/moa > ~/moa/bin/moa
 export PATH=$PATH:~/moa/bin
 ```
 
-Make a project
+Create a code
 ```
-# moa new
-├README.md
-├test
-│ └test.moa
-└src
-   └main.moa
+# echo 'def main: io.print "hello world"' > main.moa
 ```
 
 Run
 ```
-> moa js
-  function add(a, b) {
-    return a + b
-  }
-  export({ add })
+# moa run
+hello world
+```
 
-
-> moa go
-  package main
-  func add(a int, b int) int {
-    return a + b
-  }
-
-
-# main.moa
-def add a b: a + b
+Build
+```
+# moa build
+# ./main
+hello world
 ```
 
 Test
 ```
-> moa test
-.x Failed
-test.moa:3|  t.eq 2 add(1 2)
-expect: 2
-  fact: 3
-
-# test.moa
-test t:
-  t.eq 2 (add 1 1)
-  t.eq 2 (add 1 2)
+# echo 'test t: t.eq "hi" t.main.stdout
+# moa test
+expect: hi
+actual: hello world\n
 ```
 
+Compile to programming languages
+```
+# moa js
+console.log("hello world")
+```
+
+```
+# moa go
+package main
+
+import "fmt"
+
+func main() {
+  fmt.Println("hello world")
+}
+```
 
 
 
@@ -259,10 +257,10 @@ def main:
 Accepted ideas
 - Generics
 - Functional programming
-- ADT
 - Monadic error handling
 
 Pending ideas
+- ADT
 - Global variables
 - Pointer
 - Weak reference

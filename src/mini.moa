@@ -1,3 +1,17 @@
+def tokenize src:
+  io.print src
+  []
+
+def parse tokens:
+  []
+
+def generate nodes:
+  "hi!"
+
 def main:
   let src io.stdin
-  io.print src
+  let tokens tokenize src
+  let nodes parse tokens
+  let js generate nodes
+  io.print tokens
+  io.print js
