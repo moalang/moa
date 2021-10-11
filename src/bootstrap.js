@@ -8,7 +8,7 @@ const eq = (a,b) => str(a) === str(b)
 const isArray = o => typeof o === 'object' && o.constructor === Array
 const op2Assign = '+= -= *= /= ='.split(' ')
 const isAssign = t => op2Assign.includes(t)
-const op2 = '. + - * / % += -= *= /= %= == != => < > <= >= && ||'.split(' ')
+const op2 = '+ - * / % += -= *= /= %= == != < > <= >= && ||'.split(' ')
 const isOp2 = t => op2.includes(t)
 const fail = (msg, o) => {dump(o); throw new Error(msg)}
 
@@ -22,19 +22,19 @@ const parse = tokens => {
     a = a || []
     while (pos < tokens.length && g(tokens[pos])) {
       const t = f(tokens[pos])
-      if (isOp2(t) && a.length && pos < tokens.length && g(tokens[pos])) {
-        if (a.length === 1 && t === '.') {
-          const ref = [t, a[a.length - 1], tokens[pos++]]
-          if (isOp2(tokens[pos])) {
-            a[a.length - 1] = ref
-          } else {
-            a[a.length - 1] = ref.concat(many(f, g))
-          }
-        } else if (t === '=>') {
-          a[a.length - 1] = many(f, g, [t, a[a.length - 1]])
+      if (t === '=>') {
+        a[a.length - 1] = many(f, g, [t, a[a.length - 1]])
+      } else if (t === '.') {
+        const dot = [t, a[a.length - 1], tokens[pos++]]
+        if (isOp2(tokens[pos])) {
+          a[a.length - 1] = many(f, g, [tokens[pos++], dot])
+        } else if (a.length === 1) {
+          a[a.length - 1] = many(f, g, dot)
         } else {
-          a[a.length - 1] = [t, a[a.length - 1], f(tokens[pos])]
+          a[a.length - 1] = dot
         }
+      } else if (isOp2(t) && a.length) {
+        a[a.length - 1] = [t, a[a.length - 1], f(tokens[pos])]
       } else {
         a.push(t)
       }
@@ -219,7 +219,7 @@ const test = () => {
   exp(3, '1 + 2')
   exp(7, '1 + 2 * 3')
   exp(5, '1 * 2 + 3')
-  exp(true, '[1 2].size == 2')
+  exp(true, '[1 2].size == [3 4].size')
 
   // function
   exp(1, 'one', 'def one: 1')
