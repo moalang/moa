@@ -230,7 +230,7 @@ const test = () => {
   exp(3, '1 + 2')
   exp(7, '1 + 2 * 3')
   exp(5, '1 * 2 + 3')
-  exp(true, '[1 2].size == [3 4].size')
+  exp(true, '[1 2].size == 1 + 1 && [3 4].size == 2')
   exp(1, '\n  var n 0\n  n = 1\n  n')
 
   // function

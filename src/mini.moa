@@ -3,45 +3,45 @@ def tokenize src:
   var token ""
   var i 0
   def push:
-    if ((token.size) > 0):
+    if token.size > 0:
       tokens.push token
       token = ""
   def quote q:
-    if ((src.at i) == q):
+    if (src.at i) == q:
       push
       token = q
       i += 1
-      while (i < (src.size)) && (((src.at) i) != q):
-        token += (src.at i)
+      while i < src.size && (src.at i) != q:
+        token += src.at i
         i += 1
       token += q
       push
   def br:
     if (src.at i) == "\n":
       push
-      while (i < (src.size)) && ((src.at i) == "\n"):
+      while i < src.size && (src.at i) == "\n":
         token = "\n"
         i += 1
-        while (i < (src.size)) && ((src.at i) == " "):
+        while i < src.size && (src.at i) == " ":
           token += " "
           i += 1
       push
       i -= 1
 
-  while i < (src.size):
+  while i < src.size:
     quote `"`
     quote "`"
     br
 
     let c src.at i
-    if (c == "(") || (c == ")"):
+    if c == "(" || c == ")":
       push
       tokens.push c
 
-    if (c == " "):
+    if c == " ":
       push
 
-    if (c != " ") && (c != "\n") && (c != "(") && (c != ")") && (c != `"`):
+    if c != " " && c != "\n" && c != "" && c != "" && c != `"`:
       token += c
 
     i += 1
