@@ -121,6 +121,7 @@ const __literal = o => (t =>
 )(typeof o)
 const io = {
   print: o => __stdout += __literal(o) + '\\n',
+  dump: o => __stdout += JSON.stringify(o) + '\\n',
   stdin: ${str(stdin)},
 }
 function __map(o) { this.o = o }
@@ -220,6 +221,7 @@ const test = () => {
   exp(1, '1')
   exp('hi', '"hi"')
   exp('hi', '`hi`')
+  exp('"', '`"`')
   exp([1, 2], 'array 1 2')
   exp([1, 2], '[1 2]')
   exp({1: 2, 3: 4}, 'map 1 2 1+2 1+3')

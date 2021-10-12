@@ -1,24 +1,23 @@
 def tokenize src:
   var tokens []
   var token ""
+  var i 0
   def push:
     if ((token.size) > 0):
       tokens.push token
       token = ""
-  for i src.size:
-    let c src.at i
-
-    if (c == `"`):
+  def quote q:
+    if ((src.at i) == q):
       push
-      token = `"`
+      token = q
       i += 1
-      while (i < (src.size)) && (((src.at) i) != `"`):
+      while (i < (src.size)) && (((src.at) i) != q):
         token += (src.at i)
         i += 1
-      token += `"`
+      token += q
       push
-
-    if c == "\n":
+  def br:
+    if (src.at i) == "\n":
       push
       while (i < (src.size)) && ((src.at i) == "\n"):
         token = "\n"
@@ -29,6 +28,12 @@ def tokenize src:
       push
       i -= 1
 
+  while i < (src.size):
+    quote `"`
+    quote "`"
+    br
+
+    let c src.at i
     if (c == "(") || (c == ")"):
       push
       tokens.push c
@@ -38,6 +43,8 @@ def tokenize src:
 
     if (c != " ") && (c != "\n") && (c != "(") && (c != ")") && (c != `"`):
       token += c
+
+    i += 1
 
   push
   tokens
@@ -57,4 +64,4 @@ def main:
   io.print tokens.size
   io.print tokens
   io.print "-- nodes:"
-  io.print nodes
+  io.dump nodes
