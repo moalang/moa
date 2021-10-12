@@ -102,16 +102,23 @@ struct dict k v:
 
 Control Flow
 ```
-def max a b: if(a > b a b)
+def max a b:
+  if (a > b) a b
 
-def gcd a b: if:
-  a < b  (gcd b a)
-  b == 0 a
-  _      (gcd b a/b)
+def zero n:
+  if n === 0:
+    io.print "zero"
 
-def show m: match m:
-  none      "none"
-  just v => "just " ++ v
+def gcd a b:
+  branch:
+    a < b: (gcd b a)
+    b == 0: a
+    _ : (gcd b a/b)
+
+def div n:
+  match n:
+    0: "zero"
+    _: (string n / 0)
 
 def ten: for i 1...9: for j 1...9:
   print "$i x $j = ${i*j}"
