@@ -7,5 +7,5 @@ mini:
 	@-(cd src && node bootstrap.js test && minimoa mini.moa)
 
 watch:
-	@make test
+	@make mini
 	@-fswatch -0 -o . | xargs -I {} -n1 -0 make mini

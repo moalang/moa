@@ -12,7 +12,7 @@ const op2 = '+ - * / % += -= *= /= %= == != < > <= >= && ||'.split(' ')
 const isOp2 = t => op2.includes(t)
 const fail = (msg, o) => {dump(o); throw new Error(msg)}
 
-const tokenize = src => src.split(/([0-9]+|[a-zA-Z_][a-zA-Z_0-9]*(?:,[a-zA-Z_][a-zA-Z_0-9]*)*|[ \n]+|[.+\-*/=!&|>]+|"[^"]*"|`[^"]*`|(?:#.*\n)|.)/).filter(t => t[0] !== '#').map(toToken).filter(t => t)
+const tokenize = src => src.split(/([0-9]+|[a-zA-Z_][a-zA-Z_0-9]*(?:,[a-zA-Z_][a-zA-Z_0-9]*)*|[ \n]+|[.+\-*/=!&|>]+|"[^"]*"|`[^`]*`|(?:#.*\n)|.)/).filter(t => t[0] !== '#').map(toToken).filter(t => t)
 const toToken = t => t.includes('\n') ? t.slice(t.lastIndexOf('\n')) : t.trim()
 const parse = tokens => {
   let pos = 0
@@ -160,6 +160,7 @@ const __dot = (f, label, args) => {
       } else if (t === 'object') {
         if (o.constructor === Array) {
           switch (label) {
+          case 'at': return i => o[i]
           case 'size': return o.length
           case 'map': return o[label](...args)
           case 'filter': return o[label](...args)
@@ -218,6 +219,7 @@ const test = () => {
   // primitives
   exp(1, '1')
   exp('hi', '"hi"')
+  exp('hi', '`hi`')
   exp([1, 2], 'array 1 2')
   exp([1, 2], '[1 2]')
   exp({1: 2, 3: 4}, 'map 1 2 1+2 1+3')

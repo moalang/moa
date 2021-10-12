@@ -7,15 +7,39 @@ def tokenize src:
       token = ""
   for i src.size:
     let c src.at i
-    let separator (c == " ") || (c == "(") || (c == ")") || c == "\n"
-    if (c == "(") || (c == ")"):
-      tokens.push c
-    if separator:
+
+    if (c == `"`):
       push
-    if (not separator):
+      token = `"`
+      i += 1
+      while (i < (src.size)) && (((src.at) i) != `"`):
+        token += (src.at i)
+        i += 1
+      token += `"`
+      push
+
+    if c == "\n":
+      push
+      while (i < (src.size)) && ((src.at i) == "\n"):
+        token = "\n"
+        i += 1
+        while (i < (src.size)) && ((src.at i) == " "):
+          token += " "
+          i += 1
+      push
+      i -= 1
+
+    if (c == "(") || (c == ")"):
+      push
+      tokens.push c
+
+    if (c == " "):
+      push
+
+    if (c != " ") && (c != "\n") && (c != "(") && (c != ")") && (c != `"`):
       token += c
+
   push
-  io.print token
   tokens
 
 def parse tokens:
@@ -29,9 +53,8 @@ def main:
   let tokens tokenize src
   let nodes parse tokens
   let js generate nodes
-  io.print "-- src:"
-  io.print src
   io.print "-- tokens:"
+  io.print tokens.size
   io.print tokens
   io.print "-- nodes:"
   io.print nodes
