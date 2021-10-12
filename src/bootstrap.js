@@ -1,5 +1,9 @@
 'use strict'
 
+// TODOs
+// [_] support infixl, infixr, infix
+
+const fs = require('fs')
 const puts = (...a) => console.log(...a)
 const dump = o => console.dir(o, {depth: null})
 const trace = (...a) => (puts(...a), a[a.length - 1])
@@ -21,34 +25,26 @@ const parse = tokens => {
   const many = (f, g, a) => {
     a = a || []
     while (pos < tokens.length && g(tokens[pos])) {
-      const t = f(tokens[pos])
-      if (t === '=>') {
-        a[a.length - 1] = many(f, g, [t, a[a.length - 1]])
-      } else if (t === '.') {
-        const dot = [t, a[a.length - 1], tokens[pos++]]
-        if (isOp2(tokens[pos])) {
-          a[a.length - 1] = many(f, g, [tokens[pos++], dot])
-        } else if (a.length === 1) {
-          a[a.length - 1] = many(f, g, dot)
-        } else {
-          a[a.length - 1] = dot
-        }
-      } else if ((isOp2(t) || isAssign(t)) && a.length) {
-        a[a.length - 1] = [t, a[a.length - 1], f(tokens[pos])]
-      } else {
-        a.push(t)
-      }
+      a.push(f(tokens[pos]))
     }
     return a
   }
-  const block = () => tokens[pos][0] === '\n' ? lines(tokens[pos++]) : [line()]
   const unit = () => consume(t =>
-    t === '(' ? next(many(unit, t => t !== ')')) :
-    t === '[' ? next(many(unit, t => t !== ']', ['array'])) :
-    t === ':' ? block() :
+    t === '(' ? next(many(exp, t => t !== ')')) :
+    t === '[' ? next(many(exp, t => t !== ']', ['array'])) :
+    t === ':' ? (tokens[pos][0] === '\n' ? lines(tokens[pos++]) : [line()]) :
     t)
+  const exp = () => cont(unit())
+  const cont = u => {
+    const t = tokens[pos++]
+    return t === '.' ? cont([t, u, tokens[pos++]]) :
+      t == '=>' ? [t, u, exp()] :
+      isOp2(t) ? [t, u, exp()] :
+      isAssign(t) ? [t, u, exp()] :
+      (--pos, u)
+  }
+  const line = () => many(exp, t => !'\n)'.includes(t[0]))
   const lines = indent => many(line, t => t === indent && ++pos, [line()])
-  const line = () => many(unit, t => t[0] !== '\n')
   return lines('\n')
 }
 const generate = nodes => {
@@ -96,7 +92,7 @@ const generate = nodes => {
         if (node[0] === '/') {
           return `(__d => __d == 0 ? error('Zero division error') : ${gen(node[1])} / __d)(${gen(node[2])})`
         } else if (node[0] === '=>') {
-          return `((${node[1]}) => ${gen(node.slice(2))})`
+          return `((${node[1]}) => ${gen(node[2])})`
         } else if (node[0] === '-' && node.length === 2) {
           return '-' + gen(node[1])
         } else if (isAssign(node[0])) {
@@ -134,9 +130,11 @@ __map.prototype = {
 __map.prototype.constructor = __map
 const __unwrap = o => typeof o === 'object' && o.constructor === __map ? o.o : o
 const __ref = o => typeof o === 'function' && o.toString().startsWith('()') ? o() : o
+const __call = o => typeof o === 'function' && o.length === 0 ? o() : o
+const __bind = (o, f) => typeof f === 'function' ? f.bind(o) : f
 const not = o => !o
 
-const __dot = (f, label, args) => {
+const __dot = (f, label) => {
   const ref = () => {
     if (label === 'then') {
       return g => g(f())
@@ -163,16 +161,12 @@ const __dot = (f, label, args) => {
           switch (label) {
           case 'at': return i => o[i]
           case 'size': return o.length
-          case 'map': return o[label](...args)
-          case 'filter': return o[label](...args)
-          case 'push': return o[label](...args)
+          case 'map':
+          case 'filter':
+          case 'push': return arg => o[label](arg)
           }
         } else if (label in o) {
-          if (args.length === 0) {
-            return o[label]
-          } else {
-            return o[label](...args)
-          }
+          return __bind(o, o[label])
         } else {
           error('Unknown field ' + t + ' in ' + JSON.stringify(o))
         }
@@ -180,8 +174,7 @@ const __dot = (f, label, args) => {
       error('Unknown reference ' + t + ' with ' + label)
     }
   }
-  const o = ref()
-  return typeof o === 'function' && args.length ? o(...args) : o 
+  return __call(ref())
 }
 `
 const run = (src, stdin) => {
@@ -213,6 +206,10 @@ const test = () => {
       puts('return:', result.ret)
       puts('tokens:', result.tokens)
       dump(result.nodes)
+      if (result.error) {
+        fs.writeFileSync('/tmp/faild.js', result.runtime)
+        puts('node /tmp/faild.js')
+      }
       process.exit(1)
     }
   }
@@ -224,7 +221,7 @@ const test = () => {
   exp('"', '`"`')
   exp([1, 2], 'array 1 2')
   exp([1, 2], '[1 2]')
-  exp({1: 2, 3: 4}, 'map 1 2 1+2 1+3')
+  exp({1: 2, 7: 11}, 'map 1 2 3+4 5+6')
   exp(1, '(n => n) 1')
   exp(3, '(a,b => a + b) 1 2')
   exp(6, '(a,b,c => a + b + c) 1 2 3')
@@ -291,8 +288,8 @@ const test = () => {
 
   // array
   exp(2, '[1 2].size')
-  exp([2, 3], '[1 2].map(n => n + 1)')
-  exp([1, 3], '[1 2 3].filter(n => n % 2 == 1)')
+  exp([2, 3], '([1 2].map n => n + 1)')
+  exp([1, 3], '([1 2 3].filter n => n % 2 == 1)')
 
   // map
   exp(1, '(map "a" 1 "b" 2).get "a"')
@@ -307,14 +304,11 @@ const test = () => {
 }
 
 if (module.parent) {
-  const fs = require('fs')
   const src = fs.readFileSync(process.argv[2], 'utf8')
   const result = run(src, src)
   process.stdout.write(result.stdout)
   if (result.error) {
-    console.error(result.error)
-    console.log('--')
-    console.log(result.runtime)
+    fs.writeFileSync('/tmp/faild.js', result.runtime)
     process.exit(1)
   }
 } else {
