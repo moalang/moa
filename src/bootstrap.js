@@ -1,7 +1,6 @@
 'use strict'
 
 // TODOs
-// [_] support infixl, infixr, infix
 
 const fs = require('fs')
 const puts = (...a) => console.log(...a)
@@ -62,6 +61,7 @@ const generate = nodes => {
     }
     switch (node[0]) {
       case 'def': return `const ${node[1]} = (${node.slice(2, -1)}) => ${exps(node[node.length - 1])}`
+      case 'test': return `__tests.push(${node[1]} => ${exps(node[2])})`
       case 'struct':
         const names = node[node.length - 1].map(field => field[0])
         return `const ${node[1]} = (${names}) => ({${names}})`
@@ -108,6 +108,22 @@ const generate = nodes => {
 }
 const stdlib = stdin => `let __stdout = ''
 const error = msg => { throw new Error(msg) }
+const __eq = (l, r) => JSON.stringify(l) === JSON.stringify(r)
+const __tests = []
+const __testMain = () => {
+  const tester = {
+    eq: (expect, actual) => {
+      if (__eq(expect, actual)) {
+        process.stdout.write('.')
+      } else {
+        console.log('expect:', expect)
+        console.log('actual:', actual)
+        process.exit(1)
+      }
+    }
+  }
+  __tests.forEach(t => t(tester))
+}
 const __literal = o => (t =>
   t === 'string' ? o :
   t === 'object' ? (
@@ -177,11 +193,13 @@ const __dot = (f, label) => {
   return __call(ref())
 }
 `
-const run = (src, stdin) => {
+const run = (src, option) => {
+  const stdin = option.stdin || ''
+  const target = option.target || 'main'
   const tokens = tokenize(src.trim())
   const nodes = parse(tokens)
   const js = generate(nodes)
-  const runtime = stdlib(stdin) + js + '\nreturn {ret: __unwrap(main()), stdout: __stdout}'
+  const runtime = stdlib(stdin) + js + `\nreturn {ret: __unwrap(${target}()), stdout: __stdout}`
   let result = {tokens, nodes, js, runtime}
   try {
     return Object.assign(result, Function(runtime)())
@@ -196,7 +214,7 @@ const test = () => {
   const stdout = (expect, exp, ...defs) => test(o => o.stdout, '', expect, exp, ...defs)
   const test = (f, stdin, expect, exp, ...defs) => {
     const src = defs.concat([`def main: ${exp}`]).join('\n')
-    const result = run(src, stdin)
+    const result = run(src, {stdin})
     if (eq(expect, f(result))) {
       process.stdout.write('.')
     } else {
@@ -299,18 +317,35 @@ const test = () => {
 
   // comment
   exp(1, 'one', '# comment', 'def one: 1')
-
-  puts('ok')
 }
-
-if (module.parent) {
-  const src = fs.readFileSync(process.argv[2], 'utf8')
-  const result = run(src, src)
+const miniTest = () => {
+  const src = fs.readFileSync(__dirname + '/mini.moa', 'utf8')
+  const result = run(src, {stdin: src, target: '__testMain'})
   process.stdout.write(result.stdout)
   if (result.error) {
-    fs.writeFileSync('/tmp/faild.js', result.runtime)
+    puts(result.error)
+    puts('--')
+    puts('node /tmp/moa-mini-test-failed.js')
+    puts('--')
+    fs.writeFileSync('/tmp/moa-mini-test-failed.js', result.runtime)
     process.exit(1)
   }
-} else {
-  test()
+}
+const bootstrap = () => {
+  const src = fs.readFileSync(__dirname + '/mini.moa', 'utf8')
+  const result = run(src, {stdin: src})
+  process.stdout.write(result.stdout)
+  if (result.error) {
+    process.exit(1)
+  }
+}
+
+switch (process.argv[2]) {
+  case 'test': test(); miniTest(); puts('ok'); break
+  case 'bootstrap': bootstrap(); break
+  default:
+    puts('Usage:')
+    puts('  node bootstrap.js test')
+    puts('  node bootstrap.js mini-test')
+    puts('  node bootstrap.js bootstrap')
 }

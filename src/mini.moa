@@ -50,6 +50,7 @@ def tokenize src:
   tokens
 
 def parse tokens:
+  io.print tokens.size
   []
 
 def generate nodes:
@@ -60,8 +61,8 @@ def main:
   let tokens tokenize src
   let nodes parse tokens
   let js generate nodes
-  io.print "-- tokens:"
-  io.print tokens.size
-  io.print tokens
   io.print "-- nodes:"
   io.dump nodes
+
+test t:
+  t.eq 1 1
