@@ -1,7 +1,5 @@
 'use strict'
 
-// TODOs
-
 const fs = require('fs')
 const puts = (...a) => console.log(...a)
 const dump = o => console.dir(o, {depth: null})
@@ -16,7 +14,7 @@ const isOp2 = t => op2.includes(t)
 const fail = (msg, o) => {dump(o); throw new Error(msg)}
 
 const tokenize = src => src.split(/([0-9]+|[a-zA-Z_][a-zA-Z_0-9]*(?:,[a-zA-Z_][a-zA-Z_0-9]*)*|[ \n]+|[.+\-*/=!&|>]+|"[^"]*"|`[^`]*`|(?:#.*\n)|.)/).filter(t => t[0] !== '#').map(toToken).filter(t => t)
-const toToken = t => t.includes('\n') ? t.slice(t.lastIndexOf('\n')) : t.trim()
+const toToken = t => t.match(/^ *\n/) ? t.slice(t.lastIndexOf('\n')) : t.trim()
 const parse = tokens => {
   let pos = 0
   const consume = f => pos < tokens.length ? f(tokens[pos++]) : fail('EOT', {f: f.toString(),tokens})
@@ -53,7 +51,9 @@ const generate = nodes => {
   const exps = a => `{\n  ${addReturn(a.map(gen)).join('\n  ')}\n}`
   const gen = node => {
     if (!isArray(node)) {
-      if (node[0].match(/^[a-zA-Z_]/)) {
+      if ('"`\''.includes(node[0])) {
+        return str(node.slice(1, -1))
+      } else if (node[0].match(/^[a-zA-Z_]/)) {
         return `__ref(${node})`
       } else {
         return node
@@ -237,6 +237,7 @@ const test = () => {
   exp('hi', '"hi"')
   exp('hi', '`hi`')
   exp('"', '`"`')
+  exp('\n', '`\n`')
   exp([1, 2], 'array 1 2')
   exp([1, 2], '[1 2]')
   exp({1: 2, 7: 11}, 'map 1 2 3+4 5+6')
