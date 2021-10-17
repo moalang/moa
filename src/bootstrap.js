@@ -77,6 +77,7 @@ const generate = nodes => {
       case 'let': return `const ${node[1]} = ${gen(node.slice(2))}`
       case 'iif': return `(${gen(node[1])} ? ${gen(node[2])} : ${gen(node[3])})`
       case 'if': return `if (${gen(node[1])}) ${statement(node[2])}`
+      case 'fork': return node[1].map(t => gen(t[0]) + ' ? (() => ' + statement(t[1]) + ')()').join(' : \n') + ' : error("Non-exhaustive pattern")'
       case 'for':
         const a = node[1]
         const b = gen(node[2])
@@ -164,7 +165,7 @@ const __dot = (f, label) => {
       if (t === 'string') {
         switch (label) {
         case 'size': return o.length
-        case 'at': return i => o[i]
+        case 'at': return i => i < o.length ? o[i] : error('Out of index')
         }
       } else if (t === 'number') {
         // no methods
@@ -276,8 +277,12 @@ const test = () => {
   // while block
   exp(3, '\n  var n 0\n  while n < 3: n+=1\n  n')
 
-  // branch block
+  // if block
   exp(3, '\n  var n 0\n  if true:\n    n+=1\n    n+=2\n  n')
+
+  // fork block
+  exp('zero', '\n  var n 0\n  fork:\n    n == 0: "zero"\n    true: "other"')
+  exp('other', '\n  var n 2\n  fork:\n    n == 0: "zero"\n    true: "other"')
 
   // control flow
   exp(2, '\n  1\n  2')
