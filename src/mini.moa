@@ -61,4 +61,4 @@ def main:
   io.dump nodes
 
 test t:
-  t.eq 1 (tokenize `def func arg1 arg2: f arg1 + 1 == 2`)
+  t.eq ["def" "func" "arg1" "arg2" ":" "f" "arg1" "+" "1" "==" "2"] (tokenize `def func arg1 arg2: f arg1 + 1 == 2`)
