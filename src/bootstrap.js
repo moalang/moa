@@ -9,11 +9,11 @@ const eq = (a,b) => str(a) === str(b)
 const isArray = o => typeof o === 'object' && o.constructor === Array
 const op2Assign = '= += -= *= /= ='.split(' ')
 const isAssign = t => op2Assign.includes(t)
-const op2 = '+ - * / % += -= *= /= %= == != < > <= >= && ||'.split(' ')
+const op2 = '+ - * / % += -= *= /= %= == != <= >= < > && ||'.split(' ')
 const isOp2 = t => op2.includes(t)
 const fail = (msg, o) => {dump(o); throw new Error(msg)}
 
-const tokenize = src => src.split(/([0-9]+|[a-zA-Z_][a-zA-Z_0-9]*(?:,[a-zA-Z_][a-zA-Z_0-9]*)*|[ \n]+|[.+\-*/=!&|>]+|"[^"]*"|`[^`]*`|(?:#.*\n)|.)/).filter(t => t[0] !== '#').map(toToken).filter(t => t)
+const tokenize = src => src.split(/([0-9]+|[a-zA-Z_][a-zA-Z_0-9]*(?:,[a-zA-Z_][a-zA-Z_0-9]*)*|[ \n]+|[.+\-*/=!&|<>]+|"[^"]*"|`[^`]*`|(?:#.*\n)|.)/).filter(t => t[0] !== '#').map(toToken).filter(t => t)
 const toToken = t => t.match(/^ *\n/) ? t.slice(t.lastIndexOf('\n')) : t.trim()
 const parse = tokens => {
   let pos = 0
@@ -45,8 +45,14 @@ const parse = tokens => {
   return lines('\n')
 }
 const generate = nodes => {
+  const blocks = 'if for while return break continue'.split(' ')
   const map = a => 'new __map({' + [...Array(a.length / 2).keys()].map(i => i * 2).map(i => `[${a[i]}]:${a[i+1]}`) + '})'
-  const addReturn = a => (!a[a.length-1].match(/^if|for/) ? a[a.length-1] = `return ${a[a.length-1]}` : 0,a)
+  const addReturn = a => {
+    if (!blocks.some(b => b === a[a.length - 1].slice(0, b.length))) {
+      a[a.length - 1] = `return ${a[a.length - 1]}`
+    }
+    return a
+  }
   const statement = a => a.length === 1 ? gen(a[0]) : `{\n  ${a.map(gen).join('  \n')}\n}`
   const exps = a => `{\n  ${addReturn(a.map(gen)).join('\n  ')}\n}`
   const gen = node => {
@@ -54,7 +60,7 @@ const generate = nodes => {
       if ('"`\''.includes(node[0])) {
         return str(node.slice(1, -1))
       } else if (node[0].match(/^[a-zA-Z_]/)) {
-        return `__ref(${node})`
+        return blocks.includes(node) ? node : `__ref(${node})`
       } else {
         return node
       }
@@ -69,23 +75,13 @@ const generate = nodes => {
       case 'map': return `(${map(node.slice(1).map(gen))})`
       case 'var': return `let ${node[1]} = ${gen(node.slice(2))}`
       case 'let': return `const ${node[1]} = ${gen(node.slice(2))}`
-      case 'if':
-        if (node.length === 4) {
-          return `(${gen(node[1])} ? ${gen(node[2])} : ${gen(node[3])})`
-        } else if (node.length === 3) {
-          return `if (${gen(node[1])}) ${statement(node[2])}`
-        } else {
-          fail('Unknown format of if', {node})
-        }
+      case 'iif': return `(${gen(node[1])} ? ${gen(node[2])} : ${gen(node[3])})`
+      case 'if': return `if (${gen(node[1])}) ${statement(node[2])}`
       case 'for':
-        if (node.length === 4) {
-          const a = node[1]
-          const b = gen(node[2])
-          const c = statement(node[3])
-          return `for (let ${a}=0; ${a}<${b}; ++${a}) {${c}}`
-        } else {
-          fail('Unknown format of for', {node})
-        }
+        const a = node[1]
+        const b = gen(node[2])
+        const c = statement(node[3])
+        return `for (let ${a}=0; ${a}<${b}; ++${a}) {${c}}`
       case 'while': return `while (${gen(node.slice(1, -1))}) {${statement(node[node.length - 1])}}`
       case '.': return `__dot(() => ${gen(node[1])}, '${node[2]}', [${node.slice(3).map(gen)}])`
       default:
@@ -269,9 +265,9 @@ const test = () => {
   exp(3, '\n  var a 1\n  def inc: a += 1\n  inc\n  inc\n  a')
 
   // branch
-  exp(1, 'if true 1 2')
-  exp(2, 'if false 1 2')
-  exp(2, 'if (true && (1 == 2)) 1 2')
+  exp(1, 'iif true 1 2')
+  exp(2, 'iif false 1 2')
+  exp(2, 'iif (true && (1 == 2)) 1 2')
 
   // for block
   exp(3, '\n  var n 0\n  for i 3: n+=1\n  n')
@@ -282,6 +278,13 @@ const test = () => {
 
   // branch block
   exp(3, '\n  var n 0\n  if true:\n    n+=1\n    n+=2\n  n')
+
+  // control flow
+  exp(2, '\n  1\n  2')
+  exp(1, '\n  return 1\n  2')
+  exp(1, '\n  while true:\n    return 1')
+  exp(3, '\n  var n 0\n  for i 5:\n    if i >= 3: break\n    n += 1\n  n')
+  exp(1, '\n  var n 0\n  for i 5:\n    if i <= 3: continue\n    n += 1\n  n')
 
   // error handling
   exp('Zero division error', '\n  1/0\n  1')
