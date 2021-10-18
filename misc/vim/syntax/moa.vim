@@ -38,7 +38,7 @@ syn match Function /^[a-zA-Z0-9_]\+/
 
 "*Statement      o 命令文
 syn keyword Statement continue break return goto
-syn keyword Conditional if fork
+syn keyword Conditional if fork:
 syn keyword Repeat for while
 syn keyword Exception error
 syn match Operator /[+\-\*/|&]=\=/
