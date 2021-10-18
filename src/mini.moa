@@ -1,47 +1,63 @@
+struct Token:
+  code string
+  line int
+  column int
+
 def tokenize src:
   var tokens []
-  var token ""
+  var chunk ""
+  var line 1
+  var column 1
 
   def push:
-    if token.size > 0:
-      tokens.push token
-      token = ""
+    if chunk.size > 0:
+      column += chunk.size
+      tokens.push (Token chunk line column)
+      chunk = ""
 
   def quote q:
     push
-    token = q
+    chunk = q
     i += 1
     while i < src.size && (src.at i) != q:
-      token += src.at i
+      chunk += src.at i
       i += 1
-    token += q
+    chunk += q
     push
 
   var i (-1)
   while i + 1 < src.size:
     i += 1
-    let c src.at i
+    var c src.at i
+    if c == "\\":
+      i += 1
+      c = src.at i
+      fork:
+        c == "n": c = "\n"
+        c == "t": c = "\t"
     fork:
       c == `"`: quote c
       c == `'`: quote c
       c == "\n":
         push
         while i < src.size && (src.at i) == "\n":
-          token = "\n"
+          line += 1
+          column = 1
+          chunk = "\n"
           i += 1
           while i < src.size && (src.at i) == " ":
-            token += " "
+            chunk += " "
             i += 1
         push
         i -= 1
       c == "(" || c == ")" || c == ":":
         push
-        tokens.push c
+        chunk = c
+        push
       c == " ":
         push
       true:
-      token += c
-
+      chunk += c
   push
   tokens
 
@@ -61,4 +77,4 @@ def main:
   io.dump nodes
 
 test t:
-  t.eq ["def" "func" "arg1" "arg2" ":" "f" "arg1" "+" "1" "==" "2"] (tokenize `def func arg1 arg2: f arg1 + 1 == 2`)
+  t.eq ["def" "func" "arg1" "arg2" ":" "\n  " "f" "arg1" "+" "1" "==" "2"] (tokenize `def func arg1 arg2:\n  f arg1 + 1 == 2`).map(t => t.code)

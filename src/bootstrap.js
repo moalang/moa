@@ -13,8 +13,8 @@ const op2 = '+ - * / % += -= *= /= %= == != <= >= < > && ||'.split(' ')
 const isOp2 = t => op2.includes(t)
 const fail = (msg, o) => {dump(o); throw new Error(msg)}
 
-const tokenize = src => src.split(/([0-9]+|[a-zA-Z_][a-zA-Z_0-9]*(?:,[a-zA-Z_][a-zA-Z_0-9]*)*|[ \n]+|[.+\-*/=!&|<>]+|"[^"]*"|`[^`]*`|(?:#.*\n)|.)/).filter(t => t[0] !== '#').map(toToken).filter(t => t)
-const toToken = t => t.match(/^ *\n/) ? t.slice(t.lastIndexOf('\n')) : t.trim()
+const tokenize = src => src.split(/([0-9]+|[a-zA-Z_][a-zA-Z_0-9]*(?:,[a-zA-Z_][a-zA-Z_0-9]*)*\(?|[ \n]+|[.+\-*/=!&|<>]+|"[^"]*"|`[^`]*`|(?:#.*\n)|.)/).filter(t => t[0] !== '#').map(toToken).filter(t => t)
+const toToken = t => t.match(/^ *\n/) ? t.slice(t.lastIndexOf('\n')) : t.trim().replace(/\\n/g, '\n').replace(/\\/g, '\\')
 const parse = tokens => {
   let pos = 0
   const consume = f => pos < tokens.length ? f(tokens[pos++]) : fail('EOT', {f: f.toString(),tokens})
@@ -28,13 +28,14 @@ const parse = tokens => {
   }
   const unit = () => consume(t =>
     t === '(' ? next(many(exp, t => t !== ')')) :
+    t.endsWith('(') ? [t.slice(0, -1)].concat(next(many(exp, t => t !== ')'))) :
     t === '[' ? next(many(exp, t => t !== ']', ['array'])) :
     t === ':' ? (tokens[pos][0] === '\n' ? lines(tokens[pos++]) : [line()]) :
     t)
   const exp = () => cont(unit())
   const cont = u => {
     const t = tokens[pos++]
-    return t === '.' ? cont([t, u, tokens[pos++]]) :
+    return t === '.' ? cont([t, u].concat(unit())) :
       t == '=>' ? [t, u, exp()] :
       isOp2(t) ? [t, u, exp()] :
       isAssign(t) ? [t, u, exp()] :
@@ -103,6 +104,7 @@ const generate = nodes => {
   }
   return nodes.map(gen).join('\n')
 }
+const escapeSTDIN = s => '(() => {/*' + s + '*/}).toString().slice(9, -3)'
 const stdlib = stdin => `let __stdout = ''
 const error = msg => { throw new Error(msg) }
 const __eq = (l, r) => JSON.stringify(l) === JSON.stringify(r)
@@ -115,7 +117,8 @@ const __testMain = () => {
       } else {
         console.log('expect:', expect)
         console.log('actual:', actual)
-        process.exit(1)
+        console.log('stdout:', __stdout)
+        throw new Error('test was failed')
       }
     }
   }
@@ -131,7 +134,7 @@ const __literal = o => (t =>
 const io = {
   print: o => __stdout += __literal(o) + '\\n',
   dump: o => __stdout += JSON.stringify(o) + '\\n',
-  stdin: ${str(stdin)},
+  stdin: ${escapeSTDIN(stdin)},
 }
 function __map(o) { this.o = o }
 __map.prototype = {
@@ -147,7 +150,7 @@ const __call = o => typeof o === 'function' && o.length === 0 ? o() : o
 const __bind = (o, f) => typeof f === 'function' ? f.bind(o) : f
 const not = o => !o
 
-const __dot = (f, label) => {
+const __dot = (f, label, arg) => {
   const ref = () => {
     if (label === 'then') {
       return g => g(f())
@@ -187,7 +190,8 @@ const __dot = (f, label) => {
       error('Unknown reference ' + t + ' with ' + label)
     }
   }
-  return __call(ref())
+  const g = __call(ref())
+  return arg.length ? g(...arg) : g
 }
 `
 const run = (src, option) => {
@@ -235,6 +239,7 @@ const test = () => {
   exp('hi', '`hi`')
   exp('"', '`"`')
   exp('\n', '`\n`')
+  exp('\n', '`\\n`')
   exp([1, 2], 'array 1 2')
   exp([1, 2], '[1 2]')
   exp({1: 2, 7: 11}, 'map 1 2 3+4 5+6')
@@ -253,6 +258,9 @@ const test = () => {
   exp(1, 'one', 'def one: 1')
   exp(3, 'add 1 2', 'def add a b: a + b')
   exp(6, 'calc 2 3', 'def calc a b:\n  def mul a b: a * b\n  mul a b')
+
+  // method
+  exp(2, '[1].map(n => n + 1).at(0)')
 
   // struct
   exp({x:1, y:2}, 'vector2 1 2', 'struct vector2:\n  x int\n  y int')
@@ -326,6 +334,8 @@ const test = () => {
 
   // comment
   exp(1, 'one', '# comment', 'def one: 1')
+
+  return true
 }
 const miniTest = () => {
   const src = fs.readFileSync(__dirname + '/mini.moa', 'utf8')
@@ -337,8 +347,8 @@ const miniTest = () => {
     puts('node /tmp/moa-mini-test-failed.js')
     puts('--')
     fs.writeFileSync('/tmp/moa-mini-test-failed.js', result.runtime)
-    process.exit(1)
   }
+  return true
 }
 const bootstrap = () => {
   const src = fs.readFileSync(__dirname + '/mini.moa', 'utf8')
@@ -350,7 +360,7 @@ const bootstrap = () => {
 }
 
 switch (process.argv[2]) {
-  case 'test': test(); miniTest(); puts('ok'); break
+  case 'test': test() && miniTest() && puts('ok'); break
   case 'bootstrap': bootstrap(); break
   default:
     puts('Usage:')

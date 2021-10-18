@@ -21,8 +21,8 @@ syn sync minlines=500
 syn match  Comment /#.*$/
 
 "*Constant       o 定数
-syn region String start='"' end='"' skip='\\"'
-syn region String start='`' end='`' skip='\\`'
+syn region String start=/"/ end=/"/ skip=/(\\")/
+syn region String start=/`/ end=/`/ skip=/\\`/
 syn match Number / [0-9]\+\(\.[0-9]\+\)\?/
 syn keyword Boolean true false
 
@@ -37,14 +37,14 @@ syn match Function /^[a-zA-Z0-9_]\+/
 "hi def link vlMember Identifier
 
 "*Statement      o 命令文
-""syn keyword Statement next break return goto
-""syn keyword Conditional if else match
-""syn keyword Repeat for
-""syn keyword Exception catch throw
+syn keyword Statement continue break return goto
+syn keyword Conditional if fork
+syn keyword Repeat for while
+syn keyword Exception error
 syn match Operator /[+\-\*/|&]=\=/
 syn match Operator /[<>]=\=/
-syn match Operator /[=!:]=/
-syn match Operator /[=;,:]/
+syn match Operator /[=!]=/
+syn match Operator /[=;,]/
 syn match Operator "<-"
 syn match Operator "->"
 syn match Operator "||"
@@ -56,7 +56,7 @@ syn match Macro /^-.*/
 ""syn match Macro /@[a-zA-Z0-9:_]\+/
 
 "*Type           o int, long, char, その他
-""syn keyword StorageClass let var
+syn keyword StorageClass let var
 
 "*Underlined     o 目立つ文章, HTMLリンク
 ""syn keyword Define package import export
