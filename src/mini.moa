@@ -9,29 +9,42 @@ struct Tree:
 
 def tokenize src:
   var tokens []
-  var chunk ""
   var line 1
   var column 1
+  let id "abcdefghijklmnopqrstuvxwyz_"
+  let num "0123456789"
+  let idnum id + num
+  let singles "():."
+  let symbols "+ - * / = :".split " "
 
-  def push:
-    if chunk.size > 0:
-      column += chunk.size
-      tokens.push Token(chunk line column)
-      chunk = ""
+  def push fragment:
+    tokens.push Token(fragment line column)
+    column += fragment.replace("\n" "").size
 
   def quote q:
-    push
-    chunk = q
     i += 1
-    while i < src.size && src.at(i) != q:
-      chunk += src.at i
-      i += 1
-    chunk += q
-    push
+    push q + until(c => c != q) + q
+    i += 1
 
-  var i (-1)
-  while i + 1 < src.size:
-    i += 1
+  def until f:
+    s = ""
+    while i < src.size && f(src.at(i)):
+      s += src.at i
+      i += 1
+    i -= 1
+    s
+
+  def br:
+    s = ""
+    while i < src.size && src.at(i) == "\n":
+      i += 1
+      line += 1
+      s = "\n" + until(c => c == " ")
+    column = 1
+    push s
+
+  var i 0
+  while i < src.size:
     var c src.at i
     if c == "\\":
       i += 1
@@ -43,27 +56,13 @@ def tokenize src:
     fork:
       c == `"`: quote c
       c == `'`: quote c
-      c == "\n":
-        push
-        while i < src.size && src.at(i) == "\n":
-          line += 1
-          column = 1
-          chunk = "\n"
-          i += 1
-          while i < src.size && src.at(i) == " ":
-            chunk += " "
-            i += 1
-        push
-        i -= 1
-      c == "(" || c == ")" || c == ":" || c == ".":
-        push
-        chunk = c
-        push
-      c == " ":
-        push
-      true:
-      chunk += c
-  push
+      c == " ": column += until(c => c == " ").size
+      c == "\n": br
+      singles.contains c: push c
+      symbols.contains c: push until(symbols.contains)
+      id.contains c: push until(idnum.contains)
+      num.contains c: push until(num.contains)
+    i += 1
   tokens
 
 def parse tokens:
@@ -82,4 +81,5 @@ def main:
   io.dump nodes
 
 test t:
-  t.eq ["def" "func" "arg1" ":" "\n  " "f" "(" "arg1" "+" "1" ")" "==" `"hi"` "." "size"] tokenize(`def func arg1:\n  f (arg1 + 1) == "hi".size`).map(t => t.code)
+  t.eq [Token("def" 1 1) Token("f" 1 5) Token(":" 1 6) Token("\n  " 2 1) Token("1" 2 3)] tokenize(`def f:\n  1`)
+  t.eq ["def" "func" "arg1" ":" "\n  " "f" "(" "arg1" "+" "10" ")" "==" `"hi"` "." "size"] tokenize(`def func arg1:\n  f (arg1 + 10) == "hi".size`).map(t => t.code)

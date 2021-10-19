@@ -80,7 +80,7 @@ const generate = nodes => {
       case 'let': return `const ${node[1]} = ${gen(node.slice(2))}`
       case 'iif': return `(${gen(node[1])} ? ${gen(node[2])} : ${gen(node[3])})`
       case 'if': return `if (${gen(node[1])}) ${statement(node[2])}`
-      case 'fork': return node[1].map(t => gen(t[0]) + ' ? (() => ' + statement(t[1]) + ')()').join(' : \n') + ' : error("Non-exhaustive pattern in fork")'
+      case 'fork': return node[1].map(t => gen(t.slice(0, -1)) + ' ? (() => ' + statement(t[t.length - 1]) + ')()').join(' : \n') + ' : error("Non-exhaustive pattern in fork")'
       case 'match':
         const branch = a => `['${a[0]}', ${a[1]} => ${gen(a[2])}]`
         return `__match(${gen(node[1])}, [${node[2].map(branch)}])`
@@ -101,7 +101,11 @@ const generate = nodes => {
         } else if (isAssign(node[0])) {
           return node[1] + node[0] + gen(node[2])
         } else if (isOp2(node[0])) {
-          return gen(node[1]) + node[0] + gen(node[2])
+          if (node[0] === '==') {
+            return `__eq(${gen(node[1])}, ${gen(node[2])})`
+          } else {
+            return gen(node[1]) + node[0] + gen(node[2])
+          }
         } else {
           return gen(node[0]) + (node.length === 1 ? '' : `(${node.slice(1).map(gen)})`)
         }
@@ -185,6 +189,8 @@ const __dot = (f, label, arg) => {
         case 'size': return o.length
         case 'at': return i => i < o.length ? o[i] : error('Out of index')
         case 'split': return s => o.split(s)
+        case 'contains': return s => o.includes(s)
+        case 'replace': return (a,b) => o.replaceAll(a, b)
         }
       } else if (t === 'number') {
         // no methods
@@ -264,13 +270,6 @@ const test = () => {
   exp(3, '(a,b => a + b) 1 2')
   exp(6, '(a,b,c => a + b + c) 1 2 3')
 
-  // exp
-  exp(3, '1 + 2')
-  exp(7, '1 + 2 * 3')
-  exp(5, '1 * 2 + 3')
-  exp(true, '[1 2].size == 1 + 1 && [3 4].size == 2')
-  exp(1, '\n  var n 0\n  n = 1\n  n')
-
   // function
   exp(1, 'one', 'def one: 1')
   exp(3, 'add 1 2', 'def add a b: a + b')
@@ -287,6 +286,14 @@ const test = () => {
   exp({__tag: 'a', __value: 1}, 'ab.a(1)', 'adt ab:\n  a int\n  b string')
   exp(1, 'match ab.a(1):\n  a v: v\n  b s: s.size', 'adt ab:\n  a int\n  b string')
   exp(2, 'match ab.b("hi"):\n  a v: v\n  b s: s.size', 'adt ab:\n  a int\n  b string')
+
+  // exp
+  exp(3, '1 + 2')
+  exp(7, '1 + 2 * 3')
+  exp(5, '1 * 2 + 3')
+  exp(true, '([1 2].size == 1 + 1) && [3 4].size == 2')
+  exp(1, '\n  var n 0\n  n = 1\n  n')
+  exp(true, 's(1) == s(1)', 'struct s: value int')
 
   // constant
   exp(2, '\n  let a inc 1\n  a', 'def inc a: a + 1')
@@ -343,11 +350,14 @@ const test = () => {
   exp(2, '"hi".size')
   exp('i', '"hi".at(1)')
   exp(['a', 'b'], '"a,b".split(",")')
+  exp(true, '"hi".contains("h")')
+  exp(false, '"hi".contains("z")')
+  exp('heo', '"hello".replace("l" "")')
 
   // array
   exp(2, '[1 2].size')
   exp([2, 3], '[1 2].map n => n + 1')
-  exp([1, 3], '[1 2 3].filter n => n % 2 == 1')
+  exp([1, 3], '[1 2 3].filter n => (n % 2) == 1')
   exp(true, '[1 2].contains 1')
   exp(false, '[1 2].contains 3')
 
