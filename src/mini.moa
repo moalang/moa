@@ -3,6 +3,10 @@ struct Token:
   line int
   column int
 
+struct Tree:
+  leaf Token
+  forest []Tree
+
 def tokenize src:
   var tokens []
   var chunk ""
@@ -35,6 +39,7 @@ def tokenize src:
       fork:
         c == "n": c = "\n"
         c == "t": c = "\t"
+        c == "\\": c = "\\"
     fork:
       c == `"`: quote c
       c == `'`: quote c
@@ -50,7 +55,7 @@ def tokenize src:
             i += 1
         push
         i -= 1
-      c == "(" || c == ")" || c == ":":
+      c == "(" || c == ")" || c == ":" || c == ".":
         push
         chunk = c
         push
@@ -77,4 +82,4 @@ def main:
   io.dump nodes
 
 test t:
-  t.eq ["def" "func" "arg1" "arg2" ":" "\n  " "f" "arg1" "+" "1" "==" "2"] tokenize(`def func arg1 arg2:\n  f arg1 + 1 == 2`).map(t => t.code)
+  t.eq ["def" "func" "arg1" ":" "\n  " "f" "(" "arg1" "+" "1" ")" "==" `"hi"` "." "size"] tokenize(`def func arg1:\n  f (arg1 + 1) == "hi".size`).map(t => t.code)

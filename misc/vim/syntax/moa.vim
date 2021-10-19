@@ -3,42 +3,21 @@ if exists("b:current_syntax")
   finish
 endif
 
-setlocal isk+=!
-setlocal isk+=:
-setlocal isk+=@
-setlocal isk+=-
-syn sync minlines=500
-
-" keybord helper
-"inoremap {  {<CR>}<Esc>O
-"inoremap (  ()<Esc>i
-"inoremap [  []<Esc>i
-"inoremap "  ""<Esc>i
-"inoremap '  ''<Esc>i
-
-"*Comment        o コメント
+" Comments
 "syn region Comment start=/__comment__/ end="__uncomment__"
 syn match  Comment /#.*$/
 
-"*Constant       o 定数
+" Constant
 syn region String start=/"/ end=/"/ skip=/(\\")/
 syn region String start=/`/ end=/`/ skip=/\\`/
 syn match Number / [0-9]\+\(\.[0-9]\+\)\?/
 syn keyword Boolean true false
 
-"*Identifier     o 変数名
-syn match Function /^[a-zA-Z0-9_]\+/
-"syn match Function  /  *[a-zA-Z0-9_]\+\%([^#\n]*=\)\@=/
-"syn match Function  /^ *[a-zA-Z0-9_]\+\%([^#\n]*=[ \n]\)\@=/
-"syn match Function /^ *[a-zA-Z0-9_\.]\+\%([^=#]*[:|]\)\@=/
-"syn match Type /:[a-zA-Z0-9_\.]\+/
-"syn region vlBlock start=/:$/ end=/\n[^a-zA-Z]/ contains=vlMember
-"syn match vlMember /^[ \t]\+[a-zA-Z_0-9]\+[ \n]/ contained
-"hi def link vlMember Identifier
-
-"*Statement      o 命令文
-syn keyword Statement continue break return goto
-syn keyword Conditional if fork:
+" Statement
+syn keyword Statement def continue break return goto
+syn keyword StorageClass let var
+syn keyword Structure    struct
+syn keyword Conditional if fork
 syn keyword Repeat for while
 syn keyword Exception error
 syn match Operator /[+\-\*/|&]=\=/
@@ -50,18 +29,6 @@ syn match Operator "->"
 syn match Operator "||"
 syn match Operator "&&"
 
-syn match Macro /^-.*/
-
-"*PreProc        o 一般的なプリプロセッサー命令
-""syn match Macro /@[a-zA-Z0-9:_]\+/
-
-"*Type           o int, long, char, その他
-syn keyword StorageClass let var
-
-"*Underlined     o 目立つ文章, HTMLリンク
-""syn keyword Define package import export
-
-"hi def link vlRepeat Repeat
 
 "*Comment        o コメント
 "

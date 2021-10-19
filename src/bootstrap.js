@@ -56,6 +56,7 @@ const generate = nodes => {
   }
   const statement = a => a.length === 1 ? gen(a[0]) : `{\n  ${a.map(gen).join('  \n')}\n}`
   const exps = a => `{\n  ${addReturn(a.map(gen)).join('\n  ')}\n}`
+  const newAdt = tag => `(__value => ({__tag: '${tag}', __value}))`
   const gen = node => {
     if (!isArray(node)) {
       if ('"`\''.includes(node[0])) {
@@ -72,13 +73,17 @@ const generate = nodes => {
       case 'struct':
         const names = node[node.length - 1].map(field => field[0])
         return `const ${node[1]} = (${names}) => ({${names}})`
+      case 'adt': return `const ${node[1]} = {${node[2].map(t => t[0] + ':' + newAdt(t[0]))}}`
       case 'array': return `[${node.slice(1).map(gen)}]`
       case 'map': return `(${map(node.slice(1).map(gen))})`
       case 'var': return `let ${node[1]} = ${gen(node.slice(2))}`
       case 'let': return `const ${node[1]} = ${gen(node.slice(2))}`
       case 'iif': return `(${gen(node[1])} ? ${gen(node[2])} : ${gen(node[3])})`
       case 'if': return `if (${gen(node[1])}) ${statement(node[2])}`
-      case 'fork': return node[1].map(t => gen(t[0]) + ' ? (() => ' + statement(t[1]) + ')()').join(' : \n') + ' : error("Non-exhaustive pattern")'
+      case 'fork': return node[1].map(t => gen(t[0]) + ' ? (() => ' + statement(t[1]) + ')()').join(' : \n') + ' : error("Non-exhaustive pattern in fork")'
+      case 'match':
+        const branch = a => `['${a[0]}', ${a[1]} => ${gen(a[2])}]`
+        return `__match(${gen(node[1])}, [${node[2].map(branch)}])`
       case 'for':
         const a = node[1]
         const b = gen(node[2])
@@ -107,6 +112,12 @@ const generate = nodes => {
 const escapeSTDIN = s => '(() => {/*' + s + '*/}).toString().slice(9, -3)'
 const stdlib = stdin => `let __stdout = ''
 const error = msg => { throw new Error(msg) }
+const not = o => !o
+const io = {
+  print: o => __stdout += __literal(o) + '\\n',
+  dump: o => __stdout += JSON.stringify(o) + '\\n',
+  stdin: ${escapeSTDIN(stdin)},
+}
 const __eq = (l, r) => JSON.stringify(l) === JSON.stringify(r)
 const __tests = []
 const __testMain = () => {
@@ -120,7 +131,9 @@ const __testMain = () => {
         console.log('stdout:', __stdout)
         throw new Error('test was failed')
       }
-    }
+    },
+    print: o => console.log(o.toString()),
+    dump: o => console.log(JSON.stringify(o)),
   }
   __tests.forEach(t => t(tester))
 }
@@ -131,11 +144,6 @@ const __literal = o => (t =>
     JSON.stringify(o)
   ) : o.toString()
 )(typeof o)
-const io = {
-  print: o => __stdout += __literal(o) + '\\n',
-  dump: o => __stdout += JSON.stringify(o) + '\\n',
-  stdin: ${escapeSTDIN(stdin)},
-}
 function __map(o) { this.o = o }
 __map.prototype = {
   get(k) { return this.o[k] },
@@ -148,7 +156,14 @@ const __unwrap = o => typeof o === 'object' && o.constructor === __map ? o.o : o
 const __ref = o => typeof o === 'function' && o.toString().startsWith('()') ? o() : o
 const __call = o => typeof o === 'function' && o.length === 0 ? o() : o
 const __bind = (o, f) => typeof f === 'function' ? f.bind(o) : f
-const not = o => !o
+const __match = (target, conds) => {
+  for (const [tag, f] of conds) {
+    if (target.__tag === tag) {
+      return f(target.__value)
+    }
+  }
+  error('Non-exhaustive pattern in match')
+}
 
 const __dot = (f, label, arg) => {
   const ref = () => {
@@ -169,6 +184,7 @@ const __dot = (f, label, arg) => {
         switch (label) {
         case 'size': return o.length
         case 'at': return i => i < o.length ? o[i] : error('Out of index')
+        case 'split': return s => o.split(s)
         }
       } else if (t === 'number') {
         // no methods
@@ -180,6 +196,7 @@ const __dot = (f, label, arg) => {
           case 'map':
           case 'filter':
           case 'push': return arg => o[label](arg)
+          case 'contains': return arg => o.includes(arg)
           }
         } else if (label in o) {
           return __bind(o, o[label])
@@ -266,6 +283,11 @@ const test = () => {
   exp({x:1, y:2}, 'vector2 1 2', 'struct vector2:\n  x int\n  y int')
   exp(2, '(vector2 1 2).y', 'struct vector2:\n  x int\n  y int')
 
+  // algebraic data type
+  exp({__tag: 'a', __value: 1}, 'ab.a(1)', 'adt ab:\n  a int\n  b string')
+  exp(1, 'match ab.a(1):\n  a v: v\n  b s: s.size', 'adt ab:\n  a int\n  b string')
+  exp(2, 'match ab.b("hi"):\n  a v: v\n  b s: s.size', 'adt ab:\n  a int\n  b string')
+
   // constant
   exp(2, '\n  let a inc 1\n  a', 'def inc a: a + 1')
 
@@ -320,11 +342,14 @@ const test = () => {
   // string
   exp(2, '"hi".size')
   exp('i', '"hi".at(1)')
+  exp(['a', 'b'], '"a,b".split(",")')
 
   // array
   exp(2, '[1 2].size')
-  exp([2, 3], '([1 2].map n => n + 1)')
-  exp([1, 3], '([1 2 3].filter n => n % 2 == 1)')
+  exp([2, 3], '[1 2].map n => n + 1')
+  exp([1, 3], '[1 2 3].filter n => n % 2 == 1')
+  exp(true, '[1 2].contains 1')
+  exp(false, '[1 2].contains 3')
 
   // map
   exp(1, '(map "a" 1 "b" 2).get "a"')

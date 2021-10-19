@@ -3,6 +3,7 @@ top: exp+
 exp: atom (op2 exp)*
 atom:
 | ":" block
+| "=>" block
 | value suffix*
 suffix:
 | "(" top ")"
@@ -11,10 +12,9 @@ value:
 | id
 | num ("." num)?
 | "(" top ")"
-| "[" top? "]"          # array
-| "{" (id ":" exp)* "}" # struct
-| " [^"]* "             # string
-| ` [^`]* `             # dynamic string
+| "[" top? "]"  # array
+| '"' [^"]* '"' # string
+| "`" [^`]* "`" # dynamic string
 block:
 | (indent top)+
 | exp
@@ -24,10 +24,11 @@ num: [0-9]+
 op2: + - * / // % = += -= *= /= == != || && >= > <= < ->
 indent: "\n" " "+
 
-
-# Syntax of lisp
+# FYI: Syntax of lisp
 top: unit
 unit:
 | "("
 | ")"
-| [^ ]+
+| '"' [^"]* '"'
+| [^ \n]+
+| [ \n]+

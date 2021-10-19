@@ -71,7 +71,6 @@ Containers
 ```
 (a,b) # tuple
 [1 2] # array
-{x y} # struct
 ```
 
 Anonymouse Function
@@ -100,42 +99,51 @@ struct dict k v:
   values [k,v]
 ```
 
+ADT: Algebraic data type
+```
+adt tree a:
+  leaf a
+  node:
+    left tree a
+    right tree a
+```
+
 Control Flow
 ```
 def max a b:
-  if (a > b) a b
+  iif (a > b) a b
 
 def zero n:
   if n === 0:
     io.print "zero"
 
 def gcd a b:
-  branch:
-    a < b: (gcd b a)
+  fork:
+    a < b : (gcd b a)
     b == 0: a
-    _ : (gcd b a/b)
-
-def div n:
-  match n:
-    0: "zero"
-    _: (string n / 0)
+    true  : (gcd b a/b)
 
 def ten: for i 1...9: for j 1...9:
   print "$i x $j = ${i*j}"
   if i == 9:
     print "--\n"
+
+def include t v:
+  match t:
+    leaf a: a == v
+    node n: find(n.left) || find(n.right)
 ```
 
 Error Handling
 ```
-def div a b: (if b == 0
-  (error "zero division")
-  a / b)
+def div a b:
+  error "zero division" if: b == 0
+  a / b
 
 def main:
-  let n (div 4 2) # n should be 2
-  let m (div 4 0) # right side expression should be failed by error
-  n + m           # never reached here
+  let n div 4 2 # n should be 2
+  let m div 4 0 # right side expression should be failed by error
+  n + m         # never reached here
 ```
 
 Variable
