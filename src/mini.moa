@@ -3,9 +3,9 @@ struct Token:
   line int
   column int
 
-struct Node:
+adt Node:
   value Token
-  apply []Node
+  list []Node
 
 def tokenize src:
   let id "abcdefghijklmnopqrstuvxwyz_"
@@ -70,18 +70,33 @@ def tokenize src:
 
 def parse tokens:
   var pos 0
-  def br x:
+  def lines indent: sepby1 line (t => t == indent)
+  def line: many1 unit
+  def unit:
+    let token tokens.at pos
     pos += 1
-    x
-  def sepby1 f g: many_acc do(f g) [f]
+    if token.code == "(": return until c => c == ")" []
+    if token.code == "[": return until c => c == "]" []
+    if token.code.at(token.code.size - 1) == "(": return until c => c == ")" [token]
+    if token.code == ":":
+      let next tokens.at pos
+      if next.code.at(0) == "\n": return lines(next)
+      return line()
+    Node.value token
+
+  # helper methods
+  def breakline: pos += 1
+  def until f a:
+    def check:
+      if not f(tokens.at(pos).code):
+        error "miss match"
+      unit()
+    many_rec check a
+  def sepby1 f g: many_rec () => do(f() g()) [f()]
+  def many_rec f acc: catch(many_rec(f acc.append(f())) _ => Node.list(acc))
+  def many1 f: many_rec f [f()]
   def many f: many_rec f []
-  def many_rec acc f:
-    many_rec acc.append(f()) f
-  #def unit: 
-  def line: sepby1(unit br)
-  def lines: many line
-  #lines
-  []
+  lines("\n")
 
 def generate nodes:
   "hi!"
@@ -97,4 +112,9 @@ def main:
 test t:
   t.eq [Token("def" 1 1) Token("f" 1 5) Token(":" 1 6) Token("\n  " 2 1) Token("1" 2 3)] tokenize(`def f:\n  1`)
   t.eq ["def" "func" "arg1" ":" "\n  " "f" "(" "arg1" "+" "10" ")" "==" `"hi"` "." "size"] tokenize(`def func arg1:\n  f (arg1 + 10) == "hi".size`).map(t => t.code)
-  t.eq [] parse(tokenize("def main: 1"))
+
+  def simplify node:
+    match node:
+      value v: v.code
+      list l: "(" + l.map(simplify).join(" ") + ")"
+  t.eq "((def main (1)))" simplify(parse(tokenize("def main: 1")))

@@ -115,13 +115,14 @@ const generate = nodes => {
 }
 const escapeSTDIN = s => '(() => {/*' + s + '*/}).toString().slice(9, -3)'
 const stdlib = stdin => `let __stdout = ''
-const error = msg => { throw new Error(msg) }
+const error = msg => { const e = new Error(msg); e.catchable = true; throw e }
 const not = o => !o
 const io = {
   print: o => __stdout += __literal(o) + '\\n',
-  dump: o => __stdout += JSON.stringify(o) + '\\n',
+  dump: o => __stdout += JSON.stringify(o, null, ' ') + '\\n',
   stdin: ${escapeSTDIN(stdin)},
 }
+const __fail = msg => { throw new Error(msg) }
 const __eq = (l, r) => JSON.stringify(l) === JSON.stringify(r)
 const __tests = []
 const __testMain = () => {
@@ -163,7 +164,11 @@ const __catch = (f, g) => {
   try {
     return f()
   } catch (e) {
-    return g(e)
+    if (e.catchable) {
+      return g(e)
+    } else {
+      throw e
+    }
   }
 }
 const __match = (target, conds) => {
@@ -172,7 +177,8 @@ const __match = (target, conds) => {
       return f(target.__value)
     }
   }
-  error('Non-exhaustive pattern in match')
+  console.error(target)
+  __fail('Non-exhaustive pattern in match')
 }
 
 const __dot = (f, label, arg) => {
@@ -187,13 +193,14 @@ const __dot = (f, label, arg) => {
       case 'contains': return s => o.includes(s)
       case 'replace': return (a,b) => o.replaceAll(a, b)
       }
-    } else if (t === 'number') {
-      // no methods
     } else if (t === 'object') {
       if (o.constructor === Array) {
         switch (label) {
-        case 'at': return i => o[i]
+        case 'at': return i => i < o.length ? o[i] : error('Out of index')
         case 'size': return o.length
+        case 'append': return arg => Array.isArray(arg) ? o.concat([arg]) : o.concat(arg)
+        case 'concat': return arg => o.concat(arg)
+        case 'join': return arg => o.join(arg)
         case 'map':
         case 'filter':
         case 'push': return arg => o[label](arg)
@@ -202,10 +209,12 @@ const __dot = (f, label, arg) => {
       } else if (label in o) {
         return __bind(o, o[label])
       } else {
-        error('Unknown field ' + t + ' in ' + JSON.stringify(o))
+        __fail(JSON.stringify(o) + ' does not include ' + label)
       }
+    } else {
+      console.error(o.toString())
+      __fail(t + ' does not include ' + label)
     }
-    error('Unknown reference ' + t + ' with ' + label)
   }
   const g = ref()
   return arg.length ? g(...arg) : g
@@ -327,7 +336,7 @@ const test = () => {
   exp('Zero division error', '\n  1/0\n  1')
   exp('error', '\n  error "error"\n  1')
   exp(1, 'catch(1 _ => 2)')
-  exp('ok', 'catch(error("fail") e => "ok")')
+  exp(2, 'catch(error("fail") e => 2)')
 
   // stdio
   stdin('standard input', 'standard input', 'io.stdin')
@@ -342,6 +351,7 @@ const test = () => {
   // string
   exp(2, '"hi".size')
   exp('i', '"hi".at(1)')
+  exp('Out of index', '"hi".at(3)')
   exp(['a', 'b'], '"a,b".split(",")')
   exp(true, '"hi".contains("h")')
   exp(false, '"hi".contains("z")')
@@ -349,6 +359,8 @@ const test = () => {
 
   // array
   exp(2, '[1 2].size')
+  exp([1, 2], '[1].append 2')
+  exp([1, 2], '[1].concat [2]')
   exp([2, 3], '[1 2].map n => n + 1')
   exp([1, 3], '[1 2 3].filter n => (n % 2) == 1')
   exp(true, '[1 2].contains 1')
