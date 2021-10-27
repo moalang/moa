@@ -13,7 +13,7 @@ const op2 = '+ - * / % += -= *= /= %= == != <= >= < > && ||'.split(' ')
 const isOp2 = t => op2.includes(t)
 const fail = (msg, o) => {dump(o); throw new Error(msg)}
 
-const tokenize = src => src.split(/([0-9]+|[a-zA-Z_][a-zA-Z_0-9]*(?:,[a-zA-Z_][a-zA-Z_0-9]*)*\(?|[ \n]+|[.+\-*/=!&|<>]+|"[^"]*"|`[^`]*`|(?:#.*\n)|.)/).filter(t => t[0] !== '#').map(toToken).filter(t => t)
+const tokenize = src => src.split(/([0-9]+|[a-zA-Z_][a-zA-Z_0-9]*(?:,[a-zA-Z_][a-zA-Z_0-9]*)*(?:\(\)?)?|[ \n]+|[.+\-*/=!&|<>]+|"[^"]*"|`[^`]*`|(?:#.*\n)|.)/).filter(t => t[0] !== '#').map(toToken).filter(t => t)
 const toToken = t => t.match(/^ *\n/) ? t.slice(t.lastIndexOf('\n')) : t.trim().replace(/\\n/g, '\n').replace(/\\/g, '\\')
 const parse = tokens => {
   let pos = 0
@@ -61,8 +61,6 @@ const generate = nodes => {
     if (!isArray(node)) {
       if ('"`\''.includes(node[0])) {
         return str(node.slice(1, -1))
-      } else if (node[0].match(/^[a-zA-Z_]/)) {
-        return blocks.includes(node) ? node : `__ref(${node})`
       } else {
         return node
       }
@@ -79,8 +77,10 @@ const generate = nodes => {
       case 'var': return `let ${node[1]} = ${gen(node.slice(2))}`
       case 'let': return `const ${node[1]} = ${gen(node.slice(2))}`
       case 'iif': return `(${gen(node[1])} ? ${gen(node[2])} : ${gen(node[3])})`
-      case 'if': return `if (${gen(node[1])}) ${statement(node[2])}`
-      case 'fork': return node[1].map(t => gen(t.slice(0, -1)) + ' ? (() => ' + statement(t[t.length - 1]) + ')()').join(' : \n') + ' : error("Non-exhaustive pattern in fork")'
+      case 'if': return `if (${gen(node.slice(1, -1))}) ${statement(node[node.length - 1])}`
+      case 'catch':
+        return `__catch(() => ${gen(node[1])}, ${gen(node[2])})`
+      case 'do': return `(() => ${exps(node.slice(1))})()`
       case 'match':
         const branch = a => `['${a[0]}', ${a[1]} => ${gen(a[2])}]`
         return `__match(${gen(node[1])}, [${node[2].map(branch)}])`
@@ -158,8 +158,14 @@ __map.prototype = {
 __map.prototype.constructor = __map
 const __unwrap = o => typeof o === 'object' && o.constructor === __map ? o.o : o
 const __ref = o => typeof o === 'function' && o.toString().startsWith('()') ? o() : o
-const __call = o => typeof o === 'function' && o.length === 0 ? o() : o
 const __bind = (o, f) => typeof f === 'function' ? f.bind(o) : f
+const __catch = (f, g) => {
+  try {
+    return f()
+  } catch (e) {
+    return g(e)
+  }
+}
 const __match = (target, conds) => {
   for (const [tag, f] of conds) {
     if (target.__tag === tag) {
@@ -171,49 +177,37 @@ const __match = (target, conds) => {
 
 const __dot = (f, label, arg) => {
   const ref = () => {
-    if (label === 'then') {
-      return g => g(f())
-    } else if (label === 'catch') {
-      return g => {
-        try {
-          return f()
-        } catch (e) {
-          return g(e)
-        }
+    const o = f()
+    const t = typeof o
+    if (t === 'string') {
+      switch (label) {
+      case 'size': return o.length
+      case 'at': return i => i < o.length ? o[i] : error('Out of index')
+      case 'split': return s => o.split(s)
+      case 'contains': return s => o.includes(s)
+      case 'replace': return (a,b) => o.replaceAll(a, b)
       }
-    } else {
-      const o = f()
-      const t = typeof o
-      if (t === 'string') {
+    } else if (t === 'number') {
+      // no methods
+    } else if (t === 'object') {
+      if (o.constructor === Array) {
         switch (label) {
+        case 'at': return i => o[i]
         case 'size': return o.length
-        case 'at': return i => i < o.length ? o[i] : error('Out of index')
-        case 'split': return s => o.split(s)
-        case 'contains': return s => o.includes(s)
-        case 'replace': return (a,b) => o.replaceAll(a, b)
+        case 'map':
+        case 'filter':
+        case 'push': return arg => o[label](arg)
+        case 'contains': return arg => o.includes(arg)
         }
-      } else if (t === 'number') {
-        // no methods
-      } else if (t === 'object') {
-        if (o.constructor === Array) {
-          switch (label) {
-          case 'at': return i => o[i]
-          case 'size': return o.length
-          case 'map':
-          case 'filter':
-          case 'push': return arg => o[label](arg)
-          case 'contains': return arg => o.includes(arg)
-          }
-        } else if (label in o) {
-          return __bind(o, o[label])
-        } else {
-          error('Unknown field ' + t + ' in ' + JSON.stringify(o))
-        }
+      } else if (label in o) {
+        return __bind(o, o[label])
+      } else {
+        error('Unknown field ' + t + ' in ' + JSON.stringify(o))
       }
-      error('Unknown reference ' + t + ' with ' + label)
     }
+    error('Unknown reference ' + t + ' with ' + label)
   }
-  const g = __call(ref())
+  const g = ref()
   return arg.length ? g(...arg) : g
 }
 `
@@ -227,7 +221,7 @@ const run = (src, option) => {
   let result = {tokens, nodes, js, runtime}
   try {
     return Object.assign(result, Function(runtime)())
-  } catch(e) {
+  } catch (e) {
     return Object.assign(result, {ret: e.message, stdout: '', error: e})
   }
 }
@@ -271,9 +265,10 @@ const test = () => {
   exp(6, '(a,b,c => a + b + c) 1 2 3')
 
   // function
-  exp(1, 'one', 'def one: 1')
+  exp(1, 'one()', 'def one: 1')
   exp(3, 'add 1 2', 'def add a b: a + b')
   exp(6, 'calc 2 3', 'def calc a b:\n  def mul a b: a * b\n  mul a b')
+  exp(3, '\n  var a 1\n  def inc: a += 1\n  def twice f:\n    f()\n    f()\n  twice inc\n  a')
 
   // method
   exp(2, '[1].map(n => n + 1).at(0)')
@@ -300,7 +295,7 @@ const test = () => {
 
   // variable
   exp(3, '\n  var a 1\n  a += 2\n  a')
-  exp(3, '\n  var a 1\n  def inc: a += 1\n  inc\n  inc\n  a')
+  exp(3, '\n  var a 1\n  def inc: a += 1\n  inc()\n  inc()\n  a')
 
   // branch
   exp(1, 'iif true 1 2')
@@ -317,9 +312,9 @@ const test = () => {
   // if block
   exp(3, '\n  var n 0\n  if true:\n    n+=1\n    n+=2\n  n')
 
-  // fork block
-  exp('zero', '\n  var n 0\n  fork:\n    n == 0: "zero"\n    true: "other"')
-  exp('other', '\n  var n 2\n  fork:\n    n == 0: "zero"\n    true: "other"')
+  // do block
+  exp(1, 'do(1)')
+  exp(2, 'do(1 2)')
 
   // control flow
   exp(2, '\n  1\n  2')
@@ -331,10 +326,8 @@ const test = () => {
   // error handling
   exp('Zero division error', '\n  1/0\n  1')
   exp('error', '\n  error "error"\n  1')
-  exp(3, '1.then(n => n + 2)')
-  exp(1, '1.catch(n => n + 2)')
-  exp('fail', '(error "fail").then(n => n + 2)')
-  exp('ok', '(error "fail").catch(e => "ok")')
+  exp(1, 'catch(1 _ => 2)')
+  exp('ok', 'catch(error("fail") e => "ok")')
 
   // stdio
   stdin('standard input', 'standard input', 'io.stdin')
@@ -368,7 +361,7 @@ const test = () => {
   exp([1, 2], '(map "a" 1 "b" 2).values')
 
   // comment
-  exp(1, 'one', '# comment', 'def one: 1')
+  exp(1, 'one()', '# comment', 'def one: 1')
 
   return true
 }

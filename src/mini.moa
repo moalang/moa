@@ -3,70 +3,84 @@ struct Token:
   line int
   column int
 
-struct Tree:
-  leaf Token
-  forest []Tree
+struct Node:
+  value Token
+  apply []Node
 
 def tokenize src:
-  var tokens []
-  var line 1
-  var column 1
   let id "abcdefghijklmnopqrstuvxwyz_"
   let num "0123456789"
   let idnum id + num
   let singles "():."
-  let symbols "+ - * / = :".split " "
+  let symbols "+ - * / =".split " "
+  var tokens []
+  var line 1
+  var column 1
+  var pos 0
 
   def push fragment:
     tokens.push Token(fragment line column)
     column += fragment.replace("\n" "").size
 
   def quote q:
-    i += 1
-    push q + until(c => c != q) + q
-    i += 1
+    pos += 1
+    let s q + until(c => c != q) + q
+    pos += 1
+    s
 
   def until f:
     s = ""
-    while i < src.size && f(src.at(i)):
-      s += src.at i
-      i += 1
-    i -= 1
+    while pos < src.size && f src.at(pos):
+      s += src.at pos
+      pos += 1
+    pos -= 1
     s
 
-  def br:
+  def breaklines:
     s = ""
-    while i < src.size && src.at(i) == "\n":
-      i += 1
+    while pos < src.size && src.at(pos) == "\n":
+      pos += 1
       line += 1
       s = "\n" + until(c => c == " ")
     column = 1
     push s
 
-  var i 0
-  while i < src.size:
-    var c src.at i
+  def consume:
+    var c src.at pos
     if c == "\\":
-      i += 1
-      c = src.at i
-      fork:
-        c == "n": c = "\n"
-        c == "t": c = "\t"
-        c == "\\": c = "\\"
-    fork:
-      c == `"`: quote c
-      c == `'`: quote c
-      c == " ": column += until(c => c == " ").size
-      c == "\n": br
-      singles.contains c: push c
-      symbols.contains c: push until(symbols.contains)
-      id.contains c: push until(idnum.contains)
-      num.contains c: push until(num.contains)
-    i += 1
+      pos += 1
+      c = src.at pos
+      if c == "n": c = "\n"
+      if c == "t": c = "\t"
+      if c == "\\": c = "\\"
+    c
+
+  while pos < src.size:
+    let c consume()
+    if c == `"`: push quote(c)
+    if c == `'`: push quote(c)
+    if c == " ": column += until(c => c == " ").size
+    if c == "\n": breaklines()
+    if singles.contains c: push c
+    if symbols.contains c: push until(symbols.contains)
+    if id.contains c: push until(idnum.contains)
+    if num.contains c: push until(num.contains)
+    pos += 1
   tokens
 
 def parse tokens:
-  io.print tokens.size
+  var pos 0
+  def br x:
+    pos += 1
+    x
+  def sepby1 f g: many_acc do(f g) [f]
+  def many f: many_rec f []
+  def many_rec acc f:
+    many_rec acc.append(f()) f
+  #def unit: 
+  def line: sepby1(unit br)
+  def lines: many line
+  #lines
   []
 
 def generate nodes:
@@ -83,3 +97,4 @@ def main:
 test t:
   t.eq [Token("def" 1 1) Token("f" 1 5) Token(":" 1 6) Token("\n  " 2 1) Token("1" 2 3)] tokenize(`def f:\n  1`)
   t.eq ["def" "func" "arg1" ":" "\n  " "f" "(" "arg1" "+" "10" ")" "==" `"hi"` "." "size"] tokenize(`def func arg1:\n  f (arg1 + 10) == "hi".size`).map(t => t.code)
+  t.eq [] parse(tokenize("def main: 1"))

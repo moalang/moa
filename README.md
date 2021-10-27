@@ -118,10 +118,9 @@ def zero n:
     io.print "zero"
 
 def gcd a b:
-  fork:
-    a < b : (gcd b a)
-    b == 0: a
-    true  : (gcd b a/b)
+  if a < b: return gcd b a
+  if b == 0: return a
+  gcd b a / b
 
 def ten: for i 1...9: for j 1...9:
   print "$i x $j = ${i*j}"
@@ -137,13 +136,19 @@ def include t v:
 Error Handling
 ```
 def div a b:
-  error "zero division" if: b == 0
+  if b == 0:
+    error "zero division"
   a / b
 
-def main:
+def calc:
   let n div 4 2 # n should be 2
-  let m div 4 0 # right side expression should be failed by error
+  let m div 4 0 # raise "zero division" error
   n + m         # never reached here
+
+def main:
+  for i 0 10:
+    ans = catch(div(i i) e => 0)
+    print i i "=" ans
 ```
 
 Variable
@@ -185,120 +190,6 @@ num: [0-9]+
 op2: + - * / // % = += -= *= /= == != || && >= > <= <
 indent: "\n" " "+
 ```
-
-## 4. Buildin
-
-### Embedded primitives
-- bool     : true, false
-- int      : 0
-- float    : 0.0
-- string   : "hello"
-- function : a => a
-- struct   : a:1
-
-### Embedded containers
-- array : [1 2]
-- dict
-- byte, bytes
-- opt, ok, none, error
-- mutable
-
-### Core data types
-bool|
-  true
-  false
-int:
-  float :: float
-float:
-  int :: int
-string:
-  int   :: opt(int)
-  float :: opt(float)
-array a:
-  size   :: int
-  map b  :: (a b) [b]
-  keep   :: (a bool) [a]
-  dict b :: [b] dict(a b)
-dict k v:
-  size :: int
-  get  :: opt(v)
-  set  :: k v bool
-opt a|
-  some a
-  none
-  error string
-  then  :: b (a b) opt(b)
-  catch :: opt(a) opt(a)
-  alt   :: a a
-
-### Standard data types
-byte:
-  int :: int
-bytes:
-  array(byte)
-time:
-  year, month, day, hour, minute, second, yday, mday, wday :: int
-  locale
-date:
-  year, month, day, yday, mday, wday :: int
-
-# ideas
-Monad # => error monad?
-Eq    # .eq t: eq :: t t bool
-Hash
-Ord
-Index
-
-### IO
-
-```
-def main:
-  let now io.now
-  io.print now
-
-  let input io.read
-  io.print input
-
-  n <- (io.random.int 1 3)
-  io.exit n
-```
-
-
-
-
-
-## 5. Appendix
-
-Accepted ideas
-- Generics
-- Functional programming
-- Monadic error handling
-
-Pending ideas
-- ADT
-- Global variables
-- Pointer
-- Weak reference
-- Logger, debugger, profiler and resources monitor
-- Strong composability
-- Preconditions and Postconditions
-
-Rejected ideas
-- Monad
-- Null
-- Shadowing
-- Default mutable
-- Allocate / free
-- Class
-- Interface
-- Out of range access
-- Zero division
-- Standard library
-- GC
-- Destructor
-- Finalizer
-- Globalization
-- Type level programming
 
 Symbols
 - used
