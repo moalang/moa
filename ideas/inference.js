@@ -24,10 +24,10 @@ const parse = src => {
   return until(() => pos < tokens.length, unit)
 }
 
-const inference = (nodes, src) => {
+const inference = nodes => {
   let tvarSequence = 0
   const tvar = () => (name => ({name,var:true}))((++tvarSequence).toString())
-  const tlambda = (...types) => ({types})
+  const tlambda = (...types) => types.length === 1 ? types[0] : ({types})
   const ttype = (name) => ({name, types: []})
   const tint = ttype('int')
   const tbool = ttype('bool')
@@ -54,7 +54,7 @@ const inference = (nodes, src) => {
       if (a.name !== b.name || a.types.length !== b.types.length) {
         fail(`type miss match`, {a,b})
       }
-      a.types.map((t,i) => unify(t, b.types[i]))
+      a.types.forEach((t,i) => unify(t, b.types[i]))
     }
   }
   const v1 = tvar()
@@ -69,12 +69,13 @@ const inference = (nodes, src) => {
         const args = tail.slice(1, -1).map(arg => (arg.type = tvar(), arg))
         const body = tail.slice(-1)[0]
         const newEnv = Object.assign({}, env)
-        args.map(arg => newEnv[arg.code] = arg.type)
-        const ft = tlambda(...args.map(t => t.type), analyse(body, newEnv, nonGeneric.concat(args.map(t => t.type.name))))
+        args.forEach(arg => newEnv[arg.code] = arg.type)
+        const ret = analyse(body, newEnv, nonGeneric.concat(args.map(t => t.type.name)))
+        const ft = tlambda(...args.map(t => t.type), ret)
         return env[name] = ft
       } else if (tail.length) {
         const argv = tail.map(t => analyse(t, env, nonGeneric))
-        const rt = (env.__cache[str(argv)] ||= tvar()) // same signatures should refer a single type
+        const rt = (env.__cache[str(argv)] ||= tvar()) // fix tvar
         const ft = analyse(head, env, nonGeneric)
         unify(tlambda(...argv, rt), ft)
         return rt
@@ -85,7 +86,7 @@ const inference = (nodes, src) => {
       const v = node.code
       return v.match(/^[0-9]/) ? tint :
         env[v] ? fresh(env[v], nonGeneric) :
-        fail(`Not found ${v} in env`, {v,src,node,env})
+        fail(`Not found ${v} in env`, {v,node,env})
     }
   }
   const topEnv = {
@@ -101,8 +102,7 @@ const inference = (nodes, src) => {
 
 const showType = type => {
   const show = t => t.instance ? show(t.instance) :
-    t.name ||
-    (t.types.length === 1 ? show(t.types[0]) : '(' + t.types.map(show).join(' ') + ')')
+    t.name || '(' + t.types.map(show).join(' ') + ')'
   const s = show(type)
   const o = {}
   const r = s.replace(/\d+/g, t => o[t] ||= Object.keys(o).length + 1)
