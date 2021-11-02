@@ -1,5 +1,6 @@
 struct Token:
   code string
+  type string
   line int
   column int
 
@@ -18,8 +19,8 @@ def tokenize src:
   var column 1
   var pos 0
 
-  def push fragment:
-    tokens.push Token(fragment line column)
+  def push fragment type:
+    tokens.push Token(fragment type line column)
     column += fragment.replace("\n" "").size
 
   def quote q:
@@ -43,7 +44,7 @@ def tokenize src:
       line += 1
       s = "\n" + until(c => c == " ")
     column = 1
-    push s
+    push s ""
 
   def consume:
     var c src.at pos
@@ -57,14 +58,14 @@ def tokenize src:
 
   while pos < src.size:
     let c consume()
-    if c == `"`: push quote(c)
-    if c == `'`: push quote(c)
+    if c == `"`: push quote(c) "string"
+    if c == `'`: push quote(c) "string"
     if c == " ": column += until(c => c == " ").size
     if c == "\n": breaklines()
-    if singles.contains c: push c
-    if symbols.contains c: push until(symbols.contains)
-    if id.contains c: push until(idnum.contains)
-    if num.contains c: push until(num.contains)
+    if singles.contains c: push c ""
+    if symbols.contains c: push until(symbols.contains) ""
+    if id.contains c: push until(idnum.contains) ""
+    if num.contains c: push until(num.contains) "int"
     pos += 1
   tokens
 
@@ -98,23 +99,32 @@ def parse tokens:
   def many f: many_rec f []
   lines("\n")
 
-def generate nodes:
-  "hi!"
+def inference nodes:
+  io.dump nodes
+  "int"
+
+def compile_to_js nodes:
+  nodes
 
 def main:
   let src io.stdin
   let tokens tokenize src
   let nodes parse tokens
-  let js generate nodes
-  io.print "-- nodes:"
-  io.dump nodes
+  let js compile_to_js nodes
+  io.print js
 
 test t:
-  t.eq [Token("def" 1 1) Token("f" 1 5) Token(":" 1 6) Token("\n  " 2 1) Token("1" 2 3)] tokenize(`def f:\n  1`)
+  t.eq [Token("def" "" 1 1) Token("f" "" 1 5) Token(":" "" 1 6) Token("\n  " "" 2 1) Token("1" "int" 2 3)] tokenize(`def f:\n  1`)
   t.eq ["def" "func" "arg1" ":" "\n  " "f" "(" "arg1" "+" "10" ")" "==" `"hi"` "." "size"] tokenize(`def func arg1:\n  f (arg1 + 10) == "hi".size`).map(t => t.code)
 
+test t:
   def simplify node:
     match node:
       value v: v.code
       list l: "(" + l.map(simplify).join(" ") + ")"
   t.eq "((def main (1)))" simplify(parse(tokenize("def main: 1")))
+
+test t:
+  def type src:
+    inference(parse(tokenize(src)))
+  t.eq "int" type("1")

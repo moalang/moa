@@ -390,9 +390,10 @@ const miniTest = () => {
   }
   return true
 }
-const bootstrap = () => {
-  const src = fs.readFileSync(__dirname + '/mini.moa', 'utf8')
-  const result = run(src, {stdin: src})
+const compile = () => {
+  const mini = fs.readFileSync(__dirname + '/mini.moa', 'utf8').trim()
+  const src = fs.readFileSync('/dev/stdin', 'utf8').trim()
+  const result = run(mini, {stdin: src})
   process.stdout.write(result.stdout)
   if (result.error) {
     process.exit(1)
@@ -401,10 +402,10 @@ const bootstrap = () => {
 
 switch (process.argv[2]) {
   case 'test': test() && miniTest() && puts('ok'); break
-  case 'bootstrap': bootstrap(); break
+  case 'compile': compile(); break
   default:
     puts('Usage:')
     puts('  node bootstrap.js test')
     puts('  node bootstrap.js mini-test')
-    puts('  node bootstrap.js bootstrap')
+    puts('  node bootstrap.js compile')
 }
