@@ -24,11 +24,20 @@ num: [0-9]+
 op2: + - * / // % = += -= *= /= == != || && >= > <= < ->
 indent: "\n" " "+
 
-# FYI: Syntax of lisp
-top: unit
-unit:
-| "("
-| ")"
-| '"' [^"]* '"'
-| [^ \n]+
-| [ \n]+
+# Minimul requirements?
+- int             : 1
+- string          : "hi"
+- lambda          : a => a
+- apply           : f(a)
+- define          : n = 1
+- binary operator : (1 + 2) * 3
+- branch          : if(false 1 true 2 3)
+- loop            : sum = until(f -> if(a < 0
+- array           : [1 2]
+- error handling  : e = error(reason: string), try(fail(error("eof")) e -> e.reason)
+- type annotation : (a:int b:int :int) => a + b
+- variable        : a:int:ref
+
+# Nice to have?
+- Type inference
+- Hash table
