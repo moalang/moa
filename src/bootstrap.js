@@ -11,7 +11,15 @@ const op2Assign = '= += -= *= /= ='.split(' ')
 const isAssign = t => op2Assign.includes(t)
 const op2 = '+ - * / % += -= *= /= %= == != <= >= < > && ||'.split(' ')
 const isOp2 = t => op2.includes(t)
+const isGlue = t => t === '=>' || isOp2(t) || isAssign(t)
 const fail = (msg, o) => {dump(o); throw new Error(msg)}
+const until = (f, g, a) => {
+  a = a || []
+  while (f()) {
+    a.push(g())
+  }
+  return a
+}
 
 const tokenize = src => src.split(/([0-9]+|[a-zA-Z_][a-zA-Z_0-9]*(?:,[a-zA-Z_][a-zA-Z_0-9]*)*(?:\(\)?)?|[ \n]+|[.+\-*/=!&|<>]+|"[^"]*"|`[^`]*`|(?:#.*\n)|.)/).filter(t => t[0] !== '#').map(toToken).filter(t => t)
 const toToken = t => t.match(/^ *\n/) ? t.slice(t.lastIndexOf('\n')) : t.trim().replace(/\\n/g, '\n').replace(/\\/g, '\\')
@@ -19,27 +27,17 @@ const parse = tokens => {
   let pos = 0
   const consume = f => pos < tokens.length ? f(tokens[pos++]) : fail('EOT', {f: f.toString(),tokens})
   const next = v => (++pos, v)
-  const many = (f, g, a) => {
-    a = a || []
-    while (pos < tokens.length && g(tokens[pos])) {
-      a.push(f(tokens[pos]))
-    }
-    return a
-  }
+  const many = (f, g, a) => until(() => pos < tokens.length && g(tokens[pos]), f, a)
   const unit = () => consume(t =>
+    t === '[' ? next(many(exp, t => t !== ']', ['array'])) :
     t === '(' ? next(many(exp, t => t !== ')')) :
     t.endsWith('(') ? [t.slice(0, -1)].concat(next(many(exp, t => t !== ')'))) :
-    t === '[' ? next(many(exp, t => t !== ']', ['array'])) :
     t === ':' ? (tokens[pos][0] === '\n' ? lines(tokens[pos++]) : [line()]) :
     t)
-  const exp = () => cont(unit())
-  const cont = u => {
+  const exp = () => suffix(unit())
+  const suffix = u => {
     const t = tokens[pos++]
-    return t === '.' ? cont([t, u].concat(unit())) :
-      t == '=>' ? [t, u, exp()] :
-      isOp2(t) ? [t, u, exp()] :
-      isAssign(t) ? [t, u, exp()] :
-      (--pos, u)
+    return t === '.' ? suffix([t, u].concat(unit())) : isGlue(t) ? [t, u, exp()] : (--pos, u)
   }
   const line = () => many(exp, t => !'\n)'.includes(t[0]))
   const lines = indent => many(line, t => t === indent && ++pos, [line()])
@@ -47,7 +45,6 @@ const parse = tokens => {
 }
 const generate = nodes => {
   const blocks = 'if for while return break continue'.split(' ')
-  const map = a => 'new __map({' + [...Array(a.length / 2).keys()].map(i => i * 2).map(i => `[${a[i]}]:${a[i+1]}`) + '})'
   const addReturn = a => {
     if (!blocks.some(b => b === a[a.length - 1].slice(0, b.length))) {
       a[a.length - 1] = `return ${a[a.length - 1]}`
@@ -73,13 +70,11 @@ const generate = nodes => {
         return `const ${node[1]} = (${names}) => ({${names}})`
       case 'adt': return `const ${node[1]} = {${node[2].map(t => t[0] + ':' + newAdt(t[0]))}}`
       case 'array': return `[${node.slice(1).map(gen)}]`
-      case 'map': return `(${map(node.slice(1).map(gen))})`
       case 'var': return `let ${node[1]} = ${gen(node.slice(2))}`
       case 'let': return `const ${node[1]} = ${gen(node.slice(2))}`
       case 'iif': return `(${gen(node[1])} ? ${gen(node[2])} : ${gen(node[3])})`
       case 'if': return `if (${gen(node.slice(1, -1))}) ${statement(node[node.length - 1])}`
-      case 'catch':
-        return `__catch(() => ${gen(node[1])}, ${gen(node[2])})`
+      case 'catch': return `__catch(() => ${gen(node[1])}, ${gen(node[2])})`
       case 'do': return `(() => ${exps(node.slice(1))})()`
       case 'match':
         const branch = a => `['${a[0]}', ${a[1]} => ${gen(a[2])}]`
@@ -116,9 +111,8 @@ const generate = nodes => {
 const escapeSTDIN = s => '(() => {/*' + s + '*/}).toString().slice(9, -3)'
 const stdlib = stdin => `let __stdout = ''
 const error = msg => { const e = new Error(msg); e.catchable = true; throw e }
-const not = o => !o
 const io = {
-  print: o => __stdout += __literal(o) + '\\n',
+  print: o => __stdout += __toString(o) + '\\n',
   dump: o => __stdout += JSON.stringify(o, null, ' ') + '\\n',
   stdin: ${escapeSTDIN(stdin)},
 }
@@ -142,22 +136,13 @@ const __testMain = () => {
   }
   __tests.forEach(t => t(tester))
 }
-const __literal = o => (t =>
+const __toString = o => (t =>
   t === 'string' ? o :
   t === 'object' ? (
-    o.constructor === Array ? '[' + o.map(__literal).join(' ') + ']' :
+    o.constructor === Array ? '[' + o.map(__toString).join(' ') + ']' :
     JSON.stringify(o)
   ) : o.toString()
 )(typeof o)
-function __map(o) { this.o = o }
-__map.prototype = {
-  get(k) { return this.o[k] },
-  set(k, v) { this.o[k] = v },
-  get keys() { return Object.keys(this.o) },
-  get values() { return Object.values(this.o) },
-}
-__map.prototype.constructor = __map
-const __unwrap = o => typeof o === 'object' && o.constructor === __map ? o.o : o
 const __ref = o => typeof o === 'function' && o.toString().startsWith('()') ? o() : o
 const __bind = (o, f) => typeof f === 'function' ? f.bind(o) : f
 const __catch = (f, g) => {
@@ -226,7 +211,7 @@ const run = (src, option) => {
   const tokens = tokenize(src.trim())
   const nodes = parse(tokens)
   const js = generate(nodes)
-  const runtime = stdlib(stdin) + js + `\nreturn {ret: __unwrap(${target}()), stdout: __stdout}`
+  const runtime = stdlib(stdin) + js + `\nreturn {ret: ${target}(), stdout: __stdout}`
   let result = {tokens, nodes, js, runtime}
   try {
     return Object.assign(result, Function(runtime)())
@@ -268,7 +253,6 @@ const test = () => {
   exp('\n', '`\\n`')
   exp([1, 2], 'array 1 2')
   exp([1, 2], '[1 2]')
-  exp({1: 2, 7: 11}, 'map 1 2 3+4 5+6')
   exp(1, '(n => n) 1')
   exp(3, '(a,b => a + b) 1 2')
   exp(6, '(a,b,c => a + b + c) 1 2 3')
@@ -365,12 +349,6 @@ const test = () => {
   exp([1, 3], '[1 2 3].filter n => (n % 2) == 1')
   exp(true, '[1 2].contains 1')
   exp(false, '[1 2].contains 3')
-
-  // map
-  exp(1, '(map "a" 1 "b" 2).get "a"')
-  exp(2, '\n  var d map\n  d.set 1 2\n  d.get 1')
-  exp(['a', 'b'], '(map "a" 1 "b" 2).keys')
-  exp([1, 2], '(map "a" 1 "b" 2).values')
 
   // comment
   exp(1, 'one()', '# comment', 'def one: 1')
