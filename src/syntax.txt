@@ -24,20 +24,26 @@ num: [0-9]+
 op2: + - * / // % = += -= *= /= == != || && >= > <= < ->
 indent: "\n" " "+
 
-# Minimul requirements?
+
+# Syntax examples
+values
 - int             : 1
 - string          : "hi"
-- lambda          : a => a
-- apply           : f(a)
-- define          : n = 1
-- binary operator : (1 + 2) * 3
-- branch          : if(false 1 true 2 3)
-- loop            : sum = until(f -> if(a < 0
 - array           : [1 2]
+expression
+- binary operator : (1 + 2) * 3
+- update          : n = 1
+- lambda          : a,b => a + b
+- apply           : f(a)
+branch
+- branch          : if(false 1 true 2 3)
+loop
+- loop            : ?
+define
+- define function : def f arg: arg + 1
+- define struct   : struct person:\n  name string\n  age int
+error handling
 - error handling  : e = error(reason: string), try(fail(error("eof")) e -> e.reason)
-- type annotation : (a:int b:int :int) => a + b
+type hint
+- type annotation : (a:int b:int :int) => a + b, type add int int int
 - variable        : a:int:ref
-
-# Nice to have?
-- Type inference
-- Hash table

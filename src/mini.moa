@@ -87,12 +87,7 @@ def parse tokens:
 
   # helper methods
   def breakline: pos += 1
-  def until f a:
-    def check:
-      if not f(tokens.at(pos).code):
-        error "miss match"
-      unit()
-    many_rec check a
+  def until f a: many_rec assert(f(tokens.at(pos).code) unit()) a
   def sepby1 f g: many_rec () => do(f() g()) [f()]
   def many_rec f acc: catch(many_rec(f acc.append(f())) _ => Node.list(acc))
   def many1 f: many_rec f [f()]

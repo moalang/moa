@@ -85,6 +85,10 @@ const generate = nodes => {
         const c = statement(node[3])
         return `for (let ${a}=0; ${a}<${b}; ++${a}) {${c}}`
       case 'while': return `while (${gen(node.slice(1, -1))}) {${statement(node[node.length - 1])}}`
+      case 'assert':
+        const cond = gen(node[1])
+        const then = node[2] ? gen(node[2]) : 'null'
+        return `!(${cond}) ? error("assert: " + ${str(cond)}) : ${then}`
       case '.': return `__dot(() => ${gen(node[1])}, '${node[2]}', [${node.slice(3).map(gen)}])`
       default:
         if (node[0] === '/') {
@@ -321,6 +325,10 @@ const test = () => {
   exp('error', '\n  error "error"\n  1')
   exp(1, 'catch(1 _ => 2)')
   exp(2, 'catch(error("fail") e => 2)')
+  exp(1, '\n  assert 1<2\n  1')
+  exp('assert: 1>2', '\n  assert 1>2\n  1')
+  exp('assert: false', 'assert false 1')
+  exp(1, 'assert true 1')
 
   // stdio
   stdin('standard input', 'standard input', 'io.stdin')

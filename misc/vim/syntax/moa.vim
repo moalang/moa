@@ -23,7 +23,7 @@ syn keyword Exception error
 syn match Operator /[+\-\*/|&]=\=/
 syn match Operator /[<>]=\=/
 syn match Operator /[=!]=/
-syn match Operator /[=;,]/
+syn match Operator /[=;,:]/
 syn match Operator "<-"
 syn match Operator "->"
 syn match Operator "||"
