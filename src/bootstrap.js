@@ -37,7 +37,10 @@ const parse = tokens => {
   const exp = () => suffix(unit())
   const suffix = u => {
     const t = tokens[pos++]
-    return t === '.' ? suffix([t, u].concat(unit())) : isGlue(t) ? [t, u, exp()] : (--pos, u)
+    return t === '.' ? suffix([t, u].concat(unit())) :
+      t === '=>' && tokens[pos][0] === '\n' ? [t, u, ['do'].concat(lines(tokens[pos++]))] :
+      isGlue(t) ? [t, u, exp()] :
+      (--pos, u)
   }
   const line = () => many(exp, t => !'\n)'.includes(t[0]))
   const lines = indent => many(line, t => t === indent && ++pos, [line()])
@@ -298,6 +301,9 @@ const test = () => {
   exp(1, 'iif true 1 2')
   exp(2, 'iif false 1 2')
   exp(2, 'iif (true && (1 == 2)) 1 2')
+
+  // lambda block
+  exp(2, '\n  let f n =>\n    n += 1\n    n\n  f 1')
 
   // for block
   exp(3, '\n  var n 0\n  for i 3: n+=1\n  n')

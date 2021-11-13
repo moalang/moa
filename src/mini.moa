@@ -1,3 +1,7 @@
+# TODO:
+# - make a helper for patterns of `if ...: return ...`
+# - make a helper to patterns of like until, quote functions
+# - make a helper to patterns of like breaklines function
 struct Token:
   code string
   type string
@@ -23,18 +27,18 @@ def tokenize src:
     tokens.push Token(fragment type line column)
     column += fragment.replace("\n" "").size
 
-  def quote q:
-    pos += 1
-    let s q + until(c => c != q) + q
-    pos += 1
-    s
-
   def until f:
     s = ""
     while pos < src.size && f src.at(pos):
       s += src.at pos
       pos += 1
     pos -= 1
+    s
+
+  def quote q:
+    pos += 1
+    let s q + until(c => c != q) + q
+    pos += 1
     s
 
   def breaklines:
