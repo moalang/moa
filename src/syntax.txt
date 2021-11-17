@@ -24,11 +24,26 @@ num: [0-9]+
 op2: + - * / // % = += -= *= /= == != || && >= > <= < ->
 indent: "\n" " "+
 
-# FYI: Syntax of lisp
-top: unit
-unit:
-| "("
-| ")"
-| '"' [^"]* '"'
-| [^ \n]+
-| [ \n]+
+
+# Syntax examples
+values
+- int             : 1
+- string          : "hi"
+- array           : [1 2]
+expression
+- binary operator : (1 + 2) * 3
+- update          : n = 1
+- lambda          : a,b => a + b
+- apply           : f(a)
+branch
+- branch          : if(false 1 true 2 3)
+loop
+- loop            : ?
+define
+- define function : def f arg: arg + 1
+- define struct   : struct person:\n  name string\n  age int
+error handling
+- error handling  : e = error(reason: string), try(fail(error("eof")) e -> e.reason)
+type hint
+- type annotation : (a:int b:int :int) => a + b, type add int int int
+- variable        : a:int:ref
