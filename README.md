@@ -193,27 +193,29 @@ indent: "\n" " "+
 
 Symbols
 - used
-> #                          -- comment
-> ( )                        -- function call or grouping
-> * + - / // % ^ **          -- arithmetic operators
-> < > <= >= == !=            -- compare operators
-> && ||                      -- boolean operators
-> .                          -- property access
-> = += -= *= /= %= ||= &&=   -- change variable
-> " ' ` $                    -- make string
-> ,                          -- tuple
-> [ ]                        -- array
-> { }                        -- struct
-
-- option
-> ?                          -- variable arguments e.g. add x y z?0 = x+y+z
-> ;                          -- separator?
-> ->                         -- condition?
+```
+#                          -- comment
+( )                        -- function call or grouping
+* + - / // % ^ **          -- arithmetic operators
+< > <= >= == !=            -- compare operators
+&& ||                      -- boolean operators
+.                          -- property access
+= += -= *= /= %= ||= &&=   -- change variable
+" ' ` $                    -- make string
+,                          -- tuple
+[ ]                        -- array
+{ }                        -- struct
+```
 
 - unused
-> !                          -- unwrap?
-> @
-> ~
-> :
-> |
-> &
+```
+?                          -- variable arguments e.g. add x y z?0 = x+y+z
+;                          -- separator?
+->                         -- condition?
+!
+@
+~
+:
+|
+&
+```
