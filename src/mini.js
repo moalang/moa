@@ -3,23 +3,28 @@
 const puts = (...a) => console.log(...a)
 const write = (...a) => process.stdout.write(a.map(x => x.toString()).join(' '))
 const trace = o => (console.dir({'TRACE': o}, {depth: null}), o)
-const str = JSON.stringify
-const eq = (a,b) => str(a) === str(b)
-const until = (f, g) => { const a = []; while (f()) { a.push(g()) }; return a }
+const eq = (a,b) => JSON.stringify(a) === JSON.stringify(b)
 
 function compile_js(src) {
   const tokens = src.split(/([():\[\]]|[\+\-\*\/%&|=><]+|"[^"]*?"|`[^`]*?`|[ \n]+|[^() \n]+")/).map(t => t.replace(/^ +/, '')).filter(x => x)
   const parse = () => {
     let pos = 0
     const next = o => { ++pos; return o }
-    const reads = (f, g) => until(() => pos < tokens.length && tokens[pos][0] !== '\n' && f(tokens[pos]), g || consume)
-    const sepby = f => [reads(() => true)].concat(pos < tokens.length && f(tokens[pos]) ? sepby(next(f)) : [])
+    const until = f => {
+      const a = []
+      while (pos < tokens.length && tokens[pos][0] !== '\n' && f(tokens[pos])) {
+        a.push(consume())
+      }
+      return a
+    }
+    const reads = f => until(f || (() => true))
+    const sepby = f => [reads()].concat(pos < tokens.length && f(tokens[pos]) ? sepby(next(f)) : [])
     const consume = () => {
       const t = tokens[pos++]
       const node = t === '(' ? next(reads(t => t !== ')')) :
         t === '[' ? ['array'].concat(next(reads(t => t !== ']'))) :
         t === ':' && tokens[pos][0] === '\n' ? ['do'].concat(top(tokens[pos++])) :
-        t === ':' ? ['do'].concat([until(() => pos < tokens.length && tokens[pos][0] !== '\n', consume)]) :
+        t === ':' ? ['do'].concat([reads()]) :
         t
       return (tokens[pos] || '').match(/^[\+\-\*\/%&|=><]/) ? [tokens[pos++], node, consume()] : node
     }
