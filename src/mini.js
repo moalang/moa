@@ -2,8 +2,7 @@
 
 const puts = (...a) => console.log(...a)
 const write = (...a) => process.stdout.write(a.map(x => x.toString()).join(' '))
-const dump = o => console.dir({'dump': o}, {depth: null})
-const trace = (...a) => (puts('TRACE:', ...a), a[a.length - 1])
+const trace = o => (console.dir({'TRACE': o}, {depth: null}), o)
 const str = JSON.stringify
 const eq = (a,b) => str(a) === str(b)
 const until = (f, g) => { const a = []; while (f()) { a.push(g()) }; return a }
@@ -13,7 +12,8 @@ function compile_js(src) {
   const parse = () => {
     let pos = 0
     const next = o => { ++pos; return o }
-    const reads = (f, g) => until(() => pos < tokens.length && f(tokens[pos]), g || consume)
+    const reads = (f, g) => until(() => pos < tokens.length && tokens[pos][0] !== '\n' && f(tokens[pos]), g || consume)
+    const sepby = f => [reads(() => true)].concat(pos < tokens.length && f(tokens[pos]) ? sepby(next(f)) : [])
     const consume = () => {
       const t = tokens[pos++]
       const node = t === '(' ? next(reads(t => t !== ')')) :
@@ -23,15 +23,16 @@ function compile_js(src) {
         t
       return (tokens[pos] || '').match(/^[\+\-\*\/%&|=><]/) ? [tokens[pos++], node, consume()] : node
     }
-    const top = br => reads(t => t[0] !== '\n' || t === br, () => next(reads(t => t !== br)))
+    const top = br => sepby(t => t === br)
     return top('\n')
   }
-  const exps = a => a.length === 1 ? gen(a[0]) : a.map((e, i) => (i === a.length - 1 ? 'return ' : '') + gen(e)).join('\n')
+  const exps = a => a.length === 1 ? gen(a[0]) : `{\n  ${a.map((e, i) => (i === a.length - 1 ? 'return ' : '') + gen(e)).join('\n  ')}\n}`
   const apply = ([head, ...tail]) =>
     tail.length === 0 ? gen(head) :
-    head === 'def' ? `function ${tail[0]}(${tail.slice(1, -1)}) { return ${gen(tail[tail.length - 1])}}` :
+    head === 'def' ? `const ${tail[0]} = (${tail.slice(1, -1)}) => ${gen(tail[tail.length - 1])}` :
     head === 'array' ? `[${tail.map(gen).join(', ')}]` :
     head === 'do' ? exps(tail) :
+    head === 'var' ? `let ${tail[0]} = ${gen(tail.slice(1))}` :
     head === '=>' ? `((${tail[0] + ') => ' + gen(tail[1])})` :
     !Array.isArray(head) && head.match(/[\+\-\*\/%&|=><]/) ? gen(tail[0]) + head + gen(tail[1]) :
     gen(head) + '(' + tail.map(gen).join(', ') + ')'
@@ -54,9 +55,6 @@ const test = () => {
       process.exit(1)
     }
   }
-  //exp(6, 'calc 2 3', `def calc a b:
-  //def mul a b: a * b
-  //mul a b`)
 
   // primitives
   exp(1, '1')
@@ -72,9 +70,18 @@ const test = () => {
   // function
   exp(1, 'one()', 'def one: 1')
   exp(3, 'add 1 2', 'def add a b: a + b')
-//  exp(6, 'calc 2 3', 'def calc a b:\n  def mul a b: a * b\n  mul a b')
-//  exp(3, '\n  var a 1\n  def inc: a += 1\n  def twice f:\n    f()\n    f()\n  twice inc\n  a')
-//
+  exp(6, 'calc 2 3', `def calc a b:
+  def mul a b: a * b
+  mul a b`)
+  exp(3, `
+  var a 1
+  def inc: a += 1
+  def twice f:
+    f()
+    f()
+  twice inc
+  a`)
+
 //  // method
 //  exp(2, '[1].map(n => n + 1).at(0)')
 //
