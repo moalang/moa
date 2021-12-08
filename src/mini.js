@@ -3,7 +3,6 @@
 const puts = (...a) => console.log(...a)
 const write = (...a) => process.stdout.write(a.map(x => x.toString()).join(' '))
 const trace = o => (console.dir({'TRACE': o}, {depth: null}), o)
-const eq = (a,b) => JSON.stringify(a) === JSON.stringify(b)
 
 function compile_js(src) {
   const tokens = src.split(/([():\[\]]|[\+\-\*\/%&|=><]+|"[^"]*?"|`[^`]*?`|[ \n]+|[^() \n]+")/).map(t => t.replace(/^ +/, '')).filter(x => x)
@@ -50,7 +49,7 @@ const test = () => {
     const src = defs.concat([`def main: ${exp}`]).join('\n')
     const js = compile_js(src)
     const actual = eval(js + '\nmain()')
-    if (eq(expected, actual)) {
+    if (JSON.stringify(expected) === JSON.stringify(actual)) {
       process.stdout.write('.')
     } else {
       puts('src:', src)
