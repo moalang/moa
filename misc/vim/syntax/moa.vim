@@ -17,9 +17,9 @@ syn keyword Boolean true false
 syn keyword Statement def continue break return goto test
 syn keyword StorageClass let var
 syn keyword Structure    struct adt
-syn keyword Conditional if fork
+syn keyword Conditional if else
 syn keyword Repeat for while
-syn keyword Exception error
+syn keyword Exception error try do catch
 syn match Operator /[+\-\*/|&]=\=/
 syn match Operator /[<>]=\=/
 syn match Operator /[=!]=/

@@ -1,0 +1,103 @@
+# primitives
+1
+"hi"
+[1 2]
+a,b => a + b
+
+
+# expression
+(1 + 2) == 3
+
+
+# function
+def add a b:
+  a + b
+
+
+# variable and constant
+def declear:
+  let step 1  # constant
+  var count 0 # variable
+  def increment:
+    count += step
+  increment(): # return 1
+
+
+# struct
+struct vector2:
+  x int
+  y int
+
+def f:
+  let v vector2 1 2
+  v.y # return 2
+
+
+# algebraic data type
+adt ab:
+  a int
+  b string
+
+def increment:
+  match ab.a(1) v:
+    a: string (v + 1)
+    b: v
+    _: v
+
+
+# control flow
+if false 1 false 2 3 # return 3
+def div a b:
+  if b ==0: return 0
+  a / b
+for i 0 10 2: # return void
+  if i == 4: continue
+  else if i == 8: break
+  else if i == 10: return "end"
+  else: print "ok"
+while n < 10: # return void
+  print n
+  n += 1
+
+
+# error handling
+try: # return void
+  1 / 0
+  1 # never reached
+catch zero e:
+  print "zero division" e
+catch e:
+  print e
+
+do: # return int
+  let a 1
+  let b 2
+  a / b
+catch zero e:
+  0
+
+
+# methods
+## int - no methods
+## bool
+true.not                 # false
+## string
+"hi".size                # 2
+"hi".at 1                # "h"
+"hi".at 3                # Error: out of index
+"a,b".split ","          # ["a" "b"]
+"hi".contains "h"        # true
+"hello".replace "l" "_"  # he__o
+## array
+[1 2].size               # 2
+[1 2].at 0               # 1
+[1 2].at 2               # Error: out of index
+[1].append 2             # [1 2]
+[1].concat [2]           # [1 2]
+[1 2].map n => n + 1     # [2 3]
+[1 2].filter n => n == 1 # [1]
+[1 2].contains 1         # true
+## io object
+let fd io.open "stdio"   # automatically close by reference counting
+fd.write "hello"         # ()
+fd.read                  # "input as string"
