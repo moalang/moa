@@ -1,4 +1,16 @@
-Typed programming language
+Type system
 - good error messages in compiling phase
-- good performance
+- good performance at runtime
+- not good performance at compiling time
 - not good flexibility
+- not easy to create compiler
+
+Function features
+- variable arguments
+- default argument
+- optional type hint
+
+Do not
+- implicit nullable
+- implicit currying
+- overload
