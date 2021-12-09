@@ -46,6 +46,8 @@ function compile_js(src) {
         head === 'array' ? `[${tail.map(gen).join(', ')}]` :
         head === 'do' ? exps(tail) :
         head === 'var' ? `let ${tail[0]} = ${gen(tail.slice(1))}` :
+        head === 'let' ? `const ${tail[0]} = ${gen(tail.slice(1))}` :
+        head === 'if' ? gen_if(tail) :
         head === '=>' ? `((${tail[0] + ') => ' + gen(tail[1])})` :
         head === '.' ? `${gen(tail[0])}.${tail[1]}` :
         head === '==' ? `JSON.stringify(${gen(tail[0])}) === JSON.stringify(${gen(tail[1])})` :
@@ -125,21 +127,18 @@ const test = () => {
   exp(1, '\n  var n 0\n  n = 1\n  n')
   exp(true, '(s 1) == (s 1)', 'struct s: value int')
 
-//  // constant
-//  exp(2, '\n  let a inc 1\n  a', 'def inc a: a + 1')
-//
-//  // variable
-//  exp(3, '\n  var a 1\n  a += 2\n  a')
-//  exp(3, '\n  var a 1\n  def inc: a += 1\n  inc()\n  inc()\n  a')
-//
-//  // branch
-//  exp(1, 'iif true 1 2')
-//  exp(2, 'iif false 1 2')
-//  exp(2, 'iif (true && (1 == 2)) 1 2')
-//
-//  // lambda block
-//  exp(2, '\n  let f n =>\n    n += 1\n    n\n  f 1')
-//
+  // variable
+  exp(3, '\n  var a 1\n  a += 2\n  a')
+  exp(3, '\n  var a 1\n  def inc: a += 1\n  inc()\n  inc()\n  a')
+
+  // constant
+  exp(2, '\n  let a inc 1\n  a', 'def inc a: a + 1')
+
+  // branch
+  exp(1, 'if true 1 2')
+  exp(2, 'if false 1 2')
+  exp(2, 'if (true && (1 == 2)) 1 2')
+
 //  // for block
 //  exp(3, '\n  var n 0\n  for i 3: n+=1\n  n')
 //  exp(2, '\n  var n 0\n  for i [1 2].size: n+=1\n  n')
