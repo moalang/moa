@@ -2,10 +2,11 @@
 
 const puts = (...a) => console.log(...a)
 const write = (...a) => process.stdout.write(a.map(x => x.toString()).join(' '))
-const trace = o => (console.dir({'TRACE': o}, {depth: null}), o)
+const trace = (...a) => (console.dir({'TRACE': a}, {depth: null}), a[a.length - 1])
 
 function compile_js(src) {
   const tokens = src.split(/([():\[\]]|[\+\-\*\/%&|=><\.]+|"[^"]*?"|`[^`]*?`|[ \n]+|[^() \n]+")/).map(t => t.replace(/^ +/, '')).filter(x => x)
+  const is_op2 = x => x.match(/[\+\-\*\/%&|=><\.]/)
   const parse = () => {
     let pos = 0
     const next = o => { ++pos; return o }
@@ -19,13 +20,16 @@ function compile_js(src) {
     const reads = f => until(f || (() => true))
     const sepby = f => [reads()].concat(pos < tokens.length && f(tokens[pos]) ? sepby(next(f)) : [])
     const consume = () => {
+      const priorities = '|| && == != > >= < <= * / % + - .'.split(' ')
+      const priority = op => priorities.findIndex(x => x === op)
+      const op2 = (op, l, r) => Array.isArray(r) && is_op2(r[0]) && priority(op) > priority(r[0]) ? [r[0], [op, l, r[1]], r[2]] : [op, l, r]
       const t = tokens[pos++]
       const node = t === '(' ? next(reads(t => t !== ')')) :
         t === '[' ? ['array'].concat(next(reads(t => t !== ']'))) :
         t === ':' && tokens[pos][0] === '\n' ? ['do'].concat(top(tokens[pos++])) :
         t === ':' ? ['do'].concat([reads()]) :
         t
-      return (tokens[pos] || '').match(/^[\+\-\*\/%&|=><\.]/) ? [tokens[pos++], node, consume()] : node
+      return (tokens[pos] || '').match(/^[\+\-\*\/%&|=><\.]/) ? op2(tokens[pos++], node, consume()) : node
     }
     const top = br => sepby(t => t === br)
     return top('\n')
@@ -43,7 +47,8 @@ function compile_js(src) {
     head === 'var' ? `let ${tail[0]} = ${gen(tail.slice(1))}` :
     head === '=>' ? `((${tail[0] + ') => ' + gen(tail[1])})` :
     head === '.' ? `${gen(tail[0])}.${tail[1]}` :
-    !Array.isArray(head) && head.match(/[\+\-\*\/%&|=><]/) ? gen(tail[0]) + head + gen(tail[1]) :
+    head === '==' ? `JSON.stringify(${gen(tail[0])}) === JSON.stringify(${gen(tail[1])})` :
+    !Array.isArray(head) && is_op2(head) ? gen(tail[0]) + head + gen(tail[1]) :
     gen(head) + '(' + tail.map(gen).join(', ') + ')'
   const gen = node => Array.isArray(node) ? apply(node) : node
   return parse().map(gen).join('\n')
@@ -110,14 +115,14 @@ const test = () => {
   // method
   exp([2, 3], '[1 2].map(n => n + 1)')
 
-//  // exp
-//  exp(3, '1 + 2')
-//  exp(7, '1 + 2 * 3')
-//  exp(5, '1 * 2 + 3')
-//  exp(true, '([1 2].size == 1 + 1) && [3 4].size == 2')
-//  exp(1, '\n  var n 0\n  n = 1\n  n')
-//  exp(true, 's(1) == s(1)', 'struct s: value int')
-//
+  // exp
+  exp(3, '1 + 2')
+  exp(7, '1 + 2 * 3')
+  exp(5, '1 * 2 + 3')
+  exp(true, '([1 2].length == 1 + 1) && [3 4].length == 2')
+  exp(1, '\n  var n 0\n  n = 1\n  n')
+  exp(true, '(s 1) == (s 1)', 'struct s: value int')
+
 //  // constant
 //  exp(2, '\n  let a inc 1\n  a', 'def inc a: a + 1')
 //
