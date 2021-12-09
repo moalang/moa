@@ -5,7 +5,7 @@ const write = (...a) => process.stdout.write(a.map(x => x.toString()).join(' '))
 const trace = o => (console.dir({'TRACE': o}, {depth: null}), o)
 
 function compile_js(src) {
-  const tokens = src.split(/([():\[\]]|[\+\-\*\/%&|=><]+|"[^"]*?"|`[^`]*?`|[ \n]+|[^() \n]+")/).map(t => t.replace(/^ +/, '')).filter(x => x)
+  const tokens = src.split(/([():\[\]]|[\+\-\*\/%&|=><\.]+|"[^"]*?"|`[^`]*?`|[ \n]+|[^() \n]+")/).map(t => t.replace(/^ +/, '')).filter(x => x)
   const parse = () => {
     let pos = 0
     const next = o => { ++pos; return o }
@@ -25,7 +25,7 @@ function compile_js(src) {
         t === ':' && tokens[pos][0] === '\n' ? ['do'].concat(top(tokens[pos++])) :
         t === ':' ? ['do'].concat([reads()]) :
         t
-      return (tokens[pos] || '').match(/^[\+\-\*\/%&|=><]/) ? [tokens[pos++], node, consume()] : node
+      return (tokens[pos] || '').match(/^[\+\-\*\/%&|=><\.]/) ? [tokens[pos++], node, consume()] : node
     }
     const top = br => sepby(t => t === br)
     return top('\n')
@@ -34,10 +34,12 @@ function compile_js(src) {
   const apply = ([head, ...tail]) =>
     tail.length === 0 ? gen(head) :
     head === 'def' ? `const ${tail[0]} = (${tail.slice(1, -1)}) => ${gen(tail[tail.length - 1])}` :
+    head === 'struct' ? (keys => `const ${tail[0]} = (${keys}) => ({${keys}})`)(tail[1].slice(1).map(a => a[0])) :
     head === 'array' ? `[${tail.map(gen).join(', ')}]` :
     head === 'do' ? exps(tail) :
     head === 'var' ? `let ${tail[0]} = ${gen(tail.slice(1))}` :
     head === '=>' ? `((${tail[0] + ') => ' + gen(tail[1])})` :
+    head === '.' ? `${gen(tail[0])}.${tail[1]}` :
     !Array.isArray(head) && head.match(/[\+\-\*\/%&|=><]/) ? gen(tail[0]) + head + gen(tail[1]) :
     gen(head) + '(' + tail.map(gen).join(', ') + ')'
   const gen = node => Array.isArray(node) ? apply(node) : node
@@ -45,10 +47,17 @@ function compile_js(src) {
 }
 
 const test = () => {
+  const run = js => {
+    try {
+      return eval(js + '\nmain()')
+    } catch (e) {
+      return e.message
+    }
+  }
   const exp = (expected, exp, ...defs) => {
     const src = defs.concat([`def main: ${exp}`]).join('\n')
     const js = compile_js(src)
-    const actual = eval(js + '\nmain()')
+    const actual = run(js)
     if (JSON.stringify(expected) === JSON.stringify(actual)) {
       process.stdout.write('.')
     } else {
@@ -86,12 +95,12 @@ const test = () => {
   twice inc
   a`)
 
+  // struct
+  exp({x:1, y:2}, 'vector2 1 2', 'struct vector2:\n  x int\n  y int')
+  exp(2, '(vector2 1 2).y', 'struct vector2:\n  x int\n  y int')
+
 //  // method
 //  exp(2, '[1].map(n => n + 1).at(0)')
-//
-//  // struct
-//  exp({x:1, y:2}, 'vector2 1 2', 'struct vector2:\n  x int\n  y int')
-//  exp(2, '(vector2 1 2).y', 'struct vector2:\n  x int\n  y int')
 //
 //  // algebraic data type
 //  exp({__tag: 'a', __value: 1}, 'ab.a(1)', 'adt ab:\n  a int\n  b string')
