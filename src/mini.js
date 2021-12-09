@@ -3,10 +3,11 @@
 const puts = (...a) => console.log(...a)
 const write = (...a) => process.stdout.write(a.map(x => x.toString()).join(' '))
 const trace = (...a) => (console.dir({'TRACE': a}, {depth: null}), a[a.length - 1])
+const fail = (m, ...a) => { a.length && trace(a); throw new Error(m) }
 
 function compile_js(src) {
   const tokens = src.split(/([():\[\]]|[\+\-\*\/%&|=><\.]+|"[^"]*?"|`[^`]*?`|[ \n]+|[^() \n]+")/).map(t => t.replace(/^ +/, '')).filter(x => x)
-  const is_op2 = x => x.match(/[\+\-\*\/%&|=><\.]/)
+  const is_op2 = x => x.match && x.match(/[\+\-\*\/%&|=><\.]/)
   const parse = () => {
     let pos = 0
     const next = o => { ++pos; return o }
@@ -36,18 +37,19 @@ function compile_js(src) {
   }
   const gen = node => {
     const exps = a => a.length === 1 ? gen(a[0]) : `{\n  ${a.map((e, i) => (i === a.length - 1 ? 'return ' : '') + gen(e)).join('\n  ')}\n}`
-    const gen_matcher = ([tag, alias, ...exp]) => `v.__tag === '${tag}' ? (${alias} => ${gen(exp)})(v.__value)`
+    const matcher = ([tag, alias, ...exp]) => `v.__tag === '${tag}' ? (${alias} => ${gen(exp)})(v.__value)`
+    const branch = a => a.length == 0 ? fail('empty branch') : a.length === 1 ? a[0] : `${a[0]} ? ${a[1]} : ` + branch(a.slice(2))
     const apply = ([head, ...tail]) =>
       tail.length === 0 ? gen(head) :
         head === 'def' ? `const ${tail[0]} = (${tail.slice(1, -1)}) => ${gen(tail[tail.length - 1])}` :
         head === 'struct' ? (keys => `const ${tail[0]} = (${keys}) => ({${keys}})`)(tail[1].slice(1).map(a => a[0])) :
         head === 'adt' ? (tags => `const ${tail[0]} = {${tags.map(tag => `${tag}: __value => ({__tag: '${tag}', __value})`)}}`)(tail[1].slice(1).map(a => a[0])) :
-        head === 'match' ? `(v => ${tail[1].slice(1).map(gen_matcher).join(' : ')} : fail(\`Does not match \${v}\`))(${gen(tail[0])})` :
+        head === 'match' ? `(v => ${tail[1].slice(1).map(matcher).join(' : ')} : fail(\`Does not match \${v}\`))(${gen(tail[0])})` :
         head === 'array' ? `[${tail.map(gen).join(', ')}]` :
         head === 'do' ? exps(tail) :
         head === 'var' ? `let ${tail[0]} = ${gen(tail.slice(1))}` :
         head === 'let' ? `const ${tail[0]} = ${gen(tail.slice(1))}` :
-        head === 'if' ? gen_if(tail) :
+        head === 'if' ? branch(tail.map(gen)) :
         head === '=>' ? `((${tail[0] + ') => ' + gen(tail[1])})` :
         head === '.' ? `${gen(tail[0])}.${tail[1]}` :
         head === '==' ? `JSON.stringify(${gen(tail[0])}) === JSON.stringify(${gen(tail[1])})` :
