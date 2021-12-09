@@ -34,23 +34,25 @@ function compile_js(src) {
     const top = br => sepby(t => t === br)
     return top('\n')
   }
-  const exps = a => a.length === 1 ? gen(a[0]) : `{\n  ${a.map((e, i) => (i === a.length - 1 ? 'return ' : '') + gen(e)).join('\n  ')}\n}`
-  const gen_matcher = ([tag, alias, ...exp]) => `v.__tag === '${tag}' ? (${alias} => ${gen(exp)})(v.__value)`
-  const apply = ([head, ...tail]) =>
-    tail.length === 0 ? gen(head) :
-    head === 'def' ? `const ${tail[0]} = (${tail.slice(1, -1)}) => ${gen(tail[tail.length - 1])}` :
-    head === 'struct' ? (keys => `const ${tail[0]} = (${keys}) => ({${keys}})`)(tail[1].slice(1).map(a => a[0])) :
-    head === 'adt' ? (tags => `const ${tail[0]} = {${tags.map(tag => `${tag}: __value => ({__tag: '${tag}', __value})`)}}`)(tail[1].slice(1).map(a => a[0])) :
-    head === 'match' ? `(v => ${tail[1].slice(1).map(gen_matcher).join(' : ')} : fail(\`Does not match \${v}\`))(${gen(tail[0])})` :
-    head === 'array' ? `[${tail.map(gen).join(', ')}]` :
-    head === 'do' ? exps(tail) :
-    head === 'var' ? `let ${tail[0]} = ${gen(tail.slice(1))}` :
-    head === '=>' ? `((${tail[0] + ') => ' + gen(tail[1])})` :
-    head === '.' ? `${gen(tail[0])}.${tail[1]}` :
-    head === '==' ? `JSON.stringify(${gen(tail[0])}) === JSON.stringify(${gen(tail[1])})` :
-    !Array.isArray(head) && is_op2(head) ? gen(tail[0]) + head + gen(tail[1]) :
-    gen(head) + '(' + tail.map(gen).join(', ') + ')'
-  const gen = node => Array.isArray(node) ? apply(node) : node
+  const gen = node => {
+    const exps = a => a.length === 1 ? gen(a[0]) : `{\n  ${a.map((e, i) => (i === a.length - 1 ? 'return ' : '') + gen(e)).join('\n  ')}\n}`
+    const gen_matcher = ([tag, alias, ...exp]) => `v.__tag === '${tag}' ? (${alias} => ${gen(exp)})(v.__value)`
+    const apply = ([head, ...tail]) =>
+      tail.length === 0 ? gen(head) :
+        head === 'def' ? `const ${tail[0]} = (${tail.slice(1, -1)}) => ${gen(tail[tail.length - 1])}` :
+        head === 'struct' ? (keys => `const ${tail[0]} = (${keys}) => ({${keys}})`)(tail[1].slice(1).map(a => a[0])) :
+        head === 'adt' ? (tags => `const ${tail[0]} = {${tags.map(tag => `${tag}: __value => ({__tag: '${tag}', __value})`)}}`)(tail[1].slice(1).map(a => a[0])) :
+        head === 'match' ? `(v => ${tail[1].slice(1).map(gen_matcher).join(' : ')} : fail(\`Does not match \${v}\`))(${gen(tail[0])})` :
+        head === 'array' ? `[${tail.map(gen).join(', ')}]` :
+        head === 'do' ? exps(tail) :
+        head === 'var' ? `let ${tail[0]} = ${gen(tail.slice(1))}` :
+        head === '=>' ? `((${tail[0] + ') => ' + gen(tail[1])})` :
+        head === '.' ? `${gen(tail[0])}.${tail[1]}` :
+        head === '==' ? `JSON.stringify(${gen(tail[0])}) === JSON.stringify(${gen(tail[1])})` :
+        !Array.isArray(head) && is_op2(head) ? gen(tail[0]) + head + gen(tail[1]) :
+        gen(head) + '(' + tail.map(gen).join(', ') + ')'
+    return Array.isArray(node) ? apply(node) : node
+  }
   return parse().map(gen).join('\n')
 }
 
