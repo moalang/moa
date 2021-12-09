@@ -31,10 +31,13 @@ function compile_js(src) {
     return top('\n')
   }
   const exps = a => a.length === 1 ? gen(a[0]) : `{\n  ${a.map((e, i) => (i === a.length - 1 ? 'return ' : '') + gen(e)).join('\n  ')}\n}`
+  const gen_matcher = ([tag, alias, ...exp]) => `v.__tag === '${tag}' ? (${alias} => ${gen(exp)})(v.__value)`
   const apply = ([head, ...tail]) =>
     tail.length === 0 ? gen(head) :
     head === 'def' ? `const ${tail[0]} = (${tail.slice(1, -1)}) => ${gen(tail[tail.length - 1])}` :
     head === 'struct' ? (keys => `const ${tail[0]} = (${keys}) => ({${keys}})`)(tail[1].slice(1).map(a => a[0])) :
+    head === 'adt' ? (tags => `const ${tail[0]} = {${tags.map(tag => `${tag}: __value => ({__tag: '${tag}', __value})`)}}`)(tail[1].slice(1).map(a => a[0])) :
+    head === 'match' ? `(v => ${tail[1].slice(1).map(gen_matcher).join(' : ')} : fail(\`Does not match \${v}\`))(${gen(tail[0])})` :
     head === 'array' ? `[${tail.map(gen).join(', ')}]` :
     head === 'do' ? exps(tail) :
     head === 'var' ? `let ${tail[0]} = ${gen(tail.slice(1))}` :
@@ -99,14 +102,14 @@ const test = () => {
   exp({x:1, y:2}, 'vector2 1 2', 'struct vector2:\n  x int\n  y int')
   exp(2, '(vector2 1 2).y', 'struct vector2:\n  x int\n  y int')
 
-//  // method
-//  exp(2, '[1].map(n => n + 1).at(0)')
-//
-//  // algebraic data type
-//  exp({__tag: 'a', __value: 1}, 'ab.a(1)', 'adt ab:\n  a int\n  b string')
-//  exp(1, 'match ab.a(1):\n  a v: v\n  b s: s.size', 'adt ab:\n  a int\n  b string')
-//  exp(2, 'match ab.b("hi"):\n  a v: v\n  b s: s.size', 'adt ab:\n  a int\n  b string')
-//
+  // algebraic data type
+  exp({__tag: 'a', __value: 1}, 'ab.a(1)', 'adt ab:\n  a int\n  b string')
+  exp(1, 'match (ab.a 1):\n  a v: v\n  b s: s.length', 'adt ab:\n  a int\n  b string')
+  exp(2, 'match (ab.b "hi"):\n  a v: v\n  b s: s.length', 'adt ab:\n  a int\n  b string')
+
+  // method
+  exp([2, 3], '[1 2].map(n => n + 1)')
+
 //  // exp
 //  exp(3, '1 + 2')
 //  exp(7, '1 + 2 * 3')
