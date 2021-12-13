@@ -2,8 +2,8 @@
 
 const puts = (...a) => console.log(...a)
 const write = (...a) => process.stdout.write(a.map(x => x.toString()).join(' '))
-const trace = (...a) => (console.dir({'TRACE': a}, {depth: null}), a[a.length - 1])
-const error = (m, ...a) => { a.length && trace(a); throw new Error(m) }
+const trace = o => (console.dir({'TRACE': o}, {depth: null}), o)
+const fail = (m, ...a) => { a.length && trace(a); throw new Error(m) }
 
 function compile_js(src) {
   const tokens = src.split(/([():\[\]]|[\+\-\*\/%&|=><\.]+|"[^"]*?"|`[^`]*?`|[ \n]+|[^() \n]+")/).map(t => t.replace(/^ +/, '')).filter(x => x)
@@ -38,7 +38,8 @@ function compile_js(src) {
   const gen = node => {
     const exps = a => a.length === 1 ? gen(a[0]) : `{\n  ${a.map((e, i) => (i === a.length - 1 ? 'return ' : '') + gen(e)).join('\n  ')}\n}`
     const matcher = ([tag, alias, ...exp]) => `v.__tag === '${tag}' ? (${alias} => ${gen(exp)})(v.__value)`
-    const branch = a => a.length == 0 ? error('empty branch') : a.length === 1 ? a[0] : `${a[0]} ? ${a[1]} : ` + branch(a.slice(2))
+    const branch = a => a.length == 0 ? fail('empty branch') : a.length === 1 ? a[0] : `${a[0]} ? ${a[1]} : ` + branch(a.slice(2))
+    const handle = ([a, b]) => `(() => { try { return ${a} } catch (__e) { return (${b})(__e) } })()`
     const apply = ([head, ...tail]) =>
       tail.length === 0 ? gen(head) :
         head === 'def' ? `const ${tail[0]} = (${tail.slice(1, -1)}) => ${gen(tail[tail.length - 1])}` :
@@ -50,9 +51,10 @@ function compile_js(src) {
         head === 'var' ? `let ${tail[0]} = ${gen(tail.slice(1))}` :
         head === 'let' ? `const ${tail[0]} = ${gen(tail.slice(1))}` :
         head === 'if' ? branch(tail.map(gen)) :
+        head === 'catch' ? handle(tail[0].map(gen)) :
         head === '=>' ? `((${tail[0] + ') => ' + gen(tail[1])})` :
         head === '.' ? `${gen(tail[0])}.${tail[1]}` :
-        head === '/' ? `(d => d === 0 ? error('Zero division error') : ${gen(tail[0])} / d)(${gen(tail[1])})` :
+        head === '/' ? `(d => d === 0 ? fail('Zero division error') : ${gen(tail[0])} / d)(${gen(tail[1])})` :
         head === '==' ? `JSON.stringify(${gen(tail[0])}) === JSON.stringify(${gen(tail[1])})` :
         !Array.isArray(head) && is_op2(head) ? gen(tail[0]) + head + gen(tail[1]) :
         gen(head) + '(' + tail.map(gen).join(', ') + ')'
@@ -144,13 +146,9 @@ const test = () => {
 
   // error handling
   exp('Zero division error', '\n  1/0\n  1')
-  exp('error', '\n  error "error"\n  1')
-//  exp(1, 'catch(1 _ => 2)')
-//  exp(2, 'catch(error("fail") e => 2)')
-//  exp(1, '\n  assert 1<2\n  1')
-//  exp('assert: 1>2', '\n  assert 1>2\n  1')
-//  exp('assert: false', 'assert false 1')
-//  exp(1, 'assert true 1')
+  exp('error', '\n  fail "error"\n  1')
+  exp(1, 'catch(1 _ => 2)')
+  exp(2, 'catch((fail "error") e => 2)')
 
 //  // for block
 //  exp(3, '\n  var n 0\n  for i 3: n+=1\n  n')
