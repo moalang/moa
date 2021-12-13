@@ -56,6 +56,7 @@ function compile_js(src) {
         head === '.' ? `${gen(tail[0])}.${tail[1]}` :
         head === '/' ? `(d => d === 0 ? fail('Zero division error') : ${gen(tail[0])} / d)(${gen(tail[1])})` :
         head === '==' ? `JSON.stringify(${gen(tail[0])}) === JSON.stringify(${gen(tail[1])})` :
+        head === '-' && tail.length === 1 ? '-' + gen(tail[0]) :
         !Array.isArray(head) && is_op2(head) ? gen(tail[0]) + head + gen(tail[1]) :
         gen(head) + '(' + tail.map(gen).join(', ') + ')'
     return Array.isArray(node) ? apply(node) : node
@@ -150,37 +151,15 @@ const test = () => {
   exp(1, 'catch(1 _ => 2)')
   exp(2, 'catch((fail "error") e => 2)')
 
-//  // for block
-//  exp(3, '\n  var n 0\n  for i 3: n+=1\n  n')
-//  exp(2, '\n  var n 0\n  for i [1 2].size: n+=1\n  n')
-//
-//  // while block
-//  exp(3, '\n  var n 0\n  while n < 3: n+=1\n  n')
-//
-//  // if block
-//  exp(3, '\n  var n 0\n  if true:\n    n+=1\n    n+=2\n  n')
-//
-//  // do block
-//  exp(1, 'do(1)')
-//  exp(2, 'do(1 2)')
-//
-//  // control flow
-//  exp(2, '\n  1\n  2')
-//  exp(1, '\n  return 1\n  2')
-//  exp(1, '\n  while true:\n    return 1')
-//  exp(3, '\n  var n 0\n  for i 5:\n    if i >= 3: break\n    n += 1\n  n')
-//  exp(1, '\n  var n 0\n  for i 5:\n    if i <= 3: continue\n    n += 1\n  n')
-//
-//  // stdio
-//  stdin('standard input', 'standard input', 'io.stdin')
-//  stdout('hello\nworld\n', '\n  io.print "hello"\n  io.print "world"')
-//  stdout('[1 2]\n', '\n  io.print [1 2]')
-//
-//  // int
-//  exp(-1, '(-1)')
-//  exp(0, '-1 + 1')
-//  exp(0, 'add 1 (-1)', 'def add a b: a + b')
-//
+  // do block
+  exp(1, 'do 1')
+  exp(5, 'do 1 (2 + 3)')
+
+  // int
+  exp(-1, '(-1)')
+  exp(0, '-1 + 1')
+  exp(0, 'add 1 (-1)', 'def add a b: a + b')
+
 //  // string
 //  exp(2, '"hi".size')
 //  exp('i', '"hi".at(1)')
