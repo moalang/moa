@@ -5,8 +5,17 @@ const write = (...a) => process.stdout.write(a.map(x => x.toString()).join(' '))
 const trace = o => (console.dir({'TRACE': o}, {depth: null}), o)
 const fail = (m, ...a) => { a.length && trace(a); throw new Error(m) }
 
+Object.defineProperty(String.prototype, 'size', { get() { return this.length } });
+String.prototype.at = function (n) { return n < this.length ? this[n]  : fail('Out of index') }
+String.prototype.contains = function (s) { return this.includes(s) }
+String.prototype.gsub = function (a, b) { return this.replaceAll(a, b) }
+Object.defineProperty(Array.prototype, 'size', { get() { return this.length } });
+Array.prototype.at = function (n) { return n < this.length ? this[n]  : fail('Out of index') }
+Array.prototype.append = function (a) { return this.concat(a) }
+Array.prototype.contains = function (s) { return this.includes(s) }
+
 function compile_js(src) {
-  const tokens = src.split(/([():\[\]]|[\+\-\*\/%&|=><\.]+|"[^"]*?"|`[^`]*?`|[ \n]+|[^() \n]+")/).map(t => t.replace(/^ +/, '')).filter(x => x)
+  const tokens = src.replaceAll(/#.*/g, '').split(/([():\[\]]|[\+\-\*\/%&|=><\.]+|"[^"]*?"|`[^`]*?`|[ \n]+|[^() \n]+")/).map(t => t.replace(/^ +/, '')).filter(x => x)
   const is_op2 = x => x.match && x.match(/[\+\-\*\/%&|=><\.]/)
   const parse = () => {
     let pos = 0
@@ -98,6 +107,28 @@ const test = () => {
   exp(1, '(n => n) 1')
   exp(3, '(a,b => a + b) 1 2')
 
+  // int
+  exp(-1, '(-1)')
+  exp(0, '-1 + 1')
+  exp(0, 'add 1 (-1)', 'def add a b: a + b')
+
+  // string
+  exp(2, '"hi".size')
+  exp('i', '"hi".at 1')
+  exp('Out of index', '"hi".at 3')
+  exp(['a', 'b'], '"a,b".split ","')
+  exp(true, '"hi".contains "h"')
+  exp(false, '"hi".contains "z"')
+  exp('heo', '"hello".gsub "l" ""')
+
+  // array
+  exp(2, '[1 2].size')
+  exp([1, 2], '[1].append 2')
+  exp([2, 3], '[1 2].map n => n + 1')
+  exp([1, 3], '[1 2 3].filter n => (n % 2) == 1')
+  exp(true, '[1 2].contains 1')
+  exp(false, '[1 2].contains 3')
+
   // function
   exp(1, 'one()', 'def one: 1')
   exp(3, 'add 1 2', 'def add a b: a + b')
@@ -119,8 +150,8 @@ const test = () => {
 
   // algebraic data type
   exp({__tag: 'a', __value: 1}, 'ab.a(1)', 'adt ab:\n  a int\n  b string')
-  exp(1, 'match (ab.a 1):\n  a v: v\n  b s: s.length', 'adt ab:\n  a int\n  b string')
-  exp(2, 'match (ab.b "hi"):\n  a v: v\n  b s: s.length', 'adt ab:\n  a int\n  b string')
+  exp(1, 'match (ab.a 1):\n  a v: v\n  b s: s.size', 'adt ab:\n  a int\n  b string')
+  exp(2, 'match (ab.b "hi"):\n  a v: v\n  b s: s.size', 'adt ab:\n  a int\n  b string')
 
   // method
   exp([2, 3], '[1 2].map(n => n + 1)')
@@ -129,7 +160,7 @@ const test = () => {
   exp(3, '1 + 2')
   exp(7, '1 + 2 * 3')
   exp(5, '1 * 2 + 3')
-  exp(true, '([1 2].length == 1 + 1) && [3 4].length == 2')
+  exp(true, '([1 2].size == 1 + 1) && [3 4].size == 2')
   exp(1, '\n  var n 0\n  n = 1\n  n')
   exp(true, '(s 1) == (s 1)', 'struct s: value int')
 
@@ -155,31 +186,9 @@ const test = () => {
   exp(1, 'do 1')
   exp(5, 'do 1 (2 + 3)')
 
-  // int
-  exp(-1, '(-1)')
-  exp(0, '-1 + 1')
-  exp(0, 'add 1 (-1)', 'def add a b: a + b')
+  // comment
+  exp(1, 'one()', '# comment', 'def one: 1')
 
-//  // string
-//  exp(2, '"hi".size')
-//  exp('i', '"hi".at(1)')
-//  exp('Out of index', '"hi".at(3)')
-//  exp(['a', 'b'], '"a,b".split(",")')
-//  exp(true, '"hi".contains("h")')
-//  exp(false, '"hi".contains("z")')
-//  exp('heo', '"hello".replace("l" "")')
-//
-//  // array
-//  exp(2, '[1 2].size')
-//  exp([1, 2], '[1].append 2')
-//  exp([1, 2], '[1].concat [2]')
-//  exp([2, 3], '[1 2].map n => n + 1')
-//  exp([1, 3], '[1 2 3].filter n => (n % 2) == 1')
-//  exp(true, '[1 2].contains 1')
-//  exp(false, '[1 2].contains 3')
-//
-//  // comment
-//  exp(1, 'one()', '# comment', 'def one: 1')
   puts('ok')
 }
 
