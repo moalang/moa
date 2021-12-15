@@ -1,7 +1,6 @@
 'use strict'
 
-const puts = (...a) => console.log(...a)
-const write = (...a) => process.stdout.write(a.map(x => x.toString()).join(' '))
+const warn = (...a) => process.stderr.write(a.map(x => x.toString()).join(' '))
 const trace = o => (console.dir({'TRACE': o}, {depth: null}), o)
 const fail = (m, ...a) => { a.length && trace(a); throw new Error(m) }
 
@@ -90,12 +89,12 @@ const test = () => {
     const js = compile_to_js(src)
     const actual = run(js)
     if (JSON.stringify(expected) === JSON.stringify(actual)) {
-      process.stdout.write('.')
+      warn('.')
     } else {
-      puts('src:', src)
-      puts('js:', js)
-      puts('expected:', expected)
-      puts('actual:', actual)
+      warn('src:', src)
+      warn('\njs:', js)
+      warn('\nexpected:', expected)
+      warn('\nactual:', actual)
       process.exit(1)
     }
   }
@@ -195,13 +194,14 @@ const test = () => {
   exp(1, 'do 1')
   exp(5, 'do 1 (2 + 3)')
 
-  puts('ok')
+  warn('ok\n')
 }
 
 function bootstrap() {
   let fs = require('fs')
   let moa = fs.readFileSync('moa.moa', 'utf8')
-  let prefix = `'use strict'
+  let prefix = `#!/usr/bin/env node
+'use strict'
 function trace(...a) { console.log(...a); return a[a.length - 1] }
 String.prototype.rsplit = function (r) { return this.split(new RegExp(r, 'g')) }
 `
@@ -226,7 +226,7 @@ The commands are:
 	version     print Moa version\`)
 }`
   let js = prefix + compile_to_js(moa) + suffix
-  fs.writeFileSync('moa.js', js + '\n')
+  console.log(js)
 }
 
 test()
