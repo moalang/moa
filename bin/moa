@@ -1,8 +1,15 @@
 #!/usr/bin/env node
 'use strict'
 function trace(...a) { console.log(...a); return a[a.length - 1] }
+String.prototype.rsub = function (a, b) { return this.replaceAll(new RegExp(a, 'g'), b) }
 String.prototype.rsplit = function (r) { return this.split(new RegExp(r, 'g')) }
-const compile = (src) => src
+const compile = (src) => (() => {
+  const tokens = (() => {
+  const reg = `([():\\[\\]]|[\\+\\-\\*\\/%&|=><\\.]+|"[^"]*?"|[ \\n]+|[a-zA-Z0-9_,]+(?:\\(\\)|\\(?))`
+  return src.rsplit(reg).map(((t) => t.rsub(`^ +`, ``))).filter(((x) => x))
+})()
+  return src
+})()
 
 let a = process.argv[2]
 if (a === 'build') {

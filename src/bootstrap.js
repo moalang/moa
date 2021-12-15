@@ -1,7 +1,7 @@
 'use strict'
 
 const warn = (...a) => process.stderr.write(a.map(x => x.toString()).join(' '))
-const trace = o => (console.dir({'TRACE': o}, {depth: null}), o)
+const trace = o => (warn('TRACE: ' + JSON.stringify(o, null, '  ')), o)
 const fail = (m, ...a) => { a.length && trace(a); throw new Error(m) }
 
 Object.defineProperty(String.prototype, 'size', { get() { return this.length } });
@@ -48,7 +48,7 @@ function compile_to_js(src) {
     return top('\n')
   }
   const gen = node => {
-    const exps = a => a.length === 1 ? gen(a[0]) : `{\n  ${a.map((e, i) => (i === a.length - 1 ? 'return ' : '') + gen(e)).join('\n  ')}\n}`
+    const exps = a => a.length === 1 ? gen(a[0]) : `(() => {\n  ${a.map((e, i) => (i === a.length - 1 ? 'return ' : '') + gen(e)).join('\n  ')}\n})()`
     const matcher = ([tag, alias, ...exp]) => `v.__tag === '${tag}' ? (${alias} => ${gen(exp)})(v.__value)`
     const branch = a => a.length == 0 ? fail('empty branch') : a.length === 1 ? a[0] : `${a[0]} ? ${a[1]} : ` + branch(a.slice(2))
     const handle = ([a, b]) => `(() => { try { return ${a} } catch (__e) { return (${b})(__e) } })()`
@@ -203,6 +203,7 @@ function bootstrap() {
   let prefix = `#!/usr/bin/env node
 'use strict'
 function trace(...a) { console.log(...a); return a[a.length - 1] }
+String.prototype.rsub = function (a, b) { return this.replaceAll(new RegExp(a, 'g'), b) }
 String.prototype.rsplit = function (r) { return this.split(new RegExp(r, 'g')) }
 `
   let suffix = `
