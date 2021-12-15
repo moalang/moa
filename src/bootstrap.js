@@ -8,14 +8,16 @@ const fail = (m, ...a) => { a.length && trace(a); throw new Error(m) }
 Object.defineProperty(String.prototype, 'size', { get() { return this.length } });
 String.prototype.at = function (n) { return n < this.length ? this[n]  : fail('Out of index') }
 String.prototype.contains = function (s) { return this.includes(s) }
-String.prototype.gsub = function (a, b) { return this.replaceAll(a, b) }
+String.prototype.sub = function (a, b) { return this.replaceAll(a, b) }
+String.prototype.rsub = function (a, b) { return this.replaceAll(new RegExp(a, 'g'), b) }
+String.prototype.rsplit = function (r) { return this.split(new RegExp(r, 'g')) }
 Object.defineProperty(Array.prototype, 'size', { get() { return this.length } });
 Array.prototype.at = function (n) { return n < this.length ? this[n]  : fail('Out of index') }
 Array.prototype.append = function (a) { return this.concat(a) }
 Array.prototype.contains = function (s) { return this.includes(s) }
 
 function compile_to_js(src) {
-  const tokens = src.replaceAll(/#.*/g, '').split(/([():\[\]]|[\+\-\*\/%&|=><\.]+|"[^"]*?"|`[^`]*?`|[ \n]+|[^() \n]+")/).map(t => t.replace(/^ +/, '')).filter(x => x)
+  const tokens = src.split(/([():\[\]]|[\+\-\*\/%&|=><\.]+|"[^"]*?"|`[^`]*?`|[ \n]+|[a-zA-Z0-9_,]+(?:\(\)|\(?))/).map(t => t.replace(/^ +/, '')).filter(x => x)
   const is_op2 = x => x.match && x.match(/[\+\-\*\/%&|=><\.]/)
   const parse = () => {
     let pos = 0
@@ -34,7 +36,9 @@ function compile_to_js(src) {
       const priority = op => priorities.findIndex(x => x === op)
       const op2 = (op, l, r) => Array.isArray(r) && is_op2(r[0]) && priority(op) > priority(r[0]) ? [r[0], [op, l, r[1]], r[2]] : [op, l, r]
       const t = tokens[pos++]
-      const node = t === '(' ? next(reads(t => t !== ')')) :
+      const node =
+        t === '(' ? next(reads(t => t !== ')')) :
+        t.endsWith('(') ? [t.slice(0, -1)].concat(next(reads(t => t !== ')'))) :
         t === '[' ? ['array'].concat(next(reads(t => t !== ']'))) :
         t === ':' && tokens[pos][0] === '\n' ? ['do'].concat(top(tokens[pos++])) :
         t === ':' ? ['do'].concat([reads()]) :
@@ -60,9 +64,9 @@ function compile_to_js(src) {
         head === 'var' ? `let ${tail[0]} = ${gen(tail.slice(1))}` :
         head === 'let' ? `const ${tail[0]} = ${gen(tail.slice(1))}` :
         head === 'if' ? branch(tail.map(gen)) :
-        head === 'catch' ? handle(tail[0].map(gen)) :
+        head === 'catch' ? handle(tail.map(gen)) :
         head === '=>' ? `((${tail[0] + ') => ' + gen(tail[1])})` :
-        head === '.' ? `${gen(tail[0])}.${tail[1]}` :
+        head === '.' ? `${gen(tail[0])}.${gen(tail[1])}` :
         head === '/' ? `(d => d === 0 ? fail('Zero division error') : ${gen(tail[0])} / d)(${gen(tail[1])})` :
         head === '==' ? `JSON.stringify(${gen(tail[0])}) === JSON.stringify(${gen(tail[1])})` :
         head === '-' && tail.length === 1 ? '-' + gen(tail[0]) :
@@ -107,6 +111,10 @@ const test = () => {
   exp(1, '(n => n) 1')
   exp(3, '(a,b => a + b) 1 2')
 
+  // method chain
+  exp([2, 3], '[1 2].map(n => n + 1)')
+  exp([2, 3], '[1 2 3].map(n => n + 1).filter(n => n <= 3)')
+
   // int
   exp(-1, '(-1)')
   exp(0, '-1 + 1')
@@ -119,7 +127,11 @@ const test = () => {
   exp(['a', 'b'], '"a,b".split ","')
   exp(true, '"hi".contains "h"')
   exp(false, '"hi".contains "z"')
-  exp('heo', '"hello".gsub "l" ""')
+  exp('heo', '"hello".sub "l" ""')
+
+  // string with regular expression
+  exp('h_o', '"hello".rsub `[el]+` "_"')
+  //exp(['1', '+', '2'], '"1 + 2".rsplit `([0-9\+])`')
 
   // array
   exp(2, '[1 2].size')
@@ -149,12 +161,9 @@ const test = () => {
   exp(2, '(vector2 1 2).y', 'struct vector2:\n  x int\n  y int')
 
   // algebraic data type
-  exp({__tag: 'a', __value: 1}, 'ab.a(1)', 'adt ab:\n  a int\n  b string')
+  exp({__tag: 'a', __value: 1}, 'ab.a 1', 'adt ab:\n  a int\n  b string')
   exp(1, 'match (ab.a 1):\n  a v: v\n  b s: s.size', 'adt ab:\n  a int\n  b string')
   exp(2, 'match (ab.b "hi"):\n  a v: v\n  b s: s.size', 'adt ab:\n  a int\n  b string')
-
-  // method
-  exp([2, 3], '[1 2].map(n => n + 1)')
 
   // exp
   exp(3, '1 + 2')
@@ -186,21 +195,22 @@ const test = () => {
   exp(1, 'do 1')
   exp(5, 'do 1 (2 + 3)')
 
-  // comment
-  exp(1, 'one()', '# comment', 'def one: 1')
-
   puts('ok')
 }
 
 function bootstrap() {
   let fs = require('fs')
-  let moa = fs.readFileSync(__dirname + '/moa.moa', 'utf8')
-  let main = `
+  let moa = fs.readFileSync('moa.moa', 'utf8')
+  let prefix = `'use strict'
+function trace(...a) { console.log(...a); return a[a.length - 1] }
+String.prototype.rsplit = function (r) { return this.split(new RegExp(r, 'g')) }
+`
+  let suffix = `
 let a = process.argv[2]
 if (a === 'build') {
   let fs = require('fs')
   let src = fs.readFileSync(process.argv[3], 'utf8')
-  console.log(compile_to_js(src))
+  console.log(compile(src))
 } else if (a === 'version') {
   console.log('moa0.0.1 js')
 } else {
@@ -213,20 +223,10 @@ Usage:
 The commands are:
 
 	build       compile packages and dependencies
-	version     print Moa version
-
-TBD:
-
-	doc         show documentation for package or symbol
-	env         print Moa environment information
-	fix         update packages to use new APIs
-	fmt         gofmt (reformat) package sources
-	install     compile and install packages and dependencies
-	run         compile and run Moa program
-	test        test packages\`)
+	version     print Moa version\`)
 }`
-  let js = compile_to_js(moa) + main
-  fs.writeFileSync(__dirname + '/moa.js', js + '\n')
+  let js = prefix + compile_to_js(moa) + suffix
+  fs.writeFileSync('moa.js', js + '\n')
 }
 
 test()
