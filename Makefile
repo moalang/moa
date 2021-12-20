@@ -1,6 +1,6 @@
 test:
 	@printf '\033\143'
-	@(cd src && node bootstrap.js > ../bin/moa)
+	@(cd src && node bootstrap.js)
 	@node bin/moa build src/moa.moa
 
 watch:

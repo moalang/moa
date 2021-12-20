@@ -1,7 +1,7 @@
 'use strict'
 
-const warn = (...a) => process.stderr.write(a.map(x => x.toString()).join(' '))
-const trace = o => (warn('TRACE: ' + JSON.stringify(o, null, '  ')), o)
+const puts = (...a) => console.log(...a)
+const trace = (...a) => (puts('TRACE: ', ...a), a[a.length - 1])
 const fail = (m, ...a) => { a.length && trace(a); throw new Error(m) }
 
 Object.defineProperty(String.prototype, 'size', { get() { return this.length } });
@@ -89,12 +89,12 @@ const test = () => {
     const js = compile_to_js(src)
     const actual = run(js)
     if (JSON.stringify(expected) === JSON.stringify(actual)) {
-      warn('.')
+      process.stdout.write('.')
     } else {
-      warn('src:', src)
-      warn('\njs:', js)
-      warn('\nexpected:', expected)
-      warn('\nactual:', actual)
+      puts('src:', src)
+      puts('js:', js)
+      puts('expected:', expected)
+      puts('actual:', actual)
       process.exit(1)
     }
   }
@@ -194,7 +194,7 @@ const test = () => {
   exp(1, 'do 1')
   exp(5, 'do 1 (2 + 3)')
 
-  warn('ok\n')
+  puts('ok')
 }
 
 function bootstrap() {
@@ -227,7 +227,7 @@ The commands are:
 	version     print Moa version\`)
 }`
   let js = prefix + compile_to_js(moa) + suffix
-  console.log(js)
+  fs.writeFileSync(__dirname + '/../bin/moa', js)
 }
 
 test()
