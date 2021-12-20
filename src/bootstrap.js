@@ -16,14 +16,16 @@ Array.prototype.append = function (a) { return this.concat(a) }
 Array.prototype.contains = function (s) { return this.includes(s) }
 
 function compile_to_js(src) {
-  const tokens = src.split(/([():\[\]]|[\+\-\*\/%&|=><\.]+|"[^"]*?"|`[^`]*?`|[ \n]+|[a-zA-Z0-9_,]+(?:\(\)|\(?))/).map(t => t.replace(/^ +/, '')).filter(x => x)
+  const initialType = s => '"`'.includes(s[0]) ? 'string' : '0123456789'.includes(s[0]) ? 'int' : null
+  const newToken = s => Object.assign(new String(s), {type: initialType(s)})
+  const tokens = src.split(/([():\[\]]|[\+\-\*\/%&|=><\.]+|"[^"]*?"|`[^`]*?`|[ \n]+|[a-zA-Z0-9_,]+(?:\(\)|\(?))/).map(t => t.replace(/^ +/, '')).filter(x => x).map(newToken)
   const is_op2 = x => x.match && x.match(/[\+\-\*\/%&|=><\.]/)
   const parse = () => {
     let pos = 0
     const next = o => { ++pos; return o }
     const until = f => {
       const a = []
-      while (pos < tokens.length && tokens[pos][0] !== '\n' && f(tokens[pos])) {
+      while (pos < tokens.length && tokens[pos][0] != '\n' && f(tokens[pos])) {
         a.push(consume())
       }
       return a
@@ -32,19 +34,19 @@ function compile_to_js(src) {
     const sepby = f => [reads()].concat(pos < tokens.length && f(tokens[pos]) ? sepby(next(f)) : [])
     const consume = () => {
       const priorities = '|| && == != > >= < <= * / % + - .'.split(' ')
-      const priority = op => priorities.findIndex(x => x === op)
+      const priority = op => priorities.findIndex(x => x == op)
       const op2 = (op, l, r) => Array.isArray(r) && is_op2(r[0]) && priority(op) > priority(r[0]) ? [r[0], [op, l, r[1]], r[2]] : [op, l, r]
       const t = tokens[pos++]
       const node =
-        t === '(' ? next(reads(t => t !== ')')) :
-        t.endsWith('(') ? [t.slice(0, -1)].concat(next(reads(t => t !== ')'))) :
-        t === '[' ? ['array'].concat(next(reads(t => t !== ']'))) :
-        t === ':' && tokens[pos][0] === '\n' ? ['do'].concat(top(tokens[pos++])) :
-        t === ':' ? ['do'].concat([reads()]) :
+        t == '(' ? next(reads(t => t != ')')) :
+        t.endsWith('(') ? [newToken(t.slice(0, -1))].concat(next(reads(t => t != ')'))) :
+        t == '[' ? [newToken('array')].concat(next(reads(t => t != ']'))) :
+        t == ':' && tokens[pos][0] == '\n' ? [newToken('do')].concat(top(tokens[pos++])) :
+        t == ':' ? [newToken('do')].concat([reads()]) :
         t
       return (tokens[pos] || '').match(/^[\+\-\*\/%&|=><\.]/) ? op2(tokens[pos++], node, consume()) : node
     }
-    const top = br => sepby(t => t === br)
+    const top = br => sepby(t => t.toString() == br)
     return top('\n')
   }
   const gen = node => {
@@ -54,21 +56,21 @@ function compile_to_js(src) {
     const handle = ([a, b]) => `(() => { try { return ${a} } catch (__e) { return (${b})(__e) } })()`
     const apply = ([head, ...tail]) =>
       tail.length === 0 ? gen(head) :
-        head === 'def' ? `const ${tail[0]} = (${tail.slice(1, -1)}) => ${gen(tail[tail.length - 1])}` :
-        head === 'struct' ? (keys => `const ${tail[0]} = (${keys}) => ({${keys}})`)(tail[1].slice(1).map(a => a[0])) :
-        head === 'adt' ? (tags => `const ${tail[0]} = {${tags.map(tag => `${tag}: __value => ({__tag: '${tag}', __value})`)}}`)(tail[1].slice(1).map(a => a[0])) :
-        head === 'match' ? `(v => ${tail[1].slice(1).map(matcher).join(' : ')} : error(\`Does not match \${v}\`))(${gen(tail[0])})` :
-        head === 'array' ? `[${tail.map(gen).join(', ')}]` :
-        head === 'do' ? exps(tail) :
-        head === 'var' ? `let ${tail[0]} = ${gen(tail.slice(1))}` :
-        head === 'let' ? `const ${tail[0]} = ${gen(tail.slice(1))}` :
-        head === 'if' ? branch(tail.map(gen)) :
-        head === 'catch' ? handle(tail.map(gen)) :
-        head === '=>' ? `((${tail[0] + ') => ' + gen(tail[1])})` :
-        head === '.' ? `${gen(tail[0])}.${gen(tail[1])}` :
-        head === '/' ? `(d => d === 0 ? fail('Zero division error') : ${gen(tail[0])} / d)(${gen(tail[1])})` :
-        head === '==' ? `JSON.stringify(${gen(tail[0])}) === JSON.stringify(${gen(tail[1])})` :
-        head === '-' && tail.length === 1 ? '-' + gen(tail[0]) :
+        head == 'def' ? `const ${tail[0]} = (${tail.slice(1, -1)}) => ${gen(tail[tail.length - 1])}` :
+        head == 'struct' ? (keys => `const ${tail[0]} = (${keys}) => ({${keys}})`)(tail[1].slice(1).map(a => a[0])) :
+        head == 'adt' ? (tags => `const ${tail[0]} = {${tags.map(tag => `${tag}: __value => ({__tag: '${tag}', __value})`)}}`)(tail[1].slice(1).map(a => a[0])) :
+        head == 'match' ? `(v => ${tail[1].slice(1).map(matcher).join(' : ')} : error(\`Does not match \${v}\`))(${gen(tail[0])})` :
+        head == 'array' ? `[${tail.map(gen).join(', ')}]` :
+        head == 'do' ? exps(tail) :
+        head == 'var' ? `let ${tail[0]} = ${gen(tail.slice(1))}` :
+        head == 'let' ? `const ${tail[0]} = ${gen(tail.slice(1))}` :
+        head == 'if' ? branch(tail.map(gen)) :
+        head == 'catch' ? handle(tail.map(gen)) :
+        head == '=>' ? `((${tail[0] + ') => ' + gen(tail[1])})` :
+        head == '.' ? `${gen(tail[0])}.${gen(tail[1])}` :
+        head == '/' ? `(d => d === 0 ? fail('Zero division error') : ${gen(tail[0])} / d)(${gen(tail[1])})` :
+        head == '==' ? `JSON.stringify(${gen(tail[0])}) === JSON.stringify(${gen(tail[1])})` :
+        head == '-' && tail.length === 1 ? '-' + gen(tail[0]) :
         !Array.isArray(head) && is_op2(head) ? gen(tail[0]) + head + gen(tail[1]) :
         gen(head) + '(' + tail.map(gen).join(', ') + ')'
     return Array.isArray(node) ? apply(node) : node
