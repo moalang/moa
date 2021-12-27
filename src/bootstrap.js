@@ -150,6 +150,13 @@ function compile(src) {
           const t = tarray(tvar())
           tail.map(x => unify(t.tvars[0], analyse(x, env, nonGeneric)))
           return t
+        } else if (head == 'match') {
+          const target = analyse(tail[0], env, nonGeneric)
+          const tv = tvar()
+          for (const [tag, id, exp] of tail[1].slice(1)) {
+            unify(tv, analyse(exp, Object.assign({}, env, {[id]: tenv[`${target.name}__${tag}`]}), nonGeneric))
+          }
+          return tv
         } else if (head == '.') {
           const [target, id] = tail
           const t = analyse(target, env, nonGeneric)
@@ -207,9 +214,9 @@ function compile(src) {
     const topEnv = {
       __cache: {},
       '=': tlambda(v1, v1),
-      'if': tlambda(tbool, v1, v1, v1),
+      if: tlambda(tbool, v1, v1, v1),
       fail: tlambda(v1, v2),
-      catch: tlambda(v1, tlambda(v2, v1), v1)
+      catch: tlambda(v1, tlambda(v2, v1), v1),
     }
     const define = (s, t) => s.split(' ').map(x => topEnv[x] = t)
     define('true false', tbool)
@@ -227,9 +234,12 @@ function compile(src) {
     }
     for (const node of nodes.filter(node => node[0] == 'adt')) {
       const name = node[1].toString()
-      const fields = node[node.length - 1].slice(1)
       const d = {}
-      fields.map(([id, tname]) => d[id] = tlambda(ttype(tname.toString()), ttype(name)))
+      for (const [tag, tname] of node[node.length - 1].slice(1)) {
+        const t = ttype(tname.toString())
+        d[tag] = tlambda(t, ttype(name))
+        tenv[`${name}__${tag}`] = t
+      }
       tenv[name] = () => d
       topEnv[name] = ttype(name)
     }
@@ -324,11 +334,10 @@ const test = () => {
   exp({x:1, y:2}, 'vector2 1 2', 'struct vector2:\n  x int\n  y int')
   exp(2, '(vector2 1 2).y', 'struct vector2:\n  x int\n  y int')
 
-  // TODO: enable after type inference implementation
   // algebraic data type
   exp({__tag: 'a', __value: 1}, 'ab.a 1', 'adt ab:\n  a int\n  b string')
-  //exp(1, 'match (ab.a 1):\n  a v: v\n  b s: s.size', 'adt ab:\n  a int\n  b string') // fix me
-  //exp(2, 'match (ab.b "hi"):\n  a v: v\n  b s: s.size', 'adt ab:\n  a int\n  b string') // fix me
+  exp(1, 'match (ab.a 1):\n  a v: v\n  b s: s.size', 'adt ab:\n  a int\n  b string')
+  exp(2, 'match (ab.b "hi"):\n  a v: v\n  b s: s.size', 'adt ab:\n  a int\n  b string')
 
   // formula
   exp(3, '1 + 2')
