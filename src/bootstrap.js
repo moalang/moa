@@ -14,6 +14,17 @@ const showType = target => {
   const r = s.replace(/\d+/g, t => o[t] ||= Object.keys(o).length + 1)
   return r
 }
+const stdjs = (function() {
+const moa_string_at = (o, n) => n < o.length ? o[n]  : fail('Out of index')
+const moa_string_contains = (o, s) => o.includes(s)
+const moa_string_sub = (o, a, b) => o.replaceAll(a, b)
+const moa_string_rsub = (o, a, b) => o.replaceAll(new RegExp(a, 'g'), b)
+const moa_string_rsplit = (o, r) => o.split(new RegExp(r, 'g'))
+const moa_array_at = (o, n) => n < o.length ? o[n]  : fail('Out of index')
+const moa_array_append = (o, a) => o.concat(a)
+const moa_array_contains = (o, s) => o.includes(s)
+const moa_array_keep = (o, f) => o.filter(f)
+}).toString().slice(12, -1).trim()
 
 function compile(src) {
   let pos = 0
@@ -156,13 +167,18 @@ function compile(src) {
         } else if (head == '.') {
           const [target, id] = tail
           const t = analyse(target, env, nonGeneric)
+          // lambda expression makes untyped arguments and the body can access properties
+          // but current implementation requires to look up concrete type, so type inference is failed in this case
+          // idea 1: property name should be uniqued (like haskell)
+          // idea 2: lambda expression get types from outer expression e.g array[T].map(a => a), lambda explression get concrete type T from array[T]
+          // idea 3: new restriction for looking up property and it will be solved by next phase
           return tenv[t.name](...t.tvars)[id] || fail(`Not found '${id}' in '${t.name}'`)
         } else if (head == '-' && tail.length === 1) {
           return tint
         } else if (tail.length) {
+          const ft = analyse(head, env, nonGeneric)
           const argv = tail.map(t => analyse(t, env, nonGeneric))
           const rt = (env.__cache[JSON.stringify(tail)] ||= tvar()) // fix tvar
-          const ft = analyse(head, env, nonGeneric)
           unify(tlambda(...argv, rt), ft)
           return rt
         } else {
@@ -243,17 +259,6 @@ function compile(src) {
   }
   const nodes = parse()
   infer(nodes)
-  const stdjs = (function() {
-const moa_string_at = (o, n) => n < o.length ? o[n]  : fail('Out of index')
-const moa_string_contains = (o, s) => o.includes(s)
-const moa_string_sub = (o, a, b) => o.replaceAll(a, b)
-const moa_string_rsub = (o, a, b) => o.replaceAll(new RegExp(a, 'g'), b)
-const moa_string_rsplit = (o, r) => o.split(new RegExp(r, 'g'))
-const moa_array_at = (o, n) => n < o.length ? o[n]  : fail('Out of index')
-const moa_array_append = (o, a) => o.concat(a)
-const moa_array_contains = (o, s) => o.includes(s)
-const moa_array_keep = (o, f) => o.filter(f)
-  }).toString().slice(12, -1).trim()
   const js = stdjs + '\n' + nodes.map(gen).join('\n')
   return {js, nodes}
 }
@@ -280,6 +285,8 @@ const test = () => {
       process.exit(1)
     }
   }
+  exp(['A'], '["a"].map(s => s.sub("a" "A"))')
+  return
 
   // primitives
   exp(1, '1')
@@ -458,9 +465,6 @@ function bootstrap() {
   let moa = fs.readFileSync('moa.moa', 'utf8')
   let prefix = `#!/usr/bin/env node
 'use strict'
-function trace(...a) { console.log(...a); return a[a.length - 1] }
-String.prototype.rsub = function (a, b) { return this.replaceAll(new RegExp(a, 'g'), b) }
-String.prototype.rsplit = function (r) { return this.split(new RegExp(r, 'g')) }
 `
   let suffix = `
 let a = process.argv[2]

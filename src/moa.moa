@@ -1,5 +1,5 @@
 def compile src:
   let tokens:
     let reg `([():\\[\\]]|[\\+\\-\\*\\/%&|=><\\.]+|"[^"]*?"|[ \\n]+|[a-zA-Z0-9_,]+(?:\\(\\)|\\(?))`
-    src.rsplit(reg).map(t => (t.rsub `^ +` ``)).filter(x => x)
+    src.rsplit(reg).map(t => t.rsub(`^ +` ``)).filter(x => x)
   src
