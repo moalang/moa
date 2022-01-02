@@ -15,18 +15,6 @@ const showType = target => {
   return r
 }
 
-Object.defineProperty(String.prototype, 'size', { get() { return this.length } });
-String.prototype.at = function (n) { return n < this.length ? this[n]  : fail('Out of index') }
-String.prototype.contains = function (s) { return this.includes(s) }
-String.prototype.sub = function (a, b) { return this.replaceAll(a, b) }
-String.prototype.rsub = function (a, b) { return this.replaceAll(new RegExp(a, 'g'), b) }
-String.prototype.rsplit = function (r) { return this.split(new RegExp(r, 'g')) }
-Object.defineProperty(Array.prototype, 'size', { get() { return this.length } });
-Array.prototype.at = function (n) { return n < this.length ? this[n]  : fail('Out of index') }
-Array.prototype.append = function (a) { return this.concat(a) }
-Array.prototype.contains = function (s) { return this.includes(s) }
-Array.prototype.keep = function (f) { return this.filter(f) }
-
 function compile(src) {
   let pos = 0
   const newToken = s => Object.assign(new String(s.replace(/^ +/, '')), {pos: (pos+=s.length) - s.length})
@@ -49,20 +37,17 @@ function compile(src) {
       const t = tokens[pos++]
       const unnest = a => Array.isArray(a) && a.length === 1 ? unnest(a[0]) : a
       const array = a => Array.isArray(a) ? a : [a]
-      const node =
-        t == '(' ? unnest(next(reads(t => t != ')'))) :
+      const node = t == '(' ? unnest(next(reads(t => t != ')'))) :
         t == '[' ? [newToken('array')].concat(next(reads(t => t != ']'))) :
         t == ':' && tokens[pos][0] == '\n' ? [newToken('do')].concat(top(tokens[pos++])) :
-        t == ':' ? reads() :
-        t
+        t == ':' ? reads() : t
       const combine = node => (t => !t ? node :
         t == ',' ? combine([node].concat(until(t => t == ',' && ++pos, () => tokens[pos++]))) :
         t == '.' ? combine([t, node, next(tokens[++pos])]) :
         t == '=>' ? combine([t, array(node), (++pos, consume())]) :
         t.match(/^[\+\-\*\/%&|=><]/) ? combine([tokens[pos++], node, consume()]) :
         t == '()' ? combine((node.suffix = '()', pos++, node)) :
-        t == '(' && t.pos === tokens[pos - 1].pos +tokens[pos - 1].length ? ++pos && combine([node].concat(next(reads(t => t != ')')))) :
-        node)(tokens[pos])
+        t == '(' && t.pos === tokens[pos - 1].pos +tokens[pos - 1].length ? ++pos && combine([node].concat(next(reads(t => t != ')')))) : node)(tokens[pos])
       return combine(node)
     }
     const top = br => sepby(t => t.toString() == br)
@@ -73,6 +58,16 @@ function compile(src) {
     const matcher = ([tag, alias, ...exp]) => `v.__tag === '${tag}' ? (${alias} => ${gen(exp)})(v.__value)`
     const branch = a => a.length == 0 ? fail('empty branch') : a.length === 1 ? a[0] : `${a[0]} ? ${a[1]} : ` + branch(a.slice(2))
     const handle = ([a, b]) => `(() => { try { return ${a} } catch (__e) { return (${b})(__e) } })()`
+    const methods = {
+      string: 'at contains sub rsub rsplit'.split(' '),
+      array: 'at append contains keep'.split(' '),
+    }
+    const method = (o, m, a) => _method(gen(o), gen(m), showType(o.type).split('[')[0], a || [])
+    const _method = (o, m, t, a) =>
+      t == 'string' && m == 'size' ? `${o}.length` :
+      t == 'array' && m == 'size' ? `${o}.length` :
+      (methods[t] || []).includes(m) ? `moa_${t}_${m}(${o}, ${a})` :
+      `${o}.${m}` + (a.length ? `(${a})` : '')
     const apply = ([head, ...tail]) =>
       tail.length === 0 ? gen(head) :
         head == 'def' ? `const ${tail[0]} = (${tail.slice(1, -1)}) => ${gen(tail[tail.length - 1])}` :
@@ -86,11 +81,12 @@ function compile(src) {
         head == 'if' ? branch(tail.map(gen)) :
         head == 'catch' ? handle(tail.map(gen)) :
         head == '=>' ? `((${tail[0] + ') => ' + gen(tail[1])})` :
-        head == '.' ? `${gen(tail[0])}.${gen(tail[1])}` :
+        head == '.' ? method(tail[0], tail[1]) :
         head == '/' ? `(d => d === 0 ? fail('Zero division error') : ${gen(tail[0])} / d)(${gen(tail[1])})` :
         head == '==' ? `JSON.stringify(${gen(tail[0])}) === JSON.stringify(${gen(tail[1])})` :
         head == '-' && tail.length === 1 ? '-' + gen(tail[0]) :
         !Array.isArray(head) && is_op2(head) ? gen(tail[0]) + head + gen(tail[1]) :
+        Array.isArray(head) && head[0] == '.' ? method(head[1], head[2], tail.map(gen)) :
         gen(head) + '(' + tail.map(gen).join(', ') + ')'
     return (Array.isArray(node) ? apply(node) : node) + (node.suffix || '')
   }
@@ -247,7 +243,18 @@ function compile(src) {
   }
   const nodes = parse()
   infer(nodes)
-  const js = nodes.map(gen).join('\n')
+  const stdjs = (function() {
+const moa_string_at = (o, n) => n < o.length ? o[n]  : fail('Out of index')
+const moa_string_contains = (o, s) => o.includes(s)
+const moa_string_sub = (o, a, b) => o.replaceAll(a, b)
+const moa_string_rsub = (o, a, b) => o.replaceAll(new RegExp(a, 'g'), b)
+const moa_string_rsplit = (o, r) => o.split(new RegExp(r, 'g'))
+const moa_array_at = (o, n) => n < o.length ? o[n]  : fail('Out of index')
+const moa_array_append = (o, a) => o.concat(a)
+const moa_array_contains = (o, s) => o.includes(s)
+const moa_array_keep = (o, f) => o.filter(f)
+  }).toString().slice(12, -1).trim()
+  const js = stdjs + '\n' + nodes.map(gen).join('\n')
   return {js, nodes}
 }
 
