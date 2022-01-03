@@ -8,7 +8,7 @@ const showType = target => {
   const show = t => t.instance ? show(t.instance) : (
     t.name && t.types.length >= 1 ? `(${t.name} ${t.types.map(show).join(' ')})` :
     t.name ? t.name : `(${t.types.map(show).join(' ')})`
-  ) + (t.tvars.length === 0 ? '' : `[${t.tvars.map(show).join(' ')}]`)
+  ) + (t.tvars.length === 0 ? '' : `[${t.tvars.map(show).join(' ')}]`) + (target.prop ? `.${target.prop}` : '')
   const s = show(target)
   const o = {}
   const r = s.replace(/\d+/g, t => o[t] ||= Object.keys(o).length + 1)
@@ -135,9 +135,9 @@ function compile(src) {
       if (Array.isArray(node)) {
         let [head, ...tail] = node
         if (head == '=>') {
-          const argv = tail[0].map(_ => tvar())
           const newEnv = Object.assign({}, env)
-          tail[0].map((arg, i) => arg.type = newEnv[arg.toString()] = argv[i])
+          const argv = tail[0].map(arg => newEnv[arg.toString()] = (arg.type ||= tvar()))
+          //tail[0].map((arg, i) => arg.type = newEnv[arg.toString()] = argv[i])
           return tlambda(...argv, analyse(tail[1], newEnv, nonGeneric.concat(argv.map(t => t.name))))
         } else if (head == 'var' || head == 'let' || head == '=') {
           const name = tail[0].toString()
@@ -167,18 +167,20 @@ function compile(src) {
         } else if (head == '.') {
           const [target, id] = tail
           const t = analyse(target, env, nonGeneric)
-          // lambda expression makes untyped arguments and the body can access properties
-          // but current implementation requires to look up concrete type, so type inference is failed in this case
-          // idea 1: property name should be uniqued (like haskell)
-          // idea 2: lambda expression get types from outer expression e.g array[T].map(a => a), lambda explression get concrete type T from array[T]
-          // idea 3: new restriction for looking up property and it will be solved by next phase
           return tenv[t.name](...t.tvars)[id] || fail(`Not found '${id}' in '${t.name}'`)
         } else if (head == '-' && tail.length === 1) {
           return tint
         } else if (tail.length) {
-          const ft = analyse(head, env, nonGeneric)
-          const argv = tail.map(t => analyse(t, env, nonGeneric))
           const rt = (env.__cache[JSON.stringify(tail)] ||= tvar()) // fix tvar
+          const ft = analyse(head, env, nonGeneric)
+          ft.types && ft.types.slice(0, -1).map((arg, i) => {
+            if (tail[i][0] == '=>') {
+              arg.types.slice(0, -1).map((f, j) => {
+                unify(f, tail[i][1][j].type ||= tvar())
+              })
+            }
+          })
+          const argv = tail.map(t => analyse(t, env, nonGeneric))
           unify(tlambda(...argv, rt), ft)
           return rt
         } else {
@@ -285,8 +287,6 @@ const test = () => {
       process.exit(1)
     }
   }
-  exp(['A'], '["a"].map(s => s.sub("a" "A"))')
-  return
 
   // primitives
   exp(1, '1')
@@ -302,6 +302,7 @@ const test = () => {
   exp('i', '"hi".at(1).at(0)')
   exp([2, 3], '[1 2].map(n => n + 1)')
   exp([2, 3], '[1 2 3].map(n => n + 1).keep(n => n <= 3)')
+  exp(['A'], '["a"].map(s => s.sub("a" "A"))')
 
   // int
   exp(-1, '(-1)')
