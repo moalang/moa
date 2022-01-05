@@ -16,8 +16,8 @@ Array.prototype.append = function (a) { return this.concat(a) }
 Array.prototype.contains = function (s) { return this.includes(s) }
 
 function compile_to_js(src) {
-  const tokens = src.split(/([():\[\]]|[\+\-\*\/%&|=><\.]+|"[^"]*?"|`[^`]*?`|[ \n]+|[a-zA-Z0-9_,]+(?:\(\)|\(?))/).map(t => t.replace(/^ +/, '')).filter(x => x)
-  const is_op2 = x => x.match && x.match(/[\+\-\*\/%&|=><\.]/)
+  const tokens = src.split(/([():\[\].]|[\+\-\*\/%&|!=><]+|"[^"]*?"|`[^`]*?`|[ \n]+|[a-zA-Z0-9_,]+(?:\(\)|\(?))/).map(t => t.replace(/^ +/, '')).filter(x => x)
+  const is_op2 = x => '+-*/%&|!=<>'.includes(x[0])
   const parse = () => {
     let pos = 0
     const next = o => { ++pos; return o }
@@ -31,7 +31,7 @@ function compile_to_js(src) {
     const reads = f => until(f || (() => true))
     const sepby = f => [reads()].concat(pos < tokens.length && f(tokens[pos]) ? sepby(next(f)) : [])
     const consume = () => {
-      const priorities = '|| && == != > >= < <= * / % + - .'.split(' ')
+      const priorities = '|| && == != > >= < <= * / % + -'.split(' ')
       const priority = op => priorities.findIndex(x => x === op)
       const op2 = (op, l, r) => Array.isArray(r) && is_op2(r[0]) && priority(op) > priority(r[0]) ? [r[0], [op, l, r[1]], r[2]] : [op, l, r]
       const t = tokens[pos++]
@@ -42,7 +42,14 @@ function compile_to_js(src) {
         t === ':' && tokens[pos][0] === '\n' ? ['do'].concat(top(tokens[pos++])) :
         t === ':' ? ['do'].concat([reads()]) :
         t
-      return (tokens[pos] || '').match(/^[\+\-\*\/%&|=><\.]/) ? op2(tokens[pos++], node, consume()) : node
+      const predict = node => {
+        const tt = tokens[pos] || ''
+        const dot = t => t.endsWith('(') ? [['.', node, t.slice(0, -1)]].concat(next(reads(t => t !== ')'))) : ['.', node, t]
+        return is_op2(tt) ? predict(op2(tokens[pos++], node, consume())) :
+          tt === '.' ? ++pos && predict(dot(tokens[pos++])) :
+          node
+      }
+      return predict(node)
     }
     const top = br => sepby(t => t === br)
     return top('\n')
@@ -130,7 +137,7 @@ const test = () => {
 
   // string with regular expression
   exp('h_o', '"hello".rsub `[el]+` "_"')
-  //exp(['1', '+', '2'], '"1 + 2".rsplit `([0-9\+])`')
+  exp(['1', '+', '2'], '"1 + 2".rsplit(`([0-9\+])`).filter(x => x != "" && x != " ")')
 
   // array
   exp(2, '[1 2].size')
@@ -178,6 +185,7 @@ const test = () => {
 
   // constant
   exp(2, '\n  let a inc 1\n  a', 'def inc a: a + 1')
+  exp(2, '\n  let a:\n    var b 1\n    b += 1\n    b\n  a')
 
   // branch
   exp(1, 'if true 1 2')
