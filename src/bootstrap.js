@@ -1,10 +1,11 @@
 'use strict'
 
+let fs = require('fs')
 const stdjs = (function() {
 function puts(...a) { console.log(...a); return a[a.length - 1] }
 function p(...a) { puts('#', a.map(o => JSON.stringify(o, null, 2).replace(/\n +/g, ' ')).join(' ')); return a[a.length -1] }
 function pp(...a) { puts('#', a.map(o => JSON.stringify(o, null, 2)).join(' ')); return a[a.length - 1] }
-function fail(m, ...a) { a.length && trace(a); throw new Error(m) }
+function fail(m, ...a) { a.length && p(a); throw new Error(m) }
 Object.defineProperty(String.prototype, 'size', { get() { return this.length } });
 String.prototype.at = function (n) { return n >= this.length || n < -this.length ? fail('Out of index') : n >= 0 ? this[n] : this[this.length + n] }
 String.prototype.contains = function (s) { return this.includes(s) }
@@ -74,7 +75,7 @@ function compile(src) {
         head === 'do' ? exps(tail) :
         head === 'var' ? `let ${tail[0]} = ${gen(tail.slice(1))}` :
         head === 'let' ? `const ${tail[0]} = ${gen(tail.slice(1))}` :
-        head === 'if' ? branch(tail.map(gen)) :
+        head === 'if' ? `(${branch(tail.map(gen))})` :
         head === 'catch' ? handle(tail.map(gen)) :
         head === '=>' ? `((${tail[0] + ') => ' + gen(tail[1])})` :
         head === '.' ? `${gen(tail[0])}.${gen(tail[1])}` :
@@ -83,13 +84,12 @@ function compile(src) {
         head === '-' && tail.length === 1 ? '-' + gen(tail[0]) :
         is_op2(head) ? gen(tail[0]) + head + gen(tail[1]) :
         gen(head) + '(' + tail.map(gen).join(', ') + ')'
-    const template = s => s.replace(/\${(.+?)}/g, (_, p) => `" + ${p} + "`)
+    const quote = (q, s) => q + s.replace(RegExp(q, 'g'), c => '\\' + c) + q
+    const escape = s => s.replace(/\\/g, '\\\\')
     return Array.isArray(node) ? (node.length === 0 ? '' : apply(node)) :
-      node.startsWith('"""') ? JSON.stringify(node.slice(3, -3)) :
-      node.startsWith('```') ? template(JSON.stringify(node.slice(3, -3))) :
-      node.startsWith('"') ? JSON.stringify(node.slice(1, -1)) :
-      node.startsWith('`') ? template(JSON.stringify(node.slice(1, -1))) :
-      node
+      node.startsWith('"""') ? quote('"', escape(node.slice(3, -3))) :
+      node.startsWith('```') ? quote('`', escape(node.slice(3, -3))) :
+      escape(node)
   }
   return parse().map(gen).join('\n')
 }
@@ -217,7 +217,7 @@ const test = () => {
   // comments
   exp(1, '1', '# this is a comment')
 
-  // edge cases
+  // bug fixes
   exp('"', '`"`')
   exp('\n', '`\n`')
   exp('\\n', '`\\n`')
@@ -228,13 +228,13 @@ const test = () => {
   exp(1, '1', '# comment 1', '# comment 2')
   exp(1, 'if(true\n1\n2)')
   exp('ell', '"hello".slice 1 (-1)')
+  exp(2, 'if(true 1 2) + 1')
 
   puts('ok')
   return true
 }
 
 function install() {
-  let fs = require('fs')
   let moa = fs.readFileSync('moa.moa', 'utf8')
   let js = `#!/usr/bin/env node
 'use strict'
@@ -246,26 +246,30 @@ ${stdjs}
 ${compile(moa)}
 
 // Main logic
-let a = process.argv[2]
-if (a === 'build') {
-  let fs = require('fs')
-  let src = fs.readFileSync(process.argv[3], 'utf8')
-  console.log(compile(src))
-} else if (a === 'version') {
-  console.log('moa 0.0.1 js')
-} else {
-  console.log(\`Moa is a tool for managing Moa source code.
+function main(){
+  let a = process.argv[2]
+  if (a === 'build') {
+    let fs = require('fs')
+    let src = fs.readFileSync(process.argv[3], 'utf8')
+    console.log(compile(src))
+  } else if (a === 'version') {
+    console.log('moa 0.0.1 js')
+  } else {
+    console.log(\`Moa is a tool for managing Moa source code.
 
-Usage:
+  Usage:
 
-  moa <command> [arguments]
+    moa <command> [arguments]
 
-The commands are:
+  The commands are:
 
-       build       compile packages and dependencies
-       version     print Moa version\`)
-}`
-  fs.writeFileSync(__dirname + '/../bin/moa', js + '\n')
+         build       compile packages and dependencies
+         version     print Moa version\`)
+  }
+}
+main()
+`
+  fs.writeFileSync(__dirname + '/../bin/moa', js)
 }
 
 test() && install()
