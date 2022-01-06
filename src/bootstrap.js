@@ -4,6 +4,7 @@ const puts = (...a) => console.log(...a)
 const trace = (...a) => (puts('TRACE: ', ...a), a[a.length - 1])
 const fail = (m, ...a) => { a.length && trace(a); throw new Error(m) }
 
+const stdjs = (function() {
 Object.defineProperty(String.prototype, 'size', { get() { return this.length } });
 String.prototype.at = function (n) { return n < this.length ? this[n]  : fail('Out of index') }
 String.prototype.contains = function (s) { return this.includes(s) }
@@ -14,8 +15,10 @@ Object.defineProperty(Array.prototype, 'size', { get() { return this.length } })
 Array.prototype.at = function (n) { return n < this.length ? this[n]  : fail('Out of index') }
 Array.prototype.append = function (a) { return this.concat(a) }
 Array.prototype.contains = function (s) { return this.includes(s) }
+}).toString().slice(12, -1).trim()
+eval(stdjs)
 
-function compile_to_js(src) {
+function compile(src) {
   const tokens = src.split(/([():\[\].]|[\+\-\*\/%&|!=><]+|"[^"]*?"|`[^`]*?`|[ \n]+|[a-zA-Z0-9_,]+(?:\(\)|\(?))/).map(t => t.replace(/^ +/, '')).filter(x => x)
   const is_op2 = x => '+-*/%&|!=<>'.includes(x[0])
   const parse = () => {
@@ -93,7 +96,7 @@ const test = () => {
   }
   const exp = (expected, exp, ...defs) => {
     const src = defs.concat([`def main: ${exp}`]).join('\n')
-    const js = compile_to_js(src)
+    const js = compile(src)
     const actual = run(js)
     if (JSON.stringify(expected) === JSON.stringify(actual)) {
       process.stdout.write('.')
@@ -203,25 +206,29 @@ const test = () => {
   exp(5, 'do 1 (2 + 3)')
 
   puts('ok')
+  return true
 }
 
-function bootstrap() {
+function install() {
   let fs = require('fs')
   let moa = fs.readFileSync('moa.moa', 'utf8')
-  let prefix = `#!/usr/bin/env node
+  let js = `#!/usr/bin/env node
 'use strict'
-function trace(...a) { console.log(...a); return a[a.length - 1] }
-String.prototype.rsub = function (a, b) { return this.replaceAll(new RegExp(a, 'g'), b) }
-String.prototype.rsplit = function (r) { return this.split(new RegExp(r, 'g')) }
-`
-  let suffix = `
+
+// Expand primitives
+${stdjs}
+
+// User code
+${compile(moa)}
+
+// Main logic
 let a = process.argv[2]
 if (a === 'build') {
   let fs = require('fs')
   let src = fs.readFileSync(process.argv[3], 'utf8')
   console.log(compile(src))
 } else if (a === 'version') {
-  console.log('moa0.0.1 js')
+  console.log('moa 0.0.1 js')
 } else {
   console.log(\`Moa is a tool for managing Moa source code.
 
@@ -231,12 +238,10 @@ Usage:
 
 The commands are:
 
-	build       compile packages and dependencies
-	version     print Moa version\`)
+       build       compile packages and dependencies
+       version     print Moa version\`)
 }`
-  let js = prefix + compile_to_js(moa) + suffix
-  fs.writeFileSync(__dirname + '/../bin/moa', js)
+  fs.writeFileSync(__dirname + '/../bin/moa', js + '\n')
 }
 
-test()
-bootstrap()
+test() && install()
