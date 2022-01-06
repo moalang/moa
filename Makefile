@@ -1,7 +1,7 @@
 test:
 	@printf '\033\143'
 	@(cd src && node bootstrap.js)
-	@node bin/moa build src/moa.moa
+	@node bin/moa checkup && node bin/moa src/moa.moa
 
 watch:
 	@-make test

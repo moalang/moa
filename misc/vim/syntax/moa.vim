@@ -13,7 +13,7 @@ syn match Number / [0-9]\+\(\.[0-9]\+\)\?/
 syn keyword Boolean true false
 
 " Statement
-syn keyword Statement def continue break return goto test
+syn keyword Statement def continue break return goto
 syn keyword StorageClass let var
 syn keyword Structure    struct adt
 syn keyword Conditional if else

@@ -1,6 +1,6 @@
 def compile src:
   let tokens:
-    let reg ```([():\[\].]|[\+\-\*\/%&|!=><]+|""".*"""|`{3}.*`{3}|"[^"]*?"|`[^`]*?`|[ \n]+|[a-zA-Z0-9_,]+(?:\(\)|\(?)|#.+)```
+    let reg ```([():\\[\\].]|[-+*/%&|!=><]+|""".*"""|`{3}.*`{3}|"[^"]*?"|`[^`]*?`|[ \n]+|[a-zA-Z0-9_,]+(?:\\(\\)|\\(?)|#.+)```
     src.rsplit(reg).map(t => t.rsub("^ +" "").rsub("#.*" "").trim()).filter(x => x)
   def is_op2 x: '+-*/%&|!=<>'.includes(x[0])
   def parse: [["def" "main" ["do" ["let" "a" "1"] ["+" "a" "2"]]]]
@@ -18,3 +18,7 @@ def compile src:
         `${gen(head)}(${tail.map(gen).join(', ')})`)
     if Array.isArray(node) && node.size apply(node.at(0) node.slice(1)) node
   parse().map(gen).join("\n")
+
+def test t:
+  def exp expected e: t.eq expected eval(compile(`def main:\n  ${e}`) + "\nmain()")
+  exp 3 `1 + 2`

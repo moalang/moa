@@ -20,7 +20,7 @@ Array.prototype.contains = function (s) { return this.includes(s) }
 eval(stdjs.replace(/function (\w+)/g, (_, f) => `global.${f} = function ${f}`))
 
 function compile(src) {
-  const reg = /([():\[\].]|[\+\-\*\/%&|!=><]+|""".*"""|```.*```|"[^"]*?"|`[^`]*?`|[ \n]+|[a-zA-Z0-9_,]+(?:\(\)|\(?)|#.+)/
+  const reg = /([():\[\].]|[-+*\/%&|!=><]+|""".*"""|```.*```|"[^"]*?"|`[^`]*?`|[ \n]+|[a-zA-Z0-9_,]+(?:\(\)|\(?)|#.+)/
   const tokens = src.trim().replace(/^#.+\n/g, '').split(reg).map(t => t.replace(/^ +/, '').replace(/^#.*/g, '').replace(/^[ \n]+\n/, '\n')).filter(x => x)
   const is_op2 = x => '+-*/%&|!=<>'.includes(x[0])
   const parse = () => {
@@ -85,11 +85,10 @@ function compile(src) {
         is_op2(head) ? gen(tail[0]) + head + gen(tail[1]) :
         gen(head) + '(' + tail.map(gen).join(', ') + ')'
     const quote = (q, s) => q + s.replace(RegExp(q, 'g'), c => '\\' + c) + q
-    const escape = s => s.replace(/\\/g, '\\\\')
     return Array.isArray(node) ? (node.length === 0 ? '' : apply(node)) :
-      node.startsWith('"""') ? quote('"', escape(node.slice(3, -3))) :
-      node.startsWith('```') ? quote('`', escape(node.slice(3, -3))) :
-      escape(node)
+      node.startsWith('"""') ? quote('"', node.slice(3, -3)) :
+      node.startsWith('```') ? quote('`', node.slice(3, -3)) :
+      node
   }
   return parse().map(gen).join('\n')
 }
@@ -97,13 +96,13 @@ function compile(src) {
 const test = () => {
   const run = js => {
     try {
-      return eval(js + '\nmain()')
+      return eval(`${js}\nmain()`)
     } catch (e) {
       return e.message
     }
   }
   const exp = (expected, exp, ...defs) => {
-    const src = defs.concat([`def main: ${exp}`]).join('\n')
+    const src = defs.concat([`def main: ${exp}`]).join('\n').replace(/\\/g, '\\\\')
     const js = compile(src)
     const actual = run(js)
     if (JSON.stringify(expected) === JSON.stringify(actual)) {
@@ -246,6 +245,15 @@ ${stdjs}
 ${compile(moa)}
 
 // Main logic
+function tester(expected, actual) {
+  if (JSON.stringify(expected) === JSON.stringify(actual)) {
+    process.stdout.write('.')
+  } else {
+    console.log('expected:', expected)
+    console.log('actual:', actual)
+    process.exit(1)
+  }
+}
 function main(){
   let a = process.argv[2]
   if (a === 'build') {
@@ -254,6 +262,9 @@ function main(){
     console.log(compile(src))
   } else if (a === 'version') {
     console.log('moa 0.0.1 js')
+  } else if (a === 'checkup') {
+    test({eq: tester})
+    console.log('ok')
   } else {
     console.log(\`Moa is a tool for managing Moa source code.
 
