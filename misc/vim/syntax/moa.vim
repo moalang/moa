@@ -4,12 +4,11 @@ if exists("b:current_syntax")
 endif
 
 " Comments
-"syn region Comment start=/__comment__/ end="__uncomment__"
 syn match  Comment /#.*$/
 
 " Constant
-syn region String start=/"/ end=/"/ skip=/(\\")/
-syn region String start=/`/ end=/`/ skip=/\\`/
+syn region String start=+[uU]\=\z([`"]\)+ end="\z1" skip="\\\\\|\\\z1"
+syn region String start=+[uU]\=\z(```\|"""\)+ end="\z1"
 syn match Number / [0-9]\+\(\.[0-9]\+\)\?/
 syn keyword Boolean true false
 

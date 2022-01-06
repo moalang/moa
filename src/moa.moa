@@ -1,5 +1,20 @@
 def compile src:
   let tokens:
-    let reg `([():\\[\\].]|[\\+\\-\\*\\/%&|=><\]+|"[^"]*?"|[ \\n]+|[a-zA-Z0-9_,]+(?:\\(\\)|\\(?))`
-    src.rsplit(reg).map(t => t.rsub(`^ +` ``)).filter(x => x)
-  tokens
+    let reg ```([():\[\].]|[\+\-\*\/%&|!=><]+|""".*"""|`{3}.*`{3}|"[^"]*?"|`[^`]*?`|[ \n]+|[a-zA-Z0-9_,]+(?:\(\)|\(?)|#.+)```
+    src.rsplit(reg).map(t => t.rsub("^ +" "").rsub("#.*" "").trim()).filter(x => x)
+  def is_op2 x: '+-*/%&|!=<>'.includes(x[0])
+  def parse: [["def" "main" ["do" ["+" "1" "2"]]]]
+  def gen node:
+    def exps a:
+      let code a.map(e,i => if(i == a.length - 1 "return " "") + gen(e)).join("\n  ")
+      `(() => {\n  ${code}\n})()`
+    def apply head tail:
+      def define name args body: `const ${name} = (${args}) => ${body}`
+      if(
+        tail.length == 0 gen(head)
+        head == "def" define(tail.at(0) tail.slice(1 (-1)) gen(tail.at((-1))))
+        head == "do" if(tail.length == 1 gen(tail.at(0)) exps(a))
+        is_op2(head) `${gen(tail.at(0))} + ${gen(tail.at(1))}`
+        `${gen(head)}(${tail.map(gen).join(', ')})`)
+    if Array.isArray(node) && node.size apply(node.at(0) node.slice(1)) node
+  parse().map(gen).join("\n")

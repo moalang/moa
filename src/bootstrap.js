@@ -1,38 +1,40 @@
 'use strict'
 
-const puts = (...a) => console.log(...a)
-const trace = (...a) => (puts('TRACE: ', ...a), a[a.length - 1])
-const fail = (m, ...a) => { a.length && trace(a); throw new Error(m) }
-
 const stdjs = (function() {
+function puts(...a) { console.log(...a); return a[a.length - 1] }
+function p(...a) { puts('#', a.map(o => JSON.stringify(o, null, 2).replace(/\n +/g, ' ')).join(' ')); return a[a.length -1] }
+function pp(...a) { puts('#', a.map(o => JSON.stringify(o, null, 2)).join(' ')); return a[a.length - 1] }
+function fail(m, ...a) { a.length && trace(a); throw new Error(m) }
 Object.defineProperty(String.prototype, 'size', { get() { return this.length } });
-String.prototype.at = function (n) { return n < this.length ? this[n]  : fail('Out of index') }
+String.prototype.at = function (n) { return n >= this.length || n < -this.length ? fail('Out of index') : n >= 0 ? this[n] : this[this.length + n] }
 String.prototype.contains = function (s) { return this.includes(s) }
 String.prototype.sub = function (a, b) { return this.replaceAll(a, b) }
 String.prototype.rsub = function (a, b) { return this.replaceAll(new RegExp(a, 'g'), b) }
 String.prototype.rsplit = function (r) { return this.split(new RegExp(r, 'g')) }
 Object.defineProperty(Array.prototype, 'size', { get() { return this.length } });
-Array.prototype.at = function (n) { return n < this.length ? this[n]  : fail('Out of index') }
+Array.prototype.at = String.prototype.at
 Array.prototype.append = function (a) { return this.concat(a) }
 Array.prototype.contains = function (s) { return this.includes(s) }
 }).toString().slice(12, -1).trim()
-eval(stdjs)
+eval(stdjs.replace(/function (\w+)/g, (_, f) => `global.${f} = function ${f}`))
 
 function compile(src) {
-  const tokens = src.split(/([():\[\].]|[\+\-\*\/%&|!=><]+|"[^"]*?"|`[^`]*?`|[ \n]+|[a-zA-Z0-9_,]+(?:\(\)|\(?))/).map(t => t.replace(/^ +/, '')).filter(x => x)
+  const reg = /([():\[\].]|[\+\-\*\/%&|!=><]+|""".*"""|```.*```|"[^"]*?"|`[^`]*?`|[ \n]+|[a-zA-Z0-9_,]+(?:\(\)|\(?)|#.+)/
+  const tokens = src.trim().replace(/^#.+\n/g, '').split(reg).map(t => t.replace(/^ +/, '').replace(/^#.*/g, '').replace(/^[ \n]+\n/, '\n')).filter(x => x)
   const is_op2 = x => '+-*/%&|!=<>'.includes(x[0])
   const parse = () => {
     let pos = 0
     const next = o => { ++pos; return o }
     const until = f => {
       const a = []
-      while (pos < tokens.length && tokens[pos][0] !== '\n' && f(tokens[pos])) {
+      while (pos < tokens.length && f(tokens[pos])) {
         a.push(consume())
       }
       return a
     }
-    const reads = f => until(f || (() => true))
-    const sepby = f => [reads()].concat(pos < tokens.length && f(tokens[pos]) ? sepby(next(f)) : [])
+    const reads = f => until(t => until(t => t[0] === '\n') && f(t))
+    const right = () => until(t => t[0] !== '\n')
+    const sepby = f => [right()].concat(pos < tokens.length && f(tokens[pos]) ? sepby(next(f)) : [])
     const consume = () => {
       const priorities = '|| && == != > >= < <= * / % + -'.split(' ')
       const priority = op => priorities.findIndex(x => x === op)
@@ -43,7 +45,7 @@ function compile(src) {
         t.endsWith('(') ? [t.slice(0, -1)].concat(next(reads(t => t !== ')'))) :
         t === '[' ? ['array'].concat(next(reads(t => t !== ']'))) :
         t === ':' && tokens[pos][0] === '\n' ? ['do'].concat(top(tokens[pos++])) :
-        t === ':' ? ['do'].concat([reads()]) :
+        t === ':' ? ['do'].concat([right()]) :
         t
       const predict = node => {
         const tt = tokens[pos] || ''
@@ -60,7 +62,7 @@ function compile(src) {
   const gen = node => {
     const exps = a => a.length === 1 ? gen(a[0]) : `(() => {\n  ${a.map((e, i) => (i === a.length - 1 ? 'return ' : '') + gen(e)).join('\n  ')}\n})()`
     const matcher = ([tag, alias, ...exp]) => `v.__tag === '${tag}' ? (${alias} => ${gen(exp)})(v.__value)`
-    const branch = a => a.length == 0 ? fail('empty branch') : a.length === 1 ? a[0] : `${a[0]} ? ${a[1]} : ` + branch(a.slice(2))
+    const branch = a => a.length == 0 ? fail('invalid branch') : a.length === 1 ? a[0] : `${a[0]} ? ${a[1]} : ` + branch(a.slice(2))
     const handle = ([a, b]) => `(() => { try { return ${a} } catch (__e) { return (${b})(__e) } })()`
     const apply = ([head, ...tail]) =>
       tail.length === 0 ? gen(head) :
@@ -79,9 +81,15 @@ function compile(src) {
         head === '/' ? `(d => d === 0 ? fail('Zero division error') : ${gen(tail[0])} / d)(${gen(tail[1])})` :
         head === '==' ? `JSON.stringify(${gen(tail[0])}) === JSON.stringify(${gen(tail[1])})` :
         head === '-' && tail.length === 1 ? '-' + gen(tail[0]) :
-        !Array.isArray(head) && is_op2(head) ? gen(tail[0]) + head + gen(tail[1]) :
+        is_op2(head) ? gen(tail[0]) + head + gen(tail[1]) :
         gen(head) + '(' + tail.map(gen).join(', ') + ')'
-    return Array.isArray(node) ? apply(node) : node
+    const template = s => s.replace(/\${(.+?)}/g, (_, p) => `" + ${p} + "`)
+    return Array.isArray(node) ? (node.length === 0 ? '' : apply(node)) :
+      node.startsWith('"""') ? JSON.stringify(node.slice(3, -3)) :
+      node.startsWith('```') ? template(JSON.stringify(node.slice(3, -3))) :
+      node.startsWith('"') ? JSON.stringify(node.slice(1, -1)) :
+      node.startsWith('`') ? template(JSON.stringify(node.slice(1, -1))) :
+      node
   }
   return parse().map(gen).join('\n')
 }
@@ -109,13 +117,13 @@ const test = () => {
     }
   }
 
-  // primitives
+  // literals
   exp(1, '1')
   exp('hi', '"hi"')
   exp('hi', '`hi`')
-  exp('"', '`"`')
-  exp('\n', '`\n`')
-  exp('\n', '`\\n`')
+  exp('a`b', '```a`b```')
+  exp('1 + 1 = 2', '`${a} + ${a} = ${b}`', 'let a 1', 'let b 2')
+  exp('1 + 1 = 2', '```${a} + ${a} = ${b}```', 'let a 1', 'let b 2')
   exp([1, 2], '[1 2]')
   exp(1, '(n => n) 1')
   exp(3, '(a,b => a + b) 1 2')
@@ -132,6 +140,7 @@ const test = () => {
   // string
   exp(2, '"hi".size')
   exp('i', '"hi".at 1')
+  exp('h', '"hi".at((-2))')
   exp('Out of index', '"hi".at 3')
   exp(['a', 'b'], '"a,b".split ","')
   exp(true, '"hi".contains "h"')
@@ -204,6 +213,21 @@ const test = () => {
   // do block
   exp(1, 'do 1')
   exp(5, 'do 1 (2 + 3)')
+
+  // comments
+  exp(1, '1', '# this is a comment')
+
+  // edge cases
+  exp('"', '`"`')
+  exp('\n', '`\n`')
+  exp('\\n', '`\\n`')
+  exp('a"b', '"""a"b"""')
+  exp('a`b', '```a`b```')
+  exp(1, 'f()', 'def f:\n  let a 1\n\n  a')
+  exp('# comment', '"# comment"', )
+  exp(1, '1', '# comment 1', '# comment 2')
+  exp(1, 'if(true\n1\n2)')
+  exp('ell', '"hello".slice 1 (-1)')
 
   puts('ok')
   return true
