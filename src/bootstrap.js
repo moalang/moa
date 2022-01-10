@@ -21,7 +21,7 @@ eval(stdjs.replace(/function (\w+)/g, (_, f) => `global.${f} = function ${f}`))
 
 function compile(src) {
   const reg = /([():\[\].]|[-+*\/%&|!=><]+|""".*"""|```.*```|"[^"]*?"|`[^`]*?`|[ \n]+|[a-zA-Z0-9_,]+(?:\(\)|\(?)|#.+)/
-  const tokens = src.trim().replace(/^#.+\n/g, '').split(reg).map(t => t.replace(/^ +/, '').replace(/^#.*/g, '').replace(/^[ \n]+\n/, '\n')).filter(x => x)
+  const tokens = src.trim().split(reg).map(t => t.replace(/^ +/, '').replace(/^#.*/g, '').replace(/^[ \n]+\n/, '\n')).filter(x => x)
   const is_op2 = x => '+-*/%&|!=<>'.includes(x[0])
   const parse = () => {
     let pos = 0
@@ -63,8 +63,10 @@ function compile(src) {
   const gen = node => {
     const exps = a => a.length === 1 ? gen(a[0]) : `(() => {\n  ${a.map((e, i) => (i === a.length - 1 ? 'return ' : '') + gen(e)).join('\n  ')}\n})()`
     const matcher = ([tag, alias, ...exp]) => `v.__tag === '${tag}' ? (${alias} => ${gen(exp)})(v.__value)`
-    const branch = a => a.length == 0 ? fail('invalid branch') : a.length === 1 ? a[0] : `${a[0]} ? ${a[1]} : ` + branch(a.slice(2))
-    const handle = ([a, b]) => `(() => { try { return ${a} } catch (__e) { return (${b})(__e) } })()`
+    const _case = a => a.length == 0 ? fail('invalid case') : a.length === 1 ? a[0] : `${a[0]} ? ${a[1]} : ` + _case(a.slice(2))
+    const _switch = a => a.length === 0 ? `fail('invalid switch')` : `__target === JSON.stringify(${gen(a[0][0])}) ? ${gen(a[0][1])} : ` + _switch(a.slice(1))
+    const _catch = ([a, b]) => `(() => { try { return ${a} } catch (__e) { return (${b})(__e) } })()`
+    const _if = (cond, exp) => `if (${cond}) { ${exp} }`
     const apply = ([head, ...tail]) =>
       tail.length === 0 ? gen(head) :
         head === 'def' ? `const ${tail[0]} = (${tail.slice(1, -1)}) => ${gen(tail[tail.length - 1])}` :
@@ -75,8 +77,11 @@ function compile(src) {
         head === 'do' ? exps(tail) :
         head === 'var' ? `let ${tail[0]} = ${gen(tail.slice(1))}` :
         head === 'let' ? `const ${tail[0]} = ${gen(tail.slice(1))}` :
-        head === 'if' ? `(${branch(tail.map(gen))})` :
-        head === 'catch' ? handle(tail.map(gen)) :
+        head === 'case' ? `(${_case(tail.map(gen))})` :
+        head === 'if' ? `${_if(gen(tail[0]), gen(tail[1][1]))}` :
+        head === 'return' ? `return ${gen(tail)}` :
+        head === 'switch' ? `(__target => ${_switch(tail[1].slice(1))})(JSON.stringify(${gen(tail[0])}))` :
+        head === 'catch' ? _catch(tail.map(gen)) :
         head === '=>' ? `((${tail[0] + ') => ' + gen(tail[1])})` :
         head === '.' ? `${gen(tail[0])}.${gen(tail[1])}` :
         head === '/' ? `(d => d === 0 ? fail('Zero division error') : ${gen(tail[0])} / d)(${gen(tail[1])})` :
@@ -199,9 +204,12 @@ const test = () => {
   exp(2, '\n  let a:\n    var b 1\n    b += 1\n    b\n  a')
 
   // branch
-  exp(1, 'if true 1 2')
-  exp(2, 'if false 1 2')
-  exp(2, 'if (true && (1 == 2)) 1 2')
+  exp(1, '\n  if true: return 1\n  2')
+  exp(2, '\n  if false: return 1\n  2')
+  exp(1, 'case true 1 2')
+  exp(2, 'case false 1 2')
+  exp(2, 'case (true && (1 == 2)) 1 2')
+  exp('one', 'switch 1:\n  1: "one"\n  2: "two"')
 
   // error handling
   exp('Zero division error', '\n  1/0\n  1')
@@ -215,6 +223,7 @@ const test = () => {
 
   // comments
   exp(1, '1', '# this is a comment')
+  exp(1, '#comment 1\n  1 # comment 2\n# comment 3', '# this is a comment')
 
   // bug fixes
   exp('"', '`"`')
@@ -225,9 +234,9 @@ const test = () => {
   exp(1, 'f()', 'def f:\n  let a 1\n\n  a')
   exp('# comment', '"# comment"', )
   exp(1, '1', '# comment 1', '# comment 2')
-  exp(1, 'if(true\n1\n2)')
+  exp(1, 'case(true\n1\n2)')
   exp('ell', '"hello".slice 1 (-1)')
-  exp(2, 'if(true 1 2) + 1')
+  exp(2, 'case(true 1 2) + 1')
 
   puts('ok')
   return true
