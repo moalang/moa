@@ -1,7 +1,5 @@
 'use strict'
 
-let fs = require('fs')
-const stdjs = (function() {
 function puts(...a) { console.log(...a); return a[a.length - 1] }
 function p(...a) { puts('#', a.map(o => JSON.stringify(o, null, 2).replace(/\n +/g, ' ')).join(' ')); return a[a.length -1] }
 function pp(...a) { puts('#', a.map(o => JSON.stringify(o, null, 2)).join(' ')); return a[a.length - 1] }
@@ -16,9 +14,6 @@ Object.defineProperty(Array.prototype, 'size', { get() { return this.length } })
 Array.prototype.at = String.prototype.at
 Array.prototype.append = function (a) { return this.concat(a) }
 Array.prototype.contains = function (s) { return this.includes(s) }
-}).toString().slice(12, -1).trim()
-eval(stdjs.replace(/function (\w+)/g, (_, f) => `global.${f} = function ${f}`))
-
 function compile(src) {
   const reg = /([():\[\].]|[-+*\/%&|!=><]+|""".*"""|```.*```|"[^"]*?"|`[^`]*?`|[ \n]+|[a-zA-Z0-9_,]+(?:\(\)|\(?)|#.+)/
   const tokens = src.trim().split(reg).map(t => t.replace(/^ +/, '').replace(/^#.*/g, '').replace(/^[ \n]+\n/, '\n')).filter(x => x)
@@ -239,57 +234,8 @@ const test = () => {
   exp(2, 'case(true 1 2) + 1')
 
   puts('ok')
-  return true
 }
 
-function install() {
-  let moa = fs.readFileSync('moa.moa', 'utf8')
-  let js = `#!/usr/bin/env node
-'use strict'
-
-// Expand primitives
-${stdjs}
-
-// User code
-${compile(moa)}
-
-// Main logic
-function tester(expected, actual) {
-  if (JSON.stringify(expected) === JSON.stringify(actual)) {
-    process.stdout.write('.')
-  } else {
-    console.log('expected:', expected)
-    console.log('actual:', actual)
-    process.exit(1)
-  }
+if (typeof window === 'undefined') {
+  test()
 }
-function main(){
-  let a = process.argv[2]
-  if (a === 'build') {
-    let fs = require('fs')
-    let src = fs.readFileSync(process.argv[3], 'utf8')
-    console.log(compile(src))
-  } else if (a === 'version') {
-    console.log('moa 0.0.1 js')
-  } else if (a === 'checkup') {
-    test({eq: tester})
-    console.log('ok')
-  } else {
-    console.log(\`Moa is a tool for managing Moa source code.
-
-  Usage:
-
-    moa <command> [arguments]
-
-  The commands are:
-
-         build       compile packages and dependencies
-         version     print Moa version\`)
-  }
-}
-main()
-`
-  fs.writeFileSync(__dirname + '/../bin/moa', js)
-}
-
-test() && install()
