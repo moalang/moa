@@ -13,9 +13,9 @@ syn match Number / [0-9]\+\(\.[0-9]\+\)\?/
 syn keyword Boolean true false
 
 " Statement
-syn keyword Statement def continue break return goto
+syn keyword Statement def hint continue break return goto
 syn keyword StorageClass let var
-syn keyword Structure    struct adt
+syn keyword Structure struct adt
 syn keyword Conditional if else
 syn keyword Repeat for while
 syn keyword Exception error try do catch

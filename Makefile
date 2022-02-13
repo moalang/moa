@@ -1,6 +1,6 @@
 test:
 	@printf '\033\143'
-	@(cd src && node bootstrap.js)
+	@(cd src && node --trace-uncaught bootstrap.js)
 
 watch:
 	@-make test

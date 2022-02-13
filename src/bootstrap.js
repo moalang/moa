@@ -2,8 +2,8 @@
 
 const write = (...a) => process.stdout.write(a.map(x => x.toString()).join(' '))
 const puts = (...a) => console.log(...a)
-const trace = (...a) => (write('TRACE:'), console.dir(a, {depth: null}), a[a.length - 1])
-const fail = (m, ...a) => { a.length && trace(m, ...a); throw new Error(m) }
+const pp = (...a) => (write('TRACE:'), console.dir(a, {depth: null}), a[a.length - 1])
+const fail = (m, ...a) => { a.length && pp(m, ...a); throw new Error(m) }
 const showType = target => {
   const show = t => t.instance ? show(t.instance) : (
     t.name && t.types.length >= 1 ? `(${t.name} ${t.types.map(show).join(' ')})` :
@@ -29,9 +29,9 @@ const moa_array_keep = (o, f) => o.filter(f)
 function compile(src) {
   let pos = 0
   const newToken = s => Object.assign(new String(s.replace(/^ +/, '')), {pos: (pos+=s.length) - s.length})
-  const tokens = src.split(/(\(\)|[():\[\],]|[\+\-\*\/%&|=><\.]+|"[^"]*?"|`[^`]*?`|[ \n]+|[a-zA-Z0-9_]+)/).map(newToken).filter(x => x.length)
+  const tokens = src.split(/(\(\)|[():\[\],]|[\+\-\*\/%&|!=><\.]+|"[^"]*?"|`[^`]*?`|[ \n]+|[a-zA-Z0-9_]+)/).map(newToken).filter(x => x.length)
   if (pos !== src.length) { fail(`Failed to tokenize ${pos} !== ${src.length}`) }
-  const is_op2 = x => x.match && x.match(/[\+\-\*\/%&|=><\.,]/)
+  const is_op2 = x => '+-*/%|&!=<>.,'.includes(x[0])
   const parse = () => {
     let pos = 0
     const next = o => { ++pos; return o }
@@ -56,7 +56,7 @@ function compile(src) {
         t == ',' ? combine([node].concat(until(t => t == ',' && ++pos, () => tokens[pos++]))) :
         t == '.' ? combine([t, node, next(tokens[++pos])]) :
         t == '=>' ? combine([t, array(node), (++pos, consume())]) :
-        t.match(/^[\+\-\*\/%&|=><]/) ? combine([tokens[pos++], node, consume()]) :
+        is_op2(t) ? combine([tokens[pos++], node, consume()]) :
         t == '()' ? combine((node.suffix = '()', pos++, node)) :
         t == '(' && t.pos === tokens[pos - 1].pos +tokens[pos - 1].length ? ++pos && combine([node].concat(next(reads(t => t != ')')))) : node)(tokens[pos])
       return combine(node)
@@ -91,10 +91,12 @@ function compile(src) {
         head == 'let' ? `const ${tail[0]} = ${gen(tail.slice(1))}` :
         head == 'if' ? branch(tail.map(gen)) :
         head == 'catch' ? handle(tail.map(gen)) :
+        head == 'hint' ? '' :
         head == '=>' ? `((${tail[0] + ') => ' + gen(tail[1])})` :
         head == '.' ? method(tail[0], tail[1]) :
         head == '/' ? `(d => d === 0 ? fail('Zero division error') : ${gen(tail[0])} / d)(${gen(tail[1])})` :
         head == '==' ? `JSON.stringify(${gen(tail[0])}) === JSON.stringify(${gen(tail[1])})` :
+        head == '!=' ? `JSON.stringify(${gen(tail[0])}) !== JSON.stringify(${gen(tail[1])})` :
         head == '-' && tail.length === 1 ? '-' + gen(tail[0]) :
         !Array.isArray(head) && is_op2(head) ? gen(tail[0]) + head + gen(tail[1]) :
         Array.isArray(head) && head[0] == '.' ? method(head[1], head[2], tail.map(gen)) :
@@ -112,7 +114,7 @@ function compile(src) {
       }
       return rec(type)
     }
-    const unify = (a, b) => {
+    const _unify = (a, b, debug) => {
       a = prune(a)
       b = prune(b)
       if (a.var) {
@@ -120,18 +122,19 @@ function compile(src) {
           a.instance = b
         }
       } else if (b.var) {
-        unify(b, a)
+        _unify(b, a, debug)
       } else {
         if (a.name !== b.name || a.types.length !== b.types.length) {
-          fail(`type miss match`, showType(a), showType(b))
+          fail(`type miss match`, showType(a), showType(b), debug)
         }
-        a.types.map((t,i) => unify(t, b.types[i]))
+        a.types.map((t,i) => _unify(t, b.types[i]), debug)
       }
     }
 
     const prune = t => (t.var && t.instance) ? t.instance = prune(t.instance) : t
     const analyse = (node, env, nonGeneric) => node.type = prune(_analyse(node, env, nonGeneric))
     const _analyse = (node, env, nonGeneric) => {
+      const unify = (a, b) => _unify(a, b, node)
       if (Array.isArray(node)) {
         let [head, ...tail] = node
         if (head == '=>') {
@@ -147,8 +150,18 @@ function compile(src) {
           const args = tail.slice(1, -1).map(arg => (arg.type = tvar(), arg))
           const body = tail.slice(-1)[0]
           const newEnv = Object.assign({}, env)
+          const hints = tenv[name] && tenv[name].types
+          if (hints) {
+            if (args.length !== hints.length - 1) {
+              fail(`wrong number of arguments (given ${args.length}, expected ${hints.length-1})`)
+            }
+            args.map((a,i) => unify(a.type, hints[i]))
+          }
           args.forEach(arg => newEnv[arg.toString()] = arg.type)
           const ret = analyse(body, newEnv, nonGeneric.concat(args.map(t => t.type.name)))
+          if (hints) {
+            unify(ret, hints[hints.length - 1])
+          }
           return head.type = env[name] = tlambda(...args.map(t => t.type), ret)
         } else if (head == 'do') {
           const steps = tail.map(step => analyse(step, env, nonGeneric))
@@ -204,6 +217,8 @@ function compile(src) {
     const tstring = ttype('string')
     const tbool = ttype('bool')
     const tarray = t => ttype('array', t)
+    const v1 = tvar()
+    const v2 = tvar()
     const tenv = {
       string: () => ({
         size: tint,
@@ -222,9 +237,11 @@ function compile(src) {
         keep: tlambda(tlambda(t, tbool), tarray(t)),
         append: tlambda(t, tarray(t)),
       }),
+      __tester: t => ({
+        eq: tlambda(v1, v1, v2),
+      }),
+      selfcheck: tlambda(ttype('__tester'), v1),
     }
-    const v1 = tvar()
-    const v2 = tvar()
     const topEnv = {
       __cache: {},
       '=': tlambda(v1, v1),
@@ -256,6 +273,11 @@ function compile(src) {
       }
       tenv[name] = () => d
       topEnv[name] = ttype(name)
+    }
+    for (const node of nodes.filter(node => node[0] == 'hint')) {
+      const name = node[1].toString()
+      const types = node.slice(2).map(x => ttype(x.toString()))
+      tenv[name] = tlambda(...types)
     }
     return nodes.filter(node => node[0] == 'def').map(node => analyse(node, topEnv, []))
   }
@@ -320,7 +342,7 @@ const test = () => {
 
   // string with regular expression
   exp('h_o', '"hello".rsub `[el]+` "_"')
-  //exp(['1', '+', '2'], '"1 + 2".rsplit(`([0-9\+])`).keep(s => s != "")') // fix me
+  exp(['1', '+', '2'], '"1 + 2".rsplit(`([0-9\+])`).map(s => s.rsub(` ` "")).keep(s => s != "")')
 
   // array
   exp(2, '[1 2].size')
@@ -354,13 +376,15 @@ const test = () => {
   exp(1, 'match (ab.a 1):\n  a v: v\n  b s: s.size', 'adt ab:\n  a int\n  b string')
   exp(2, 'match (ab.b "hi"):\n  a v: v\n  b s: s.size', 'adt ab:\n  a int\n  b string')
 
-  // formula
+  // exp
   exp(3, '1 + 2')
   exp(7, '1 + 2 * 3')
   exp(5, '1 * 2 + 3')
   exp(true, '([1 2].size == 1 + 1) && [3 4].size == 2')
   exp(true, '(s 1) == (s 1)', 'struct s:\n  value int')
   exp(3, '(a,b => a + b) 1 2')
+  exp(true, '1 == 1')
+  exp(false, '1 != 1')
 
   // variable
   exp(1, '\n  var n 0\n  n = 1\n  n')
@@ -458,7 +482,13 @@ const test = () => {
   type('int', 'def g: (f true) + (f 4)', 'def f x: 3')
   type('(bool (1 1))', 'h', 'def f x: x', 'def g y: y', 'def h b: if b (f g) (g f)')
 
+  // type hint
+  type('(1 1)', 'f', 'def f x: x')
+  type('(string string)', 'f', 'hint f string string', 'def f x: x')
+  type('(int int)', 'f', 'hint f int int', 'def f x: x')
+
   puts('ok')
+  return true
 }
 
 function bootstrap() {
@@ -468,13 +498,28 @@ function bootstrap() {
 'use strict'
 `
   let suffix = `
-let a = process.argv[2]
-if (a === 'build') {
+
+let command = process.argv[2]
+if (command === 'build') {
   let fs = require('fs')
   let src = fs.readFileSync(process.argv[3], 'utf8')
   console.log(compile(src))
-} else if (a === 'version') {
+} else if (command === 'version') {
   console.log('moa0.0.1 js')
+} else if (command === 'selfcheck') {
+  const tester = {
+    eq: (a, b) => {
+      if (JSON.stringify(a) === JSON.stringify(b)) {
+        process.stdout.write('.')
+      } else {
+        console.log("expect: ", a)
+        console.log("actual: ", b)
+        process.exit(-1)
+      }
+    }
+  }
+  selfcheck(tester)
+  console.log('ok')
 } else {
   console.log(\`Moa is a tool for managing Moa source code.
 
@@ -484,12 +529,11 @@ Usage:
 
 The commands are:
 
-	build       compile packages and dependencies
-	version     print Moa version\`)
+  build       compile packages and dependencies
+  version     print Moa version\`)
 }`
-  let js = prefix + compile(moa).js + suffix
+  let js = prefix + compile(moa.trim()).js + suffix
   fs.writeFileSync(__dirname + '/../bin/moa', js)
 }
 
-test()
-//bootstrap()
+test() && bootstrap()
