@@ -4,5 +4,6 @@ def compile src:
     let reg `([():\\[\\]]|[\\+\\-\\*\\/%&|=><\\.]+|"[^"]*?"|[ \\n]+|[a-zA-Z0-9_,]+(?:\\(\\)|\\(?))`
     src.rsplit(reg).map(t => t.rsub(`^ +` "")).keep(x => x != "")
   src
+
 def selfcheck t:
   t.eq 1 1
