@@ -4,6 +4,7 @@ function puts(...a) { console.log(...a); return a[a.length - 1] }
 function p(...a) { puts('#', a.map(o => JSON.stringify(o, null, 2).replace(/\n +/g, ' ')).join(' ')); return a[a.length -1] }
 function pp(...a) { puts('#', a.map(o => JSON.stringify(o, null, 2)).join(' ')); return a[a.length - 1] }
 function fail(m, ...a) { a.length && p(a); throw new Error(m) }
+
 Object.defineProperty(String.prototype, 'size', { get() { return this.length } });
 String.prototype.at = function (n) { return n >= this.length || n < -this.length ? fail('Out of index') : n >= 0 ? this[n] : this[this.length + n] }
 String.prototype.contains = function (s) { return this.includes(s) }
@@ -14,6 +15,8 @@ Object.defineProperty(Array.prototype, 'size', { get() { return this.length } })
 Array.prototype.at = String.prototype.at
 Array.prototype.append = function (a) { return this.concat(a) }
 Array.prototype.contains = function (s) { return this.includes(s) }
+Array.prototype.keep = function (f) { return this.filter(f) }
+
 function compile(src) {
   const reg = /([():\[\].]|[-+*\/%&|!=><]+|""".*"""|```.*```|"[^"]*?"|`[^`]*?`|[ \n]+|[a-zA-Z0-9_,]+(?:\(\)|\(?)|#.+)/
   const tokens = src.trim().split(reg).map(t => t.replace(/^ +/, '').replace(/^#.*/g, '').replace(/^[ \n]+\n/, '\n')).filter(x => x)
@@ -130,7 +133,7 @@ const test = () => {
 
   // method chain
   exp([2, 3], '[1 2].map(n => n + 1)')
-  exp([2, 3], '[1 2 3].map(n => n + 1).filter(n => n <= 3)')
+  exp([2, 3], '[1 2 3].map(n => n + 1).keep(n => n <= 3)')
 
   // int
   exp(-1, '(-1)')
@@ -149,13 +152,13 @@ const test = () => {
 
   // string with regular expression
   exp('h_o', '"hello".rsub `[el]+` "_"')
-  exp(['1', '+', '2'], '"1 + 2".rsplit(`([0-9\+])`).filter(x => x != "" && x != " ")')
+  exp(['1', '+', '2'], '"1 + 2".rsplit(`([0-9\+])`).keep(x => x != "" && x != " ")')
 
   // array
   exp(2, '[1 2].size')
   exp([1, 2], '[1].append 2')
   exp([2, 3], '[1 2].map n => n + 1')
-  exp([1, 3], '[1 2 3].filter n => (n % 2) == 1')
+  exp([1, 3], '[1 2 3].keep n => (n % 2) == 1')
   exp(true, '[1 2].contains 1')
   exp(false, '[1 2].contains 3')
 
@@ -250,7 +253,8 @@ function bootstrap() {
         console.log('actual:', b)
         process.exit(-1)
       }
-    }
+    },
+    run_js: js => Function('__f = ' + js + '; return typeof __f === "function" ? __f() : __f')()
   }`
   const prefix = `#!/usr/bin/env node
 'use strict'`
