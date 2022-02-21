@@ -18,6 +18,7 @@ Array.prototype.contains = function (s) { return this.includes(s) }
 Array.prototype.keep = function (f) { return this.filter(f) }
 
 function compile(src) {
+  src = src.trim()
   const reg = /([():\[\].]|[-+*\/%&|!=><]+|""".*"""|```.*```|"[^"]*?"|`[^`]*?`|[ \n]+|[a-zA-Z0-9_,]+(?:\(\)|\(?)|#.+)/
   const tokens = src.trim().split(reg).map(t => t.replace(/^ +/, '').replace(/^#.*/g, '').replace(/^[ \n]+\n/, '\n')).filter(x => x)
   const is_op2 = x => '+-*/%&|!=<>'.includes(x[0])
