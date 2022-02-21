@@ -73,6 +73,7 @@ function compile(src) {
         head === 'match' ? `(v => ${tail[1].slice(1).map(matcher).join(' : ')} : error(\`Does not match \${v}\`))(${gen(tail[0])})` :
         head === 'array' ? `[${tail.map(gen).join(', ')}]` :
         head === 'do' ? exps(tail) :
+        head === 'while' ? `while (${gen(tail[0])}) { ${tail[1].slice(1).map(gen).join(";")} }` :
         head === 'var' ? `let ${tail[0]} = ${gen(tail.slice(1))}` :
         head === 'let' ? `const ${tail[0]} = ${gen(tail.slice(1))}` :
         head === 'case' ? `(${_case(tail.map(gen))})` :
@@ -219,6 +220,10 @@ const test = () => {
   // do block
   exp(1, 'do 1')
   exp(5, 'do 1 (2 + 3)')
+
+  // while block
+  exp(3, '\n  var n 0\n  while n < 3:\n    n += 1\n  n')
+  exp(2, '\n  var n 0\n  while n < 3:\n    n += 1\n    if n==2: break\n  n')
 
   // comments
   exp(1, '1', '# this is a comment')
