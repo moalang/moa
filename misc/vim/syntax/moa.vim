@@ -9,6 +9,7 @@ syn match  Comment /#.*$/
 " Constant
 syn region String start=+[uU]\=\z([`"]\)+ end="\z1" skip="\\\\\|\\\z1"
 syn region String start=+[uU]\=\z(```\|"""\)+ end="\z1"
+syn region String start=+[uU]\=\z(r!\)+ end="!" skip="\\\\!"
 syn match Number / [0-9]\+\(\.[0-9]\+\)\?/
 syn keyword Boolean true false
 

@@ -1,13 +1,74 @@
 hint compile string string
 def compile src:
   let tokens:
-    let reg `([():\\[\\]]|[\\+\\-\\*\\/%&|=><\\.]+|"[^"]*?"|[ \\n]+|[a-zA-Z0-9_,]+(?:\\(\\)|\\(?))`
+    let reg r!([():\[\].]|""".*"""|```.*```|"[^"]*?"|`[^`]*?`|r\u0021[^\u0021]*\u0021|[-+*\/%&|\u0021=><]+|[ \n]+|[a-zA-Z0-9_,]+(?:\(\)|\(?)|#.+)!
     src.rsplit(reg).map(t => t.rsub(`^ +` "")).keep(x => x != "")
-  src
+  let nodes:
+    def is_op2 x: x && "+-*/%&|!=<>".includes(x.at(0))
+    var pos 0
+    def next o:
+      pos+=1
+      o
+    def until f:
+      var a []
+      while pos < tokens.size && f(tokens.at(pos)):
+        a.push(consume())
+      a
+    def reads f: until(t => until(t => t.startsWith("\n")) && f(t))
+    def right: until(t => t.startsWith("\n").flip)
+    def sepby f: [right()].concat(case(pos < tokens.size && f(tokens.at(pos)) sepby(next(f)) []))
+    def consume:
+      let priorities "|| && == != > >= < <= * / % + -".split(" ")
+      def priority op: priorities.findIndex(x => x === op)
+      def op2 op l r: case Array.isArray(r) && is_op2(r) && priority(op) > priority(r.at(0)) [r.at(0) [op l r.at(1)] r.at(2)] [op l r]
+      let t tokens.at pos
+      pos+=1
+      def predict node:
+        let tt case(pos < tokens.size tokens.at(pos) "")
+        def dot t:
+          case(t.endsWith("(")
+            [["." node t.slice(0 -1)]].concat(next(reads(t => t !== ")")))
+            ["." node t])
+        if is_op2(tt):
+          return predict(op2(next(tokens.at(pos)) node consume()))
+        if tt == ".":
+          pos += 1
+          return predict(dot(next(tokens.at(pos))))
+        node
+      let node case(
+        t === "("                                    next(reads(t => t !== ")"))
+        t.endsWith("(")                              [t.slice(0, -1)].concat(next(reads(t => t !== ")")))
+        t === "["                                    ["array"].concat(next(reads(t => t !== "]")))
+        t === ":" && tokens.at(pos).startsWith("\n") ["do"].concat(top(next(tokens[pos])))
+        t === ":"                                    ["do"].concat([right()])
+        t)
+      predict(node)
+    def top br: sepby(t => t === br)
+    top("\n")
+  def gen node:
+    def is_block a: "if else while".split(" ").includes(a.at(0))
+    def exps a:
+      case(a.length == 1 gen(a.at(0))
+        a.find(is_block) `{\n  ` + a.map((e i) => case(is_block(e).flip && i === a.size - 1 "return " "") + gen(e)).join("\n  ") + `\n}`
+        `(() => {\n  ` + a.map((e i) => case(i === a.length - 1 "return " "") + gen(e)).join("\n  ") + `\n})()`)
+    def apply a:
+      if a.size == 0:
+        return ""
+      let head a.at(0)
+      let tail a.slice(1)
+      case(tail.size == 0 gen(head)
+        head === "def"    `const ` + tail.at(0) + ` = (` + tail.slice(1 (-1)) + `) => ` + gen(tail.at(tail.size - 1))
+        head === "do"     exps(tail)
+        gen(head) + "(" + tail.map(gen).join(", ") + ")")
+    case(Array.isArray(node) apply(node) node)
+  nodes.map(gen).join("\n")
+
 
 def selfcheck t:
-  def eq expect src:
-    t.eq expect t.run_js(src)
+  def eq expect exp:
+    let src `def main: ${exp}`
+    let js compile src
+    t.eq expect t.run_js(js + "\nmain()")
 
   # literals
   eq 1 "1"

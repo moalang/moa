@@ -5,6 +5,11 @@ function p(...a) { puts('#', a.map(o => JSON.stringify(o, null, 2).replace(/\n +
 function pp(...a) { puts('#', a.map(o => JSON.stringify(o, null, 2)).join(' ')); return a[a.length - 1] }
 function fail(m, ...a) { a.length && p(a); throw new Error(m) }
 
+const stdjs = (function() {
+function fail(m, ...a) { a.length && p(a); throw new Error(m) }
+function puts(...a) { console.log(...a); return a[a.length - 1] }
+function p(...a) { puts('#', a.map(o => JSON.stringify(o, null, 2).replace(/\n +/g, ' ')).join(' ')); return a[a.length -1] }
+function pp(...a) { puts('#', a.map(o => JSON.stringify(o, null, 2)).join(' ')); return a[a.length - 1] }
 Object.defineProperty(String.prototype, 'size', { get() { return this.length } });
 String.prototype.at = function (n) { return n >= this.length || n < -this.length ? fail('Out of index') : n >= 0 ? this[n] : this[this.length + n] }
 String.prototype.contains = function (s) { return this.includes(s) }
@@ -16,11 +21,23 @@ Array.prototype.at = String.prototype.at
 Array.prototype.append = function (a) { return this.concat(a) }
 Array.prototype.contains = function (s) { return this.includes(s) }
 Array.prototype.keep = function (f) { return this.filter(f) }
+Object.defineProperty(Boolean.prototype, 'flip', { get() { return this == false } })
+}).toString().slice(12, -1).trim()
+eval(stdjs)
 
 function compile(src) {
-  src = src.trim()
-  const reg = /([():\[\].]|[-+*\/%&|!=><]+|""".*"""|```.*```|"[^"]*?"|`[^`]*?`|[ \n]+|[a-zA-Z0-9_,]+(?:\(\)|\(?)|#.+)/
-  const tokens = src.trim().split(reg).map(t => t.replace(/^ +/, '').replace(/^#.*/g, '').replace(/^[ \n]+\n/, '\n')).filter(x => x)
+  const trim = a => {
+    let b = []
+    let i = a.length - 1
+    for (; i>=0; --i) {
+      if (!a[i].startsWith('\n')) {
+        break
+      }
+    }
+    return a.slice(0, i+1)
+  }
+  const reg = /([():\[\].]|""".*"""|```.*```|"[^"]*?"|`[^`]*?`|r![^!]*!|[-+*\/%&|!=><]+|[ \n]+|[a-zA-Z0-9_,]+(?:\(\)|\(?)|#.+)/
+  const tokens = trim(src.trim().split(reg).map(t => t.replace(/^ +/, '').replace(/^#.*/g, '').replace(/^[ \n]+\n/, '\n')).filter(x => x))
   const is_op2 = x => '+-*/%&|!=<>'.includes(x[0])
   const parse = () => {
     let pos = 0
@@ -32,21 +49,14 @@ function compile(src) {
       }
       return a
     }
-    const reads = f => until(t => until(t => t[0] === '\n') && f(t))
-    const right = () => until(t => t[0] !== '\n')
+    const reads = f => until(t => until(t => t.startsWith('\n')) && f(t))
+    const right = () => until(t => !t.startsWith('\n'))
     const sepby = f => [right()].concat(pos < tokens.length && f(tokens[pos]) ? sepby(next(f)) : [])
     const consume = () => {
       const priorities = '|| && == != > >= < <= * / % + -'.split(' ')
       const priority = op => priorities.findIndex(x => x === op)
       const op2 = (op, l, r) => Array.isArray(r) && is_op2(r[0]) && priority(op) > priority(r[0]) ? [r[0], [op, l, r[1]], r[2]] : [op, l, r]
       const t = tokens[pos++]
-      const node =
-        t === '(' ? next(reads(t => t !== ')')) :
-        t.endsWith('(') ? [t.slice(0, -1)].concat(next(reads(t => t !== ')'))) :
-        t === '[' ? ['array'].concat(next(reads(t => t !== ']'))) :
-        t === ':' && tokens[pos][0] === '\n' ? ['do'].concat(top(tokens[pos++])) :
-        t === ':' ? ['do'].concat([right()]) :
-        t
       const predict = node => {
         const tt = tokens[pos] || ''
         const dot = t => t.endsWith('(') ? [['.', node, t.slice(0, -1)]].concat(next(reads(t => t !== ')'))) : ['.', node, t]
@@ -54,13 +64,24 @@ function compile(src) {
           tt === '.' ? ++pos && predict(dot(tokens[pos++])) :
           node
       }
+      const to_array = a => a.length === 0 ? '[]' : ['array'].concat(a)
+      const node =
+        t === '(' ? next(reads(t => t !== ')')) :
+        t.endsWith('(') ? [t.slice(0, -1)].concat(next(reads(t => t !== ')'))) :
+        t === '[' ? to_array(next(reads(t => t !== ']'))) :
+        t === ':' && tokens[pos].startsWith('\n') ? ['do'].concat(top(tokens[pos++])) :
+        t === ':' ? ['do'].concat([right()]) :
+        t
       return predict(node)
     }
     const top = br => sepby(t => t === br)
     return top('\n')
   }
   const gen = node => {
-    const exps = a => a.length === 1 ? gen(a[0]) : `(() => {\n  ${a.map((e, i) => (i === a.length - 1 ? 'return ' : '') + gen(e)).join('\n  ')}\n})()`
+    const is_block = a => ['if', 'else', 'while'].includes(a[0])
+    const exps = a => a.length === 1 ? gen(a[0]) :
+      a.find(is_block) ? `{\n  ${a.map((e, i) => (!is_block(e) && i === a.length - 1 ? 'return ' : '') + gen(e)).join('\n  ')}\n}` :
+      `(() => {\n  ${a.map((e, i) => (i === a.length - 1 ? 'return ' : '') + gen(e)).join('\n  ')}\n})()`
     const matcher = ([tag, alias, ...exp]) => `v.__tag === '${tag}' ? (${alias} => ${gen(exp)})(v.__value)`
     const _case = a => a.length == 0 ? fail('invalid case') : a.length === 1 ? a[0] : `${a[0]} ? ${a[1]} : ` + _case(a.slice(2))
     const _switch = a => a.length === 0 ? `fail('invalid switch')` : `__target === JSON.stringify(${gen(a[0][0])}) ? ${gen(a[0][1])} : ` + _switch(a.slice(1))
@@ -79,6 +100,7 @@ function compile(src) {
         head === 'let' ? `const ${tail[0]} = ${gen(tail.slice(1))}` :
         head === 'case' ? `(${_case(tail.map(gen))})` :
         head === 'if' ? `${_if(gen(tail[0]), gen(tail[1][1]))}` :
+        head === 'else' ? `else { ${gen(tail[0][1])} }` :
         head === 'return' ? `return ${gen(tail)}` :
         head === 'switch' ? `(__target => ${_switch(tail[1].slice(1))})(JSON.stringify(${gen(tail[0])}))` :
         head === 'catch' ? _catch(tail.map(gen)) :
@@ -92,6 +114,7 @@ function compile(src) {
         gen(head) + '(' + tail.map(gen).join(', ') + ')'
     const quote = (q, s) => q + s.replace(RegExp(q, 'g'), c => '\\' + c) + q
     return Array.isArray(node) ? (node.length === 0 ? '' : apply(node)) :
+      node.startsWith('r!') ? '/' + node.slice(2, -1).replace(/\\\\/g, '\\') + '/' :
       node.startsWith('"""') ? quote('"', node.slice(3, -3)) :
       node.startsWith('```') ? quote('`', node.slice(3, -3)) :
       node
@@ -107,16 +130,16 @@ const test = () => {
       return e.message
     }
   }
-  const exp = (expected, exp, ...defs) => {
+  const exp = (expect, exp, ...defs) => {
     const src = defs.concat([`def main: ${exp}`]).join('\n').replace(/\\/g, '\\\\')
     const js = compile(src)
     const actual = run(js)
-    if (JSON.stringify(expected) === JSON.stringify(actual)) {
+    if (JSON.stringify(expect) === JSON.stringify(actual)) {
       process.stdout.write('.')
     } else {
       puts('src:', src)
       puts('js:', js)
-      puts('expected:', expected)
+      puts('expect:', expect)
       puts('actual:', actual)
       process.exit(1)
     }
@@ -132,6 +155,7 @@ const test = () => {
   exp([1, 2], '[1 2]')
   exp(1, '(n => n) 1')
   exp(3, '(a,b => a + b) 1 2')
+  exp(/\d/.toString(), 'r!\\d!.toString()')
 
   // method chain
   exp([2, 3], '[1 2].map(n => n + 1)')
@@ -141,6 +165,9 @@ const test = () => {
   exp(-1, '(-1)')
   exp(0, '-1 + 1')
   exp(0, 'add 1 (-1)', 'def add a b: a + b')
+
+  // boolean
+  exp(true, 'false.flip')
 
   // string
   exp(2, '"hi".size')
@@ -207,8 +234,10 @@ const test = () => {
   // branch
   exp(1, '\n  if true: return 1\n  2')
   exp(2, '\n  if false: return 1\n  2')
+  exp(2, '\n  if false: return 1\n  else: return 2')
   exp(1, 'case true 1 2')
   exp(2, 'case false 1 2')
+  exp(3, 'case false 1 false 2 3')
   exp(2, 'case (true && (1 == 2)) 1 2')
   exp('one', 'switch 1:\n  1: "one"\n  2: "two"')
 
@@ -242,6 +271,7 @@ const test = () => {
   exp(1, 'case(true\n1\n2)')
   exp('ell', '"hello".slice 1 (-1)')
   exp(2, 'case(true 1 2) + 1')
+  exp(/([():\[\].]|""".*"""|```.*```|"[^"]*?"|`[^`]*?`|r\u0021[^\u0021]*\u0021|[-+*\/%&|\u0021=><]+|[ \n]+|[a-zA-Z0-9_,]+(?:\(\)|\(?)|#.+)/.toString(), 'r!([():\\[\\].]|""".*"""|```.*```|"[^"]*?"|`[^`]*?`|r\\u0021[^\\u0021]*\\u0021|[-+*\\/%&|\\u0021=><]+|[ \\n]+|[a-zA-Z0-9_,]+(?:\\(\\)|\\(?)|#.+)!.toString()')
 
   puts('ok')
   return true
@@ -260,10 +290,11 @@ function bootstrap() {
         process.exit(-1)
       }
     },
-    run_js: js => Function('__f = ' + js + '; return typeof __f === "function" ? __f() : __f')()
+    run_js: js => eval(js)
   }`
   const prefix = `#!/usr/bin/env node
-'use strict'`
+'use strict'
+${stdjs}`
   const suffix = `let a = process.argv[2]
 if (a === 'build') {
   let fs = require('fs')
@@ -288,7 +319,16 @@ The commands are:
 }`
   const moa_js = compile(moa)
   const js = `${prefix}\n\n\n${moa_js}\n\n\n${suffix}`
-  eval(`${moa_js}\nselfcheck(${tester})\nconsole.log('ok')`)
+  const selfcheck_js = `${stdjs}\n${moa_js}\nselfcheck(${tester})\nconsole.log('ok')`
+  fs.writeFileSync('/tmp/a.js', selfcheck_js)
+  const ret = require('child_process').spawnSync('node', ['/tmp/a.js'])
+  if (ret.status !== 0) {
+    console.log(ret.stdout.toString())
+  } else {
+    console.log(ret.stdout.toString())
+    console.log(ret.stderr.toString())
+    process.exit(ret.status)
+  }
   fs.writeFileSync(__dirname + '/../bin/moa', js)
 }
 
