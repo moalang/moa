@@ -37,7 +37,8 @@ function compile(src) {
     return a.slice(0, i+1)
   }
   const reg = /([():\[\].]|""".*"""|```.*```|"[^"]*?"|`[^`]*?`|r![^!]*!|[-+*\/%&|!=><]+|[ \n]+|[a-zA-Z0-9_,]+(?:\(\)|\(?)|#.+)/
-  const tokens = trim(src.trim().split(reg).map(t => t.replace(/^ +/, '').replace(/^#.*/g, '').replace(/^[ \n]+\n/, '\n')).filter(x => x))
+  const patch = s => s.replace(/(?<=[a-z])\[(.+?)\]/g, m => `.at((${m.slice(1,-1)}))`)
+  const tokens = trim(patch(src).replace().trim().split(reg).map(t => t.replace(/^ +/, '').replace(/^#.*/g, '').replace(/^[ \n]+\n/, '\n')).filter(x => x))
   const is_op2 = x => '+-*/%&|!=<>'.includes(x[0])
   const parse = () => {
     let pos = 0
@@ -84,7 +85,6 @@ function compile(src) {
       `(() => {\n  ${a.map((e, i) => (i === a.length - 1 ? 'return ' : '') + gen(e)).join('\n  ')}\n})()`
     const matcher = ([tag, alias, ...exp]) => `v.__tag === '${tag}' ? (${alias} => ${gen(exp)})(v.__value)`
     const _case = a => a.length == 0 ? fail('invalid case') : a.length === 1 ? a[0] : `${a[0]} ? ${a[1]} : ` + _case(a.slice(2))
-    const _switch = a => a.length === 0 ? `fail('invalid switch')` : `__target === JSON.stringify(${gen(a[0][0])}) ? ${gen(a[0][1])} : ` + _switch(a.slice(1))
     const _catch = ([a, b]) => `(() => { try { return ${a} } catch (__e) { return (${b})(__e) } })()`
     const _if = (cond, exp) => `if (${cond}) { ${exp} }`
     const apply = ([head, ...tail]) =>
@@ -102,7 +102,6 @@ function compile(src) {
         head === 'if' ? `${_if(gen(tail[0]), gen(tail[1][1]))}` :
         head === 'else' ? `else { ${gen(tail[0][1])} }` :
         head === 'return' ? `return ${gen(tail)}` :
-        head === 'switch' ? `(__target => ${_switch(tail[1].slice(1))})(JSON.stringify(${gen(tail[0])}))` :
         head === 'catch' ? _catch(tail.map(gen)) :
         head === 'hint' ? '' :
         head === '=>' ? `((${tail[0] + ') => ' + gen(tail[1])})` :
@@ -171,9 +170,10 @@ const test = () => {
 
   // string
   exp(2, '"hi".size')
-  exp('i', '"hi".at 1')
-  exp('h', '"hi".at((-2))')
-  exp('Out of index', '"hi".at 3')
+  exp('i', 's[1]', 'let s "hi"')
+  exp('i', 's[-1]', 'let s "hi"')
+  exp('h', 's[-2]', 'let s "hi"')
+  exp('Out of index', 's[3]', 'let s "hi"')
   exp(['a', 'b'], '"a,b".split ","')
   exp(true, '"hi".contains "h"')
   exp(false, '"hi".contains "z"')
@@ -239,7 +239,6 @@ const test = () => {
   exp(2, 'case false 1 2')
   exp(3, 'case false 1 false 2 3')
   exp(2, 'case (true && (1 == 2)) 1 2')
-  exp('one', 'switch 1:\n  1: "one"\n  2: "two"')
 
   // error handling
   exp('Zero division error', '\n  1/0\n  1')
