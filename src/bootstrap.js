@@ -5,8 +5,6 @@ function p(...a) { puts('#', a.map(o => JSON.stringify(o, null, 2).replace(/\n +
 function pp(...a) { puts('#', a.map(o => JSON.stringify(o, null, 2)).join(' ')); return a[a.length - 1] }
 function fail(m, ...a) { a.length && p(a); throw new Error(m) }
 
-const stdjs = (function() {
-function fail(m, ...a) { a.length && p(a); throw new Error(m) }
 function puts(...a) { console.log(...a); return a[a.length - 1] }
 function p(...a) { puts('#', a.map(o => JSON.stringify(o, null, 2).replace(/\n +/g, ' ')).join(' ')); return a[a.length -1] }
 function pp(...a) { puts('#', a.map(o => JSON.stringify(o, null, 2)).join(' ')); return a[a.length - 1] }
@@ -22,8 +20,6 @@ Array.prototype.append = function (a) { return this.concat(a) }
 Array.prototype.contains = function (s) { return this.includes(s) }
 Array.prototype.keep = function (f) { return this.filter(f) }
 Object.defineProperty(Boolean.prototype, 'flip', { get() { return this == false } })
-}).toString().slice(12, -1).trim()
-eval(stdjs)
 
 function compile(src) {
   const trim = a => {
@@ -144,23 +140,8 @@ const test = () => {
     }
   }
 
-  // literals
-  exp(1, '1')
-  exp('hi', '"hi"')
-  exp('hi', '`hi`')
-  exp('a`b', '```a`b```')
-  exp('1 + 1 = 2', '`${a} + ${a} = ${b}`', 'let a 1', 'let b 2')
-  exp('1 + 1 = 2', '```${a} + ${a} = ${b}```', 'let a 1', 'let b 2')
-  exp([1, 2], '[1 2]')
-  exp(1, '(n => n) 1')
-  exp(3, '(a,b => a + b) 1 2')
-  exp(/\d/.toString(), 'r!\\d!.toString()')
-
-  // method chain
-  exp([2, 3], '[1 2].map(n => n + 1)')
-  exp([2, 3], '[1 2 3].map(n => n + 1).keep(n => n <= 3)')
-
   // int
+  exp(1, '1')
   exp(-1, '(-1)')
   exp(0, '-1 + 1')
   exp(0, 'add 1 (-1)', 'def add a b: a + b')
@@ -169,6 +150,11 @@ const test = () => {
   exp(true, 'false.flip')
 
   // string
+  exp('hi', '"hi"')
+  exp('hi', '`hi`')
+  exp('a`b', '```a`b```')
+  exp('1 + 1 = 2', '`${a} + ${a} = ${b}`', 'let a 1', 'let b 2')
+  exp('1 + 1 = 2', '```${a} + ${a} = ${b}```', 'let a 1', 'let b 2')
   exp(2, '"hi".size')
   exp('i', 's[1]', 'let s "hi"')
   exp('i', 's[-1]', 'let s "hi"')
@@ -184,12 +170,17 @@ const test = () => {
   exp(['1', '+', '2'], '"1 + 2".rsplit(`([0-9\+])`).keep(x => x != "" && x != " ")')
 
   // array
+  exp([1, 2], '[1 2]')
   exp(2, '[1 2].size')
   exp([1, 2], '[1].append 2')
   exp([2, 3], '[1 2].map n => n + 1')
   exp([1, 3], '[1 2 3].keep n => (n % 2) == 1')
   exp(true, '[1 2].contains 1')
   exp(false, '[1 2].contains 3')
+
+  // anonymous function
+  exp(1, '(n => n) 1')
+  exp(3, '(a,b => a + b) 1 2')
 
   // function
   exp(1, 'one()', 'def one: 1')
@@ -205,6 +196,9 @@ const test = () => {
     f()
   twice inc
   a`)
+
+  // regular expression
+  exp(/\d/.toString(), 'r!\\d!.toString()')
 
   // struct
   exp({x:1, y:2}, 'vector2 1 2', 'struct vector2:\n  x int\n  y int')
@@ -271,15 +265,15 @@ const test = () => {
   exp('ell', '"hello".slice 1 (-1)')
   exp(2, 'case(true 1 2) + 1')
   exp(/([():\[\].]|""".*"""|```.*```|"[^"]*?"|`[^`]*?`|r\u0021[^\u0021]*\u0021|[-+*\/%&|\u0021=><]+|[ \n]+|[a-zA-Z0-9_,]+(?:\(\)|\(?)|#.+)/.toString(), 'r!([():\\[\\].]|""".*"""|```.*```|"[^"]*?"|`[^`]*?`|r\\u0021[^\\u0021]*\\u0021|[-+*\\/%&|\\u0021=><]+|[ \\n]+|[a-zA-Z0-9_,]+(?:\\(\\)|\\(?)|#.+)!.toString()')
+  exp([2, 3], '[1 2].map(n => n + 1)')
+  exp([2, 3], '[1 2 3].map(n => n + 1).keep(n => n <= 3)')
 
   puts('ok')
   return true
 }
 
 function bootstrap() {
-  const fs = require('fs')
-  const moa = fs.readFileSync('moa.moa', 'utf8')
-  const tester = `{
+  const tester = {
     eq: (a, b) => {
       if (JSON.stringify(a) === JSON.stringify(b)) {
         process.stdout.write('.')
@@ -290,45 +284,12 @@ function bootstrap() {
       }
     },
     run_js: js => eval(js)
-  }`
-  const prefix = `#!/usr/bin/env node
-'use strict'
-${stdjs}`
-  const suffix = `let a = process.argv[2]
-if (a === 'build') {
-  let fs = require('fs')
-  let src = fs.readFileSync(process.argv[3], 'utf8')
-  console.log(compile(src))
-} else if (a === 'version') {
-  console.log('moa0.0.1 js')
-} else if (a === 'selfcheck') {
-  selfcheck(${tester})
-  console.log('ok')
-} else {
-  console.log(\`Moa is a tool for managing Moa source code.
-
-Usage:
-
-  moa <command> [arguments]
-
-The commands are:
-
-	build       compile packages and dependencies
-	version     print Moa version\`)
-}`
-  const moa_js = compile(moa)
-  const js = `${prefix}\n\n\n${moa_js}\n\n\n${suffix}`
-  const selfcheck_js = `${stdjs}\n${moa_js}\nselfcheck(${tester})\nconsole.log('ok')`
-  fs.writeFileSync('/tmp/a.js', selfcheck_js)
-  const ret = require('child_process').spawnSync('node', ['/tmp/a.js'])
-  if (ret.status !== 0) {
-    console.log(ret.stdout.toString())
-  } else {
-    console.log(ret.stdout.toString())
-    console.log(ret.stderr.toString())
-    process.exit(ret.status)
   }
-  fs.writeFileSync(__dirname + '/../bin/moa', js)
+  const fs = require('fs')
+  const moa = fs.readFileSync('moa.moa', 'utf8')
+  const moa_js = compile(moa)
+  eval(moa_js + '\nselfcheck(tester)')
+  console.log('ok')
 }
 
 test() && bootstrap()
