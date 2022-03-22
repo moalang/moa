@@ -46,11 +46,11 @@ def compile src:
           return predict(dot(next(tokens[pos])))
         node
       let node case(
-        t === "("                                    next(reads(t => t !== ")"))
-        t.endsWith("(")                              [t.slice(0, -1)].concat(next(reads(t => t !== ")")))
-        t === "["                                    ["array"].concat(next(reads(t => t !== "]")))
+        t === "("                                 next(reads(t => t !== ")"))
+        t.endsWith("(")                           [t.slice(0, -1)].concat(next(reads(t => t !== ")")))
+        t === "["                                 ["array"].concat(next(reads(t => t !== "]")))
         t === ":" && tokens[pos].startsWith("\n") ["do"].concat(top(next(tokens[pos])))
-        t === ":"                                    ["do"].concat([right()])
+        t === ":"                                 ["do"].concat([right()])
         t)
       predict(node)
     def top br:
