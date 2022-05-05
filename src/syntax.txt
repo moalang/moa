@@ -1,0 +1,15 @@
+top: line+
+line:
+| reserves? exp+ "\n"
+| exp "\n"
+reserves: qw(use fn struct enum let var if else elif for continue break return)
+exp: node ([+-*/%|&<>=^]+ exp)*
+node: bottom ("." id ("(" exp+ ")"))*
+bottom:
+| "(" exp ")"                   # priority
+| "[" exp* "]"                  # array
+| "[" (":" | (id ":" exp)+) "]" # dict
+| "{" line* "}"                 # statement
+| " [^"]* "                     # string
+| [0-9]+ ("." [0-9]+)?
+| [A-Za-z_][A-Za-z0-9_]* ("(" exp+ ")")?
