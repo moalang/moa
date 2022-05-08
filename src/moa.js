@@ -13,7 +13,7 @@ const isOp2 = s => typeof s === 'string' && s.match(/^[+\-*%/=><|&]+$/)
 const isEol = s => s === undefined || (typeof s === 'string' && s.match(/[\n{}]/))
 const isSpace = s => typeof s === 'string' && s.match(/^[ \t]+$/)
 const compileToJs = source => {
-  const tokens = source.split(/([^\[\](){} \n]+|.)/g).filter(x => x.replace(/ +/g, ''))
+  const tokens = source.split(/([A-Za-z0-9_]+\(|[^\[\](){} \n]+|.)/g).filter(x => x.replace(/ +/g, ''))
   const nodes = parse(tokens)
   return generate(nodes)
 }
@@ -52,6 +52,8 @@ const parse = tokens => {
     const t = tokens[pos++]
     if (t.match(/^[0-9](\.[0-9]+)?$/) || t.match(/^[A-Za-z0-9_]+$/) || t.startsWith('"')) {
       return t
+    } else if (t.match(/^[A-Za-z0-9_]+\($/)) {
+      return [t.slice(0, -1),  ...many(exp, {stop: u => u === ')'})]
     } else if ('}])'.includes(t)) {
       return t
     } else if (t === '(') {
@@ -78,8 +80,10 @@ const generate = nodes => {
       return '(() => {' + addReturn(args.map(gen)).join('\n') + '})()'
     } else if (head === 'let') {
       return `let ${args[0]} = ${gen(args.slice(1))}`
+    } else if (head === 'fn') {
+      return `const ${args[0]} = (${args.slice(1, -1)}) => ${gen(args[args.length - 1])}`
     } else {
-      throw Error(`Unknown node "${head}" with "${args}"`)
+      return `${head}(${args.map(gen)})`
     }
   }
   return nodes.map(gen).join('\n')
@@ -99,6 +103,7 @@ const test = () => {
       process.exit(1)
     }
   }
+
   // bottom
   exp(1, '1')
   exp('hi', '"hi"')
@@ -108,6 +113,8 @@ const test = () => {
   exp([1, 2], '[1 2]')
   exp(1, '{1}')
   exp(1, '{let a 1\na}')
+  exp(1, 'fn f a a\nf(1)')
+  exp(3, 'fn f a b a + b\nf(1 2)')
 
   // exp
   exp(3, '1 + 2')
