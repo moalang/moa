@@ -8,7 +8,7 @@ node: bottom ("." id ("(" exp+ ")"))*
 bottom:
 | "(" exp ")"                   # priority
 | "[" exp* "]"                  # array
-| "[" (":" | (id ":" exp)+) "]" # dict
+| "[" (":" | (id ":" exp)+) "]" # dict?
 | "{" line* "}"                 # statement
 | " [^"]* "                     # string
 | [0-9]+ ("." [0-9]+)?
