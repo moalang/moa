@@ -10,12 +10,36 @@ const dump = o => console.dir(o, {depth: null})
 const reserves = 'use fn struct enum let var if else elif for continue break return'.split(' ')
 
 const isOp2 = s => typeof s === 'string' && s.match(/^[+\-*%/=><|&]+$/)
-const isEol = s => s === undefined || (typeof s === 'string' && s.match(/[\n{}]/))
-const isSpace = s => typeof s === 'string' && s.match(/^[ \t]+$/)
-const compileToJs = source => {
-  const tokens = source.split(/([A-Za-z0-9_]+\(|[^\[\](){} \n]+|.)/g).filter(x => x.replace(/ +/g, ''))
+const compile = source => {
+  const simplify = ts => {
+    const tokens = []
+    let level = 0
+    for (const t of ts) {
+      if (t === ' ' || t.match(/^ +$/)) {
+        continue
+      } else if (t.match(/^ *$/)) {
+        continue
+      } else if (t.includes('\n')) {
+        if (level === 0) {
+          tokens.push(';')
+        }
+        continue
+      }
+      if ('[('.includes(t)) {
+        ++level
+      } else if (')]'.includes(t)) {
+        --level
+      } else if (t === '}' && tokens[tokens.length - 1] !== ';') {
+        tokens.push(';')
+      }
+      tokens.push(t)
+    }
+    return tokens
+  }
+  const tokens = simplify(source.split(/([A-Za-z0-9_]+\(|[^\[\](){} \n;]+|.)/g))
   const nodes = parse(tokens)
-  return generate(nodes)
+  const js = generate(nodes)
+  return {tokens, nodes, js}
 }
 
 const parse = tokens => {
@@ -33,7 +57,7 @@ const parse = tokens => {
     return a
   }
   const consume = t => reserves.includes(t) ? line() : exp()
-  const line = () => many(exp, {stop: isEol})
+  const line = () => many(exp, {stop: t => t === ';'})
   const exp = () => {
     const lhs = atom()
     if (isOp2(tokens[pos])) {
@@ -43,9 +67,6 @@ const parse = tokens => {
     }
   }
   const atom = () => {
-    while (isSpace(tokens[pos])) {
-      pos++
-    }
     if (pos >= tokens.length) {
       return null
     }
@@ -90,14 +111,21 @@ const generate = nodes => {
 }
 const test = () => {
   const exp = (expect, source) => {
-    const js = compileToJs(source)
-    const actual = eval(js)
+    const {js, nodes, tokens} = compile(source)
+    let actual
+    try {
+      actual = eval(js)
+    } catch(e) {
+      actual = e.stack
+    }
     if (str(actual) === str(expect)) {
       put('.')
     } else {
       puts('FAILURE')
       puts('source:', source)
       puts('js    :', js)
+      puts('nodes :', nodes)
+      puts('tokens:', tokens)
       puts('expect:', expect)
       puts('actual:', actual)
       process.exit(1)
@@ -108,10 +136,11 @@ const test = () => {
   exp(1, '1')
   exp('hi', '"hi"')
   exp(1, '(1)')
-  exp(1, '((1))')
   exp([1], '[1]')
   exp([1, 2], '[1 2]')
   exp(1, '{1}')
+  exp(2, '{1;2}')
+  exp(2, '{1\n2}')
   exp(1, '{let a 1\na}')
   exp(1, 'fn f a a\nf(1)')
   exp(3, 'fn f a b a + b\nf(1 2)')
@@ -120,6 +149,11 @@ const test = () => {
   exp(3, '1 + 2')
   exp(7, '1 + 2 * 3')
   exp(9, '(1 + 2) * 3')
+
+  // new lines
+  exp(1, '(\n(\n1\n)\n)')
+  exp(9, '(\n1\n+\n2\n) * 3')
+  exp([1, 2], '[\n1\n2\n]')
 
   // reserves
 
@@ -137,7 +171,6 @@ bottom:
 | [A-Za-z_][A-Za-z0-9_]* ("(" exp+ ")")?
 */
 }
-const compile = () => console.log(compileToJs(process.argv[2]))
-const main = () => process.argv[2] ? compile(process.argv[2]) : test()
+const main = () => process.argv[2] ? console.log(compile(process.argv[2]).js) : test()
 
 main()
