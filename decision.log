@@ -1,16 +1,9 @@
-Type system
-- good error messages in compiling phase
-- good performance at runtime
-- not good performance at compiling time
-- not good flexibility
-- not easy to create compiler
-
-Function features
-- variable arguments
-- default argument
-- optional type hint
+Keep
+- simple specification
+- minimum compiler
+- no dependency in runtime
+- enough features to develop service which cover HTML, JavaScript, StyleSheet and backend APIs
 
 Do not
-- implicit nullable
-- implicit currying
-- overload
+- type system
+- algebraic data type
