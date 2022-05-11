@@ -42,7 +42,7 @@ const compile = source => {
     }
     return tokens.map(t => newNode(t))
   }
-  const tokens = simplify(source.split(/([A-Za-z0-9_]+\(|[^\[\](){} \n;\.]+|.)/g))
+  const tokens = simplify(source.split(/([A-Za-z0-9_]+\(|"[^"]*"|[^\[\](){} \n;\.]+|.)/g))
   const nodes = inference(parse(tokens))
   const js = generate(nodes)
   return {tokens, nodes, js}
@@ -110,14 +110,19 @@ const generate = nodes => {
     } else if (head == '__do') {
       return '(() => {' + addReturn(args.map(gen)).join('\n') + '})()'
     } else if (head == 'let') {
-      return `let ${args[0]} = ${gen(args.slice(1))}`
+      return `const ${args[0]} = ${gen(args.slice(1))}`
+    } else if (head == 'var') {
+      return `var ${args[0]} = ${gen(args.slice(1))}`
     } else if (head == 'fn') {
       return `const ${args[0]} = (${args.slice(1, -1)}) => ${gen(args[args.length - 1])}`
+    } else if (head == 'struct') {
+      const names = args[args.length - 1].slice(1).map(a => a[0])
+      return `const ${args[0]} = (${names}) => ({${names}})`
     } else {
       return `${head}(${args.map(gen)})`
     }
   }
-  return nodes.map(gen).join('\n')
+  return nodes.map(gen).join(';\n')
 }
 const test = () => {
   const exp = (expect, source) => {
@@ -141,6 +146,48 @@ const test = () => {
       process.exit(1)
     }
   }
+  exp(11, 'struct item { name string; price int }; item("jar" 11).price')
+  return
+
+  // define:
+  // | "let" id exp
+  exp(1, 'let a 1; a')
+  // | "var" id exp
+  exp(3, 'var a 1; a += 2; a')
+  // | "fn" id+ exp
+  exp(3, 'fn add a b a + b; add(1 2)')
+  // | "struct" id+ "{" (define lf)* } "}"
+  exp(11, 'struct item { name string; price int }; item("jar" 11).price')
+  // | "enum" id "{" (id type* lf)* "}"
+  // | "alias" id+ type
+  // block: "{" ((define | statement | exp) lf)* "}"
+  // statement:
+  // | "if" exp block ("elif" exp block)* ("else" block)?
+  // | "for" id exp block
+  // | "while" exp block
+  // | "continue" cond?
+  // | "break" cond?
+  // | "return" exp? cond?
+  // | "p" exp+ cond?                 # print one line while developing
+  // | "pp" exp+ cond?                # print multiple lines while developing
+  // exp: node (op2 exp)*
+  // node: bottom ("." id ("(" exp+ ")"))*
+  // bottom:
+  // | "(" exp ")"                    # priority   : 1 * (2 + 3)
+  // | "[" exp* "]"                   # array      : [] [1 2]
+  // | "[" (":" | (exp ":" exp)*) "]" # dict       : [:] ["key1":1 "key2":2+3]
+  // | '"' [^"]* '"'                  # string     : "hi"
+  // | id ("," id)* "=>" exp          # lambda
+  // | [0-9]+ ("." [0-9]+)?
+  // | id ("(" exp+ ")")?
+  // | block
+  // cond:
+  // | "if" exp
+  // | "unless" exp
+  // id: [A-Za-z_][A-Za-z0-9_]*
+  // type: id ("(" type+ ")")?
+  // op2: [+-/%*=<>|&^,;]+
+  // lf: ";" | "\n"
 
   // bottom
   exp(1, '1')
@@ -154,7 +201,6 @@ const test = () => {
   exp(2, '{1\n2}')
   exp(1, '{let a 1\na}')
 
-  // reverses: use
   // reverses: fn
   exp(1, 'fn f a a\nf(1)')
   exp(3, 'fn f a b a + b\nf(1 2)')
@@ -186,14 +232,42 @@ const test = () => {
   // lines
   puts('ok')
 /*
-top: line+
-line:
-| reserves? exp+ "\n"
-| exp "\n"
-reserves: qw(use fn struct enum let var if else elif for continue break return)
+top: define+
+define:
+| "let" id exp
+| "var" id exp
+| "fn" id+ exp
+| "struct" id+ "{" (define lf)* } "}"
+| "enum" id "{" (id type* lf)* "}"
+| "alias" id+ type
+block: "{" ((define | statement | exp) lf)* "}"
+statement:
+| "if" exp block ("elif" exp block)* ("else" block)?
+| "for" id exp block
+| "while" exp block
+| "continue" cond?
+| "break" cond?
+| "return" exp? cond?
+| "p" exp+ cond?                 # print one line while developing
+| "pp" exp+ cond?                # print multiple lines while developing
+exp: node (op2 exp)*
 node: bottom ("." id ("(" exp+ ")"))*
 bottom:
-| "[" (":" | (id ":" exp)+) "]" # dict?
+| "(" exp ")"                    # priority   : 1 * (2 + 3)
+| "[" exp* "]"                   # array      : [] [1 2]
+| "[" (":" | (exp ":" exp)*) "]" # dict       : [:] ["key1":1 "key2":2+3]
+| '"' [^"]* '"'                  # string     : "hi"
+| id ("," id)* "=>" exp          # lambda
+| [0-9]+ ("." [0-9]+)?
+| id ("(" exp+ ")")?
+| block
+cond:
+| "if" exp
+| "unless" exp
+id: [A-Za-z_][A-Za-z0-9_]*
+type: id ("(" type+ ")")?
+op2: [+-/%*=<>|&^,;]+
+lf: ";" | "\n"
 */
 }
 const main = () => process.argv[2] ? console.log(compile(process.argv[2]).js) : test()
