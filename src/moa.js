@@ -8,8 +8,14 @@ const puts = (...a) => console.log(strs(a))
 const trace = (...a) => puts('TRACE', ...a)
 const dump = o => console.dir(o, {depth: null})
 const reserves = 'use fn struct enum let var if else elif for continue break return'.split(' ')
+const newNode = s => new String(s)
+const __method = {
+  string: {
+    size: o => o.length
+  }
+}
 
-const isOp2 = s => typeof s === 'string' && s.match(/^[+\-*%/=><|&]+$/)
+const isOp2 = s => s && s.match && s.match(/^[+\-*%/=><|&.]+$/)
 const compile = source => {
   const simplify = ts => {
     const tokens = []
@@ -34,10 +40,10 @@ const compile = source => {
       }
       tokens.push(t)
     }
-    return tokens
+    return tokens.map(t => newNode(t))
   }
-  const tokens = simplify(source.split(/([A-Za-z0-9_]+\(|[^\[\](){} \n;]+|.)/g))
-  const nodes = parse(tokens)
+  const tokens = simplify(source.split(/([A-Za-z0-9_]+\(|[^\[\](){} \n;\.]+|.)/g))
+  const nodes = inference(parse(tokens))
   const js = generate(nodes)
   return {tokens, nodes, js}
 }
@@ -56,16 +62,9 @@ const parse = tokens => {
     }
     return a
   }
-  const consume = t => reserves.includes(t) ? line() : exp()
-  const line = () => many(exp, {stop: t => t === ';'})
-  const exp = () => {
-    const lhs = atom()
-    if (isOp2(tokens[pos])) {
-      return [tokens[pos++], lhs, exp()]
-    } else {
-      return lhs
-    }
-  }
+  const consume = t => reserves.includes(t.toString()) ? line() : exp()
+  const line = () => many(exp, {stop: t => t == ';'})
+  const exp = () => ((lhs, t) => isOp2(t) ? ++pos && [t, lhs, exp()] : lhs)(atom(), tokens[pos])
   const atom = () => {
     if (pos >= tokens.length) {
       return null
@@ -74,34 +73,45 @@ const parse = tokens => {
     if (t.match(/^[0-9](\.[0-9]+)?$/) || t.match(/^[A-Za-z0-9_]+$/) || t.startsWith('"')) {
       return t
     } else if (t.match(/^[A-Za-z0-9_]+\($/)) {
-      return [t.slice(0, -1),  ...many(exp, {stop: u => u === ')'})]
-    } else if ('}])'.includes(t)) {
+      return [newNode(t.slice(0, -1)),  ...many(exp, {stop: u => u == ')'})]
+    } else if ('}]);'.includes(t.toString())) {
       return t
-    } else if (t === '(') {
-      return many(exp, {stop: u => u === ')'})
-    } else if (t === '[') {
-      return ['__array', ...many(exp, {stop: u => u === ']'})]
-    } else if (t === '{') {
-      return ['__do', ...many(line, {stop: u => u === '}'})]
+    } else if (t == '(') {
+      return many(exp, {stop: u => u == ')'})
+    } else if (t == '[') {
+      return [newNode('__array'), ...many(exp, {stop: u => u == ']'})]
+    } else if (t == '{') {
+      return [newNode('__do'), ...many(line, {stop: u => u == '}'})]
     } else {
       throw Error(`Unexpected token "${t}"`)
     }
   }
   return many(consume)
 }
+
+const inference = nodes => {
+  const inf = o => Array.isArray(o) ? o.map(inf) : o.type = 'string'
+  nodes.map(inf)
+  return nodes
+}
+
 const generate = nodes => {
   const gen = o => Array.isArray(o) ?(o.length === 1 ? gen(o[0]) : apply(o)) : o
   const addReturn = a => [...a.slice(-0, -1), 'return ' + a[a.length - 1]]
   const apply = ([head, ...args]) => {
     if (isOp2(head)) {
-      return '(' + gen(args[0]) + head + gen(args[1]) + ')'
-    } else if (head === '__array') {
+      if (head == '.') {
+        return `__method.${args[0].type}.${args[1]}(${args[0]})`
+      } else {
+        return '(' + gen(args[0]) + head + gen(args[1]) + ')'
+      }
+    } else if (head == '__array') {
       return '[' + args.map(gen).join(', ') + ']'
-    } else if (head === '__do') {
+    } else if (head == '__do') {
       return '(() => {' + addReturn(args.map(gen)).join('\n') + '})()'
-    } else if (head === 'let') {
+    } else if (head == 'let') {
       return `let ${args[0]} = ${gen(args.slice(1))}`
-    } else if (head === 'fn') {
+    } else if (head == 'fn') {
       return `const ${args[0]} = (${args.slice(1, -1)}) => ${gen(args[args.length - 1])}`
     } else {
       return `${head}(${args.map(gen)})`
@@ -135,6 +145,7 @@ const test = () => {
   // bottom
   exp(1, '1')
   exp('hi', '"hi"')
+  exp(2, '"hi".size')
   exp(1, '(1)')
   exp([1], '[1]')
   exp([1, 2], '[1 2]')
@@ -142,8 +153,23 @@ const test = () => {
   exp(2, '{1;2}')
   exp(2, '{1\n2}')
   exp(1, '{let a 1\na}')
+
+  // reverses: use
+  // reverses: fn
   exp(1, 'fn f a a\nf(1)')
   exp(3, 'fn f a b a + b\nf(1 2)')
+  // reverses: struct
+  ////exp(1, 'struct a { b int; c string }\na(1 "hi").b')
+  // reverses: enum
+  // reverses: let
+  // reverses: var
+  // reverses: if
+  // reverses: else
+  // reverses: elif
+  // reverses: for
+  // reverses: continue
+  // reverses: break
+  // reverses: return
 
   // exp
   exp(3, '1 + 2')
@@ -168,7 +194,6 @@ reserves: qw(use fn struct enum let var if else elif for continue break return)
 node: bottom ("." id ("(" exp+ ")"))*
 bottom:
 | "[" (":" | (id ":" exp)+) "]" # dict?
-| [A-Za-z_][A-Za-z0-9_]* ("(" exp+ ")")?
 */
 }
 const main = () => process.argv[2] ? console.log(compile(process.argv[2]).js) : test()
