@@ -15,16 +15,18 @@ bottom:
 | [0-9]+ ("." [0-9]+)?
 | id ("(" exp+ ")")?
 | block
-block: "{" ((define | statement | exp) lf)* "}"
 statement:
-| "if" exp exp ("elif" exp exp)* ("else" exp)?
-| "for" id exp exp
-| "while" exp exp
+| "if" node node ("elif" node node)* ("else" exp)?
+| "for" id node node
+| "while" node node
 | "continue" cond?
 | "break" cond?
 | "return" exp? cond?
 | "p" exp+ cond?                 # print one line while developing
 | "pp" exp+ cond?                # print multiple lines while developing
+
+-- helpers --
+block: "{" ((define | statement | exp) lf)* "}"
 cond:
 | "if" exp
 | "unless" exp

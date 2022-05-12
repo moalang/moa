@@ -173,11 +173,13 @@ const test = () => {
   exp(3, 'fn add a b a + b; add(1 2)')
   // | "struct" id+ "{" (define lf)* } "}"
   exp(11, 'struct item { name string; price int }; item("jar" 11).price')
+
   // block: "{" ((define | statement | exp) lf)* "}"
   exp(1, '{1}')
   exp(2, '{1;2}')
   exp(2, '{1\n2}')
   exp(1, '{let a 1\na}')
+
   // statement:
   // | "if" exp exp ("elif" exp exp)* ("else" exp)?
   exp(1, 'var a; if true { a = 1 } elif true { a = 2 } else { a = 3 }; a')
@@ -196,8 +198,10 @@ const test = () => {
   exp(3, '1 + 2')
   exp(7, '1 + 2 * 3')
   exp(9, '(1 + 2) * 3')
+
   // node: bottom ("." id ("(" exp+ ")"))*
   exp(2, '[1 2].size')
+
   // bottom:
   // | "(" exp ")"                    # priority   : 1 * (2 + 3)
   exp(1, '(1)')
