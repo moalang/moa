@@ -17,9 +17,9 @@ bottom:
 | block
 block: "{" ((define | statement | exp) lf)* "}"
 statement:
-| "if" exp block ("elif" exp block)* ("else" block)?
-| "for" id exp block
-| "while" exp block
+| "if" exp exp ("elif" exp exp)* ("else" exp)?
+| "for" id exp exp
+| "while" exp exp
 | "continue" cond?
 | "break" cond?
 | "return" exp? cond?

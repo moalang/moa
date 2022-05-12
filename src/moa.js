@@ -7,7 +7,7 @@ const put = (...a) => process.stdout.write(strs(a))
 const puts = (...a) => console.log(strs(a))
 const trace = (...a) => puts('TRACE', ...a)
 const dump = o => console.dir(o, {depth: null})
-const reserves = 'use fn struct enum let var if else elif for continue break return'.split(' ')
+const reserves = 'use fn struct enum let var if else elif for continue break return p pp'.split(' ')
 
 Object.defineProperty(String.prototype, '_size', { get() { return this.length } });
 String.prototype._at = function (n) { return n >= this.length || n < -this.length ? fail('Out of index') : n >= 0 ? this[n] : this[this.length + n] }
@@ -126,6 +126,10 @@ const generate = nodes => {
       return `else if (${gen(args[0])}) ${gen(args[1])} ${args.length >= 3 ? gen(args.slice(2)) : ''}`
     } else if (head === 'else') {
       return `else ${gen(args)}`
+    } else if (head === 'p') {
+      return `__p(${args.map(gen)})`
+    } else if (head === 'pp') {
+      return `__pp(${args.map(gen)})`
     } else {
       return `${head}(${args.map(gen)})`
     }
@@ -137,7 +141,13 @@ const test = () => {
     const {js, nodes, tokens} = compile(source)
     let actual
     try {
+      const __stdout = []
+      const __p = (...a) => {__stdout.push(a.map(str).join(' ')); return ''}
+      const __pp = (...a) => {__stdout.push(a.map(x => JSON.stringify(x, null, 2)).join(' ')); return ''}
       actual = eval(js)
+      if (__stdout.length) {
+        actual += __stdout.join('\n')
+      }
     } catch(e) {
       actual = e.stack
     }
@@ -154,7 +164,6 @@ const test = () => {
       process.exit(1)
     }
   }
-
   // define:
   // | "let" id exp
   exp(1, 'let a 1; a')
@@ -170,22 +179,25 @@ const test = () => {
   exp(2, '{1\n2}')
   exp(1, '{let a 1\na}')
   // statement:
-  // | "if" exp block ("elif" exp block)* ("else" block)?
+  // | "if" exp exp ("elif" exp exp)* ("else" exp)?
   exp(1, 'var a; if true { a = 1 } elif true { a = 2 } else { a = 3 }; a')
   exp(2, 'var a; if false { a = 1 } elif true { a = 2 } else { a = 3 }; a')
   exp(3, 'var a; if false { a = 1 } elif false { a = 2 } else { a = 3 }; a')
-  // | "for" id exp block
-  // | "while" exp block
+  // | "for" id exp exp
+  // | "while" exp exp
   // | "continue" cond?
   // | "break" cond?
   // | "return" exp? cond?
   // | "p" exp+ cond?                 # print one line while developing
+  exp('1 [2,3]\n4', 'p 1 [2 3]; p 4')
   // | "pp" exp+ cond?                # print multiple lines while developing
+  exp('1 [\n  2,\n  3\n]\n4', 'pp 1 [2 3]; pp 4')
   // exp: node (op2 exp)*
   exp(3, '1 + 2')
   exp(7, '1 + 2 * 3')
   exp(9, '(1 + 2) * 3')
   // node: bottom ("." id ("(" exp+ ")"))*
+  exp(2, '[1 2].size')
   // bottom:
   // | "(" exp ")"                    # priority   : 1 * (2 + 3)
   exp(1, '(1)')
