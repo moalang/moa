@@ -100,7 +100,6 @@ const parse = tokens => {
 
 const generate = nodes => {
   const gen = o => Array.isArray(o) ?(o.length === 1 ? gen(o[0]) : apply(o)) : o
-  const addReturn = a => [...a.slice(-0, -1), 'return ' + a[a.length - 1]]
   const apply = ([head, ...args]) => {
     if (isOp2(head)) {
       if (head === '.') {
@@ -111,16 +110,22 @@ const generate = nodes => {
     } else if (head === '__array') {
       return '[' + args.map(gen).join(', ') + ']'
     } else if (head === '__do') {
-      return '(() => {' + addReturn(args.map(gen)).join('\n') + '})()'
+      return '{' + args.map(gen).join('\n') + '}'
     } else if (head === 'let') {
       return `const ${args[0]} = ${gen(args.slice(1))}`
     } else if (head === 'var') {
-      return `var ${args[0]} = ${gen(args.slice(1))}`
+      return `var ${args[0]} = ${args.length >= 2 ? gen(args.slice(1)) : 'undefined'}`
     } else if (head === 'fn') {
       return `const ${args[0]} = (${args.slice(1, -1)}) => ${gen(args[args.length - 1])}`
     } else if (head === 'struct') {
       const names = args[args.length - 1].slice(1).map(a => '_' + a[0])
       return `const ${args[0]} = (${names}) => ({${names}})`
+    } else if (head === 'if') {
+      return `if (${gen(args[0])}) ${gen(args[1])} ${args.length >= 3 ? gen(args.slice(2)) : ''}`
+    } else if (head === 'elif') {
+      return `else if (${gen(args[0])}) ${gen(args[1])} ${args.length >= 3 ? gen(args.slice(2)) : ''}`
+    } else if (head === 'else') {
+      return `else ${gen(args)}`
     } else {
       return `${head}(${args.map(gen)})`
     }
@@ -166,6 +171,9 @@ const test = () => {
   exp(1, '{let a 1\na}')
   // statement:
   // | "if" exp block ("elif" exp block)* ("else" block)?
+  exp(1, 'var a; if true { a = 1 } elif true { a = 2 } else { a = 3 }; a')
+  exp(2, 'var a; if false { a = 1 } elif true { a = 2 } else { a = 3 }; a')
+  exp(3, 'var a; if false { a = 1 } elif false { a = 2 } else { a = 3 }; a')
   // | "for" id exp block
   // | "while" exp block
   // | "continue" cond?
