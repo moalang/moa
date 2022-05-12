@@ -167,7 +167,7 @@ const generate = nodes => {
   return nodes.map(gen).join(';\n')
 }
 const test = () => {
-  const exp = (expect, source) => {
+  const check = (expect, source) => {
     const {js, nodes, tokens} = compile(source)
     let actual
     try {
@@ -197,84 +197,75 @@ const test = () => {
 
   // define:
   // | "let" id exp
-  exp(1, 'let a 1; a')
+  check(1, 'let a 1; a')
   // | "var" id exp
-  exp(3, 'var a 1; a += 2; a')
+  check(3, 'var a 1; a += 2; a')
   // | "fn" id+ exp
-  exp(3, 'fn add a b a + b; add(1 2)')
-  exp(1, 'fn f 1; f()')
+  check(3, 'fn add a b a + b; add(1 2)')
+  check(1, 'fn f 1; f()')
   // | "struct" id+ "{" (define lf)* } "}"
-  exp(11, 'struct item { name string; price int }; item("jar" 11).price')
+  check(11, 'struct item { name string; price int }; item("jar" 11).price')
 
-  // block: "{" ((define | statement | exp) lf)* "}"
-  exp(1, '{1}')
-  exp(2, '{1;2}')
-  exp(2, '{1\n2}')
-  exp(1, '{let a 1\na}')
-
-  // statement:
-  // | "if" exp exp ("elif" exp exp)* ("else" exp)?
-  exp(1, 'var a; if true { a = 1 } elif true { a = 2 } else { a = 3 }; a')
-  exp(2, 'var a; if false { a = 1 } elif true { a = 2 } else { a = 3 }; a')
-  exp(3, 'var a; if false { a = 1 } elif false { a = 2 } else { a = 3 }; a')
-  // | "for" id exp exp
-  exp(3, 'var a 0; for i [1 2] { a += i }; a')
-  // | "while" exp exp
-  exp(3, 'var a 0; while a < 3 { a += 1 }; a')
-  // | "continue" cond?
-  exp(0, 'var a 0; for i [1 2 3] { continue; a += i }; a')
-  exp(4, 'var a 0; for i [1 2 3] { continue if i == 2; a += i }; a')
-  exp(4, 'var a 2; for i [1 2 3] { continue unless i == 2; a += i }; a')
-  // | "break" cond?
-  exp(0, 'var a 0; for i [1 2 3] { break; a += i }; a')
-  exp(1, 'var a 0; for i [1 2 3] { break if i == 2; a += i }; a')
-  exp(0, 'var a 0; for i [1 2 3] { break unless i == 2; a += i }; a')
-  // | "return" exp? cond?
-  exp(1, 'fn f { return 1; return 2 }; f()')
-  exp(2, 'fn f { return 1 if false; return 2 }; f()')
-  exp(1, 'fn f { return 1 unless false; return 2 }; f()')
-  // | "p" exp+ cond?                 # print one line while developing
-  exp('1 [2,3]\n4', 'p 1 [2 3]; p 4')
-  exp('1', 'p 1 if true')
-  exp('', 'p 1 unless true')
-  // | "pp" exp+ cond?                # print multiple lines while developing
-  exp('1 [\n  2,\n  3\n]\n4', 'pp 1 [2 3]; pp 4')
-  exp('1', 'pp 1 if true')
-  exp('', 'pp 1 unless true')
   // exp: node (op2 exp)*
-  exp(3, '1 + 2')
-  exp(7, '1 + 2 * 3')
-  exp(9, '(1 + 2) * 3')
+  check(3, '1 + 2')
+  check(7, '1 + 2 * 3')
+  check(9, '(1 + 2) * 3')
 
   // node: bottom ("." id ("(" exp+ ")"))*
-  exp(2, '[1 2].size')
+  check(2, '[1 2].size')
 
   // bottom:
   // | "(" exp ")"                    # priority   : 1 * (2 + 3)
-  exp(1, '(1)')
+  check(1, '(1)')
   // | "[" exp* "]"                   # array      : [] [1 2]
-  exp([1], '[1]')
-  exp([1, 2], '[1 2]')
-  // | "[" (":" | (exp ":" exp)*) "]" # dict       : [:] ["key1":1 "key2":2+3]
+  check([1], '[1]')
+  check([1, 2], '[1 2]')
   // | '"' [^"]* '"'                  # string     : "hi"
-  exp('hi', '"hi"')
+  check('hi', '"hi"')
   // | id ("," id)* "=>" exp          # lambda
   // | [0-9]+ ("." [0-9]+)?
-  exp(1, '1')
-  // DUPLICATED | id ("(" exp+ ")")?
-  // DUPLICATED | block
-  // DUPLICATED cond:
-  // DUPLICATED | "if" exp
-  // DUPLICATED | "unless" exp
-  // DUPLICATED id: [A-Za-z_][A-Za-z0-9_]*
-  // DUPLICATED type: id ("(" type+ ")")?
-  // DUPLICATED op2: [+-/%*=<>|&^,;]+
-  // DUPLICATED lf: ";" | "\n"
+  check(1, '1')
+
+  // statement:
+  // | "if" exp exp ("elif" exp exp)* ("else" exp)?
+  check(1, 'var a; if true { a = 1 } elif true { a = 2 } else { a = 3 }; a')
+  check(2, 'var a; if false { a = 1 } elif true { a = 2 } else { a = 3 }; a')
+  check(3, 'var a; if false { a = 1 } elif false { a = 2 } else { a = 3 }; a')
+  // | "for" id exp exp
+  check(3, 'var a 0; for i [1 2] { a += i }; a')
+  // | "while" exp exp
+  check(3, 'var a 0; while a < 3 { a += 1 }; a')
+  // | "continue" cond?
+  check(0, 'var a 0; for i [1 2 3] { continue; a += i }; a')
+  check(4, 'var a 0; for i [1 2 3] { continue if i == 2; a += i }; a')
+  check(4, 'var a 2; for i [1 2 3] { continue unless i == 2; a += i }; a')
+  // | "break" cond?
+  check(0, 'var a 0; for i [1 2 3] { break; a += i }; a')
+  check(1, 'var a 0; for i [1 2 3] { break if i == 2; a += i }; a')
+  check(0, 'var a 0; for i [1 2 3] { break unless i == 2; a += i }; a')
+  // | "return" exp? cond?
+  check(1, 'fn f { return 1; return 2 }; f()')
+  check(2, 'fn f { return 1 if false; return 2 }; f()')
+  check(1, 'fn f { return 1 unless false; return 2 }; f()')
+  // | "p" exp+ cond?                 # print one line while developing
+  check('1 [2,3]\n4', 'p 1 [2 3]; p 4')
+  check('1', 'p 1 if true')
+  check('', 'p 1 unless true')
+  // | "pp" exp+ cond?                # print multiple lines while developing
+  check('1 [\n  2,\n  3\n]\n4', 'pp 1 [2 3]; pp 4')
+  check('1', 'pp 1 if true')
+  check('', 'pp 1 unless true')
+
+  // block: "{" ((define | statement | exp) lf)* "}"
+  check(1, '{1}')
+  check(2, '{1;2}')
+  check(2, '{1\n2}')
+  check(1, '{let a 1\na}')
 
   // new lines
-  exp(1, '(\n(\n1\n)\n)')
-  exp(9, '(\n1\n+\n2\n) * 3')
-  exp([1, 2], '[\n1\n2\n]')
+  check(1, '(\n(\n1\n)\n)')
+  check(9, '(\n1\n+\n2\n) * 3')
+  check([1, 2], '[\n1\n2\n]')
 
   // lines
   puts('ok')
