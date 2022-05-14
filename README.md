@@ -18,21 +18,6 @@ Create a code
 
 Run
 ```
-# moa run hello.moa
+# moa hello.moa | node
 hello world
-```
-
-Build
-```
-# moa build hello.moa > main
-# ./main
-hello world
-```
-
-Test
-```
-# echo '\ntest t: t.eq "hi" >> hello.moa
-# moa test hello.moa
-expect: hi
-actual: hello world\n
 ```

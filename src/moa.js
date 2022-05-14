@@ -283,8 +283,9 @@ const test = () => {
 }
 
 const main = () => {
-  if (process.argv[2]) {
-    const moa = fs.readFileSync(process.argv[2], 'utf-8')
+  const paths = process.argv.slice(2)
+  if (paths.length) {
+    const moa = paths.map(path => fs.readFileSync(path, 'utf-8')).join('\n\n')
     puts('// Embedded JavaScript')
     puts(embeddedJs)
     puts()
