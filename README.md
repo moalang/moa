@@ -13,26 +13,26 @@ export PATH=$PATH:~/moa/bin
 
 Create a code
 ```
-# echo 'def main: io.print "hello world"' > main.moa
+# echo 'p "hello world"' > main.moa
 ```
 
 Run
 ```
-# moa run
+# moa run hello.moa
 hello world
 ```
 
 Build
 ```
-# moa build
+# moa build hello.moa > main
 # ./main
 hello world
 ```
 
 Test
 ```
-# echo 'test t: t.eq "hi" t.main.stdout
-# moa test
+# echo '\ntest t: t.eq "hi" >> hello.moa
+# moa test hello.moa
 expect: hi
 actual: hello world\n
 ```
