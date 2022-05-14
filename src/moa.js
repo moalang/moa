@@ -10,6 +10,7 @@ const dump = o => console.dir(o, {depth: null})
 const reserves = 'use fn struct enum let var if else elif for while continue break return p pp'.split(' ')
 const fail = m => { throw Error(m) }
 
+const embedded = (() => {
 Object.defineProperty(String.prototype, '_size', { get() { return this.length } });
 String.prototype._at = function (n) { return n >= this.length || n < -this.length ? fail('Out of index') : n >= 0 ? this[n] : this[this.length + n] }
 String.prototype._in = function (s) { return this.includes(s) }
@@ -23,6 +24,13 @@ Array.prototype._append = function (a) { return this.concat(a) }
 Array.prototype._contains = function (s) { return this.includes(s) }
 Array.prototype._keep = function (f) { return this.filter(f) }
 Object.defineProperty(Boolean.prototype, '_flip', { get() { return this == false } })
+})
+embedded()
+const runtime = (() => {
+const __p = (...args) => console.log(...args.map(x => JSON.stringify(x)))
+const __pp = (...args) => console.log(...args.map(x => JSON.stringify(x, null, 2)))
+})
+const embeddedJs = runtime.toString().slice(8, -2) + '\n' + embedded.toString().slice(8, -2)
 
 const isOp2 = s => s && s.match && s.match(/^[+\-*%/=><|&.]+$/)
 const compile = source => {
@@ -156,9 +164,9 @@ const generate = nodes => {
       }
     } else if (head === 'p' || head === 'pp') {
       if (isCond(args)) {
-        return cond(`__${head}(${args.slice(0, -2).map(gen)})`, args.slice(-2)) + '; ""'
+        return cond(`__${head}(${args.slice(0, -2).map(gen)})`, args.slice(-2))
       } else {
-        return `__${head}(${args.map(gen)}); ""`
+        return `__${head}(${args.map(gen)})`
       }
     } else {
       return `${head}(${args.map(gen)})`
@@ -172,11 +180,14 @@ const test = () => {
     let actual
     try {
       const __stdout = []
-      const __p = (...a) => __stdout.push(a.map(str).join(' '))
-      const __pp = (...a) => __stdout.push(a.map(x => JSON.stringify(x, null, 2)).join(' '))
+      const __p = (...a) => { __stdout.push(a.map(str).join(' ')) }
+      const __pp = (...a) => { __stdout.push(a.map(x => JSON.stringify(x, null, 2)).join(' ')) }
       actual = eval(js)
+      if (actual === undefined) {
+        actual = ''
+      }
       if (__stdout.length) {
-        actual += __stdout.join('\n')
+        actual = actual + __stdout.join('\n')
       }
     } catch(e) {
       actual = e.stack
@@ -270,6 +281,18 @@ const test = () => {
   // lines
   puts('ok')
 }
-const main = () => process.argv[2] ? console.log(compile(process.argv[2]).js) : test()
+
+const main = () => {
+  if (process.argv[2]) {
+    const moa = fs.readFileSync(process.argv[2], 'utf-8')
+    puts('// Embedded JavaScript')
+    puts(embeddedJs)
+    puts()
+    puts('// Compiled Moa source code')
+    puts(compile(moa).js)
+  } else {
+    test()
+  }
+}
 
 main()
