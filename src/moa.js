@@ -13,15 +13,9 @@ const fail = m => { throw Error(m) }
 const embedded = (() => {
 Object.defineProperty(String.prototype, '_size', { get() { return this.length } });
 String.prototype._at = function (n) { return n >= this.length || n < -this.length ? fail('Out of index') : n >= 0 ? this[n] : this[this.length + n] }
-String.prototype._in = function (s) { return this.includes(s) }
-String.prototype._sub = function (a, b) { return this.replaceAll(a, b) }
-String.prototype._split = function (s) { return this.split(s) }
-String.prototype._rsub = function (a, b) { return this.replaceAll(new RegExp(a, 'g'), b) }
-String.prototype._rsplit = function (r) { return this.split(new RegExp(r, 'g')) }
 Object.defineProperty(Array.prototype, '_size', { get() { return this.length } });
 Array.prototype._at =  function (n) { return n >= this.length || n < -this.length ? fail('Out of index') : n >= 0 ? this[n] : this[this.length + n] }
-Array.prototype._append = function (a) { return this.concat(a) }
-Array.prototype._contains = function (s) { return this.includes(s) }
+Array.prototype._in = function (v) { return this.includes(v) }
 Array.prototype._keep = function (f) { return this.filter(f) }
 Object.defineProperty(Boolean.prototype, '_flip', { get() { return this == false } })
 })
@@ -31,6 +25,27 @@ const __p = (...args) => console.log(...args.map(x => JSON.stringify(x)))
 const __pp = (...args) => console.log(...args.map(x => JSON.stringify(x, null, 2)))
 })
 const embeddedJs = runtime.toString().slice(8, -2) + '\n' + embedded.toString().slice(8, -2)
+
+const http = () => {
+  const h = require('http')
+  return {
+    _version: '0.0.1',
+    _listen: (target, f) => {
+      const server = h.createServer((request, response) => {
+        let status = 200
+        let headers = []
+        let body = ''
+        f({
+          _print: x => body += typeof x === 'string' ? x : JSON.stringify(x)
+        })
+        response.writeHead(status, headers)
+        response.end(body)
+        })
+      server.listen(...target.split(':').reverse())
+    }
+  }
+}
+const lib = {http}
 
 const isOp2 = s => s && s.match && s.match(/^[+\-*%/=><|&.]+$/)
 const compile = source => {
@@ -43,12 +58,12 @@ const compile = source => {
       } else if (t.match(/^ *$/)) {
         continue
       } else if (t.includes('\n')) {
-        if (level === 0) {
+        if (level === 0 && tokens[tokens.length - 1] !== '{') {
           tokens.push(';')
         }
         continue
       }
-      if ('[('.includes(t)) {
+      if ('[('.includes(t) || t.endsWith('(')) {
         ++level
       } else if (')]'.includes(t)) {
         --level
@@ -114,17 +129,24 @@ const generate = nodes => {
     args[0] === 'if' ? `if (${gen(args[1])}) ${head}` :
     args[0] === 'unless' ? `if (!${gen(args[1])}) ${head}` :
     fail(`Unknown condition ${args}`)
+  const addReturn = x => x.startsWith('return ') ? x : 'return ' + x
+  const statement = a => a.length === 1 ? a[0] : `(() => { ${[...a.slice(0, -1), addReturn(a[a.length - 1])].join(';')} })()`
+  const block = a => a[0] === '__do' ? '{' + a.slice(1).map(gen).join(';') + '}' : gen(a)
   const apply = ([head, ...args]) => {
     if (isOp2(head)) {
       if (head === '.') {
-        return '(' + gen(args[0]) + '._' + args[1] + ')'
+        if (Array.isArray(args[1])) {
+          return `${gen(args[0])}._${args[1][0]}(${args[1].slice(1).map(gen)})`
+        } else {
+          return `${gen(args[0])}._${args[1]}`
+        }
       } else {
         return '(' + gen(args[0]) + head + gen(args[1]) + ')'
       }
     } else if (head === '__array') {
       return '[' + args.map(gen).join(', ') + ']'
     } else if (head === '__do') {
-      return '{' + args.map(gen).join('\n') + '}'
+      return statement(args.map(gen))
     } else if (head === 'let') {
       return `const ${args[0]} = ${gen(args.slice(1))}`
     } else if (head === 'var') {
@@ -135,19 +157,19 @@ const generate = nodes => {
       const names = args[args.length - 1].slice(1).map(a => '_' + a[0])
       return `const ${args[0]} = (${names}) => ({${names}})`
     } else if (head === 'if') {
-      return `if (${gen(args[0])}) ${gen(args[1])} ${args.length >= 3 ? gen(args.slice(2)) : ''}`
+      return `if (${gen(args[0])}) ${block(args[1])} ${args.length >= 3 ? gen(args.slice(2)) : ''}`
     } else if (head === 'elif') {
-      return `else if (${gen(args[0])}) ${gen(args[1])} ${args.length >= 3 ? gen(args.slice(2)) : ''}`
+      return `else if (${gen(args[0])}) ${block(args[1])} ${args.length >= 3 ? gen(args.slice(2)) : ''}`
     } else if (head === 'else') {
-      return `else ${gen(args)}`
+      return `else ${block(args)}`
     } else if (head === 'for') {
       if (args.length == 3) {
-        return `for (let ${args[0]} of ${gen(args[1])}) { ${gen(args[2])} }`
+        return `for (let ${args[0]} of ${gen(args[1])}) ${block(args[2])}`
       } else {
         throw Error(`Unknown for syntax ${args}`)
       }
     } else if (head === 'while') {
-      return `while (${gen(args[0])}) { ${gen(args[1])} }`
+      return `while (${gen(args[0])}) ${block(args[1])}`
     } else if (head === 'continue' || head === 'break') {
       return cond(head, args)
     } else if (head === 'return') {
@@ -168,6 +190,8 @@ const generate = nodes => {
       } else {
         return `__${head}(${args.map(gen)})`
       }
+    } else if (head === 'use') {
+      return `const http = (${lib[args[0]].toString()})()`
     } else {
       return `${head}(${args.map(gen)})`
     }
@@ -212,7 +236,8 @@ const test = () => {
   // | "var" id exp
   check(3, 'var a 1; a += 2; a')
   // | "fn" id+ exp
-  check(3, 'fn add a b a + b; add(1 2)')
+  check(2, 'fn inc a a + 1; inc(1)')
+  check(2, 'fn inc a { a + 1 }; inc(1)')
   check(1, 'fn f 1; f()')
   // | "struct" id+ "{" (define lf)* } "}"
   check(11, 'struct item { name string; price int }; item("jar" 11).price')
@@ -224,6 +249,7 @@ const test = () => {
 
   // node: bottom ("." id ("(" exp+ ")"))*
   check(2, '[1 2].size')
+  check(true, '[1 2].in(1)')
 
   // bottom:
   // | "(" exp ")"                    # priority   : 1 * (2 + 3)
@@ -273,26 +299,35 @@ const test = () => {
   check(2, '{1\n2}')
   check(1, '{let a 1\na}')
 
+  // libraries
+  check('0.0.1', 'use http; http.version')
+
   // new lines
   check(1, '(\n(\n1\n)\n)')
   check(9, '(\n1\n+\n2\n) * 3')
   check([1, 2], '[\n1\n2\n]')
+  check(1, 'fn f {\n1\n}\nf()')
+  check(1, 'fn f {1}\nf()\nfn g {\n1\n}\ng()')
 
   // lines
   puts('ok')
 }
 
+const usage = () => console.log('usage: moa [moa files]')
+
 const main = () => {
   const paths = process.argv.slice(2)
-  if (paths.length) {
+  if (paths.length === 0) {
+    usage()
+  } else if (paths[0] === '--test') {
+    test()
+  } else {
     const moa = paths.map(path => fs.readFileSync(path, 'utf-8')).join('\n\n')
     puts('// Embedded JavaScript')
     puts(embeddedJs)
     puts()
     puts('// Compiled Moa source code')
     puts(compile(moa).js)
-  } else {
-    test()
   }
 }
 

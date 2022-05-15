@@ -14,12 +14,12 @@ syn match Number / [0-9]\+\(\.[0-9]\+\)\?/
 syn keyword Boolean true false
 
 " Statement
-syn keyword Statement def hint continue break return goto with
+syn keyword Statement fn continue break return
 syn keyword StorageClass let var
-syn keyword Structure struct adt
-syn keyword Conditional if else when case switch
+syn keyword Structure struct
+syn keyword Conditional if elif else
 syn keyword Repeat for while
-syn keyword Exception error try do catch
+syn keyword Keyword use p pp
 syn match Operator /[+\-\*/|&]=\=/
 syn match Operator /[<>]=\=/
 syn match Operator /[=!]=/

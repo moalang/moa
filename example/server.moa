@@ -1,0 +1,7 @@
+use http
+
+fn handle r {
+  r.print("hello world")
+}
+
+http.listen(":8888" handle)
