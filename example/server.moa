@@ -1,7 +1,11 @@
 use http
 
+struct response {
+  hello string
+}
+
 fn handle r {
-  r.print("hello world")
+  r.json(response("world"))
 }
 
 http.listen(":8888" handle)

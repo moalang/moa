@@ -32,15 +32,19 @@ const http = () => {
     _version: '0.0.1',
     _listen: (target, f) => {
       const server = h.createServer((request, response) => {
-        let status = 200
-        let headers = []
+        let statusCode = 200
+        let headers = {'content-type': 'text/plain; charset=utf-8'}
         let body = ''
         f({
-          _print: x => body += typeof x === 'string' ? x : JSON.stringify(x)
+          _json: (obj, status) => {
+            body = typeof obj === 'string' ? obj : JSON.stringify(obj)
+            statusCode = status || statusCode
+            headers['content-type'] = 'application/json; charset=utf-8'
+          }
         })
-        response.writeHead(status, headers)
+        response.writeHead(statusCode, headers)
         response.end(body)
-        })
+      })
       server.listen(...target.split(':').reverse())
     }
   }
