@@ -28,22 +28,63 @@ const embeddedJs = runtime.toString().slice(8, -2) + '\n' + embedded.toString().
 
 const http = () => {
   const h = require('http')
+  const fs = require('fs')
+  const path = require('path')
+  const types = {
+    html: 'text/html; charset=utf-8',
+    js: 'application/javascript',
+    css: 'text/css',
+    png: 'image/png',
+    jpg: 'image/jpeg',
+    gif: 'image/gif',
+    webp: 'image/webp',
+    ico: 'image/x-icon',
+    svg: 'image/svg+xml; charset=utf-8'
+  }
   return {
     _version: '0.0.1',
-    _listen: (target, f) => {
-      const server = h.createServer((request, response) => {
+    _listen: (target, matcher) => {
+      const gets = {}
+      const posts = {}
+      let dir = null
+      matcher({
+        _get: (s, f) => gets[s] = f,
+        _post: (s, f) => posts[s] = f,
+        _mount: d => dir = d
+      })
+      const server = h.createServer(async (request, response) => {
         let statusCode = 200
-        let headers = {'content-type': 'text/plain; charset=utf-8'}
+        let ctype = 'text/plain'
         let body = ''
-        f({
-          _json: (obj, status) => {
-            body = typeof obj === 'string' ? obj : JSON.stringify(obj)
-            statusCode = status || statusCode
-            headers['content-type'] = 'application/json; charset=utf-8'
+        const respond = (s, t, b) => { statusCode = s; ctype = t; body = b }
+        const exposure = {
+          _json: (obj, status) => respond(200, 'application/json; charset=utf-8', typeof obj === 'string' ? obj : JSON.stringify(obj))
+        }
+        try {
+          if (request.method === 'POST' && request.url in posts) {
+            await posts[request.url](exposure)
+          } else if (request.method === 'GET') {
+            if (request.url in gets) {
+              await gets[request.url](exposure)
+            } else {
+              const normalizedPath = request.url.endsWith('/') ? request.url + 'index.html' : request.url
+              const data = await new Promise((resolve, reject) => fs.readFile(path.join(dir, normalizedPath), 'utf-8', (err, data) => err ? reject(err) : resolve(data)))
+              respond(200, types[path.extname(normalizedPath).slice(1)] || 'text/plain', data)
+            }
+          } else {
+            respond(404, 'text/plain', '')
           }
-        })
-        response.writeHead(statusCode, headers)
-        response.end(body)
+        } catch (e) {
+          console.dir(e)
+          if (e.code === 'ENOENT') {
+            respond(404, 'text/plain', '')
+          } else {
+            respond(500, 'text/plain', e.message)
+          }
+        } finally {
+          response.writeHead(statusCode, {'content-type': ctype})
+          response.end(body)
+        }
       })
       server.listen(...target.split(':').reverse())
     }
@@ -51,7 +92,7 @@ const http = () => {
 }
 const lib = {http}
 
-const isOp2 = s => s && s.match && s.match(/^[+\-*%/=><|&.]+$/)
+const isOp2 = s => s && s.match && s.match(/^[+\-*%/=><|&]+$/)
 const compile = source => {
   const simplify = ts => {
     const tokens = []
@@ -102,6 +143,15 @@ const parse = tokens => {
   const line = () => many(exp, {stop: t => t === ';'})
   const exp = () => ((lhs, t) => isOp2(t) ? ++pos && [t, lhs, exp()] : lhs)(atom(), tokens[pos])
   const atom = () => {
+    const unit = bottom()
+    if (tokens[pos] === '.') {
+      ++pos
+      return ['.', unit, atom()]
+    } else {
+      return unit
+    }
+  }
+  const bottom = () => {
     if (pos >= tokens.length) {
       return null
     }
@@ -138,14 +188,12 @@ const generate = nodes => {
   const block = a => a[0] === '__do' ? '{' + a.slice(1).map(gen).join(';') + '}' : gen(a)
   const apply = ([head, ...args]) => {
     if (isOp2(head)) {
-      if (head === '.') {
-        if (Array.isArray(args[1])) {
-          return `${gen(args[0])}._${args[1][0]}(${args[1].slice(1).map(gen)})`
-        } else {
-          return `${gen(args[0])}._${args[1]}`
-        }
+      return '(' + gen(args[0]) + head + gen(args[1]) + ')'
+    } else if (head === '.') {
+      if (Array.isArray(args[1])) {
+        return `${gen(args[0])}._${args[1][0]}(${args[1].slice(1).map(gen)})`
       } else {
-        return '(' + gen(args[0]) + head + gen(args[1]) + ')'
+        return `${gen(args[0])}._${args[1]}`
       }
     } else if (head === '__array') {
       return '[' + args.map(gen).join(', ') + ']'
@@ -250,6 +298,7 @@ const test = () => {
   check(3, '1 + 2')
   check(7, '1 + 2 * 3')
   check(9, '(1 + 2) * 3')
+  check(2, '[1].size + [1].size')
 
   // node: bottom ("." id ("(" exp+ ")"))*
   check(2, '[1 2].size')

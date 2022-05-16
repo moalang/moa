@@ -4,8 +4,9 @@ struct response {
   hello string
 }
 
-fn handle r {
-  r.json(response("world"))
+fn dispatch m {
+  m.get("/hello" r => r.json(response("world")))
+  m.mount("./")
 }
 
-http.listen(":8888" handle)
+http.listen(":8888" dispatch)
