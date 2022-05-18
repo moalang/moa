@@ -54,6 +54,8 @@ const http = () => {
     ico: 'image/x-icon',
     svg: 'image/svg+xml; charset=utf-8'
   }
+  const isHotLoading = process.env.DEV
+  let onHotLoading = () => {}
   return {
     _version: '0.0.1',
     _listen: (target, matcher) => {
@@ -65,7 +67,14 @@ const http = () => {
         _post: (s, f) => posts[s] = f,
         _mount: d => dir = d
       })
+      if (isHotLoading) {
+        fs.watch('./', {recursive: true}, () => setTimeout(onHotLoading, 10))
+      }
       const server = h.createServer(async (request, response) => {
+        if (isHotLoading && request.url === '/__moa_ping') {
+          onHotLoading = () => response.end()
+          return
+        }
         let statusCode = 200
         let ctype = 'text/plain'
         let body = ''
@@ -83,7 +92,11 @@ const http = () => {
             } else {
               const normalizedPath = request.url.endsWith('/') ? request.url + 'index.html' : request.url
               const data = await new Promise((resolve, reject) => fs.readFile(path.join(dir, normalizedPath), 'utf-8', (err, data) => err ? reject(err) : resolve(data)))
-              respond(200, types[path.extname(normalizedPath).slice(1)] || 'text/plain', data)
+              let extra = ''
+              if (isHotLoading && normalizedPath.endsWith('.html')) {
+                extra += '<script>var s = document.createElement("script"); s.src = "/__moa_ping"; s.onload = () => location.reload(); window.onload = () => document.body.appendChild(s)</script>'
+              }
+              respond(200, types[path.extname(normalizedPath).slice(1)] || 'text/plain', data + extra)
             }
           } else {
             respond(404, 'text/plain', '')
