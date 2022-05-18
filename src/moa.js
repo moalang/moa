@@ -70,6 +70,8 @@ const http = () => {
       if (isHotLoading) {
         fs.watch('./', {recursive: true}, () => setTimeout(onHotLoading, 10))
       }
+      __p(now()._string, `listen ${target}`)
+
       const server = h.createServer(async (request, response) => {
         if (isHotLoading && request.url === '/__moa_ping') {
           onHotLoading = () => response.end()
