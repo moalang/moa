@@ -21,7 +21,20 @@ Object.defineProperty(Boolean.prototype, '_flip', { get() { return this == false
 })
 embedded()
 const runtime = (() => {
-const __p = (...args) => console.log(...args.map(x => JSON.stringify(x)))
+let now = () => {
+  const d = new Date()
+  const pnow = performance.now()
+  const _year = d.getFullYear()
+  const _month = d.getMonth() + 1
+  const _day = d.getDate()
+  const _hour = d.getHours()
+  const _minute = d.getMinutes()
+  const _second = d.getSeconds()
+  const _string = `${_year}/${('0' + _month).slice(-2)}/${('0' + _day).slice(-2)} ${('0' + _hour).slice(-2)}:${('0' + _minute).slice(-2)}:${('0' + _second).slice(-2)}`
+  const _elapsed = () => Math.floor((performance.now() - pnow) * 10) / 10 + 'ms'
+  return { _year, _month, _day, _hour, _minute, _second, _string, _elapsed }
+}
+const __p = (...args) => console.log(...args.map(x => ['string', 'number'].includes(typeof x) ? x : JSON.stringify(x)))
 const __pp = (...args) => console.log(...args.map(x => JSON.stringify(x, null, 2)))
 })
 const embeddedJs = runtime.toString().slice(8, -2) + '\n' + embedded.toString().slice(8, -2)
@@ -56,6 +69,7 @@ const http = () => {
         let statusCode = 200
         let ctype = 'text/plain'
         let body = ''
+        const time = now()
         const respond = (s, t, b) => { statusCode = s; ctype = t; body = b }
         const exposure = {
           _json: (obj, status) => respond(200, 'application/json; charset=utf-8', typeof obj === 'string' ? obj : JSON.stringify(obj))
@@ -74,13 +88,14 @@ const http = () => {
           } else {
             respond(404, 'text/plain', '')
           }
+          __p(now()._string, statusCode, time._elapsed(), request.url)
         } catch (e) {
-          console.dir(e)
           if (e.code === 'ENOENT') {
             respond(404, 'text/plain', '')
           } else {
             respond(500, 'text/plain', e.message)
           }
+          __p(now()._string, statusCode, time._elapsed(), request.url, e.stack)
         } finally {
           response.writeHead(statusCode, {'content-type': ctype})
           response.end(body)
