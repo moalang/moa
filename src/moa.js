@@ -39,88 +39,7 @@ const __pp = (...args) => console.log(...args.map(x => JSON.stringify(x, null, 2
 })
 const embeddedJs = runtime.toString().slice(8, -2) + '\n' + embedded.toString().slice(8, -2)
 
-const http = () => {
-  const h = require('http')
-  const fs = require('fs')
-  const path = require('path')
-  const types = {
-    html: 'text/html; charset=utf-8',
-    js: 'application/javascript',
-    css: 'text/css',
-    png: 'image/png',
-    jpg: 'image/jpeg',
-    gif: 'image/gif',
-    webp: 'image/webp',
-    ico: 'image/x-icon',
-    svg: 'image/svg+xml; charset=utf-8'
-  }
-  const isHotLoading = process.env.DEV
-  let onHotLoading = () => {}
-  return {
-    _version: '0.0.1',
-    _listen: (target, matcher) => {
-      const gets = {}
-      const posts = {}
-      let dir = null
-      matcher({
-        _get: (s, f) => gets[s] = f,
-        _post: (s, f) => posts[s] = f,
-        _mount: d => dir = d
-      })
-      if (isHotLoading) {
-        fs.watch('./', {recursive: true}, () => setTimeout(onHotLoading, 10))
-      }
-      __p(now()._string, `listen ${target}`)
-
-      const server = h.createServer(async (request, response) => {
-        if (isHotLoading && request.url === '/__moa_ping') {
-          onHotLoading = () => response.end()
-          return
-        }
-        let statusCode = 200
-        let ctype = 'text/plain'
-        let body = ''
-        const time = now()
-        const respond = (s, t, b) => { statusCode = s; ctype = t; body = b }
-        const exposure = {
-          _json: (obj, status) => respond(200, 'application/json; charset=utf-8', typeof obj === 'string' ? obj : JSON.stringify(obj))
-        }
-        try {
-          if (request.method === 'POST' && request.url in posts) {
-            await posts[request.url](exposure)
-          } else if (request.method === 'GET') {
-            if (request.url in gets) {
-              await gets[request.url](exposure)
-            } else {
-              const normalizedPath = request.url.endsWith('/') ? request.url + 'index.html' : request.url
-              const data = await new Promise((resolve, reject) => fs.readFile(path.join(dir, normalizedPath), 'utf-8', (err, data) => err ? reject(err) : resolve(data)))
-              let extra = ''
-              if (isHotLoading && normalizedPath.endsWith('.html')) {
-                extra += '<script>var s = document.createElement("script"); s.src = "/__moa_ping"; s.onload = () => location.reload(); window.onload = () => document.body.appendChild(s)</script>'
-              }
-              respond(200, types[path.extname(normalizedPath).slice(1)] || 'text/plain', data + extra)
-            }
-          } else {
-            respond(404, 'text/plain', '')
-          }
-          __p(now()._string, statusCode, time._elapsed(), request.url)
-        } catch (e) {
-          if (e.code === 'ENOENT') {
-            respond(404, 'text/plain', '')
-          } else {
-            respond(500, 'text/plain', e.message)
-          }
-          __p(now()._string, statusCode, time._elapsed(), request.url, e.stack)
-        } finally {
-          response.writeHead(statusCode, {'content-type': ctype})
-          response.end(body)
-        }
-      })
-      server.listen(...target.split(':').reverse())
-    }
-  }
-}
-const lib = {http}
+const lib = { http: require('./http'), html: require('./html') }
 
 const isOp2 = s => s && s.match && s.match(/^[+\-*%/=><|&]+$/)
 const compile = source => {
@@ -149,7 +68,7 @@ const compile = source => {
     }
     return tokens
   }
-  const tokens = simplify(source.split(/([A-Za-z0-9_]+\(|"[^"]*"|[^\[\](){} \n;\.]+|.)/g))
+  const tokens = simplify(source.split(/(\$?[A-Za-z0-9_]+[\(:]|"[^"]*"|\(\)|\[:\]|[^\[\](){} \n;\.]+|.)/g))
   const nodes = parse(tokens)
   const js = generate(nodes)
   return {tokens, nodes, js}
@@ -191,14 +110,29 @@ const parse = tokens => {
     } else if (t.match(/^[A-Za-z0-9_]+\($/)) {
       const args =  many(exp, {stop: u => u === ')'})
       return args.length ? [t.slice(0, -1),  ...args] : t + ')'
+    } else if (t.match(/^\$?[A-Za-z0-9_]+\:$/)) {
+      const a = [':', t.slice(0, -1), exp()]
+      while (tokens[pos].match(/^\$?[A-Za-z0-9_]+\:$/)) {
+        const key = tokens[pos++].slice(0, -1)
+        a.push(key, exp())
+      }
+      return a
     } else if ('}]);'.includes(t.toString())) {
       return t
     } else if (t === '(') {
       return many(exp, {stop: u => u === ')'})
     } else if (t === '[') {
-      return ['__array', ...many(exp, {stop: u => u === ']'})]
+      if (tokens[pos].match(/^\$?[a-zA-Z0-9_]*:/)) {
+        const dict = bottom()
+        ++pos
+        return dict
+      } else {
+        return ['__array', ...many(exp, {stop: u => u === ']'})]
+      }
     } else if (t === '{') {
       return ['__do', ...many(line, {stop: u => u === '}'})]
+    } else if (t === '()' || t === '[:]') {
+      return '({})'
     } else {
       throw Error(`Unexpected token "${t}"`)
     }
@@ -225,6 +159,9 @@ const generate = nodes => {
       } else {
         return `${gen(args[0])}._${args[1]}`
       }
+    } else if (head === ':') {
+      const key = s => s.startsWith('$') ? `[${s.slice(1)}]` : s
+      return '({' + Array.from({length: args.length/2}, (_, i) => key(args[i*2]) + ':' + args[i*2+1]).join(',') + '})'
     } else if (head === '__array') {
       return '[' + args.map(gen).join(', ') + ']'
     } else if (head === '__do') {
@@ -273,7 +210,7 @@ const generate = nodes => {
         return `__${head}(${args.map(gen)})`
       }
     } else if (head === 'use') {
-      return `const http = (${lib[args[0]].toString()})()`
+      return `const ${args[0]} = (${lib[args[0]].toString()})()`
     } else {
       return `${head}(${args.map(gen)})`
     }
@@ -337,9 +274,18 @@ const test = () => {
   // bottom:
   // | "(" exp ")"                    # priority   : 1 * (2 + 3)
   check(1, '(1)')
+  // | "(" tag* ")"                   # struct     : () (name:"moa" age:1)
+  check({}, '()')
+  check({a:1}, '(a:1)')
+  check({a:1,b:"2"}, '(a:1 b:"2")')
+  check({a:1,b:"2",c:3}, 'let c 3; (a:1 b:"2" c:c)')
   // | "[" exp* "]"                   # array      : [] [1 2]
   check([1], '[1]')
   check([1, 2], '[1 2]')
+  // | "[" (":" | entity+) "]"        # dict       : [:] [key:1 $var:2]
+  check({}, '[:]')
+  check({a:1}, '[a:1]')
+  check({a:1,b:"2",3:4}, 'let c 3; let d 4; [a:1 b:"2" $c:d]')
   // | '"' [^"]* '"'                  # string     : "hi"
   check('hi', '"hi"')
   // | id ("," id)* "=>" exp          # lambda
@@ -383,7 +329,9 @@ const test = () => {
   check(1, '{let a 1\na}')
 
   // libraries
-  check('0.0.1', 'use http; http.version')
+  check('0.0.2', 'use http; http.version')
+  check('0.0.1', 'use html; html.version')
+  //check('<p><div><a href=/ title="a b">hello<br>world</a></div></p>\n<hr>', 'use html; html.render("p\n  div\n    a href=/ title=\"a b\" \"hello\" br $name\nhr" dict(name "world"))')
 
   // new lines
   check(1, '(\n(\n1\n)\n)')
