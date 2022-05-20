@@ -51,12 +51,13 @@ module.exports = () => {
             await gets[request.url](exposure)
           } else {
             const normalizedPath = request.url.endsWith('/') ? request.url + 'index.html' : request.url
-            const data = await new Promise((resolve, reject) => fs.readFile(path.join(dir, normalizedPath), 'utf-8', (err, data) => err ? reject(err) : resolve(data)))
-            let extra = ''
+            const data = await new Promise((resolve, reject) => fs.readFile(path.join(dir, normalizedPath), (err, data) => err ? reject(err) : resolve(data)))
             if (isHotLoading && normalizedPath.endsWith('.html')) {
-              extra += '<script>var s = document.createElement("script"); s.src = "/__moa_ping"; s.onload = () => location.reload(); window.onload = () => document.body.appendChild(s)</script>'
+              const script = '\n\n<script>var s = document.createElement("script"); s.src = "/__moa_ping"; s.onload = () => location.reload(); window.onload = () => document.body.appendChild(s)</script>'
+              respond(200, types.html, data + script)
+            } else {
+              respond(200, types[path.extname(normalizedPath).slice(1)] || 'text/plain', data)
             }
-            respond(200, types[path.extname(normalizedPath).slice(1)] || 'text/plain', data + extra)
           }
         } else {
           respond(404, 'text/plain', '')
@@ -70,7 +71,7 @@ module.exports = () => {
         }
         __p(now()._string, statusCode, time._elapsed(), request.url, e.stack)
       } finally {
-        response.writeHead(statusCode, {'content-type': ctype})
+        response.writeHead(statusCode, {'Content-Type': ctype})
         response.end(body)
       }
     })

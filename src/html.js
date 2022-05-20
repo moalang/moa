@@ -78,4 +78,3 @@ module.exports = () => {
   }
   return { _version, _render }
 }
-
