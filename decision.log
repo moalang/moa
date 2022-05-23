@@ -2,7 +2,7 @@ Keep
 - simple specification
 - minimum compiler
 - no dependency in runtime
-- enough features to develop service which cover HTML, JavaScript, StyleSheet and backend APIs
+- only core types, no library
 
 Do not
 - type system

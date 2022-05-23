@@ -7,7 +7,7 @@ const put = (...a) => process.stdout.write(strs(a))
 const puts = (...a) => console.log(strs(a))
 const trace = (...a) => puts('TRACE', ...a)
 const dump = o => console.dir(o, {depth: null})
-const reserves = 'use fn struct enum let var if else elif for while continue break return p pp'.split(' ')
+const reserves = 'fn struct enum let var if else elif for while continue break return p pp'.split(' ')
 const fail = m => { throw Error(m) }
 
 const embedded = (() => {
@@ -38,8 +38,6 @@ const __p = (...args) => console.log(...args.map(x => ['string', 'number'].inclu
 const __pp = (...args) => console.log(...args.map(x => JSON.stringify(x, null, 2)))
 })
 const embeddedJs = runtime.toString().slice(8, -2) + '\n' + embedded.toString().slice(8, -2)
-
-const lib = { http: require('./http'), html: require('./html') }
 
 const isOp2 = s => s && s.match && s.match(/^[+\-*%/=><|&]+$/)
 const compile = source => {
@@ -147,8 +145,8 @@ const generate = nodes => {
     args[0] === 'if' ? `if (${gen(args[1])}) ${head}` :
     args[0] === 'unless' ? `if (!${gen(args[1])}) ${head}` :
     fail(`Unknown condition ${args}`)
-  const addReturn = x => x.startsWith('return ') ? x : 'return ' + x
-  const statement = a => a.length === 1 ? a[0] : `(() => { ${[...a.slice(0, -1), addReturn(a[a.length - 1])].join(';')} })()`
+  const addReturn = x => x.match(/^return|if|for|while/) ? x : 'return ' + x
+  const statement = a => `(() => { ${[...a.slice(0, -1), addReturn(a[a.length - 1])].join(';')} })()`
   const block = a => a[0] === '__do' ? '{' + a.slice(1).map(gen).join(';') + '}' : gen(a)
   const apply = ([head, ...args]) => {
     if (isOp2(head)) {
@@ -209,8 +207,6 @@ const generate = nodes => {
       } else {
         return `__${head}(${args.map(gen)})`
       }
-    } else if (head === 'use') {
-      return `const ${args[0]} = (${lib[args[0]].toString()})()`
     } else {
       return `${head}(${args.map(gen)})`
     }
@@ -218,14 +214,15 @@ const generate = nodes => {
   return nodes.map(gen).join(';\n')
 }
 const test = () => {
-  const check = (expect, source) => {
+  const check = (expect, exp) => {
+    const source = `fn main { ${exp} }`
     const {js, nodes, tokens} = compile(source)
     let actual
     try {
       const __stdout = []
       const __p = (...a) => { __stdout.push(a.map(str).join(' ')) }
       const __pp = (...a) => { __stdout.push(a.map(x => JSON.stringify(x, null, 2)).join(' ')) }
-      actual = eval(js)
+      actual = eval(js + '\nmain()')
       if (actual === undefined) {
         actual = ''
       }
@@ -327,11 +324,6 @@ const test = () => {
   check(2, '{1;2}')
   check(2, '{1\n2}')
   check(1, '{let a 1\na}')
-
-  // libraries
-  check('0.0.2', 'use http; http.version')
-  check('0.0.1', 'use html; html.version')
-  //check('<p><div><a href=/ title="a b">hello<br>world</a></div></p>\n<hr>', 'use html; html.render("p\n  div\n    a href=/ title=\"a b\" \"hello\" br $name\nhr" dict(name "world"))')
 
   // new lines
   check(1, '(\n(\n1\n)\n)')
