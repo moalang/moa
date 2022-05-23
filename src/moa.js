@@ -214,15 +214,14 @@ const generate = nodes => {
   return nodes.map(gen).join(';\n')
 }
 const test = () => {
-  const check = (expect, exp) => {
-    const source = `fn main { ${exp} }`
+  const check = (expect, source) => {
     const {js, nodes, tokens} = compile(source)
     let actual
     try {
       const __stdout = []
       const __p = (...a) => { __stdout.push(a.map(str).join(' ')) }
       const __pp = (...a) => { __stdout.push(a.map(x => JSON.stringify(x, null, 2)).join(' ')) }
-      actual = eval(js + '\nmain()')
+      actual = eval(js)
       if (actual === undefined) {
         actual = ''
       }
