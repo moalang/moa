@@ -335,12 +335,39 @@ const test = () => {
   puts('ok')
 }
 
-const usage = () => console.log('usage: moa [moa files]')
+const interactive = async () => {
+  puts('Moa 0.0.1 May 23 2022, 21:26')
+  const readline = require('node:readline')
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    prompt: '> '
+  })
+  rl.prompt()
+  rl.on('line', (line) => {
+    const cmd = line.trim()
+    if (['exit', 'quit', 'q'].includes(cmd)) {
+      rl.close()
+      return
+    }
+    let {js} = compile(cmd)
+    js = js.replace(/^let |const /g, 'global.')
+    try {
+      puts(eval(js))
+    } catch (e) {
+      puts(e.stack)
+    }
+    puts('js:', js)
+    rl.prompt()
+  }).on('close', () => {
+    puts('Bye👋')
+  })
+}
 
 const main = () => {
   const paths = process.argv.slice(2)
   if (paths.length === 0) {
-    usage()
+    interactive()
   } else if (paths[0] === '--test') {
     test()
   } else {
