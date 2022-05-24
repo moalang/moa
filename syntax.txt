@@ -1,39 +1,26 @@
-top: define+
-define:
-| "let" id exp
-| "var" id exp
-| "fn" id+ exp
-| "struct" id+ "{" (id type lf)* } "}"
-exp: node (op2 exp)*
-node: bottom ("." id ("(" exp+ ")"))*
+top: node*
+node:
+| keywords exp+ (":" ("\n  " node)+)? cond? "\n"
+| exp+ cond? "\n"
+| "#" .*                     # comment
+exp: unit (op2 exp)*
+unit: op1? bottom ("." id ("(" exp+ ")")?)*
 bottom:
-| "(" exp ")"                    # priority   : 1 * (2 + 3)
-| "(" tag* ")"                   # struct     : () (name:"moa" age:1)
-| "[" exp* "]"                   # array      : [] [1 2]
-| "[" (":" | entity+) "]"        # dict       : [:] [key:1 $var:2]
-| '"' [^"]* '"'                  # string     : "hi"
-| id ("," id)* "=>" exp          # lambda
-| [0-9]+ ("." [0-9]+)?
-| id ("(" exp+ ")")?
-| block
-statement:
-| "if" node node ("elif" node node)* ("else" exp)?
-| "for" id node node
-| "while" node node
-| "continue" cond?
-| "break" cond?
-| "return" exp? cond?
-| "p" exp+ cond?                 # print one line while developing
-| "pp" exp+ cond?                # print multiple lines while developing
+| "(" exp ")"                     # priority : 1 * (2 + 3)
+| "[" exp* "]"                    # array    : [] [1 2]
+| "{" tags "}"                    # struct   : {} {one two=2 (three)=3}
+| '"' [^"]* '"'                   # string   : "hi"
+| '`' ("${" unit "}" | [^"])* '`' # template : "hi {name}"
+| id ("," id)* "=>" exp           # lambda   : a,b => a + b
+| [0-9]+ ("." [0-9]+)?            # number   : 1 0.5
+| id ("(" exp+ ")")?              # id       : name f()
 
--- helpers --
-block: "{" ((define | statement | exp) lf)* "}"
-tag: id ":" exp
-entity: tag | "$" id ":" exp
+# helpers
+tags: id* (id "=" exp)*
 cond:
 | "if" exp
 | "unless" exp
 id: [A-Za-z_][A-Za-z0-9_]*
-type: id ("(" type+ ")")?
-op2: [+-/%*=<>|&^,;]+
-lf: ";" | "\n"
+op1: "!"
+op2: [+-/%*=<>|&^;]+
+keywords: qw(let var fn struct if unless for while continue break return fail p pp)

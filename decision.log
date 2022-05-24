@@ -1,9 +1,16 @@
-Keep
-- simple specification
-- minimum compiler
-- no dependency in runtime
-- only core types, no library
+Principle
+- Simple syntax for users, hard work for authors
 
-Do not
-- type system
-- algebraic data type
+Decisions
+- Infer type
+- Compile to JavaScript and Go
+- Embedded types are below
+  - int
+  - float
+  - string
+  - vector
+  - dictionary
+  - struct
+  - time
+- No dependency in runtime
+- No standard library
