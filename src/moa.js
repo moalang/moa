@@ -8,7 +8,6 @@ const puts = (...a) => console.log(strs(a))
 const dump = (...a) => a.map(o => console.dir(o, {depth: null}))
 const trace = o => { dump(o); return o }
 const reserves = 'let var fn struct if unless for while continue break return fail p pp)'.split(' ')
-const fail = m => { throw Error(m) }
 
 const embeddedJs = (() => {
 const __error = (message, obj) => { throw Object.assign(Error(message), obj) }
@@ -35,10 +34,16 @@ function Group(tag, a) { this[tag] = true; this.a = a }
 Token.prototype.toString = function() { return this.code }
 const newToken = code => new Token(code)
 const newArray = a => new Group('array', a)
-const newStruct = a => new Group('struct', a)
+const newStruct = a => new Group('struct', a.map(x => x.code ? ['=', x, x] : x))
 const newStatement = a => new Group('statement', a)
-const isOp2 = t => t.toString().match(/^[+\-*%/=><|&^]+$/)
+const isOp2 = t => t && t.toString().match(/^[+\-*%/=><|&^]+$/)
 const compile = source => {
+  const tokens = tokenize(source)
+  const nodes = (parse(tokens))
+  const js = generate(nodes)
+  return {tokens, nodes, js}
+}
+const tokenize = source => {
   const simplify = ts => {
     let nesting = 0
     let indent = 0
@@ -50,7 +55,7 @@ const compile = source => {
         const before = indent
         indent = t.split('\n').slice(-1)[0].length
         if (indent % 2 !== 0) {
-          fail(`Indentations must be multiple of two spaces. But this is ${JSON.stringify(indent)}`)
+          throw Error(`Indentations must be multiple of two spaces. But this is ${JSON.stringify(indent)}`)
         }
         if (indent == before) {
           return ';'
@@ -68,10 +73,7 @@ const compile = source => {
     ts = ts.map(t => t === '{' ? '{{' : t === '}' ? '}}' : t)
     return ts.flatMap(convert).concat(close(indent / 2)).map(newToken)
   }
-  const tokens = simplify(source.split(/([ \n]+|[0-9]+(?:\.[0-9]+)?|[A-Za-z0-9_]+(?:,[A-Za-z0-9_]+)|[A-Za-z0-9_]+\(?|[+\-*%/=><|&^]+|"[^"]*"|`[^`]*`|[^\[\](){} \n;\.]+|.)/g).filter(x => x.replace(/^ +$/, '')))
-  const nodes = (parse(tokens))
-  const js = generate(nodes)
-  return {tokens, nodes, js}
+  return simplify(source.split(/([ \n]+|[0-9]+(?:\.[0-9]+)?|[A-Za-z0-9_]+(?:,[A-Za-z0-9_]+)|[A-Za-z0-9_]+\(?|[+\-*%/=><|&^]+|"[^"]*"|`[^`]*`|[^\[\](){} \n;\.]+|.)/g).filter(x => x.replace(/^ +$/, '')))
 }
 
 const parse = tokens => {
@@ -120,6 +122,8 @@ const parse = tokens => {
       return many(exp, {stop: u => u == ']'}, newArray)
     } else if (token == '{') {
       return many(line, {stop: u => u == '}'}, newStatement)
+    } else if (isOp2(code)) {
+      return token
     } else {
       throw Error(`Unexpected token "${code}"`)
     }
@@ -129,12 +133,13 @@ const parse = tokens => {
 
 const infer = nodes => {
   let tvarSequence = 0
-  const tvar = () => (name => ({name,var:true}))((++tvarSequence).toString())
-  const tlambda = (...types) => types.length === 1 ? types[0] : ({types})
-  const ttype = (name) => ({name, types: []})
+  const tvar = () => (name => ({name, var:true, toString: function() { return this.name }}))((++tvarSequence).toString())
+  const tlambda = (...types) => types.length === 1 ? types[0] : ({types, toString: function(){ return '(' + this.types.map(x => x.toString()).join(' ') + ')' }})
+  const ttype = (name) => ({name, types: [], toString: function(){ return this.types.length ? `${this.name}(${this.types.map(x => x.toString()).join('.')})` : this.name}})
   const tint = ttype('int')
   const tbool = ttype('bool')
-  const tempty = ttype('empty')
+  const tstring = ttype('string')
+  const tarray = ttype('array') // TODO: generics
   const fresh = (type, nonGeneric) => {
     const d = {}
     const rec = t => {
@@ -145,7 +150,7 @@ const infer = nodes => {
     }
     return rec(type)
   }
-  const unify = (a, b) => {
+  const unify = (a, b, node) => {
     a = prune(a)
     b = prune(b)
     if (a.var) {
@@ -153,12 +158,12 @@ const infer = nodes => {
         a.instance = b
       }
     } else if (b.var) {
-      unify(b, a)
+      unify(b, a, node)
     } else {
       if (a.name !== b.name || a.types.length !== b.types.length) {
-        fail(`type miss match`, {a,b})
+        throw Error(`type miss match "${a}" and "${b}" around ${node}`)
       }
-      a.types.forEach((t,i) => unify(t, b.types[i]))
+      a.types.forEach((t,i) => unify(t, b.types[i], node))
     }
   }
   const v1 = tvar()
@@ -167,7 +172,7 @@ const infer = nodes => {
   const _analyse = (node, env, nonGeneric) => {
     if (Array.isArray(node)) {
       let [head,...tail] = node
-      if (head == 'fn') {
+      if (head == 'fn' || head == 'let') {
         const name = tail[0].code
         const args = tail.slice(1, -1).map(arg => (arg.type = tvar(), arg))
         const body = tail.slice(-1)[0]
@@ -176,31 +181,42 @@ const infer = nodes => {
         const ret = analyse(body, newEnv, nonGeneric.concat(args.map(t => t.type.name)))
         const ft = tlambda(...args.map(t => t.type), ret)
         return env[name] = ft
+      } else if (head == '=>') {
+        const newEnv = Object.assign({}, env)
+        const args = [tail[0]]
+        args[0].type = tvar()
+        args.forEach(arg => newEnv[arg.code] = arg.type)
+        return analyse(tail[1], newEnv, nonGeneric.concat(args.map(t => t.type.name)))
       } else if (tail.length) {
         const argv = tail.map(t => analyse(t, env, nonGeneric))
         const rt = (env.__cache[str(argv)] ||= tvar()) // fix tvar
         const ft = analyse(head, env, nonGeneric)
-        unify(tlambda(...argv, rt), ft)
+        unify(tlambda(...argv, rt), ft, node)
         return rt
       } else {
         return analyse(head, env, nonGeneric)
       }
     } else if (node.statement || node.array) {
-      return node.a.map(x => analyse(x, env, nonGeneric)).slice(-1)[0] || tvar()
+      return node.a.map(x => analyse(x, env, nonGeneric)).slice(-1)[0] || tarray
     } else if (node.struct) {
-      return node.a.toString()
+      return tint // TODO
     } else {
       const v = node.code
-      return v.match(/^[0-9]/) ? tint :
-        env[v] ? fresh(env[v], nonGeneric) :
-        fail(`Not found ${v} in env`, {v,node,env})
+      if (v.match(/^[0-9]/)) {
+        return tint
+      } else if (v.match(/^["`]/)) {
+        return tstring
+      } else if (env[v]) {
+        return fresh(env[v], nonGeneric)
+      } else {
+        throw Error(`Not found ${v} in env`, {v,node,env})
+      }
     }
   }
   const topEnv = {
     __cache: {},
     'true': tbool,
     'false': tbool,
-    '({})': tempty,
     '+': tlambda(tint, tint, tint),
     '-': tlambda(tint, tint, tint),
     '*': tlambda(tint, tint, tint),
@@ -215,7 +231,7 @@ const infer = nodes => {
 
 const generate = nodes => {
   const gen = o => o.array ? '[' + o.a.map(gen) + ']' :
-    o.struct ? '({' + o.a.map(structField) + '})' :
+    o.struct ? '({' + o.a.map(x => `${x[1].code}: ${gen(x[2])}`) + '})' :
     o.statement ? statement(o.a.map(gen)) :
     Array.isArray(o) ? (o.length === 1 ? gen(o[0]) : apply(o)) : o.code
   const isCond = args => ['if', 'unless'].includes(args[args.length - 2].code)
@@ -226,7 +242,6 @@ const generate = nodes => {
   const addReturn = x => x.match(/^return|if|for|while/) ? x : 'return ' + x
   const statement = a => `(() => { ${[...a.slice(0, -1), addReturn(a[a.length - 1])].join(';')} })()`
   const block = a => a[0].statement ? '{' + a.slice(1).map(gen).join(';') + '}' : gen(a)
-  const structField = o => o.code ? `${o.code}:${o.code}` : `${o[1].code}: ${gen(o[2])}`
   const apply = ([head, ...args]) => {
     if (Array.isArray(head)) {
       return gen(head) + (args.length ? '(' + args.flatMap(x => x).map(gen) + ')' : '')
@@ -294,7 +309,102 @@ const generate = nodes => {
   }
   return nodes.map(gen).join(';\n')
 }
-const test = () => {
+
+const testAll = () => { testInference(); testJavaScript() }
+
+const testInference = () => {
+  const showType = type => {
+    const show = t => t.instance ? show(t.instance) : t.name || '(' + t.types.map(show).join(' ') + ')'
+    const s = show(type)
+    const o = {}
+    const r = s.replace(/\d+/g, t => o[t] ||= Object.keys(o).length + 1)
+    return r
+  }
+
+  const reject = src => {
+    try {
+      infer(parse(tokenize(src)))
+    } catch (e) {
+      if (e.message.match(/^type miss match/)) {
+        process.stdout.write('.')
+        return
+      }
+    }
+    puts('Failed')
+    puts('src:', src)
+  }
+  const inf = (src, expect) => {
+    try {
+      let types = infer(parse(tokenize(src))).map(node => node.type)
+      const actual = showType(types.slice(-1)[0])
+      if (str(actual) === str(expect)) {
+        process.stdout.write('.')
+      } else {
+        puts('Failed')
+        puts('expect:', expect)
+        puts('actual:', actual)
+        puts('   src:', src)
+        process.exit(1)
+      }
+    } catch (e) {
+      puts('Failed')
+      puts('  src:', src)
+      console.error(e)
+      process.exit(2)
+    }
+  }
+  // primitives
+  inf('(1)', 'int')
+  inf('(true)', 'bool')
+  inf('(false)', 'bool')
+
+  // exp
+  inf('(+ 1 1)', 'int')
+  inf('(< 1 1)', 'bool')
+
+  // branch
+  inf('(if true 1 2)', 'int')
+  inf('(if true true true)', 'bool')
+
+  // value
+  inf('(fn value 1)', 'int')
+
+  // simple function
+  inf('(fn inc a (+ a 1))', '(int int)')
+  inf('(fn add a b (+ a b))', '(int int int)')
+
+  // generics
+  inf('(fn f a a)', '(1 1)')
+  inf('(fn f a b a)', '(1 2 1)')
+  inf('(fn f a b b)', '(1 2 2)')
+  inf('(fn f a a) (f 1)', 'int')
+  inf('(fn f a a) (f 1) (f true)', 'bool')
+
+  // combinations
+  inf('(fn f x (+ x 1)) (fn g x (+ x 2)) (+ (f 1) (g 1))', 'int')
+  inf('(fn _ f g x (g (f x)))', '((1 2) (2 3) 1 3)')
+  inf('(fn _ x y z (x z (y z)))', '((1 2 3) (1 2) 1 3)')
+  inf('(fn _ b x (if (x b) x (fn _ x b)))', '(1 (1 bool) (1 1))')
+  inf('(fn _ x (if true x (if x true false)))', '(bool bool)')
+  inf('(fn _ x y (if x x y))', '(bool bool bool)')
+  inf('(fn _ n ((fn _ x (x (fn _ y y))) (fn _ f (f n))))', '(1 1)')
+  inf('(fn _ x y (x y))', '((1 2) 1 2)')
+  inf('(fn _ x y (x (y x)))', '((1 2) ((1 2) 1) 2)')
+  inf('(fn _ h t f x (f h (t f x)))', '(1 ((1 2 3) 4 2) (1 2 3) 4 3)')
+  inf('(fn _ x y (x (y x) (y x)))', '((1 1 2) ((1 1 2) 1) 2)')
+  inf('(fn id x x) (fn f y (id (y id)))', '(((1 1) 2) 2)')
+  inf('(fn id x x) (fn f (if (id true) (id 1) (id 2)))', 'int')
+  inf('(fn f x (3)) (fn g (+ (f true) (f 4)))', 'int')
+  inf('(fn f x x) (fn g y y) (fn h b (if b (f g) (g f)))', '(bool (1 1))')
+
+  // type errors
+  reject('(+ 1 true)')
+
+  puts('ok')
+}
+
+
+const testJavaScript = () => {
   const check = (expect, exp, ...defs) => {
     const source = (defs || []).concat(`fn main:\n  ${exp.replace("\n", "\n  ")}`).join('\n')
     const {js, nodes, tokens} = compile(source)
@@ -324,7 +434,7 @@ const test = () => {
       puts('tokens:', tokens.map(unwrapToken))
       puts('expect:', expect)
       puts('actual:', actual)
-      process.exit(1)
+      process.exit(3)
     }
   }
 
@@ -401,7 +511,7 @@ const main = () => {
   if (paths.length === 0) {
     interactive()
   } else if (paths[0] === '--test') {
-    test()
+    testAll()
   } else {
     const moa = paths.map(path => fs.readFileSync(path, 'utf-8')).join('\n\n')
     puts('// Embedded JavaScript')
