@@ -97,7 +97,7 @@ const parse = tokens => {
     const unit = bottom()
     if (tokens[pos] == '.') {
       ++pos
-      return ['.', unit, atom()]
+      return [tokens[pos-1], unit, atom()]
     } else {
       return unit
     }
@@ -133,18 +133,31 @@ const parse = tokens => {
 
 const infer = nodes => {
   let tvarSequence = 0
-  const tvar = () => (name => ({name, var:true, toString: function() { return this.name }}))((++tvarSequence).toString())
-  const tlambda = (...types) => types.length === 1 ? types[0] : ({types, toString: function(){ return '(' + this.types.map(x => x.toString()).join(' ') + ')' }})
-  const ttype = (name) => ({name, types: [], toString: function(){ return this.types.length ? `${this.name}(${this.types.map(x => x.toString()).join('.')})` : this.name}})
+  function Type(name, types, f, dynamic) {
+    this.name = name
+    this.types = types || []
+    this.args = f ? Array(f.length).fill().map(tvar) : []
+    this.props = f ? f(...this.args) : {}
+    this.dynamic = dynamic || false
+  }
+  Type.prototype.toString = function() {
+    const types = this.types.map(x => x.toString()).join(' ')
+    return this.name + (types ? `(${types}.join(' '))` : '')
+  }
+  const tvar = () => new Type((++tvarSequence).toString(), [], null, true)
+  const tlambda = (...types) => types.length === 1 ? types[0] : new Type('', types)
+  const ttype = (name, f) => new Type(name, [], f)
   const tint = ttype('int')
   const tbool = ttype('bool')
-  const tstring = ttype('string')
+  const tstring = ttype('string', () => ({
+    size: tint
+  }))
   const tarray = ttype('array') // TODO: generics
   const fresh = (type, nonGeneric) => {
     const d = {}
     const rec = t => {
       const p = prune(t)
-      return p.var ?
+      return p.dynamic ?
         (nonGeneric.includes(p.name) ? p : d[p.name] ||= tvar()) :
         ({name: p.name, types: p.types.map(rec)})
     }
@@ -153,11 +166,11 @@ const infer = nodes => {
   const unify = (a, b, node) => {
     a = prune(a)
     b = prune(b)
-    if (a.var) {
+    if (a.dynamic) {
       if (a.name !== b.name) {
         a.instance = b
       }
-    } else if (b.var) {
+    } else if (b.dynamic) {
       unify(b, a, node)
     } else {
       if (a.name !== b.name || a.types.length !== b.types.length) {
@@ -167,7 +180,7 @@ const infer = nodes => {
     }
   }
   const v1 = tvar()
-  const prune = t => (t.var && t.instance) ? t.instance = prune(t.instance) : t
+  const prune = t => (t.dynamic && t.instance) ? t.instance = prune(t.instance) : t
   const analyse = (node, env, nonGeneric) => node.type = _analyse(node, env, nonGeneric)
   const _analyse = (node, env, nonGeneric) => {
     if (Array.isArray(node)) {
@@ -187,6 +200,8 @@ const infer = nodes => {
         args[0].type = tvar()
         args.forEach(arg => newEnv[arg.code] = arg.type)
         return analyse(tail[1], newEnv, nonGeneric.concat(args.map(t => t.type.name)))
+      } else if (head == '.') {
+        return analyse(tail[0]).props[tail[1].code]
       } else if (tail.length) {
         const argv = tail.map(t => analyse(t, env, nonGeneric))
         const rt = (env.__cache[str(argv)] ||= tvar()) // fix tvar
@@ -199,7 +214,9 @@ const infer = nodes => {
     } else if (node.statement || node.array) {
       return node.a.map(x => analyse(x, env, nonGeneric)).slice(-1)[0] || tarray
     } else if (node.struct) {
-      return tint // TODO
+      const kvs = node.a.map(x => [x[1].code, analyse(x[2])])
+      const name = 'struct_' + kvs.flatMap(([k,v]) => [k, v.toString()]).join('_')
+      return ttype(name, () => Object.fromEntries(kvs))
     } else {
       const v = node.code
       if (v.match(/^[0-9]/)) {
@@ -310,7 +327,11 @@ const generate = nodes => {
   return nodes.map(gen).join(';\n')
 }
 
-const testAll = () => { testInference(); testJavaScript() }
+const testAll = () => {
+  testInference()
+  testJavaScript()
+  puts('ok')
+}
 
 const testInference = () => {
   const showType = type => {
@@ -353,6 +374,7 @@ const testInference = () => {
       process.exit(2)
     }
   }
+
   // primitives
   inf('(1)', 'int')
   inf('(true)', 'bool')
@@ -373,12 +395,22 @@ const testInference = () => {
   inf('(fn inc a (+ a 1))', '(int int)')
   inf('(fn add a b (+ a b))', '(int int int)')
 
-  // generics
+  // generic function
   inf('(fn f a a)', '(1 1)')
   inf('(fn f a b a)', '(1 2 1)')
   inf('(fn f a b b)', '(1 2 2)')
   inf('(fn f a a) (f 1)', 'int')
   inf('(fn f a a) (f 1) (f true)', 'bool')
+
+  // struct
+  inf('{a=1}.a', 'int')
+  inf('{a=1 b="hi"}.b', 'string')
+
+  // embedded types
+  inf('"hi".size', 'int')
+
+  // generic array
+  //inf('[]', '1')
 
   // combinations
   inf('(fn f x (+ x 1)) (fn g x (+ x 2)) (+ (f 1) (g 1))', 'int')
@@ -399,8 +431,6 @@ const testInference = () => {
 
   // type errors
   reject('(+ 1 true)')
-
-  puts('ok')
 }
 
 
@@ -445,36 +475,32 @@ const testJavaScript = () => {
   // unit: bottom ("." id ("(" exp+ ")")?)*
   //check(2, '"hi".size')
   // bottom:
-  // | "(" exp ")"                # priority : 1 * (2 + 3)
+  // | "(" exp ")"                     # priority : 1 * (2 + 3)
   check(9, '(1 + 2) * 3')
-  // | "[" exp* "]"               # array    : [] [1 2]
+  // | "[" exp* "]"                    # array    : [] [1 2]
   check([], '[]')
   check([1, 2], '[1 2]')
-  // | "(" tags ")"               # struct   : () (name price=1)
+  // | "{" tags "}"                    # struct   : {} {one two=2 (three)=3}
   check({}, '{}')
   check({key:1}, '{key=1}')
   check({key1:1, key2:2}, '{key1 key2=2}', 'let key1 1')
-  // | '"' [^"]* '"'              # string   : "hi"
+  // | '"' [^"]* '"'                   # string   : "hi"
   check('hi', '"hi"')
   check('${name}', '"${name}"')
   // | '`' ("${" unit "}" | [^"])* '`' # template : "hi {name}"
   check('hello moa', '`hello ${name}`', 'let name "moa"')
-  // | id ("," id)* "=>" exp      # lambda   : a,b => a + b
+  // | id ("," id)* "=>" exp           # lambda   : a,b => a + b
   check('3', '(x => x + 1)(2)')
   check('3', '(a,b => a + b)(1 2)')
-  // | [0-9]+ ("." [0-9]+)?       # number   : 1 0.5
+  // | [0-9]+ ("." [0-9]+)?            # number   : 1 0.5
   check(1, '1')
   check(1.5, '1.5')
-  // | id ("(" exp+ ")")?         # id       : name f()
+  // | id ("(" exp+ ")")?              # id       : name f()
   check(1, 'v', 'let v 1')
   check(1, 'f()', 'fn f 1')
   check(2, 'inc(1)', 'fn inc x:\n  x + 1')
   check(3, 'add(1 2)', 'fn add a b:\n  a + b')
   // keyword: qw(let var fn struct if unless for while continue break return fail p pp)
-
-
-  // lines
-  puts('ok')
 }
 
 const interactive = async () => {
