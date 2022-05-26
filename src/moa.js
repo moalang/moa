@@ -33,10 +33,12 @@ Token.prototype.update = function(code) { this.code = code; return this}
 Token.prototype.toString = function() { return this.code }
 function Group(tag, a) { this[tag] = true; this.a = a }
 Token.prototype.toString = function() { return this.code }
+
 const newToken = (code, pos) => new Token(code, pos)
 const newArray = a => new Group('array', a)
 const newStruct = a => new Group('struct', a.map(x => x.code ? ['=', x, x] : x))
 const newStatement = a => new Group('statement', a)
+
 const isOp2 = t => t && t.toString().match(/^[+\-*%/=><|&^]+$/)
 const compile = source => {
   const tokens = tokenize(source)
@@ -278,9 +280,6 @@ const generate = nodes => {
       } else {
         return `${gen(args[0])}._${args[1]}`
       }
-    } else if (head == ':') {
-      const key = s => s.startsWith('$') ? `[${s.slice(1)}]` : s
-      return '({' + Array.from({length: args.length/2}, (_, i) => key(args[i*2]) + ':' + args[i*2+1]).join(',') + '})'
     } else if (head == 'let') {
       return `const ${gen(args[0])} = ${gen(args.slice(1))}`
     } else if (head == 'var') {
@@ -360,7 +359,7 @@ const testInference = () => {
   }
   const inf = (src, expect) => {
     try {
-      const types = infer(parse(tokenize(src))).map(node => node.type)
+      let types = infer(parse(tokenize(src))).map(node => node.type)
       const actual = showType(types.slice(-1)[0])
       if (str(actual) === str(expect)) {
         process.stdout.write('.')
@@ -476,6 +475,7 @@ const testJavaScript = () => {
   // | keywords exp+ (":" ("\n  " node)+)? cond? "\n"
   // | exp+ cond? "\n"
   // exp: unit (op2 exp)*
+  check(3, '1 + 2')
   // unit: bottom ("." id ("(" exp+ ")")?)*
   //check(2, '"hi".size')
   // bottom:
