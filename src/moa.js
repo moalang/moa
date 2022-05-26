@@ -28,12 +28,12 @@ const __p = (...args) => console.log(...args.map(x => ['string', 'number'].inclu
 const __pp = (...args) => console.log(...args.map(x => JSON.stringify(x, null, 2)))
 }).toString().slice(8, -1).trim()
 
-function Token(code) { this.code = code }
+function Token(code, pos) { this.code = code; this.pos = pos }
 Token.prototype.update = function(code) { this.code = code; return this}
 Token.prototype.toString = function() { return this.code }
 function Group(tag, a) { this[tag] = true; this.a = a }
 Token.prototype.toString = function() { return this.code }
-const newToken = code => new Token(code)
+const newToken = (code, pos) => new Token(code, pos)
 const newArray = a => new Group('array', a)
 const newStruct = a => new Group('struct', a.map(x => x.code ? ['=', x, x] : x))
 const newStatement = a => new Group('statement', a)
@@ -48,11 +48,13 @@ const tokenize = source => {
   const simplify = ts => {
     let nesting = 0
     let indent = 0
-    let pos = 0
-    const close = n => [...Array(n)].flatMap(_ => [';', '}', ';'])
+    let pos = -ts[0].length
+    const wrap = t => newToken(t, pos)
+    const close = n => [...Array(n)].flatMap(_ => [';', '}', ';']).map(t => newToken(t, -1))
     const convert = t => {
+      pos += t.length
       if (t === ':') {
-        return '{'
+        return wrap('{')
       } else if (nesting === 0 && t.includes('\n')) {
         const before = indent
         indent = t.split('\n').slice(-1)[0].length
@@ -60,7 +62,7 @@ const tokenize = source => {
           throw Error(`Indentations must be multiple of two spaces. But this is ${JSON.stringify(indent)}`)
         }
         if (indent == before) {
-          return ';'
+          return wrap(';')
         } else if (indent < before) {
           return close((before - indent) / 2)
         }
@@ -70,10 +72,10 @@ const tokenize = source => {
       } else if (')]'.includes(t)) {
         --nesting
       }
-      return t
+      return wrap(t)
     }
     ts = ts.map(t => t === '{' ? '{{' : t === '}' ? '}}' : t)
-    return ts.flatMap(convert).concat(close(indent / 2)).map(newToken)
+    return ts.flatMap(convert).concat(close(indent / 2))
   }
   return simplify(source.split(/([ \n]+|[0-9]+(?:\.[0-9]+)?|[A-Za-z0-9_]+(?:,[A-Za-z0-9_]+)|[A-Za-z0-9_]+\(?|[+\-*%/=><|&^]+|"[^"]*"|`[^`]*`|[^\[\](){} \n;\.]+|.)/g).filter(x => x.replace(/^ +$/, '')))
 }
@@ -358,7 +360,7 @@ const testInference = () => {
   }
   const inf = (src, expect) => {
     try {
-      let types = infer(parse(tokenize(src))).map(node => node.type)
+      const types = infer(parse(tokenize(src))).map(node => node.type)
       const actual = showType(types.slice(-1)[0])
       if (str(actual) === str(expect)) {
         process.stdout.write('.')
