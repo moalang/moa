@@ -29,6 +29,7 @@ const __pp = (...args) => console.log(...args.map(x => JSON.stringify(x, null, 2
 }).toString().slice(8, -1).trim()
 
 function Token(code) { this.code = code }
+Token.prototype.update = function(code) { this.code = code; return this}
 Token.prototype.toString = function() { return this.code }
 function Group(tag, a) { this[tag] = true; this.a = a }
 Token.prototype.toString = function() { return this.code }
@@ -47,6 +48,7 @@ const tokenize = source => {
   const simplify = ts => {
     let nesting = 0
     let indent = 0
+    let pos = 0
     const close = n => [...Array(n)].flatMap(_ => [';', '}', ';'])
     const convert = t => {
       if (t === ':') {
@@ -109,7 +111,7 @@ const parse = tokens => {
     const token = tokens[pos++]
     const code = token.code
     if (code.match(/^[A-Za-z0-9_]+\($/)) {
-      return  many(exp, {stop: u => u == ')'}, a => a.length ? [newToken(code.slice(0, -1)),  ...a] : newToken(code + ')'))
+      return  many(exp, {stop: u => u == ')'}, a => a.length ? [token.update(code.slice(0, -1)),  ...a] : token.update(code + ')'))
     } else if (code.match(/^[A-Za-z0-9_]+/) || code.startsWith('"') || code.startsWith('`')) {
       return token
     } else if ('}]);'.includes(code)) {
