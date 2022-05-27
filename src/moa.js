@@ -11,25 +11,6 @@ const dump = (...a) => a.map(o => console.dir(o, {depth: null}))
 const trace = o => { dump(o); return o }
 const reserves = 'let var fn struct if unless for while continue break return fail p pp)'.split(' ')
 
-const embeddedJs = (() => {
-const __error = (message, obj) => { throw Object.assign(Error(message), obj) }
-const __now = () => {
-  const d = new Date()
-  const pnow = performance.now()
-  const _year = d.getFullYear()
-  const _month = d.getMonth() + 1
-  const _day = d.getDate()
-  const _hour = d.getHours()
-  const _minute = d.getMinutes()
-  const _second = d.getSeconds()
-  const _string = `${_year}/${('0' + _month).slice(-2)}/${('0' + _day).slice(-2)} ${('0' + _hour).slice(-2)}:${('0' + _minute).slice(-2)}:${('0' + _second).slice(-2)}`
-  const _elapsed = () => Math.floor((performance.now() - pnow) * 10) / 10 + 'ms'
-  return { _year, _month, _day, _hour, _minute, _second, _string, _elapsed }
-}
-const __p = (...args) => console.log(...args.map(x => ['string', 'number'].includes(typeof x) ? x : JSON.stringify(x)))
-const __pp = (...args) => console.log(...args.map(x => JSON.stringify(x, null, 2)))
-}).toString().slice(8, -1).trim()
-
 function Token(code, pos, type) { this.code = code; this.pos = pos; this.type = type }
 Token.prototype.toString = function() { return this.code }
 function Group(tag, a) { this[tag] = true; this.a = a; this.type = undefined }
@@ -47,11 +28,12 @@ const compile = source => {
   const js = generate(nodes)
   return {tokens, nodes, js}
 }
+
 const tokenize = source => {
   const simplify = ts => {
     let pos = 0
-    ts = ts.map(t => t === '{' ? '{{' : t === '}' ? '}}' : t)
-    ts = ts.map(code => { const t = newToken(code, pos); pos += code.length; return t })
+    const safe = t => t === '{' ? '{{' : t === '}' ? '}}' : t
+    ts = ts.map(code => { const t = newToken(safe(code), pos); pos += code.length; return t })
     ts = ts.filter(x => x.code.replace(/^ +/, ''))
 
     let nesting = 0
@@ -154,8 +136,8 @@ const infer = nodes => {
   function Type(params) {
     this.name = params.name || ''
     this.types = params.types || []
-    this.args = params.args || [] // f ? Array(f.length).fill().map(tvar) : []
-    this.props = params.props || {} // f ? f(...this.args) : {}
+    this.args = params.args || []
+    this.props = params.props || {}
     this.dynamic = params.dynamic || false
     this.instance = params.instance || undefined
   }
@@ -180,7 +162,7 @@ const infer = nodes => {
     size: tint
   }))
   const tarray = ttype('array', t => ({
-    __at: tlambda(tint, t)
+    size: tint
   }))
   const fresh = (type, nonGeneric) => {
     const d = {}
@@ -240,7 +222,10 @@ const infer = nodes => {
         return analyze(tail[0], env, nonGeneric).props[tail[1].code]
       } else if (head.array && tail.length) {
         const t = analyze(head, env, nonGeneric)
-        tail.forEach(x => unify(analyze(x, env, nonGeneric), t.args[0]))
+        if (tail.length !== 1) {
+          throw new Error(`Array calling should take 1 argument but gave ${tail.length}`)
+        }
+        unify(tint, analyze(tail[0], env, nonGeneric))
         return t.args[0]
       } else if (tail.length) {
         const argv = tail.map(t => analyze(t, env, nonGeneric))
@@ -291,6 +276,10 @@ const infer = nodes => {
 }
 
 const generate = nodes => {
+  const embedded = {
+    'array_size': (o, name) => `${gen(o)}.length`,
+    'string_size': (o, name) => `${gen(o)}.length`
+  }
   const gen = o => o.array ? '[' + o.a.map(gen) + ']' :
     o.struct ? '({' + o.a.map(x => `${x[1].code}: ${gen(x[2])}`) + '})' :
     o.statement ? statement(o.a.map(gen)) :
@@ -316,10 +305,15 @@ const generate = nodes => {
         return '(' + gen(args[0]) + head + gen(args[1]) + ')'
       }
     } else if (head == '.') {
-      if (Array.isArray(args[1])) {
-        return `${gen(args[0])}._${args[1][0]}(${args[1].slice(1).map(gen)})`
+      const key = args[0].type.name + '_' + args[1]
+      if (key in embedded) {
+        return embedded[key](args[0], args[1], args.slice(2).map(gen))
       } else {
-        return `${gen(args[0])}._${args[1]}`
+        if (Array.isArray(args[1])) {
+          return `${gen(args[0])}.${args[1][0]}(${args[1].slice(1).map(gen)})`
+        } else {
+          return `${gen(args[0])}.${args[1]}`
+        }
       }
     } else if (head == 'let') {
       return `const ${gen(args[0])} = ${gen(...args.slice(1))}`
@@ -419,16 +413,7 @@ const tester = () => {
     const {js, nodes, tokens} = compile(source)
     let actual
     try {
-      const __stdout = []
-      const __p = (...a) => { __stdout.push(a.map(str).join(' ')) }
-      const __pp = (...a) => { __stdout.push(a.map(x => JSON.stringify(x, null, 2)).join(' ')) }
       actual = eval(js + '\nmain()')
-      if (actual === undefined) {
-        actual = ''
-      }
-      if (__stdout.length) {
-        actual = actual + __stdout.join('\n')
-      }
     } catch(e) {
       actual = e.stack
     }
@@ -481,10 +466,12 @@ const testAll = () => {
   // struct
   inf('{a=1}.a', 'int')
   inf('{a=1 b="hi"}.b', 'string')
-  // embedded types
+  // string
   inf('"hi".size', 'int')
   // generic array
-  //inf('[]', '1')
+  inf('[].size', 'int')
+  inf('[1](0)', 'int')
+  inf('["hi"](0)', 'string')
   // combinations
   inf('(fn f x (+ x 1)) (fn g x (+ x 2)) (+ (f 1) (g 1))', 'int')
   inf('(fn _ f g x (g (f x)))', '((1 2) (2 3) 1 3)')
@@ -511,7 +498,8 @@ const testAll = () => {
   // exp: unit (op2 exp)*
   check(3, '1 + 2')
   // unit: bottom ("." id ("(" exp+ ")")?)*
-  //check(2, '"hi".size')
+  check(1, '[1].size')
+  check(2, '"hi".size')
   // bottom:
   // | "(" exp ")"                     # priority : 1 * (2 + 3)
   check(9, '(1 + 2) * 3')
@@ -581,10 +569,6 @@ const main = () => {
     testAll()
   } else {
     const moa = paths.map(path => fs.readFileSync(path, 'utf-8')).join('\n\n')
-    puts('// Embedded JavaScript')
-    puts(embeddedJs)
-    puts()
-    puts('// Compiled Moa source code')
     puts(compile(moa).js)
   }
 }
