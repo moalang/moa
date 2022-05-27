@@ -233,7 +233,7 @@ const infer = nodes => {
         return env[name] = ft
       } else if (head == '=>') {
         const newEnv = Object.assign({}, env)
-        const args = tail[0].code.split(',').map((s,i) => new Token(s, tail[0].pos + i, tvar()))
+        const args = tail[0].code ? tail[0].code.split(',').map((s,i) => new Token(s, tail[0].pos + i, tvar())) : []
         args.map(arg => newEnv[arg.code] = arg.type)
         return tlambda(...args.map(t => t.type), analyze(tail[1], newEnv, nonGeneric.concat(args.map(t => t.type.name))))
       } else if (head == '.') {
@@ -466,6 +466,8 @@ const testAll = () => {
   inf('(if true true true)', 'bool')
   // value
   inf('(fn value 1)', 'int')
+  // lambda
+  inf('(() => 1)', 'int')
   inf('(x => x + 1)', '(int int)')
   // simple function
   inf('(fn inc a (+ a 1))', '(int int)')
