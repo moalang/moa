@@ -29,7 +29,6 @@ const __pp = (...args) => console.log(...args.map(x => JSON.stringify(x, null, 2
 }).toString().slice(8, -1).trim()
 
 function Token(code, pos) { this.code = code; this.pos = pos }
-Token.prototype.update = function(code) { this.code = code; return this}
 Token.prototype.toString = function() { return this.code }
 function Group(tag, a) { this[tag] = true; this.a = a }
 Token.prototype.toString = function() { return this.code }
@@ -48,38 +47,39 @@ const compile = source => {
 }
 const tokenize = source => {
   const simplify = ts => {
+    let pos = 0
+    ts = ts.map(t => t === '{' ? '{{' : t === '}' ? '}}' : t)
+    ts = ts.map(code => { const t = newToken(code, pos); pos += code.length; return t })
+    ts = ts.filter(x => x.code.replace(/^ +/, ''))
+
     let nesting = 0
     let indent = 0
-    let pos = -ts[0].length
-    const wrap = t => newToken(t, pos)
     const close = n => [...Array(n)].flatMap(_ => [';', '}', ';']).map(t => newToken(t, -1))
     const convert = t => {
-      pos += t.length
-      if (t === ':') {
-        return wrap('{')
-      } else if (nesting === 0 && t.includes('\n')) {
+      if (t == ':') {
+        return newToken('{', t.pos)
+      } else if (nesting === 0 && t.code.includes('\n')) {
         const before = indent
-        indent = t.split('\n').slice(-1)[0].length
+        indent = t.code.split('\n').slice(-1)[0].length
         if (indent % 2 !== 0) {
           throw Error(`Indentations must be multiple of two spaces. But this is ${JSON.stringify(indent)}`)
         }
         if (indent == before) {
-          return wrap(';')
+          return newToken(';', t.pos)
         } else if (indent < before) {
           return close((before - indent) / 2)
         }
         return []
-      } else if ('[('.includes(t) || t.endsWith('(')) {
+      } else if ('[('.includes(t.code)) {
         ++nesting
-      } else if (')]'.includes(t)) {
+      } else if (')]'.includes(t.code)) {
         --nesting
       }
-      return wrap(t)
+      return t
     }
-    ts = ts.map(t => t === '{' ? '{{' : t === '}' ? '}}' : t)
     return ts.flatMap(convert).concat(close(indent / 2))
   }
-  return simplify(source.split(/([ \n]+|[0-9]+(?:\.[0-9]+)?|[A-Za-z0-9_]+(?:,[A-Za-z0-9_]+)|[A-Za-z0-9_]+\(?|[+\-*%/=><|&^]+|"[^"]*"|`[^`]*`|[^\[\](){} \n;\.]+|.)/g).filter(x => x.replace(/^ +$/, '')))
+  return simplify(source.split(/([ \n]+|[0-9]+(?:\.[0-9]+)?|[A-Za-z0-9_]+(?:,[A-Za-z0-9_]+)*|[+\-*%/=><|&^]+|"[^"]*"|`[^`]*`|[^\[\](){} \n;\.]+|.)/g))
 }
 
 const parse = tokens => {
@@ -97,13 +97,25 @@ const parse = tokens => {
     return g ? g(a) : a
   }
   const consume = t => reserves.includes(t.code) ? line() : exp()
-  const line = () => many(exp, {stop: t => t == ';'})
-  const exp = () => ((lhs, t) => isOp2(t) ? ++pos && [t, lhs, exp()] : lhs)(atom(), tokens[pos])
+  const line = () => many(exp, {stop: t => t == ';'}, a => a.length === 1 ? a[0] : a)
+  const exp = () => {
+    const lhs = atom()
+    const t = tokens[pos]
+    if (t && isOp2(t)) {
+      ++pos
+      return [t, lhs, exp()]
+    } else {
+      return lhs
+    }
+  }
   const atom = () => {
     const unit = bottom()
-    if (tokens[pos] == '.') {
+    const pred = tokens[pos]
+    if (pred == '.') {
       ++pos
       return [tokens[pos-1], unit, atom()]
+    } else if (pred == '(' && tokens[pos - 1].pos === pred.pos - tokens[pos - 1].code.length) {
+      return [unit].concat(bottom())
     } else {
       return unit
     }
@@ -114,16 +126,14 @@ const parse = tokens => {
     }
     const token = tokens[pos++]
     const code = token.code
-    if (code.match(/^[A-Za-z0-9_]+\($/)) {
-      return  many(exp, {stop: u => u == ')'}, a => a.length ? [token.update(code.slice(0, -1)),  ...a] : token.update(code + ')'))
-    } else if (code.match(/^[A-Za-z0-9_]+/) || code.startsWith('"') || code.startsWith('`')) {
+    if (code.match(/^[A-Za-z0-9_]+/) || code.startsWith('"') || code.startsWith('`')) {
       return token
     } else if ('}]);'.includes(code)) {
       return token
     } else if (token == '{{') {
       return many(exp, {stop: u => u == '}}'}, newStruct)
     } else if (token == '(') {
-      return many(exp, {stop: u => u == ')'})
+      return many(exp, {stop: u => u == ')'}, a => a.length === 1 ? a[0] : a)
     } else if (token == '[') {
       return many(exp, {stop: u => u == ']'}, newArray)
     } else if (token == '{') {
@@ -148,7 +158,7 @@ const infer = nodes => {
   }
   Type.prototype.toString = function() {
     const types = this.types.map(x => x.toString()).join(' ')
-    return this.name + (types ? `(${types}.join(' '))` : '')
+    return this.name + (types ? `(${types})` : '')
   }
   const tvar = () => new Type((++tvarSequence).toString(), [], null, true)
   const tlambda = (...types) => types.length === 1 ? types[0] : new Type('', types)
@@ -165,7 +175,7 @@ const infer = nodes => {
       const p = prune(t)
       return p.dynamic ?
         (nonGeneric.includes(p.name) ? p : d[p.name] ||= tvar()) :
-        ({name: p.name, types: p.types.map(rec)})
+        new Type(p.name, p.types.map(rec))
     }
     return rec(type)
   }
@@ -220,7 +230,7 @@ const infer = nodes => {
     } else if (node.statement || node.array) {
       return node.a.map(x => analyse(x, env, nonGeneric)).slice(-1)[0] || tarray
     } else if (node.struct) {
-      const kvs = node.a.map(x => [x[1].code, analyse(x[2])])
+      const kvs = node.a.map(x => [x[1].code, analyse(x[2]), env, nonGeneric])
       const name = 'struct_' + kvs.flatMap(([k,v]) => [k, v.toString()]).join('_')
       return ttype(name, () => Object.fromEntries(kvs))
     } else {
@@ -256,7 +266,7 @@ const generate = nodes => {
   const gen = o => o.array ? '[' + o.a.map(gen) + ']' :
     o.struct ? '({' + o.a.map(x => `${x[1].code}: ${gen(x[2])}`) + '})' :
     o.statement ? statement(o.a.map(gen)) :
-    Array.isArray(o) ? (o.length === 1 ? gen(o[0]) : apply(o)) : o.code
+    Array.isArray(o) ? apply(o) : o.code
   const isCond = args => ['if', 'unless'].includes(args[args.length - 2].code)
   const cond = (head, args) => args.length === 0 ? head.code :
     args[0] == 'if' ? `if (${gen(args[1])}) ${head}` :
@@ -265,9 +275,10 @@ const generate = nodes => {
   const addReturn = x => x.match(/^return|if|for|while/) ? x : 'return ' + x
   const statement = a => `(() => { ${[...a.slice(0, -1), addReturn(a[a.length - 1])].join(';')} })()`
   const block = a => a[0].statement ? '{' + a.slice(1).map(gen).join(';') + '}' : gen(a)
-  const apply = ([head, ...args]) => {
-    if (Array.isArray(head)) {
-      return gen(head) + (args.length ? '(' + args.flatMap(x => x).map(gen) + ')' : '')
+  const apply = node => {
+    const [head, ...args] = node
+    if (Array.isArray(head) || head.array || head.struct || head.statement) {
+      return args.length ? gen(head) + '(' + args.map(gen) + ')' : gen(head)
     } else if (isOp2(head)) {
       if (head == '=>') {
         return '((' + gen(args[0]) + ') => ' + gen(args[1]) + ')'
@@ -281,7 +292,7 @@ const generate = nodes => {
         return `${gen(args[0])}._${args[1]}`
       }
     } else if (head == 'let') {
-      return `const ${gen(args[0])} = ${gen(args.slice(1))}`
+      return `const ${gen(args[0])} = ${gen(...args.slice(1))}`
     } else if (head == 'var') {
       return `var ${gen(args[0])} = ${args.length >= 2 ? gen(args.slice(1)) : 'undefined'}`
     } else if (head == 'fn') {
@@ -459,7 +470,7 @@ const testJavaScript = () => {
     if (str(actual) === str(expect)) {
       put('.')
     } else {
-      const unwrapToken = o => Array.isArray(o) ? o.map(unwrapToken) : o.code
+      const unwrapToken = o => Array.isArray(o) ? o.map(unwrapToken) : o.a ? o.a.map(unwrapToken) : o.toString()
       puts('FAILURE')
       puts('source:', source)
       puts('js    :', js)
