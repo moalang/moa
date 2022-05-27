@@ -1,5 +1,7 @@
 'use strict'
 
+Error.stackTraceLimit = 100
+
 const fs = require('fs')
 const str = o => typeof o === 'string' ? o : JSON.stringify(o)
 const strs = o => Array.isArray(o) ? o.map(str).join(' ') : str(o)
@@ -28,12 +30,12 @@ const __p = (...args) => console.log(...args.map(x => ['string', 'number'].inclu
 const __pp = (...args) => console.log(...args.map(x => JSON.stringify(x, null, 2)))
 }).toString().slice(8, -1).trim()
 
-function Token(code, pos) { this.code = code; this.pos = pos }
+function Token(code, pos, type) { this.code = code; this.pos = pos; this.type = type }
 Token.prototype.toString = function() { return this.code }
-function Group(tag, a) { this[tag] = true; this.a = a }
-Token.prototype.toString = function() { return this.code }
+function Group(tag, a) { this[tag] = true; this.a = a; this.type = undefined }
+Group.prototype.toString = function() { return '(' + this.a.map(x => x.toString()).join(' ') + ')' }
 
-const newToken = (code, pos) => new Token(code, pos)
+const newToken = (code, pos, type) => new Token(code, pos, type)
 const newArray = a => new Group('array', a)
 const newStruct = a => new Group('struct', a.map(x => x.code ? ['=', x, x] : x))
 const newStatement = a => new Group('statement', a)
@@ -41,7 +43,7 @@ const newStatement = a => new Group('statement', a)
 const isOp2 = t => t && t.toString().match(/^[+\-*%/=><|&^]+$/)
 const compile = source => {
   const tokens = tokenize(source)
-  const nodes = (parse(tokens))
+  const nodes = infer(parse(tokens))
   const js = generate(nodes)
   return {tokens, nodes, js}
 }
@@ -149,33 +151,52 @@ const parse = tokens => {
 
 const infer = nodes => {
   let tvarSequence = 0
-  function Type(name, types, f, dynamic) {
-    this.name = name
-    this.types = types || []
-    this.args = f ? Array(f.length).fill().map(tvar) : []
-    this.props = f ? f(...this.args) : {}
-    this.dynamic = dynamic || false
+  function Type(params) {
+    this.name = params.name || ''
+    this.types = params.types || []
+    this.args = params.args || [] // f ? Array(f.length).fill().map(tvar) : []
+    this.props = params.props || {} // f ? f(...this.args) : {}
+    this.dynamic = params.dynamic || false
+    this.instance = params.instance || undefined
   }
   Type.prototype.toString = function() {
-    const types = this.types.map(x => x.toString()).join(' ')
-    return this.name + (types ? `(${types})` : '')
+    if (this.instance) {
+      return this.instance.toString()
+    } else {
+      const types = this.types.map(x => x.toString()).join(' ')
+      return this.name + (types ? `(${types})` : '')
+    }
   }
-  const tvar = () => new Type((++tvarSequence).toString(), [], null, true)
-  const tlambda = (...types) => types.length === 1 ? types[0] : new Type('', types)
-  const ttype = (name, f) => new Type(name, [], f)
+  const tvar = () => new Type({name: (++tvarSequence).toString(), dynamic: true})
+  const tlambda = (...types) => types.length === 1 ? types[0] : new Type({types})
+  const ttype = (name, f) => {
+    f ||= () => ({})
+    const args = Array(f.length).fill().map(tvar)
+    return new Type({name, args, props: f(...args)})
+  }
   const tint = ttype('int')
   const tbool = ttype('bool')
   const tstring = ttype('string', () => ({
     size: tint
   }))
-  const tarray = ttype('array') // TODO: generics
+  const tarray = ttype('array', t => ({
+    __at: tlambda(tint, t)
+  }))
   const fresh = (type, nonGeneric) => {
     const d = {}
     const rec = t => {
       const p = prune(t)
-      return p.dynamic ?
-        (nonGeneric.includes(p.name) ? p : d[p.name] ||= tvar()) :
-        new Type(p.name, p.types.map(rec))
+      if (p.dynamic) {
+        if (nonGeneric.includes(p.name)) {
+          return p
+        } else {
+        return d[p.name] ||= tvar()
+        }
+      } else {
+        const q = new Type(p)
+        q.types = q.types.map(rec)
+        return q
+      }
     }
     return rec(type)
   }
@@ -197,8 +218,8 @@ const infer = nodes => {
   }
   const v1 = tvar()
   const prune = t => (t.dynamic && t.instance) ? t.instance = prune(t.instance) : t
-  const analyse = (node, env, nonGeneric) => node.type = _analyse(node, env, nonGeneric)
-  const _analyse = (node, env, nonGeneric) => {
+  const analyze = (node, env, nonGeneric) => node.type = _analyze(node, env, nonGeneric)
+  const _analyze = (node, env, nonGeneric) => {
     if (Array.isArray(node)) {
       let [head,...tail] = node
       if (head == 'fn' || head == 'let') {
@@ -207,30 +228,37 @@ const infer = nodes => {
         const body = tail.slice(-1)[0]
         const newEnv = Object.assign({}, env)
         args.forEach(arg => newEnv[arg.code] = arg.type)
-        const ret = analyse(body, newEnv, nonGeneric.concat(args.map(t => t.type.name)))
+        const ret = analyze(body, newEnv, nonGeneric.concat(args.map(t => t.type.name)))
         const ft = tlambda(...args.map(t => t.type), ret)
         return env[name] = ft
       } else if (head == '=>') {
         const newEnv = Object.assign({}, env)
-        const args = [tail[0]]
-        args[0].type = tvar()
-        args.forEach(arg => newEnv[arg.code] = arg.type)
-        return analyse(tail[1], newEnv, nonGeneric.concat(args.map(t => t.type.name)))
+        const args = tail[0].code.split(',').map((s,i) => new Token(s, tail[0].pos + i, tvar()))
+        args.map(arg => newEnv[arg.code] = arg.type)
+        return tlambda(...args.map(t => t.type), analyze(tail[1], newEnv, nonGeneric.concat(args.map(t => t.type.name))))
       } else if (head == '.') {
-        return analyse(tail[0]).props[tail[1].code]
+        return analyze(tail[0], env, nonGeneric).props[tail[1].code]
+      } else if (head.array && tail.length) {
+        const t = analyze(head, env, nonGeneric)
+        tail.forEach(x => unify(analyze(x, env, nonGeneric), t.args[0]))
+        return t.args[0]
       } else if (tail.length) {
-        const argv = tail.map(t => analyse(t, env, nonGeneric))
+        const argv = tail.map(t => analyze(t, env, nonGeneric))
         const rt = (env.__cache[str(argv)] ||= tvar()) // fix tvar
-        const ft = analyse(head, env, nonGeneric)
+        const ft = analyze(head, env, nonGeneric)
         unify(tlambda(...argv, rt), ft, node)
         return rt
       } else {
-        return analyse(head, env, nonGeneric)
+        return analyze(head, env, nonGeneric)
       }
-    } else if (node.statement || node.array) {
-      return node.a.map(x => analyse(x, env, nonGeneric)).slice(-1)[0] || tarray
+    } else if (node.statement) {
+      return node.a.map(x => analyze(x, env, nonGeneric)).slice(-1)[0]
+    } else if (node.array) {
+      const t = fresh(tarray)
+      node.a.forEach(x => unify(analyze(x, env, nonGeneric), t.args[0]))
+      return t
     } else if (node.struct) {
-      const kvs = node.a.map(x => [x[1].code, analyse(x[2]), env, nonGeneric])
+      const kvs = node.a.map(x => [x[1].code, analyze(x[2], env, nonGeneric)])
       const name = 'struct_' + kvs.flatMap(([k,v]) => [k, v.toString()]).join('_')
       return ttype(name, () => Object.fromEntries(kvs))
     } else {
@@ -239,10 +267,10 @@ const infer = nodes => {
         return tint
       } else if (v.match(/^["`]/)) {
         return tstring
-      } else if (env[v]) {
+      } else if (v in env) {
         return fresh(env[v], nonGeneric)
       } else {
-        throw Error(`Not found ${v} in env`, {v,node,env})
+        throw Error(`Not found ${v} in ${Object.keys(env)}`)
       }
     }
   }
@@ -258,7 +286,7 @@ const infer = nodes => {
     '<': tlambda(tint, tint, tbool),
     'if': tlambda(tbool, v1, v1, v1),
   }
-  nodes.map(node => analyse(node, topEnv, []))
+  nodes.map(node => analyze(node, topEnv, []))
   return nodes
 }
 
@@ -277,8 +305,10 @@ const generate = nodes => {
   const block = a => a[0].statement ? '{' + a.slice(1).map(gen).join(';') + '}' : gen(a)
   const apply = node => {
     const [head, ...args] = node
-    if (Array.isArray(head) || head.array || head.struct || head.statement) {
+    if (Array.isArray(head) || head.struct || head.statement) {
       return args.length ? gen(head) + '(' + args.map(gen) + ')' : gen(head)
+    } else if (head.array) {
+      return args.length ? gen(head) + '[' + args.map(gen) + ']' : gen(head)
     } else if (isOp2(head)) {
       if (head == '=>') {
         return '((' + gen(args[0]) + ') => ' + gen(args[1]) + ')'
@@ -436,6 +466,7 @@ const testAll = () => {
   inf('(if true true true)', 'bool')
   // value
   inf('(fn value 1)', 'int')
+  inf('(x => x + 1)', '(int int)')
   // simple function
   inf('(fn inc a (+ a 1))', '(int int)')
   inf('(fn add a b (+ a b))', '(int int int)')
@@ -485,6 +516,7 @@ const testAll = () => {
   // | "[" exp* "]"                    # array    : [] [1 2]
   check([], '[]')
   check([1, 2], '[1 2]')
+  check(2, '[1 2](1)')
   // | "{" tags "}"                    # struct   : {} {one two=2 (three)=3}
   check({}, '{}')
   check({key:1}, '{key=1}')
