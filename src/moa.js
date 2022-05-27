@@ -341,13 +341,7 @@ const generate = nodes => {
   return nodes.map(gen).join(';\n')
 }
 
-const testAll = () => {
-  testInference()
-  testJavaScript()
-  puts('ok')
-}
-
-const testInference = () => {
+const tester = () => {
   const showType = type => {
     const show = t => t.instance ? show(t.instance) : t.name || '(' + t.types.map(show).join(' ') + ')'
     const s = show(type)
@@ -356,9 +350,9 @@ const testInference = () => {
     return r
   }
 
-  const reject = src => {
+  const reject = source => {
     try {
-      infer(parse(tokenize(src)))
+      infer(parse(tokenize(source)))
     } catch (e) {
       if (e.message.match(/^type miss match/)) {
         process.stdout.write('.')
@@ -366,11 +360,12 @@ const testInference = () => {
       }
     }
     puts('Failed')
-    puts('src:', src)
+    puts('source:', source)
   }
-  const inf = (src, expect) => {
+
+  const inf = (source, expect) => {
     try {
-      let types = infer(parse(tokenize(src))).map(node => node.type)
+      let types = infer(parse(tokenize(source))).map(node => node.type)
       const actual = showType(types.slice(-1)[0])
       if (str(actual) === str(expect)) {
         process.stdout.write('.')
@@ -378,77 +373,17 @@ const testInference = () => {
         puts('Failed')
         puts('expect:', expect)
         puts('actual:', actual)
-        puts('   src:', src)
+        puts('source:', source)
         process.exit(1)
       }
     } catch (e) {
       puts('Failed')
-      puts('  src:', src)
+      puts('  source:', source)
       console.error(e)
       process.exit(2)
     }
   }
 
-  // primitives
-  inf('(1)', 'int')
-  inf('(true)', 'bool')
-  inf('(false)', 'bool')
-
-  // exp
-  inf('(+ 1 1)', 'int')
-  inf('(< 1 1)', 'bool')
-
-  // branch
-  inf('(if true 1 2)', 'int')
-  inf('(if true true true)', 'bool')
-
-  // value
-  inf('(fn value 1)', 'int')
-
-  // simple function
-  inf('(fn inc a (+ a 1))', '(int int)')
-  inf('(fn add a b (+ a b))', '(int int int)')
-
-  // generic function
-  inf('(fn f a a)', '(1 1)')
-  inf('(fn f a b a)', '(1 2 1)')
-  inf('(fn f a b b)', '(1 2 2)')
-  inf('(fn f a a) (f 1)', 'int')
-  inf('(fn f a a) (f 1) (f true)', 'bool')
-
-  // struct
-  inf('{a=1}.a', 'int')
-  inf('{a=1 b="hi"}.b', 'string')
-
-  // embedded types
-  inf('"hi".size', 'int')
-
-  // generic array
-  //inf('[]', '1')
-
-  // combinations
-  inf('(fn f x (+ x 1)) (fn g x (+ x 2)) (+ (f 1) (g 1))', 'int')
-  inf('(fn _ f g x (g (f x)))', '((1 2) (2 3) 1 3)')
-  inf('(fn _ x y z (x z (y z)))', '((1 2 3) (1 2) 1 3)')
-  inf('(fn _ b x (if (x b) x (fn _ x b)))', '(1 (1 bool) (1 1))')
-  inf('(fn _ x (if true x (if x true false)))', '(bool bool)')
-  inf('(fn _ x y (if x x y))', '(bool bool bool)')
-  inf('(fn _ n ((fn _ x (x (fn _ y y))) (fn _ f (f n))))', '(1 1)')
-  inf('(fn _ x y (x y))', '((1 2) 1 2)')
-  inf('(fn _ x y (x (y x)))', '((1 2) ((1 2) 1) 2)')
-  inf('(fn _ h t f x (f h (t f x)))', '(1 ((1 2 3) 4 2) (1 2 3) 4 3)')
-  inf('(fn _ x y (x (y x) (y x)))', '((1 1 2) ((1 1 2) 1) 2)')
-  inf('(fn id x x) (fn f y (id (y id)))', '(((1 1) 2) 2)')
-  inf('(fn id x x) (fn f (if (id true) (id 1) (id 2)))', 'int')
-  inf('(fn f x (3)) (fn g (+ (f true) (f 4)))', 'int')
-  inf('(fn f x x) (fn g y y) (fn h b (if b (f g) (g f)))', '(bool (1 1))')
-
-  // type errors
-  reject('(+ 1 true)')
-}
-
-
-const testJavaScript = () => {
   const check = (expect, exp, ...defs) => {
     const source = (defs || []).concat(`fn main:\n  ${exp.replace("\n", "\n  ")}`).join('\n')
     const {js, nodes, tokens} = compile(source)
@@ -482,6 +417,61 @@ const testJavaScript = () => {
     }
   }
 
+  return {inf, reject, check}
+}
+
+const testAll = () => {
+  const {inf, reject, check} = tester()
+
+  // -- Tests for type inference
+  // primitives
+  inf('(1)', 'int')
+  inf('(true)', 'bool')
+  inf('(false)', 'bool')
+  // exp
+  inf('(+ 1 1)', 'int')
+  inf('(< 1 1)', 'bool')
+  // branch
+  inf('(if true 1 2)', 'int')
+  inf('(if true true true)', 'bool')
+  // value
+  inf('(fn value 1)', 'int')
+  // simple function
+  inf('(fn inc a (+ a 1))', '(int int)')
+  inf('(fn add a b (+ a b))', '(int int int)')
+  // generic function
+  inf('(fn f a a)', '(1 1)')
+  inf('(fn f a b a)', '(1 2 1)')
+  inf('(fn f a b b)', '(1 2 2)')
+  inf('(fn f a a) (f 1)', 'int')
+  inf('(fn f a a) (f 1) (f true)', 'bool')
+  // struct
+  inf('{a=1}.a', 'int')
+  inf('{a=1 b="hi"}.b', 'string')
+  // embedded types
+  inf('"hi".size', 'int')
+  // generic array
+  //inf('[]', '1')
+  // combinations
+  inf('(fn f x (+ x 1)) (fn g x (+ x 2)) (+ (f 1) (g 1))', 'int')
+  inf('(fn _ f g x (g (f x)))', '((1 2) (2 3) 1 3)')
+  inf('(fn _ x y z (x z (y z)))', '((1 2 3) (1 2) 1 3)')
+  inf('(fn _ b x (if (x b) x (fn _ x b)))', '(1 (1 bool) (1 1))')
+  inf('(fn _ x (if true x (if x true false)))', '(bool bool)')
+  inf('(fn _ x y (if x x y))', '(bool bool bool)')
+  inf('(fn _ n ((fn _ x (x (fn _ y y))) (fn _ f (f n))))', '(1 1)')
+  inf('(fn _ x y (x y))', '((1 2) 1 2)')
+  inf('(fn _ x y (x (y x)))', '((1 2) ((1 2) 1) 2)')
+  inf('(fn _ h t f x (f h (t f x)))', '(1 ((1 2 3) 4 2) (1 2 3) 4 3)')
+  inf('(fn _ x y (x (y x) (y x)))', '((1 1 2) ((1 1 2) 1) 2)')
+  inf('(fn id x x) (fn f y (id (y id)))', '(((1 1) 2) 2)')
+  inf('(fn id x x) (fn f (if (id true) (id 1) (id 2)))', 'int')
+  inf('(fn f x (3)) (fn g (+ (f true) (f 4)))', 'int')
+  inf('(fn f x x) (fn g y y) (fn h b (if b (f g) (g f)))', '(bool (1 1))')
+  // type errors
+  reject('(+ 1 true)')
+
+  // -- Tests for executions
   // node:
   // | keywords exp+ (":" ("\n  " node)+)? cond? "\n"
   // | exp+ cond? "\n"
@@ -516,6 +506,8 @@ const testJavaScript = () => {
   check(2, 'inc(1)', 'fn inc x:\n  x + 1')
   check(3, 'add(1 2)', 'fn add a b:\n  a + b')
   // keyword: qw(let var fn struct if unless for while continue break return fail p pp)
+
+  puts('ok')
 }
 
 const interactive = async () => {
