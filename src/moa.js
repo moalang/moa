@@ -9,7 +9,7 @@ const put = (...a) => process.stdout.write(strs(a))
 const puts = (...a) => console.log(strs(a))
 const dump = (...a) => a.map(o => console.dir(o, {depth: null}))
 const trace = o => { dump(o); return o }
-const reserves = 'let var fn struct if unless for while continue break return fail p pp)'.split(' ')
+const reserves = 'let var fn struct when if unless for while continue break return fail p pp)'.split(' ')
 
 function Token(code, pos, type) { this.code = code; this.pos = pos; this.type = type }
 Token.prototype.toString = function() { return this.code }
@@ -220,6 +220,15 @@ const infer = nodes => {
         return tlambda(...args.map(t => t.type), analyze(tail[1], newEnv, nonGeneric.concat(args.map(t => t.type.name))))
       } else if (head == '.') {
         return analyze(tail[0], env, nonGeneric).props[tail[1].code]
+      } else if (head == 'when') {
+        for (let i=0; i<tail.length - 1; i+=2) {
+          unify(tbool, analyze(tail[i], env, nonGeneric))
+        }
+        const ret = tvar()
+        for (let i=1; i<tail.length; i+=2) {
+          unify(ret, analyze(tail[i], env, nonGeneric))
+        }
+        return ret
       } else if (head.array && tail.length) {
         const t = analyze(head, env, nonGeneric)
         if (tail.length !== 1) {
@@ -292,6 +301,7 @@ const generate = nodes => {
   const addReturn = x => x.match(/^return|if|for|while/) ? x : 'return ' + x
   const statement = a => `(() => { ${[...a.slice(0, -1), addReturn(a[a.length - 1])].join(';')} })()`
   const block = a => a[0].statement ? '{' + a.slice(1).map(gen).join(';') + '}' : gen(a)
+  const when = a => a.length === 1 ? a[0] : `${a[0]} ? ${1} : ` + when(a.slice(2))
   const apply = node => {
     const [head, ...args] = node
     if (Array.isArray(head) || head.struct || head.statement) {
@@ -336,6 +346,8 @@ const generate = nodes => {
       } else {
         throw Error(`Unknown for syntax ${args}`)
       }
+    } else if (head == 'when') {
+      return when(args)
     } else if (head == 'while') {
       return `while (${gen(args[0])}) ${block(args[1])}`
     } else if (head == 'continue' || head == 'break') {
@@ -528,6 +540,9 @@ const testAll = () => {
   check(2, 'inc(1)', 'fn inc x:\n  x + 1')
   check(3, 'add(1 2)', 'fn add a b:\n  a + b')
   // keyword: qw(let var fn struct if unless for while continue break return fail p pp)
+  check(1, 'when true 1 2')
+  check(2, 'when false 1 2')
+  check(3, 'when false 1 false 2 3')
 
   puts('ok')
 }
