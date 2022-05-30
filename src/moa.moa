@@ -1,2 +1,33 @@
+# top: node*
+# node:
+# | keywords exp+ (":" ("\n  " node)+)? cond? "\n"
+# | exp+ cond? "\n"
+# | "#" .*                     # comment
+# exp: unit (op2 exp)*
+# unit: op1? bottom ("." id ("(" exp+ ")")?)*
+# bottom:
+# | "(" exp ")"                     # priority : 1 * (2 + 3)
+# | "[" exp* "]"                    # array    : [] [1 2]
+# | "{" tags "}"                    # struct   : {} {one two=2 (three)=3}
+# | '"' [^"]* '"'                   # string   : "hi"
+# | '`' ("${" unit "}" | [^"])* '`' # template : "hi {name}"
+# | id ("," id)* "=>" exp           # lambda   : a,b => a + b
+# | [0-9]+ ("." [0-9]+)?            # number   : 1 0.5
+# | id ("(" exp+ ")")?              # id       : name f()
+# 
+# # helpers
+# tags: id* (id "=" exp)*
+# cond:
+# | "if" exp
+# | "unless" exp
+# id: [A-Za-z_][A-Za-z0-9_]*
+# op1: "!"
+# op2: [+-/%*=<>|&^;]+
+# keywords: qw(let var fn struct when if else "else if" return fail p pp)
+
+
+
+
+
 fn compile s:
-  "console.log('............................................................ok')"
+  "console.log('ok')"

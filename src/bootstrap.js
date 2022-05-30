@@ -37,15 +37,19 @@ const compile = source => {
 
 const tokenize = source => {
   const simplify = ts => {
-    let pos = 0
     const safe = t => t === '{' ? '{{' : t === '}' ? '}}' : t
-    ts = ts.map(code => { const t = newToken(safe(code), pos); pos += code.length; return t })
-    ts = ts.filter(x => x.code.replace(/^ +/, ''))
-
+    let pos = 0
     let nesting = 0
     let indent = 0
     const close = n => [...Array(n)].flatMap(_ => [';', '}', ';']).map(t => newToken(t, -1))
-    const convert = t => {
+    const convert = code => {
+      if (!code || code.startsWith('#') || !code.replace(/^ +$/, '')) {
+        pos += code.length
+        return []
+      }
+      const t = newToken(safe(code), pos)
+      pos += code.length
+
       if (t == ':') {
         return newToken('{', t.pos)
       } else if (nesting === 0 && t.code.includes('\n')) {
@@ -69,7 +73,7 @@ const tokenize = source => {
     }
     return ts.flatMap(convert).concat(close(indent / 2))
   }
-  return simplify(source.split(/([ \n]+|[0-9]+(?:\.[0-9]+)?|[A-Za-z0-9_]+(?:,[A-Za-z0-9_]+)*|[+\-*%/=><|&^]+|"[^"]*"|`[^`]*`|[^\[\](){} \n;\.]+|.)/g))
+  return simplify(source.split(/((?: |\n|#[^\n]*)+|[0-9]+(?:\.[0-9]+)?|[A-Za-z0-9_]+(?:,[A-Za-z0-9_]+)*|[+\-*%/=><|&^]+|"[^"]*"|`[^`]*`|[^\[\](){} \n;\.#]+|.)/g))
 }
 
 const parse = tokens => {
@@ -240,6 +244,8 @@ const testBootstrap = () => {
   // node:
   // | keywords exp+ (":" ("\n  " node)+)? cond? "\n"
   // | exp+ cond? "\n"
+  // # | "#" .*                     # comment
+  check(1, '# hello\n1')
   // exp: unit (op2 exp)*
   check(3, '1 + 2')
   // unit: bottom ("." id ("(" exp+ ")")?)*
@@ -280,25 +286,6 @@ const testBootstrap = () => {
   puts('ok')
 }
 
-const tester = () => {
-  const moa = fs.readFileSync('./moa.moa', 'utf-8')
-  fs.writeFileSync('/tmp/moa', compile(moa).js)
-  const { execSync } = require('child_process')
-  execSync('node /tmp/moa moa.moa > ../bin/moa')
-  execSync('chmod 0755 ../bin/moa')
-  return (expect, source) => {
-    const actual = execSync('node ../bin/moa /tmp/t', {encoding: 'utf-8'})
-    if (expect === actual) {
-      put('.')
-    } else {
-      puts('source:', source)
-      puts('js    :', fs.readFileSync('../bin/moa', 'utf-8'))
-      puts('expect:', expect)
-      puts('actual:', actual)
-    }
-  }
-}
-
 const testMoa = () => {
   const moa = fs.readFileSync('./moa.moa', 'utf-8')
   const prefix = `#!node
@@ -320,10 +307,7 @@ if (!process.argv[1]) {
   console.log(execSync('node ../bin/moa --selfcheck', {encoding: 'utf-8'}))
 }
 
-const main = () => {
-  const paths = process.argv.slice(2)
-  testBootstrap()
-  testMoa()
-}
 
-main()
+const paths = process.argv.slice(2)
+testBootstrap()
+testMoa()

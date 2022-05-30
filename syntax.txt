@@ -2,7 +2,7 @@ top: node*
 node:
 | keywords exp+ (":" ("\n  " node)+)? cond? "\n"
 | exp+ cond? "\n"
-| "#" .*                     # comment
+| "#" .*                          # comment
 exp: unit (op2 exp)*
 unit: op1? bottom ("." id ("(" exp+ ")")?)*
 bottom:
