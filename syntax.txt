@@ -23,4 +23,4 @@ cond:
 id: [A-Za-z_][A-Za-z0-9_]*
 op1: "!"
 op2: [+-/%*=<>|&^;]+
-keywords: qw(let var fn struct if unless for while continue break return fail p pp)
+keywords: qw(let var fn struct when if else "else if" return fail p pp)
