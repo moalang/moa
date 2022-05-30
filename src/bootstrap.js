@@ -300,9 +300,24 @@ const tester = () => {
 }
 
 const testMoa = () => {
-  const eq = tester()
-  eq('1\n',  'p 1')
-  puts('ok')
+  const moa = fs.readFileSync('./moa.moa', 'utf-8')
+  const prefix = `#!node
+"use strict"
+`
+  const suffix = `
+if (!process.argv[1]) {
+  console.log('Usage: moa [file ...]')
+} else if (process.argv[1] === '--selfcheck') {
+  __selfcheck()
+} else {
+  const source = process.argv.slice(1).map(p => require('fs').readFileSync(p, 'utf-8')).join('\\n\\n')
+  console.log(compile(source))
+}
+`
+  fs.writeFileSync('/tmp/moa', prefix + compile(moa).js + suffix)
+  const { execSync } = require('child_process')
+  execSync('node /tmp/moa moa.moa > ../bin/moa')
+  console.log(execSync('node ../bin/moa --selfcheck', {encoding: 'utf-8'}))
 }
 
 const main = () => {

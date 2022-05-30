@@ -1,3 +1,2 @@
-p "#!node"
-p "'use strict'"
-p "console.log(1)"
+fn compile s:
+  "console.log('............................................................ok')"
