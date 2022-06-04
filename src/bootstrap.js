@@ -2,32 +2,31 @@
 
 Error.stackTraceLimit = 100
 
-const fs = require('fs')
+// general helper
 const str = o => typeof o === 'string' ? o : JSON.stringify(o)
 const strs = o => Array.isArray(o) ? o.map(str).join(' ') : str(o)
 const put = (...a) => process.stdout.write(strs(a))
 const puts = (...a) => console.log(strs(a))
 const dump = (...a) => a.map(o => console.dir(o, {depth: null}))
 const trace = o => { dump(o); return o }
-const reserves = 'let var fn struct when if unless for while continue break return fail p pp)'.split(' ')
+
+// specific helper
+const isOp2 = t => typeof t === 'string' && t.match(/^[+\-*%/=><|&^]+$/)
+const isAssign = t => t.endsWith('=')
+const isOp1 = t => t === '!'
+
+// runtime
 const __prop = (obj, id, args) => {
-  const t = typeof obj
-  if ((t === 'string' || Array.isArray(obj)) && id === 'size') {
+  if ((typeof obj === 'string' || Array.isArray(obj)) && id === 'size') {
     return obj.length
   }
+  const o = obj[id]
+  return args.length ? o(...args) : o
 }
+const __at = (a, n) => a[n]
+let __p = (...a) => console.log(...a)
 
-function Token(code, pos) { this.code = code; this.pos = pos }
-Token.prototype.toString = function() { return this.code }
-function Group(tag, a) { this[tag] = true; this.a = a }
-Group.prototype.toString = function() { return '(' + this.a.map(x => x.toString()).join(' ') + ')' }
-
-const newToken = (code, pos) => new Token(code, pos)
-const newArray = a => new Group('array', a)
-const newStruct = a => new Group('struct', a.map(x => x.code ? ['=', x, x] : x))
-const newStatement = a => new Group('statement', a)
-
-const isOp2 = t => t && t.toString().match(/^[+\-*%/=><|&^]+$/)
+// compiler
 const compile = source => {
   const tokens = tokenize(source)
   const nodes = parse(tokens)
@@ -36,82 +35,87 @@ const compile = source => {
 }
 
 const tokenize = source => {
-  const simplify = ts => {
-    const safe = t => t === '{' ? '{{' : t === '}' ? '}}' : t
-    let pos = 0
+  const simplify = tokens => {
     let nesting = 0
     let indent = 0
-    const close = n => [...Array(n)].flatMap(_ => [';', '}', ';']).map(t => newToken(t, -1))
-    const convert = code => {
-      if (!code || code.startsWith('#') || !code.replace(/^ +$/, '')) {
-        pos += code.length
+    const close = n => [...Array(n)].flatMap(_ => ['__eol', '__eob', '__eol'])
+    const convert = (token, i) => {
+      if (!token || token.startsWith('#') || !token.replace(/^ +$/, '')) {
         return []
       }
-      const t = newToken(safe(code), pos)
-      pos += code.length
 
-      if (t == ':') {
-        return newToken('{', t.pos)
-      } else if (nesting === 0 && t.code.includes('\n')) {
+      if (nesting === 0 && token.includes('\n')) {
         const before = indent
-        indent = t.code.split('\n').slice(-1)[0].length
+        indent = token.split('\n').slice(-1)[0].length
         if (indent % 2 !== 0) {
-          throw Error(`Indentations must be multiple of two spaces. But this is ${JSON.stringify(indent)}`)
+          throw Error(`Indent error: '${JSON.stringify(indent)}'`)
         }
-        if (indent == before) {
-          return newToken(';', t.pos)
+        if (indent === before) {
+          return '__eol'
         } else if (indent < before) {
           return close((before - indent) / 2)
         }
         return []
-      } else if ('[('.includes(t.code)) {
+      } else if ('{[('.includes(token)) {
         ++nesting
-      } else if (')]'.includes(t.code)) {
+      } else if (')]}'.includes(token)) {
         --nesting
       }
-      return t
+
+      if (token === '(' && tokens[i - 1].match(/^[A-Za-z0-9_)\]]/)) {
+        return '__call'
+      }
+      if (token === '[' && tokens[i - 1].match(/^[A-Za-z0-9_)\]]/)) {
+        return '__at'
+      }
+      if (token === ':' && !tokens[i + 1].includes('\n')) {
+        return '__line'
+      }
+      return token
     }
-    return ts.flatMap(convert).concat(close(indent / 2))
+    return tokens.flatMap(convert).concat(close(indent / 2))
   }
-  return simplify(source.split(/((?: |\n|#[^\n]*)+|[0-9]+(?:\.[0-9]+)?|[A-Za-z0-9_]+(?:,[A-Za-z0-9_]+)*|[+\-*%/=><|&^]+|"[^"]*"|`[^`]*`|[^\[\](){} \n;\.#]+|.)/g))
+  return simplify(source.split(/((?: |\n|#[^\n]*)+|[0-9]+(?:\.[0-9]+)?|[A-Za-z0-9_]+(?:,[A-Za-z0-9_]+)*|[+\-*%/=><|&^]+|"[^"]*"|`[^`]*`|.)/g).filter(x => x))
 }
 
 const parse = tokens => {
   let pos = 0
-  const many = (f, option, g) => {
-    option = option || {}
+  const many = (f, stop, g) => {
     const a = []
     while (pos < tokens.length) {
-      if (option.stop && option.stop(tokens[pos])) {
+      const token = tokens[pos]
+      if (stop == token) {
         ++pos
         break
+      } else if (token === '__line') {
+        ++pos
+        a.push(many(exp))
+      } else if (token.startsWith('__')) {
+        break
+      } else {
+        a.push(f(token))
       }
-      a.push(f(tokens[pos]))
     }
     return g ? g(a) : a
   }
-  const consume = t => reserves.includes(t.code) ? line() : exp()
-  const line = () => many(exp, {stop: t => t == ';'}, a => a.length === 1 ? a[0] : a)
-  const exp = () => {
-    const lhs = atom()
-    const t = tokens[pos]
-    if (t && isOp2(t)) {
-      ++pos
-      return [t, lhs, exp()]
+  const line = () => many(exp, '__eol')
+  const exp = () => glue(bottom())
+  const glue = lhs => {
+    const pred = tokens[pos++]
+    if (isOp1(lhs)) {
+      --pos
+      return [lhs, exp()]
+    } else if (isOp2(pred)) {
+      return [pred, lhs, exp()]
+    } else if (pred == '.') {
+      return [tokens[pos-1], lhs, exp()]
+    } else if (pred == '__call') {
+      return glue(many(exp, ')', a => ['__call', lhs, ...a]))
+    } else if (pred === '__at') {
+      return glue([pred, lhs, many(exp, ']')])
     } else {
+      --pos
       return lhs
-    }
-  }
-  const atom = () => {
-    const unit = bottom()
-    const pred = tokens[pos]
-    if (pred == '.') {
-      ++pos
-      return [tokens[pos-1], unit, atom()]
-    } else if (pred == '(' && tokens[pos - 1].pos === pred.pos - tokens[pos - 1].code.length) {
-      return [unit].concat(bottom())
-    } else {
-      return unit
     }
   }
   const bottom = () => {
@@ -119,174 +123,176 @@ const parse = tokens => {
       return null
     }
     const token = tokens[pos++]
-    const code = token.code
-    if (code.match(/^[A-Za-z0-9_]+/) || code.startsWith('"') || code.startsWith('`')) {
+    if (token.match(/^[A-Za-z0-9_"`}\])]/) || isOp1(token)) {
       return token
-    } else if ('}]);'.includes(code)) {
-      return token
-    } else if (token == '{{') {
-      return many(exp, {stop: u => u == '}}'}, newStruct)
-    } else if (token == '(') {
-      return many(exp, {stop: u => u == ')'}, a => a.length === 1 ? a[0] : a)
-    } else if (token == '[') {
-      return many(exp, {stop: u => u == ']'}, newArray)
-    } else if (token == '{') {
-      return many(line, {stop: u => u == '}'}, newStatement)
-    } else if (isOp2(code)) {
-      return token
+    } else if (token === '{') {
+      return many(exp, '}', a => ['__struct', ...a])
+    } else if (token === '(') {
+      return many(exp, ')')
+    } else if (token === '[') {
+      return many(exp, ']', a => ['__array', ...a])
+    } else if (token === ':') {
+      return many(line, '__eob', a => ['__block', ...a])
     } else {
-      throw Error(`Unexpected token "${code}"`)
+      throw Error(`Unexpected token "${token}"`)
     }
   }
-  return many(consume)
+  const unnest = a => !Array.isArray(a) ? a : a.length === 1 ? unnest(a[0]) : a.map(unnest)
+  return many(line).map(unnest)
 }
 
 const generate = nodes => {
-  const gen = o => o.array ? '[' + o.a.map(gen) + ']' :
-    o.struct ? '({' + o.a.map(x => `${x[1].code}: ${gen(x[2])}`) + '})' :
-    o.statement ? statement(o.a.map(gen)) :
-    Array.isArray(o) ? apply(o) : o.code
-  const isCond = args => args.length >= 2 && args[args.length - 2].code === 'if'
-  const cond = (head, args) => args.length === 0 ? head.code :
-    args[0] == 'if' ? `if (${gen(args[1])}) ${head}` :
-    args[0] == 'unless' ? `if (!${gen(args[1])}) ${head}` :
-    fail(`Unknown condition ${args}`)
-  const addReturn = x => x.match(/^return|if|for|while/) ? x : 'return ' + x
-  const statement = a => `(() => { ${[...a.slice(0, -1), addReturn(a[a.length - 1])].join(';')} })()`
-  const block = a => a[0].statement ? '{' + a.slice(1).map(gen).join(';') + '}' : gen(a)
-  const when = a => a.length === 1 ? a[0] : `${a[0]} ? ${1} : ` + when(a.slice(2))
+  const gen = o => Array.isArray(o) ? apply(o) :
+    o === '__array' ? '[]' :
+    o === '__struct' ? '({})' :
+    o.startsWith('`') ? template(o) : o
+  const template = s => s.replace(/\$[^ `]+/g, x => '${' + x.slice(1) + '}')
+  const when = a => a.length === 1 ? a[0] : `${a[0]} ? ${a[1]} : ` + when(a.slice(2))
+  const statement = a => a.length === 1 ? 'return ' + a[0] : a[0] + '\n' + statement(a.slice(1))
   const apply = node => {
-    const [head, ...args] = node
-    if (Array.isArray(head) || head.struct || head.statement) {
-      return args.length ? gen(head) + '(' + args.map(gen) + ')' : gen(head)
-    } else if (head.array) {
-      return args.length ? gen(head) + '[' + args.map(gen) + ']' : gen(head)
+    const [head, ...tail] = node
+    const args = tail.map(gen)
+    // internal
+    if (head === '__call') {
+      return args[0] + `(${args.slice(1)})`
+    } else if (head === '__block') {
+      return args.length === 1 ? args[0] : '{' + statement(args) + '}'
+    } else if (head === '__array') {
+      return `[${args.join(', ')}]`
+    } else if (head === '__struct') {
+      const kvs = tail.map(o => Array.isArray(o) ? `${o[1]}:${o[2]}` : o).join(',')
+      return `({${kvs}})`
+
+    // keywords
+    } else if (head === 'let') {
+      return `const ${args[0]} = ${args[1]}`
+    } else if (head === 'var') {
+      return `let ${args[0]} = ${args[1]}`
+    } else if (head === 'fn') {
+      return `const ${args[0]} = (${args.slice(1, -1)}) => ${args[args.length - 1]}`
+    } else if (head === '.') {
+      args[1] = `'${args[1]}'`
+      return `__prop(${args})`
+    } else if (isOp1(head)) {
+      return '(' + head + args.join('') + ')'
     } else if (isOp2(head)) {
-      if (head == '=>') {
-        return '((' + gen(args[0]) + ') => ' + gen(args[1]) + ')'
+      const [lhs, rhs] = args
+      if (head === '=>') {
+        return `((${lhs}) => ${rhs})`
+      } else if (isAssign(head)) {
+        return `${lhs} ${head} ${rhs}`
       } else {
-        return '(' + gen(args[0]) + head + gen(args[1]) + ')'
+        return `(${lhs} ${head} ${rhs})`
       }
-    } else if (head == '.') {
-      if (Array.isArray(args[1])) {
-        return `__prop(${gen(args[0])}, '${args[1][0]}', ${args[1].slice(1).map(gen)})`
-      } else {
-        return `__prop(${gen(args[0])}, '${args[1]}')`
-      }
-    } else if (head == 'let') {
-      return `const ${gen(args[0])} = ${gen(...args.slice(1))}`
-    } else if (head == 'var') {
-      return `var ${gen(args[0])} = ${args.length >= 2 ? gen(args.slice(1)) : 'undefined'}`
-    } else if (head == 'fn') {
-      return `const ${gen(args[0])} = (${args.slice(1, -1).map(gen)}) => ${gen(args[args.length - 1])}`
-    } else if (head == 'struct') {
-      const names = args[args.length - 1].slice(1).map(a => '_' + a[0])
-      return `const ${gen(args[0])} = (${names}) => ({${names}})`
-    } else if (head == 'if') {
-      return `if (${gen(args[0])}) ${block(args[1])} ${args.length >= 3 ? gen(args.slice(2)) : ''}`
-    } else if (head == 'elif') {
-      return `else if (${gen(args[0])}) ${block(args[1])} ${args.length >= 3 ? gen(args.slice(2)) : ''}`
-    } else if (head == 'else') {
-      return `else ${block(args)}`
-    } else if (head == 'when') {
+    } else if (head === 'when') {
       return when(args)
-    } else if (head == 'return') {
-      if (args.length === 0) {
-        return 'return'
-      } else if (args.length === 1) {
-        return `return ${gen(args[0])}`
-      } else if (args.length === 2) {
-        return cond('return', args)
-      } else if (args.length === 3) {
-        return cond(`return ${args[0]}`, args.slice(1))
-      } else {
-        throw Error(`Unknown return syntax ${args}`)
-      }
-    } else if (head == 'p' || head == 'pp') {
-      if (isCond(args)) {
-        return cond(`console.log(${args.slice(0, -2).map(gen)})`, args.slice(-2))
-      } else {
-        return `console.log(${args.map(gen)})`
-      }
+    } else if (head === 'if') {
+      return `${args[0]} ? ${args[1]} : null`
+    } else if (head === 'p') {
+      return `__p(${args})`
+
+    // general
     } else {
-      return `${head}(${args.map(gen)})`
+      return `${head}(${args})`
     }
   }
   return nodes.map(gen).join(';\n')
 }
 
+// checker
 const check = (expect, exp, ...defs) => {
-  const source = (defs || []).concat(`fn main:\n  ${exp.replace("\n", "\n  ")}`).join('\n')
-  const {js, nodes, tokens} = compile(source)
-  let actual
+  const source = (defs || []).concat(`fn main:\n  ${exp.replace(/\n/g, "\n  ")}`).join('\n')
   try {
-    actual = eval(js + '\nmain()')
-  } catch(e) {
-    actual = e.stack
-  }
-  if (str(actual) === str(expect)) {
-    put('.')
-  } else {
-    const unwrapToken = o => Array.isArray(o) ? o.map(unwrapToken) : o.a ? o.a.map(unwrapToken) : o.toString()
-    puts('FAILURE')
-    puts('source:', source)
-    puts('js    :', js)
-    puts('nodes :', nodes.map(unwrapToken))
-    puts('tokens:', tokens.map(unwrapToken))
-    puts('expect:', expect)
-    puts('actual:', actual)
-    process.exit(3)
+    const {js, nodes, tokens} = compile(source)
+    let actual
+    try {
+      const stdout = []
+      const __p = (...a) => stdout.push(a.map(str).join(' '))
+      actual = eval(js + '\nmain()')
+      if (stdout.length) {
+        actual = stdout.join('\n')
+      }
+    } catch(e) {
+      actual = e.stack
+    }
+    if (str(actual) === str(expect)) {
+      put('.')
+    } else {
+      puts('FAILURE')
+      puts('source:', source)
+      puts('js    :', js)
+      puts('nodes :', nodes)
+      puts('tokens:', tokens)
+      puts('expect:', expect)
+      puts('actual:', actual)
+      process.exit(1)
+    }
+  } catch (e) {
+      puts('FAILURE')
+      puts('source:', source)
+      puts('error:', e.stack)
+      process.exit(1)
   }
 }
 
-const testBootstrap = () => {
-  // -- Tests for executions
-  // node:
-  // | keywords exp+ (":" ("\n  " node)+)? cond? "\n"
-  // | exp+ cond? "\n"
-  // # | "#" .*                     # comment
-  check(1, '# hello\n1')
+const test = () => {
+  // top: node*
+  check(3, 'a + b()', 'let a 1\nfn b 2')
+  // node: exp+ ("\n" | (":\n" ("  " node)+)?)
   // exp: unit (op2 exp)*
-  check(3, '1 + 2')
-  // unit: bottom ("." id ("(" exp+ ")")?)*
-  check(1, '[1].size')
+  check(7, '1 + 2 * 3')
+  // unit: op1? bottom (prop | call | at)*
+  check(false, '!true')
+  check(true, '!(true && false)')
+  check(1, 'f()[1].size', 'fn f: ["a" "b"]')
+  // prop: "." id
   check(2, '"hi".size')
+  // call: "(" exp+ ")"
+  check(3, 'add(1 2)', 'fn add a b: a + b')
+  check(1, 'f()(1)', 'fn f: g\nfn g x: x')
+  // at: "[" exp "]"
+  check(2, '[1 2][1]')
+  check(2, 'a[1]', 'let a [1 2]')
+  check(1, 'a[0][0]', 'let a [[1]]')
   // bottom:
-  // | "(" exp ")"                     # priority : 1 * (2 + 3)
+  // | "(" exp  ")"                    # priority : 1 * (2 + 3)
   check(9, '(1 + 2) * 3')
-  // | "[" exp* "]"                    # array    : [] [1 2]
+  // | "(" exp exp+ ")"                # apply    : f(a) == (f a)
+  check(3, '(add 1 2)', 'fn add a b: a + b')
+  // | "[" exp* "]"                    # array    : [], [1 2]
   check([], '[]')
   check([1, 2], '[1 2]')
-  check(2, '[1 2](1)')
-  // | "{" tags "}"                    # struct   : {} {one two=2 (three)=3}
+  // | "{" id* (id "=" exp)* "}"       # struct   : {}, {one two=2}
   check({}, '{}')
-  check({key:1}, '{key=1}')
-  check({key1:1, key2:2}, '{key1 key2=2}', 'let key1 1')
+  check({one: 1, two: 2}, '{one two=2}', 'let one 1')
   // | '"' [^"]* '"'                   # string   : "hi"
   check('hi', '"hi"')
-  check('${name}', '"${name}"')
-  // | '`' ("${" unit "}" | [^"])* '`' # template : "hi {name}"
-  check('hello moa', '`hello ${name}`', 'let name "moa"')
+  // | '`' ("$" unit | [^"])* '`'      # template : "hi $user.name"
+  check('hi moa', '`hi $name`', 'let name "moa"')
   // | id ("," id)* "=>" exp           # lambda   : a,b => a + b
-  check('3', '(x => x + 1)(2)')
-  check('3', '(a,b => a + b)(1 2)')
-  // | [0-9]+ ("." [0-9]+)?            # number   : 1 0.5
+  check(1, 'f(a => 1)', 'fn f g: g()')
+  check(3, 'f(a,b => 3)', 'fn f g: g(1 2)')
+  // | [0-9]+ ("." [0-9]+)?            # number   : 1, 0.5
   check(1, '1')
-  check(1.5, '1.5')
-  // | id ("(" exp+ ")")?              # id       : name f()
-  check(1, 'v', 'let v 1')
-  check(1, 'f()', 'fn f 1')
-  check(2, 'inc(1)', 'fn inc x:\n  x + 1')
-  check(3, 'add(1 2)', 'fn add a b:\n  a + b')
-  // keyword: qw(let var fn struct if unless for while continue break return fail p pp)
+  check(0.5, '0.5')
+  // | id                              # id       : name
+  check(1, 'a', 'let a 1')
+
+  // keywords
+  check(1, 'if true: p 1')
+  check(null, 'if false: p 1')
+  check(3, 'a + f()', 'let a 1\nfn f: 2')
+  check(1, 'var n 0\nn+=1\nn')
   check(1, 'when true 1 2')
   check(2, 'when false 1 2')
+  check(2, 'when false 1 true 2 3')
   check(3, 'when false 1 false 2 3')
 
   puts('ok')
 }
 
-const testMoa = () => {
+const selfhceck = () => {
+  const fs = require('fs')
   const moa = fs.readFileSync('./moa.moa', 'utf-8')
   const prefix = `#!node
 "use strict"
@@ -307,7 +313,5 @@ if (!process.argv[1]) {
   console.log(execSync('node ../bin/moa --selfcheck', {encoding: 'utf-8'}))
 }
 
-
-const paths = process.argv.slice(2)
-testBootstrap()
-testMoa()
+test()
+selfhceck()
