@@ -1,4 +1,4 @@
-'use strict'
+'\nuse strict'
 
 Error.stackTraceLimit = 100
 
@@ -148,7 +148,7 @@ const generate = nodes => {
     o.startsWith('`') ? template(o) : o
   const template = s => s.replace(/\$[^ `]+/g, x => '${' + x.slice(1) + '}')
   const when = a => a.length === 1 ? a[0] : `${a[0]} ? ${a[1]} : ` + when(a.slice(2))
-  const statement = a => a.length === 1 ? 'return ' + a[0] : a[0] + '\n' + statement(a.slice(1))
+  const statement = a => a.map((v, i) => a.length - 1 === i ? 'return ' + v : v)
   const apply = node => {
     const [head, ...tail] = node
     const args = tail.map(gen)
@@ -156,7 +156,7 @@ const generate = nodes => {
     if (head === '__call') {
       return args[0] + `(${args.slice(1)})`
     } else if (head === '__block') {
-      return args.length === 1 ? args[0] : '{' + statement(args) + '}'
+      return args.length === 1 ? args[0] : '{\n  ' + statement(args).join('\n  ') + '\n}'
     } else if (head === '__array') {
       return `[${args.join(', ')}]`
     } else if (head === '__struct') {
@@ -310,11 +310,8 @@ const test = () => {
 
 const selfhceck = () => {
   const fs = require('fs')
-  const moa = fs.readFileSync('./moa.moa', 'utf-8')
-  const prefix = `#!node
-"use strict"
-`
-  const suffix = `
+  const prefix = '#!node\n"use strict"\n'
+  const suffix = '\n\n\n' + (() => {
 if (!process.argv[1]) {
   console.log('Usage: moa [file ...]')
 } else if (process.argv[1] === '--selfcheck') {
@@ -323,12 +320,17 @@ if (!process.argv[1]) {
   const source = process.argv.slice(1).map(p => require('fs').readFileSync(p, 'utf-8')).join('\\n\\n')
   console.log(compile(source))
 }
-`
+  }).toString().slice(8, -1)
+  const moa = fs.readFileSync('./moa.moa', 'utf-8')
   fs.writeFileSync('/tmp/moa', prefix + compile(moa).js + suffix)
   const { execSync } = require('child_process')
-  const ret = execSync('node /tmp/moa moa.moa > ../bin/moa')
-  console.log(execSync('node ../bin/moa --selfcheck', {encoding: 'utf-8'}))
-  process.exit(ret)
+  const run = cmd => put(execSync(cmd, {encoding: 'utf-8'}))
+  const rets = []
+  run('node /tmp/moa moa.moa > /tmp/moa.go')
+  run('go build /tmp/moa.go')
+  run('mv moa ../bin/moa')
+  run('chmod 0755 ../bin/moa')
+  run('../bin/moa --selfcheck', {encoding: 'utf-8'})
 }
 
 test()

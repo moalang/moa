@@ -18,7 +18,22 @@
 # id: [A-Za-z_][A-Za-z0-9_]*
 # op1: "!"
 # op2: [+-/%*=<>|&^;]+
-# keywords: qw(var let fn if when)
+# keywords: qw(let var fn struct adt if when)
 
-fn compile s:
-  "console.log('ok')"
+fn tokenize source:
+  ["fn" "main" ":" "1"]
+
+fn parse tokens:
+  [["fn" "main" "1"]]
+
+fn infer nodes:
+  nodes
+
+fn go nodes:
+  `package main\nfunc main() {println("hello moa")}`
+
+fn compile source:
+  let tokens tokenize source
+  let nodes parse tokens
+  infer nodes
+  go nodes
