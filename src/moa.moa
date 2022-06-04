@@ -18,7 +18,7 @@
 # id: [A-Za-z_][A-Za-z0-9_]*
 # op1: "!"
 # op2: [+-/%*=<>|&^;]+
-# keywords: qw(let var fn struct adt if when)
+# keywords: qw(let var fn struct adt if when match)
 
 fn tokenize source:
   ["fn" "main" ":" "1"]
@@ -30,7 +30,7 @@ fn infer nodes:
   nodes
 
 fn go nodes:
-  `package main\nfunc main() {println("hello moa")}`
+  `func selfcheck() {println("hello moa")}`
 
 fn compile source:
   let tokens tokenize source

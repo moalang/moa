@@ -44,7 +44,7 @@ const tokenize = source => {
         return []
       }
 
-      if (nesting === 0 && token.includes('\n')) {
+      if (nesting === 0 && token.match(/^[ \n]+/)) {
         const before = indent
         indent = token.split('\n').slice(-1)[0].length
         if (indent % 2 !== 0) {
@@ -62,13 +62,15 @@ const tokenize = source => {
         --nesting
       }
 
-      if (token === '(' && tokens[i - 1].match(/^[A-Za-z0-9_)\]]/)) {
+      const prev = tokens[i - 1] || ''
+      const pred = tokens[i + 1] || ''
+      if (token === '(' && prev && prev.match(/^[A-Za-z0-9_)\]]/)) {
         return '__call'
       }
-      if (token === '[' && tokens[i - 1].match(/^[A-Za-z0-9_)\]]/)) {
+      if (token === '[' && prev && prev.match(/^[A-Za-z0-9_)\]]/)) {
         return '__at'
       }
-      if (token === ':' && !tokens[i + 1].includes('\n')) {
+      if (token === ':' && pred && !pred.includes('\n')) {
         return '__line'
       }
       return token
@@ -192,10 +194,10 @@ const generate = nodes => {
     } else if (head === 'adt') {
       const names = tail[1].slice(1).map(x => x[0])
       return names.map(name => `const ${name} = __val => ({__tag:'${name}',__val})`).join('\n')
-    } else if (head === 'case') {
+    } else if (head === 'match') {
       const error = '(()=>{throw Error(`Unmatch error: "${__.__tag}"`)})()'
-      const cases = tail[1].slice(1).map(a => `__.__tag === '${a[0]}' ? (${gen(a[1])} => ${gen(a[2])})(__.__val) : `).join('\n  ') + error
-      return `(__ => ${cases})(${args[0]})`
+      const match = tail[1].slice(1).map(a => `__.__tag === '${a[0]}' ? (${gen(a[1])} => ${gen(a[2])})(__.__val) : `).join('\n  ') + error
+      return `(__ => ${match})(${args[0]})`
     } else if (head === 'when') {
       return when(args)
     } else if (head === 'if') {
@@ -213,14 +215,14 @@ const generate = nodes => {
 
 // checker
 const check = (expect, exp, ...defs) => {
-  const source = (defs || []).concat(`fn main:\n  ${exp.replace(/\n/g, "\n  ")}`).join('\n')
+  const source = (defs || []).concat(exp).join('\n')
   try {
     const {js, nodes, tokens} = compile(source)
     let actual
     try {
       const stdout = []
       const __p = (...a) => stdout.push(a.map(str).join(' '))
-      actual = eval(js + '\nmain()')
+      actual = eval(js)
       if (stdout.length) {
         actual = stdout.join('\n')
       }
@@ -279,8 +281,10 @@ const test = () => {
   check({one: 1, two: 2}, '{one two=2}', 'let one 1')
   // | '"' [^"]* '"'                   # string   : "hi"
   check('hi', '"hi"')
-  // | '`' ("$" unit | [^"])* '`'      # template : "hi $user.name"
+  check('hi', '"hi"')
+  // | '`' ("$" unit | [^"])* '`'      # template : `hi $user.name`
   check('hi moa', '`hi $name`', 'let name "moa"')
+  check('a\nb', '`a\nb`')
   // | id ("," id)* "=>" exp           # lambda   : a,b => a + b
   check(1, 'f(a => 1)', 'fn f g: g()')
   check(3, 'f(a,b => 3)', 'fn f g: g(1 2)')
@@ -290,13 +294,13 @@ const test = () => {
   // | id                              # id       : name
   check(1, 'a', 'let a 1')
 
-  // qw(let var fn struct adt if when)
+  // qw(let var fn struct adt if when match)
   check(1, 'n', 'let n 1')
   check(1, 'var n 0\nn+=1\nn')
   check(1, 'f()', 'fn f: 1')
   check({name: 'apple', price: 199}, 'item("apple" 199)', 'struct item:\n  name string\n  price int')
-  check(3, 'case a(1):\n  a v: v + 2\n  b v: v', 'adt ab:\n  a int\n  b string')
-  check(2, 'case b("hi"):\n  a v: v\n  b v: v.size', 'adt ab:\n  a int\n  b string')
+  check(3, 'match a(1):\n  a v: v + 2\n  b v: v', 'adt ab:\n  a int\n  b string')
+  check(2, 'match b("hi"):\n  a v: v\n  b v: v.size', 'adt ab:\n  a int\n  b string')
   check(1, 'if true: p 1')
   check(null, 'if false: p 1')
   check(3, 'a + f()', 'let a 1\nfn f: 2')
@@ -310,27 +314,18 @@ const test = () => {
 
 const selfhceck = () => {
   const fs = require('fs')
-  const prefix = '#!node\n"use strict"\n'
-  const suffix = '\n\n\n' + (() => {
-if (!process.argv[1]) {
-  console.log('Usage: moa [file ...]')
-} else if (process.argv[1] === '--selfcheck') {
-  __selfcheck()
-} else {
-  const source = process.argv.slice(1).map(p => require('fs').readFileSync(p, 'utf-8')).join('\\n\\n')
-  console.log(compile(source))
-}
-  }).toString().slice(8, -1)
   const moa = fs.readFileSync('./moa.moa', 'utf-8')
-  fs.writeFileSync('/tmp/moa', prefix + compile(moa).js + suffix)
+  const main_go = fs.readFileSync('./main.go', 'utf-8')
+  const moa_go = eval(compile(moa).js + `\ncompile(${JSON.stringify(moa)})`)
+  const go = main_go + '\n' + moa_go + '\n'
+  fs.writeFileSync('/tmp/moa.go', go)
   const { execSync } = require('child_process')
   const run = cmd => put(execSync(cmd, {encoding: 'utf-8'}))
   const rets = []
-  run('node /tmp/moa moa.moa > /tmp/moa.go')
   run('go build /tmp/moa.go')
   run('mv moa ../bin/moa')
   run('chmod 0755 ../bin/moa')
-  run('../bin/moa --selfcheck', {encoding: 'utf-8'})
+  run('../bin/moa --selfcheck')
 }
 
 test()
