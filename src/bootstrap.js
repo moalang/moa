@@ -152,7 +152,7 @@ const generate = nodes => {
   const apply = node => {
     const [head, ...tail] = node
     const args = tail.map(gen)
-    // internal
+    // internal marks
     if (head === '__call') {
       return args[0] + `(${args.slice(1)})`
     } else if (head === '__block') {
@@ -163,13 +163,7 @@ const generate = nodes => {
       const kvs = tail.map(o => Array.isArray(o) ? `${o[1]}:${o[2]}` : o).join(',')
       return `({${kvs}})`
 
-    // keywords
-    } else if (head === 'let') {
-      return `const ${args[0]} = ${args[1]}`
-    } else if (head === 'var') {
-      return `let ${args[0]} = ${args[1]}`
-    } else if (head === 'fn') {
-      return `const ${args[0]} = (${args.slice(1, -1)}) => ${args[args.length - 1]}`
+    // operators
     } else if (head === '.') {
       args[1] = `'${args[1]}'`
       return `__prop(${args})`
@@ -184,6 +178,24 @@ const generate = nodes => {
       } else {
         return `(${lhs} ${head} ${rhs})`
       }
+
+    // keywords
+    } else if (head === 'let') {
+      return `const ${args[0]} = ${args[1]}`
+    } else if (head === 'var') {
+      return `let ${args[0]} = ${args[1]}`
+    } else if (head === 'fn') {
+      return `const ${args[0]} = (${args.slice(1, -1)}) => ${args[args.length - 1]}`
+    } else if (head === 'struct') {
+      const names = tail[1].slice(1).map(x => x[0])
+      return `const ${tail[0]} = (${names}) => ({${names}})`
+    } else if (head === 'adt') {
+      const names = tail[1].slice(1).map(x => x[0])
+      return names.map(name => `const ${name} = __val => ({__tag:'${name}',__val})`).join('\n')
+    } else if (head === 'case') {
+      const error = '(()=>{throw Error(`Unmatch error: "${__.__tag}"`)})()'
+      const cases = tail[1].slice(1).map(a => `__.__tag === '${a[0]}' ? (${gen(a[1])} => ${gen(a[2])})(__.__val) : `).join('\n  ') + error
+      return `(__ => ${cases})(${args[0]})`
     } else if (head === 'when') {
       return when(args)
     } else if (head === 'if') {
@@ -278,11 +290,16 @@ const test = () => {
   // | id                              # id       : name
   check(1, 'a', 'let a 1')
 
-  // keywords
+  // qw(let var fn struct adt if when)
+  check(1, 'n', 'let n 1')
+  check(1, 'var n 0\nn+=1\nn')
+  check(1, 'f()', 'fn f: 1')
+  check({name: 'apple', price: 199}, 'item("apple" 199)', 'struct item:\n  name string\n  price int')
+  check(3, 'case a(1):\n  a v: v + 2\n  b v: v', 'adt ab:\n  a int\n  b string')
+  check(2, 'case b("hi"):\n  a v: v\n  b v: v.size', 'adt ab:\n  a int\n  b string')
   check(1, 'if true: p 1')
   check(null, 'if false: p 1')
   check(3, 'a + f()', 'let a 1\nfn f: 2')
-  check(1, 'var n 0\nn+=1\nn')
   check(1, 'when true 1 2')
   check(2, 'when false 1 2')
   check(2, 'when false 1 true 2 3')
@@ -309,8 +326,9 @@ if (!process.argv[1]) {
 `
   fs.writeFileSync('/tmp/moa', prefix + compile(moa).js + suffix)
   const { execSync } = require('child_process')
-  execSync('node /tmp/moa moa.moa > ../bin/moa')
+  const ret = execSync('node /tmp/moa moa.moa > ../bin/moa')
   console.log(execSync('node ../bin/moa --selfcheck', {encoding: 'utf-8'}))
+  process.exit(ret)
 }
 
 test()
