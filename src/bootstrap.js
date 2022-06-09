@@ -1,4 +1,4 @@
-'\nuse strict'
+'use strict'
 
 Error.stackTraceLimit = 100
 
@@ -299,15 +299,14 @@ const test = () => {
   check(1, 'var n 0\nn+=1\nn')
   check(1, 'f()', 'fn f: 1')
   check({name: 'apple', price: 199}, 'item("apple" 199)', 'struct item:\n  name string\n  price int')
-  check(3, 'match a(1):\n  a v: v + 2\n  b v: v', 'adt ab:\n  a int\n  b string')
-  check(2, 'match b("hi"):\n  a v: v\n  b v: v.size', 'adt ab:\n  a int\n  b string')
   check(1, 'if true: p 1')
   check(null, 'if false: p 1')
-  check(3, 'a + f()', 'let a 1\nfn f: 2')
   check(1, 'when true 1 2')
   check(2, 'when false 1 2')
   check(2, 'when false 1 true 2 3')
   check(3, 'when false 1 false 2 3')
+  check(3, 'match a(1):\n  a v: v + 2\n  b v: v', 'adt ab:\n  a int\n  b string')
+  check(2, 'match b("hi"):\n  a v: v\n  b v: v.size', 'adt ab:\n  a int\n  b string')
 
   puts('ok')
 }
