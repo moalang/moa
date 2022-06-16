@@ -30,7 +30,7 @@ fn infer nodes:
   nodes
 
 fn go nodes:
-  `func selfcheck() {println("hello moa")}`
+  `package main\nfunc main() {println("..................ok")}`
 
 fn compile source:
   let tokens tokenize source
