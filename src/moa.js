@@ -26,7 +26,7 @@ Token.prototype.toString = Token.prototype.valueOf = function() { return this.co
 'startsWith endsWith match replace'.split(' ').map(m => Token.prototype[m] = function(...a) { return this.code[m](...a) } )
 
 const fs = require('fs')
-const str = o => Array.isArray(o) ? o.map(str).join(' ') :
+const str = o => Array.isArray(o) ? (o.length === 1 ? str(o[0]) : '(' + o.map(str).join(' ') + ')') :
   typeof o === 'string' ? o :
   typeof o === 'object' && o.constructor === Token ? o.toString() :
   typeof o === 'object' && o.constructor === Type ? o.toString() :
@@ -104,7 +104,7 @@ const parse = tokens => {
         break
       } else if (token == '__line') {
         ++pos
-        a.push(many(exp))
+        a.push(unnest(many(exp)))
       } else if (token.startsWith('__')) {
         break
       } else {
@@ -113,7 +113,8 @@ const parse = tokens => {
     }
     return g ? g(a) : a
   }
-  const line = () => many(exp, '__eol')
+  const unnest = a => a.length === 1 ? unnest(a[0]) : a
+  const line = () => unnest(many(exp, '__eol'))
   const exp = () => glue(bottom())
   const glue = lhs => {
     const pred = tokens[pos++]
@@ -127,7 +128,7 @@ const parse = tokens => {
     } else if (pred == '__call') {
       return glue(many(exp, ')', a => [new Token('__call'), lhs, ...a]))
     } else if (pred == '__at') {
-      return glue([pred, lhs, many(exp, ']')])
+      return glue([pred, lhs, unnest(many(exp, ']'))])
     } else {
       --pos
       return lhs
@@ -143,7 +144,7 @@ const parse = tokens => {
     } else if (token == '{') {
       return many(exp, '}', a => [new Token('__struct'), ...a])
     } else if (token == '(') {
-      return many(exp, ')')
+      return unnest(many(exp, ')'))
     } else if (token == '[') {
       return many(exp, ']', a => [new Token('__array'), ...a])
     } else if (token == ':') {
@@ -152,22 +153,27 @@ const parse = tokens => {
       throw Error(`Unexpected token "${token}"`)
     }
   }
-  const unnest = a => !Array.isArray(a) ? a : a.length === 1 ? unnest(a[0]) : a.map(unnest)
-  return many(line).map(unnest)
+  return many(line)
 }
 const infer = nodes => {
   let tvarSequence = 0
+  const tenv = {}
   const tvar = () => new Type({name: (++tvarSequence).toString(), dynamic: true})
   const tlambda = (...types) => types.length === 1 ? types[0] : new Type({types})
   const ttype = (name, f) => {
+    if (name && name in tenv) {
+      return tenv[name]
+    }
     f ||= () => ({})
     const targs = Array(f.length).fill().map(tvar)
-    return new Type({name, targs, props: f(...targs)})
+    return tenv[name] =  new Type({name, targs, props: f(...targs)})
   }
+  const none = ttype('none')
   const tint = ttype('int')
   const tbool = ttype('bool')
   const tstring = ttype('string', () => ({ size: tint }))
   const tarray = ttype('array', t => ({ size: tint }))
+  const prune = t => (t.dynamic && t.instance) ? t.instance = prune(t.instance) : t
   const fresh = (type, nonGeneric) => {
     const d = {}
     const rec = t => {
@@ -204,8 +210,8 @@ const infer = nodes => {
     }
   }
   const v1 = tvar()
-  const prune = t => (t.dynamic && t.instance) ? t.instance = prune(t.instance) : t
-  const analyze = (node, env, nonGeneric) => node.type = _analyze(node, env, nonGeneric)
+  const analyze = (node, env, nonGeneric) => node.type = _assert(_analyze(node, env, nonGeneric), node)
+  const _assert = (type, node) => type || (() => {throw Error(`Type can not be infered ${node}`)})()
   const _analyze = (node, env, nonGeneric) => {
     if (Array.isArray(node)) {
       let [head,...tail] = node
@@ -224,8 +230,33 @@ const infer = nodes => {
         const ret = ttype(name, () => Object.fromEntries(kvs))
         const ft = tlambda(...kvs.map(kv => kv[1]), ret)
         return env[name] = ft
+      } else if (head == 'adt') {
+        const name = tail[0].code
+        const f = o => Array.isArray(o) ? [o[0].code, ttype(o[1].code)] : [o.code, none]
+        const kvs = tail[1].slice(1).map(f)
+        const adt = ttype(name, () => Object.fromEntries(kvs))
+        kvs.map(([name, alias]) => env[name] = tlambda(alias, adt))
+        return env[name] = adt
+      } else if (head == 'match') {
+        const target = analyze(tail[0], env, nonGeneric)
+        const ret = tvar()
+        for (let cond of tail[1].slice(1)) {
+          if (cond.length === 3) {
+            const tag = cond[0].code
+            const alias = cond[1].code
+            const exp = cond[2]
+            const newEnv = Object.assign({}, env)
+            newEnv[alias] = env[tag].types[0]
+            unify(ret, analyze(exp, newEnv, nonGeneric), exp)
+          } else if (cond.length === 2) {
+            unify(ret, analyze(cond[1], env, nonGeneric), cond[1])
+          } else {
+            throw Error('Unknown condition of match')
+          }
+        }
+        return ret
       } else if (head == '__call') {
-        return _analyze(tail[0], env, nonGeneric)
+        return analyze(tail[0], env, nonGeneric)
       } else if (head == '__block') {
         predict(env, tail)
         return tail.map(line => analyze(line, env, nonGeneric)).slice(-1)[0]
@@ -236,7 +267,7 @@ const infer = nodes => {
       } else if (head == '__at') {
         const ary = analyze(tail[0], env, nonGeneric)
         const index = analyze(tail[1], env, nonGeneric)
-        unify(tint, index)
+        unify(tint, index, tail)
         return ary.targs[0]
       } else if (head == '__struct') {
         const kvs = tail.map(x => Array.isArray(x) ?
@@ -250,14 +281,16 @@ const infer = nodes => {
         targs.map(arg => newEnv[arg.code] = arg.type)
         return tlambda(...targs.map(t => t.type), analyze(tail[1], newEnv, nonGeneric.concat(targs.map(t => t.type.name))))
       } else if (head == '.') {
-        return analyze(tail[0], env, nonGeneric).props[tail[1].code]
+        const type =  analyze(tail[0], env, nonGeneric)
+        const name = tail[1].code
+        return type.props[tail[1].code] || (() => {throw Error(`${name} not found in ${type}:${Object.keys(type.props)}`)})()
       } else if (head == 'when') {
         for (let i=0; i<tail.length - 1; i+=2) {
-          unify(tbool, analyze(tail[i], env, nonGeneric))
+          unify(tbool, analyze(tail[i], env, nonGeneric), tail[i])
         }
         const ret = tvar()
         for (let i=1; i<tail.length; i+=2) {
-          unify(ret, analyze(tail[i], env, nonGeneric))
+          unify(ret, analyze(tail[i], env, nonGeneric), tail[i])
         }
         return ret
       } else if (head.array && tail.length) {
@@ -265,7 +298,7 @@ const infer = nodes => {
         if (tail.length !== 1) {
           throw new Error(`Array calling should take 1 argument but gave ${tail.length}`)
         }
-        unify(tint, analyze(tail[0], env, nonGeneric))
+        unify(tint, analyze(tail[0], env, nonGeneric), tail[0])
         return t.targs[0]
       } else if (tail.length) {
         const argv = tail.map(t => analyze(t, env, nonGeneric))
@@ -372,11 +405,16 @@ const generate = nodes => {
       const names = tail[1].slice(1).map(x => x[0])
       return `const ${tail[0]} = (${names}) => ({${names}})`
     } else if (head == 'adt') {
-      const names = tail[1].slice(1).map(x => x[0])
-      return names.map(name => `const ${name} = __val => ({__tag:'${name}',__val})`).join('\n')
+      const f = o => Array.isArray(o) ?
+        `const ${o[0]} = __val => ({__tag:'${o[0]}',__val})` :
+        `const ${o} = {__tag:'${o}'}`
+      return tail[1].slice(1).map(f).join('\n')
     } else if (head == 'match') {
       const error = '(()=>{throw Error(`Unmatch error: "${__.__tag}"`)})()'
-      const match = tail[1].slice(1).map(a => `__.__tag === '${a[0]}' ? (${gen(a[1])} => ${gen(a[2])})(__.__val) : `).join('\n  ') + error
+      const f = a => a.length === 3 ? `__.__tag === '${a[0]}' ? (${gen(a[1])} => ${gen(a[2])})(__.__val) : ` :
+        a.length === 2 ? `__.__tag === '${a[0]}' ? ${gen(a[1])} : ` :
+        (() => {throw Error(`Unexpected condition of match ${a}`)})()
+      const match = tail[1].slice(1).map(f).join('\n  ') + error
       return `(__ => ${match})(${args[0]})`
     } else if (head == 'when') {
       return when(args)
@@ -568,8 +606,9 @@ const testAll = () => {
   check(2, 'when false 1 2')
   check(2, 'when false 1 true 2 3')
   check(3, 'when false 1 false 2 3')
-  //check(3, 'match a(1):\n  a v: v + 2\n  b v: v', 'adt ab:\n  a int\n  b string')
-  //check(2, 'match b("hi"):\n  a v: v\n  b v: v.size', 'adt ab:\n  a int\n  b string')
+  check(1, 'match a(1):\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
+  check(2, 'match b("hi"):\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
+  check(0, 'match c:\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
 
   puts('ok')
 }
