@@ -23,7 +23,7 @@ Type.prototype.pretty = function() {
   return this.toString().replace(/\d+/g, t => o[t] ||= Object.keys(o).length + 1)
 }
 Token.prototype.toString = Token.prototype.valueOf = function() { return this.code }
-'startsWith endsWith match replace'.split(' ').map(m => Token.prototype[m] = function(...a) { return this.code[m](...a) } )
+'startsWith match replace'.split(' ').map(m => Token.prototype[m] = function(...a) { return this.code[m](...a) } )
 
 const fs = require('fs')
 const str = o => Array.isArray(o) ? (o.length === 1 ? str(o[0]) : '(' + o.map(str).join(' ') + ')') :
@@ -33,14 +33,10 @@ const str = o => Array.isArray(o) ? (o.length === 1 ? str(o[0]) : '(' + o.map(st
   JSON.stringify(o)
 const put = (...a) => process.stdout.write(str(a))
 const puts = (...a) => console.log(...a.map(str))
-const dump = o => Array.isArray(o) ? (o.type ? '[' + o.map(dump).join(' ') + ']' + o.toString() : o.map(dump)) :
-  typeof o === 'object' && o.constructor === Token ? o.code + o.toString() :
-  str(o)
-const trace = o => { console.dir(dump(o), {depth: null}); return o }
 
 const isOp1 = t => t == '!'
 const isOp2 = t => t && t.toString().match(/^[+\-*%/=><|&^]+$/)
-const isAssign = t => t.endsWith('=')
+const isAssign = t => '+= -= *= /= %= ='.split(' ').includes(t.code)
 
 const compile = source => {
   const tokens = tokenize(source)
