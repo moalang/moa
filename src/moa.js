@@ -15,49 +15,39 @@ function Type(params) {
   this.instance = params.instance || undefined
 }
 Type.prototype.toString = function() {
-  if (this.instance) {
-    return this.instance.toString()
-  } else {
-    const types = this.types.map(x => x.toString()).join(' ')
-    return this.name + (types ? `(${types})` : '')
-  }
+  const show = a => a.length ? `(${a.map(t => t.toString()).join(' ')})` : ''
+  return this.instance ? this.instance.toString() : this.name + show(this.types) + show(this.targs)
 }
-const showType = type => {
-  const pretty = a => a.length === 0 ? '' : `(${a.map(show).join(' ')})`
-  const show = t => t.instance ? show(t.instance) : t.name + pretty(t.targs) || pretty(t.types)
-  return show(type)
-}
-const simplifyTypeString = s => {
+Type.prototype.pretty = function() {
   const o = {}
-  return s.replace(/\d+/g, t => o[t] ||= Object.keys(o).length + 1)
+  return this.toString().replace(/\d+/g, t => o[t] ||= Object.keys(o).length + 1)
 }
-const showTypeIfPossible = o => typeof o === 'object' && o.type ? ':' + showType(o.type) : ''
 Token.prototype.toString = Token.prototype.valueOf = function() { return this.code }
-'startsWith endsWith match replace'.split(' ').map(s => Token.prototype[s] = function(...a) { return this.code[s](...a) } )
+'startsWith endsWith match replace'.split(' ').map(m => Token.prototype[m] = function(...a) { return this.code[m](...a) } )
 
 const fs = require('fs')
 const str = o => Array.isArray(o) ? o.map(str).join(' ') :
   typeof o === 'string' ? o :
   typeof o === 'object' && o.constructor === Token ? o.toString() :
-  typeof o === 'object' && o.constructor === Type ? showType(o) :
+  typeof o === 'object' && o.constructor === Type ? o.toString() :
   JSON.stringify(o)
 const put = (...a) => process.stdout.write(str(a))
 const puts = (...a) => console.log(...a.map(str))
-const dump = o => Array.isArray(o) ? (o.type ? '[' + o.map(dump).join(' ') + ']' + showTypeIfPossible(o) : o.map(dump)) :
-  typeof o === 'object' && o.constructor === Token ? o.code + showTypeIfPossible(o) :
+const dump = o => Array.isArray(o) ? (o.type ? '[' + o.map(dump).join(' ') + ']' + o.toString() : o.map(dump)) :
+  typeof o === 'object' && o.constructor === Token ? o.code + o.toString() :
   str(o)
 const trace = o => { console.dir(dump(o), {depth: null}); return o }
 
 const isOp1 = t => t == '!'
 const isOp2 = t => t && t.toString().match(/^[+\-*%/=><|&^]+$/)
 const isAssign = t => t.endsWith('=')
+
 const compile = source => {
   const tokens = tokenize(source)
   const nodes = infer(parse(tokens))
   const js = generate(nodes)
   return {tokens, nodes, js}
 }
-
 const tokenize = source => {
   const simplify = tokens => {
     let nesting = 0
@@ -103,7 +93,6 @@ const tokenize = source => {
   }
   return simplify(source.split(/((?: |\n|#[^\n]*)+|[0-9]+(?:\.[0-9]+)?|[A-Za-z0-9_]+(?:,[A-Za-z0-9_]+)*|[+\-*%/=><|&^]+|"[^"]*"|`[^`]*`|.)/g).filter(x => x))
 }
-
 const parse = tokens => {
   let pos = 0
   const many = (f, stop, g) => {
@@ -166,7 +155,6 @@ const parse = tokens => {
   const unnest = a => !Array.isArray(a) ? a : a.length === 1 ? unnest(a[0]) : a.map(unnest)
   return many(line).map(unnest)
 }
-
 const infer = nodes => {
   let tvarSequence = 0
   const tvar = () => new Type({name: (++tvarSequence).toString(), dynamic: true})
@@ -321,7 +309,6 @@ const infer = nodes => {
   nodes.map(node => analyze(node, topEnv, []))
   return nodes
 }
-
 const generate = nodes => {
   const embedded = {
     'array_size': (o, name) => `${gen(o)}.length`,
@@ -352,7 +339,7 @@ const generate = nodes => {
 
     // operators
     } else if (head == '.') {
-      const key = showType(tail[0].type) + '_' + args[1]
+      const key = tail[0].type.toString() + '_' + args[1]
       if (key in embedded) {
         return embedded[key](args[0], args[1], args.slice(2).map(gen))
       } else {
@@ -424,7 +411,7 @@ const tester = () => {
   const inf = (source, expect) => {
     try {
       let types = infer(parse(tokenize(source))).map(node => node.type)
-      const actual = simplifyTypeString(showType(types.slice(-1)[0]))
+      const actual = types.slice(-1)[0].pretty()
       if (str(actual) === str(expect)) {
         process.stdout.write('.')
       } else {
@@ -467,6 +454,7 @@ const tester = () => {
 
   return {inf, reject, check}
 }
+
 
 const testAll = () => {
   const {inf, reject, check} = tester()
@@ -586,6 +574,7 @@ const testAll = () => {
   puts('ok')
 }
 
+
 const interactive = async () => {
   puts('Moa 0.0.1 May 23 2022, 21:26')
   const readline = require('node:readline')
@@ -615,6 +604,7 @@ const interactive = async () => {
   })
 }
 
+
 const main = () => {
   const paths = process.argv.slice(2)
   if (paths.length === 0) {
@@ -626,5 +616,6 @@ const main = () => {
     puts(compile(moa).js)
   }
 }
+
 
 main()
