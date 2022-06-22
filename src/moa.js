@@ -124,7 +124,12 @@ const parse = tokens => {
     } else if (isOp2(pred)) {
       return [pred, lhs, exp()]
     } else if (pred == '.') {
-      return [tokens[pos-1], lhs, exp()]
+      const rhs = exp()
+      if (Array.isArray(rhs) && isOp1(rhs[0]) || isOp2(rhs[0])) {
+        return [rhs[0], [pred, lhs, rhs[1]], rhs[2]]
+      } else {
+        return [pred, lhs, rhs]
+      }
     } else if (pred == '__call') {
       return glue(many(exp, ')', a => [new Token('__call'), lhs, ...a]))
     } else if (pred == '__at') {
@@ -255,11 +260,17 @@ const infer = nodes => {
           }
         }
         return ret
+      } else if (head == 'return') {
+        return analyze(tail[0], env, nonGeneric)
       } else if (head == '__call') {
         return analyze(tail[0], env, nonGeneric)
       } else if (head == '__block') {
         predict(env, tail)
-        return tail.map(line => analyze(line, env, nonGeneric)).slice(-1)[0]
+        const ret = tail.map(line => analyze(line, env, nonGeneric)).slice(-1)[0]
+        const f = node => node[0] == 'if' ? g(node[2]) : ''
+        const g = node => node[0] == 'return' ? unify(ret, node[1].type, node[1]) : f(node)
+        tail.map(f)
+        return ret
       } else if (head == '__array') {
         const ta = fresh(tarray, nonGeneric)
         tail.map(x => unify(ta.targs[0], analyze(x, env, nonGeneric), x))
@@ -283,8 +294,8 @@ const infer = nodes => {
       } else if (head == '.') {
         const type =  analyze(tail[0], env, nonGeneric)
         const name = tail[1].code
-        return type.props[tail[1].code] || (() => {throw Error(`${name} not found in ${type}:${Object.keys(type.props)}`)})()
-      } else if (head == 'when') {
+        return type.props[name] || (() => {throw Error(`${name} not found in ${type}:${Object.keys(type.props)}`)})()
+      } else if (head == 'case') {
         for (let i=0; i<tail.length - 1; i+=2) {
           unify(tbool, analyze(tail[i], env, nonGeneric), tail[i])
         }
@@ -292,6 +303,7 @@ const infer = nodes => {
         for (let i=1; i<tail.length; i+=2) {
           unify(ret, analyze(tail[i], env, nonGeneric), tail[i])
         }
+        unify(ret, analyze(tail[tail.length - 1], env, nonGeneric), tail[tail.length - 1])
         return ret
       } else if (head.array && tail.length) {
         const t = analyze(head, env, nonGeneric)
@@ -333,7 +345,8 @@ const infer = nodes => {
     '<': tlambda(tint, tint, tbool),
     '!': tlambda(tbool, tbool),
     '&&': tlambda(tbool, tbool, tbool),
-    'if': tlambda(tbool, v1, v1, v1),
+    'if': tlambda(tbool, v1, none),
+    'case': tlambda(tbool, v1, v1, v1),
   }
   '+ - * / % += -= *= /= %='.split(' ').map(op => topEnv[op] = tlambda(tint, tint, tint))
   const defs = 'fn struct'.split(' ')
@@ -352,7 +365,9 @@ const generate = nodes => {
     o == '__struct' ? '({})' :
     o.startsWith('`') ? template(o) : o
   const template = s => s.replace(/\$[^ `]+/g, x => '${' + x.slice(1) + '}')
-  const when = a => a.length === 1 ? a[0] : `${a[0]} ? ${a[1]} : ` + when(a.slice(2))
+  const _case = a => a.length === 0 ? (() => {throw Error('Invalid case expression')})() :
+    a.length === 1 ? a[0] :
+    `${a[0]} ? ${a[1]} : ` + _case(a.slice(2))
   const statement = a => a.map((v, i) => a.length - 1 === i ? 'return ' + v : v)
   const apply = node => {
     const [head, ...tail] = node
@@ -409,6 +424,10 @@ const generate = nodes => {
         `const ${o[0]} = __val => ({__tag:'${o[0]}',__val})` :
         `const ${o} = {__tag:'${o}'}`
       return tail[1].slice(1).map(f).join('\n')
+    } else if (head == 'if') {
+      return `if (${args[0]}) { ${args[1]} }`
+    } else if (head == 'case') {
+      return _case(args)
     } else if (head == 'match') {
       const error = '(()=>{throw Error(`Unmatch error: "${__.__tag}"`)})()'
       const f = a => a.length === 3 ? `__.__tag === '${a[0]}' ? (${gen(a[1])} => ${gen(a[2])})(__.__val) : ` :
@@ -416,12 +435,6 @@ const generate = nodes => {
         (() => {throw Error(`Unexpected condition of match ${a}`)})()
       const match = tail[1].slice(1).map(f).join('\n  ') + error
       return `(__ => ${match})(${args[0]})`
-    } else if (head == 'when') {
-      return when(args)
-    } else if (head == 'if') {
-      return `${args[0]} ? ${args[1]} : null`
-    } else if (head == 'p') {
-      return `__p(${args})`
 
     // general
     } else {
@@ -440,10 +453,13 @@ const tester = () => {
       if (e.message.match(/^type miss match/)) {
         process.stdout.write('.')
         return
+      } else {
+        throw e
       }
     }
     puts('Failed')
     puts('source:', source)
+    process.exit(1)
   }
 
   const inf = (source, expect) => {
@@ -506,8 +522,10 @@ const testAll = () => {
   inf('+ 1 1', 'int')
   inf('< 1 1', 'bool')
   // branch
-  inf('if true 1 2', 'int')
-  inf('if true true true', 'bool')
+  inf('case true 1 2', 'int')
+  inf('case true true true', 'bool')
+  inf('if true: return 1', 'none')
+  inf('fn f:\n  if true: return 1  \n  2\nf()', 'int')
   // value
   inf('fn value 1', 'int')
   // lambda
@@ -535,20 +553,21 @@ const testAll = () => {
   inf('fn f x (+ x 1)\nfn g x (+ x 2)\n(+ (f 1) (g 1))', 'int')
   inf('fn _ f g x (g (f x))', '((1 2) (2 3) 1 3)')
   inf('fn _ x y z (x z (y z))', '((1 2 3) (1 2) 1 3)')
-  inf('fn _ b x (if (x b) x (x => b))', '(1 (1 bool) (1 1))')
-  inf('fn _ x (if true x (if x true false))', '(bool bool)')
-  inf('fn _ x y (if x x y)', '(bool bool bool)')
+  inf('fn _ b x (case (x b) x (x => b))', '(bool (bool bool) (bool bool))')
+  inf('fn _ x (case true x (case x true false))', '(bool bool)')
+  inf('fn _ x y (case x x y)', '(bool bool bool)')
   inf('fn _ n ((x => (x (y => y))) (f => (f n)))', '(1 1)')
   inf('fn _ x y (x y)', '((1 2) 1 2)')
   inf('fn _ x y (x (y x))', '((1 2) ((1 2) 1) 2)')
   inf('fn _ h t f x (f h (t f x))', '(1 ((1 2 3) 4 2) (1 2 3) 4 3)')
   inf('fn _ x y (x (y x) (y x))', '((1 1 2) ((1 1 2) 1) 2)')
   inf('fn id x x\nfn f y (id (y id))', '(((1 1) 2) 2)')
-  inf('fn id x x\nfn f (if (id true) (id 1) (id 2))', 'int')
+  inf('fn id x x\nfn f (case (id true) (id 1) (id 2))', 'int')
   inf('fn f x (3)\nfn g (+ (f true) (f 4))', 'int')
-  inf('fn f x x\nfn g y y\nfn h b (if b (f g) (g f))', '(bool (1 1))')
+  inf('fn f x x\nfn g y y\nfn h b (case b (f g) (g f))', '(bool (1 1))')
   // type errors
   reject('(+ 1 true)')
+  reject('fn f:\n  if true: return 1  \n  "hi"\nf()')
 
   // -- Tests for executions
   // top: node*
@@ -595,20 +614,24 @@ const testAll = () => {
   // | id                              # id       : name
   check(1, 'a', 'let a 1')
 
-  // qw(let var fn struct adt if when match)
+  // qw(let var fn struct adt if return case match)
   check(1, 'n', 'let n 1')
   check(1, 'var n 0\nn+=1\nn')
   check(1, 'f()', 'fn f: 1')
   check({name: 'apple', price: 199}, 'item("apple" 199)', 'struct item:\n  name string\n  price int')
-  //check(1, 'if true: p 1')
-  //check(null, 'if false: p 1')
-  check(1, 'when true 1 2')
-  check(2, 'when false 1 2')
-  check(2, 'when false 1 true 2 3')
-  check(3, 'when false 1 false 2 3')
+  check(1, 'if true: return 1\n2')
+  check(2, 'if false: return 1\n2')
+  check(1, 'case true 1 2')
+  check(2, 'case false 1 2')
+  check(2, 'case false 1 true 2 3')
+  check(3, 'case false 1 false 2 3')
   check(1, 'match a(1):\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
   check(2, 'match b("hi"):\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
   check(0, 'match c:\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
+
+  // priority of operators
+  check(3, '"hi".size + 1')
+  check(3, '1 + "hi".size')
 
   puts('ok')
 }
@@ -622,6 +645,10 @@ const interactive = async () => {
     output: process.stdout,
     prompt: '> '
   })
+  const typeTree = o =>
+    Array.isArray(o) && o.length === 1 ? typeTree(o[0]) :
+    Array.isArray(o) ? `(${o.map(typeTree).join(' ')})` :
+    o.type || o.code
   rl.prompt()
   rl.on('line', (line) => {
     const cmd = line.trim()
@@ -629,7 +656,7 @@ const interactive = async () => {
       rl.close()
       return
     }
-    let {js} = compile(cmd)
+    let {js, nodes} = compile(cmd)
     js = js.replace(/^let |const /g, 'global.')
     try {
       puts(eval(js))
@@ -637,6 +664,7 @@ const interactive = async () => {
       puts(e.stack)
     }
     puts('js:', js)
+    puts('type:', typeTree(nodes))
     rl.prompt()
   }).on('close', () => {
     puts('Bye👋')

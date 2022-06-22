@@ -11,7 +11,7 @@ Version 1.x -- core
   - [x] vector
   - [x] dictionary
   - [x] struct
-  - [ ] algebraic data type
+  - [x] algebraic data type
 - [x] No dependency in runtime
 - [ ] Exception
 - [ ] Embedded testing framework
