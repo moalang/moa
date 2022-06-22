@@ -13,7 +13,7 @@ Version 1.x -- core
   - [x] struct
   - [x] algebraic data type
 - [x] No dependency in runtime
-- [ ] Exception
+- [ ] Error handloing
 - [ ] Embedded testing framework
 
 Version 2.x -- standard library

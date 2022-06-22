@@ -262,8 +262,23 @@ const infer = nodes => {
         return ret
       } else if (head == 'return') {
         return analyze(tail[0], env, nonGeneric)
+      } else if (head == 'case') {
+        for (let i=0; i<tail.length - 1; i+=2) {
+          unify(tbool, analyze(tail[i], env, nonGeneric), tail[i])
+        }
+        const ret = tvar()
+        for (let i=1; i<tail.length; i+=2) {
+          unify(ret, analyze(tail[i], env, nonGeneric), tail[i])
+        }
+        unify(ret, analyze(tail[tail.length - 1], env, nonGeneric), tail[tail.length - 1])
+        return ret
       } else if (head == '__call') {
-        return analyze(tail[0], env, nonGeneric)
+        if (tail[0] == 'fail') {
+          analyze(tail.slice(1), env, nonGeneric)
+          return tvar()
+        } else {
+          return analyze(tail[0], env, nonGeneric)
+        }
       } else if (head == '__block') {
         predict(env, tail)
         const ret = tail.map(line => analyze(line, env, nonGeneric)).slice(-1)[0]
@@ -295,16 +310,6 @@ const infer = nodes => {
         const type =  analyze(tail[0], env, nonGeneric)
         const name = tail[1].code
         return type.props[name] || (() => {throw Error(`${name} not found in ${type}:${Object.keys(type.props)}`)})()
-      } else if (head == 'case') {
-        for (let i=0; i<tail.length - 1; i+=2) {
-          unify(tbool, analyze(tail[i], env, nonGeneric), tail[i])
-        }
-        const ret = tvar()
-        for (let i=1; i<tail.length; i+=2) {
-          unify(ret, analyze(tail[i], env, nonGeneric), tail[i])
-        }
-        unify(ret, analyze(tail[tail.length - 1], env, nonGeneric), tail[tail.length - 1])
-        return ret
       } else if (head.array && tail.length) {
         const t = analyze(head, env, nonGeneric)
         if (tail.length !== 1) {
@@ -374,7 +379,11 @@ const generate = nodes => {
     const args = tail.map(gen)
     // internal marks
     if (head == '__call') {
-      return args[0] + `(${args.slice(1)})`
+      if (tail[0] == 'fail') {
+        return `(() => { throw Error(${gen(tail[1])}) })()`
+      } else {
+        return args[0] + `(${args.slice(1)})`
+      }
     } else if (head == '__block') {
       return args.length === 1 ? args[0] : '{\n  ' + statement(args).join('\n  ') + '\n}'
     } else if (head == '__array') {
@@ -403,6 +412,8 @@ const generate = nodes => {
       const [lhs, rhs] = args
       if (head == '=>') {
         return `((${lhs}) => ${rhs})`
+      } else if (head == '/') {
+        return `(((l,r) => r === 0 ? (() => { throw Error('Zero division error') })() : l / r)(${lhs},${rhs}))`
       } else if (isAssign(head)) {
         return `${lhs} ${head} ${rhs}`
       } else {
@@ -479,7 +490,7 @@ const tester = () => {
       puts('Failed')
       puts('  source:', source)
       console.error(e)
-      process.exit(2)
+      process.exit(1)
     }
   }
 
@@ -502,16 +513,37 @@ const tester = () => {
       puts('tokens:', tokens)
       puts('expect:', expect)
       puts('actual:', actual)
-      process.exit(3)
+      process.exit(1)
     }
   }
 
-  return {inf, reject, check}
+  const error = (expect, exp, ...defs) => {
+    const source = (defs || []).concat(`fn main:\n  ${exp.replace(/\n/g, "\n  ")}`).join('\n')
+    const {js} = compile(source)
+    let actual = 'no exception happen'
+    try {
+      eval(js + '\nmain()')
+    } catch(e) {
+      actual = e.message
+      if (expect === actual) {
+        put('.')
+        return
+      }
+    }
+    puts('FAILURE')
+    puts('source:', source)
+    puts('js    :', js)
+    puts('expect:', expect)
+    puts('actual:', actual)
+    process.exit(1)
+  }
+
+  return {inf, reject, check, error}
 }
 
 
 const testAll = () => {
-  const {inf, reject, check} = tester()
+  const {inf, reject, check, error} = tester()
 
   // -- Tests for type inference
   // primitives
@@ -614,7 +646,7 @@ const testAll = () => {
   // | id                              # id       : name
   check(1, 'a', 'let a 1')
 
-  // qw(let var fn struct adt if return case match)
+  // qw(let var fn struct adt if return case match fail)
   check(1, 'n', 'let n 1')
   check(1, 'var n 0\nn+=1\nn')
   check(1, 'f()', 'fn f: 1')
@@ -628,6 +660,8 @@ const testAll = () => {
   check(1, 'match a(1):\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
   check(2, 'match b("hi"):\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
   check(0, 'match c:\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
+  error('hi', 'fail("hi")')
+  error('Zero division error', '1/0')
 
   // priority of operators
   check(3, '"hi".size + 1')
