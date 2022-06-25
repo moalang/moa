@@ -488,8 +488,8 @@ const tester = () => {
       process.exit(1)
     }
   }
-  const reject = exp => test((ret) => /^type miss match/.test(ret) ? ret.slice(0, 15) : ret, 'type miss match', exp)
-  const inf = (expect, exp) => test((ret, main) => main.type ? main.type.pretty() : ret, expect, exp)
+  const reject = (exp, ...defs) => test((ret) => /^type miss match/.test(ret) ? ret.slice(0, 15) : ret, 'type miss match', exp, ...defs)
+  const inf = (expect, exp, ...defs) => test((ret, main) => main.type ? main.type.pretty() : ret, expect, exp, ...defs)
   const check = (expect, exp, ...defs) => test((ret) => str(ret), str(expect), exp, ...defs)
   const error = (expect, exp, ...defs) => test((ret) => ret, str(expect), exp, ...defs)
   return {inf, reject, check, error}
@@ -511,7 +511,7 @@ const testAll = () => {
   inf('int', 'case true 1 2')
   inf('bool', 'case true true true')
   inf('nil', 'if true: return')
-  inf('int', 'fn f:\n  if true: return 1  \n  2\nf()')
+  inf('int', 'if true: return 1\n2')
   // value
   inf('int', 'fn value 1')
   // lambda
@@ -536,7 +536,7 @@ const testAll = () => {
   inf('int', '[1][0]')
   inf('string', '["hi"][0]')
   // combinations
-  inf('int', 'fn f x (+ x 1)\nfn g x (+ x 2)\n(+ (f 1) (g 1))')
+  inf('int', '(+ (f 1) (g 1))', 'fn f x (+ x 1)', 'fn g x (+ x 2)')
   inf('((1 2) (2 3) 1 3)', 'fn _ f g x (g (f x))')
   inf('((1 2 3) (1 2) 1 3)', 'fn _ x y z (x z (y z))')
   inf('(bool (bool bool) (bool bool))', 'fn _ b x (case (x b) x (x => b))')
@@ -547,14 +547,14 @@ const testAll = () => {
   inf('((1 2) ((1 2) 1) 2)', 'fn _ x y (x (y x))')
   inf('(1 ((1 2 3) 4 2) (1 2 3) 4 3)', 'fn _ h t f x (f h (t f x))')
   inf('((1 1 2) ((1 1 2) 1) 2)', 'fn _ x y (x (y x) (y x))')
-  inf('(((1 1) 2) 2)', 'fn id x x\nfn f y (id (y id))')
-  inf('int', 'fn id x x\nfn f (case (id true) (id 1) (id 2))')
-  inf('int', 'fn f x (3)\nfn g (+ (f true) (f 4))')
-  inf('(bool (1 1))', 'fn f x x\nfn g y y\nfn h b (case b (f g) (g f))')
+  inf('(((1 1) 2) 2)', 'fn f y (id (y id))', 'fn id x x')
+  inf('int', 'fn f (case (id true) (id 1) (id 2))', 'fn id x x')
+  inf('int', 'fn g (+ (f true) (f 4))', 'fn f x (3)')
+  inf('(bool (1 1))', 'fn h b (case b (f g) (g f))', 'fn f x x', 'fn g y y')
   // type errors
   reject('(+ 1 true)')
   reject('if true: return 1')
-  reject('fn f:\n  if true: return 1  \n  "hi"\nf()')
+  reject('f()', 'fn f:\n  if true: return 1  \n  "hi"')
 
   // -- Tests for executions
   // top: node*
