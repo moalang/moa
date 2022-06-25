@@ -42,9 +42,9 @@ const isOp1 = t => t == '!'
 const isOp2 = t => t && t.toString().match(/^[+\-*%/=><|&^]+$/)
 const isAssign = t => '+= -= *= /= %= ='.split(' ').includes(t.code)
 
-const compile = source => {
+const compile = (source, hints) => {
   const tokens = tokenize(source)
-  const nodes = infer(parse(tokens))
+  const nodes = infer(parse(tokens), hints)
   const js = generate(nodes)
   return {tokens, nodes, js}
 }
@@ -160,7 +160,7 @@ const parse = tokens => {
   }
   return many(line)
 }
-const infer = nodes => {
+const infer = (nodes, hints) => {
   let tvarSequence = 0
   const tenv = {}
   const tvar = () => new Type({name: (++tvarSequence).toString(), dynamic: true})
@@ -345,7 +345,7 @@ const infer = nodes => {
       }
     }
   }
-  const topEnv = {
+  const topEnv = Object.assign({
     __cache: {},
     'true': tbool,
     'false': tbool,
@@ -354,12 +354,13 @@ const infer = nodes => {
     '&&': tlambda(tbool, tbool, tbool),
     'if': tlambda(tbool, v1, tnil),
     'case': tlambda(tbool, v1, v1, v1),
-  }
+  }, hints || {})
   '+ - * / % += -= *= /= %='.split(' ').map(op => topEnv[op] = tlambda(tint, tint, tint))
   const defs = 'fn struct'.split(' ')
   const predict = (env, nodes) => nodes.map(x => Array.isArray(x) && defs.includes(x[0].code) ? env[x[1]] = tvar() : null)
   predict(topEnv, nodes)
   nodes.map(node => analyze(node, topEnv, []))
+  nodes.hints = topEnv
   return nodes
 }
 const generate = nodes => {
@@ -459,7 +460,7 @@ const generate = nodes => {
 }
 
 
-const tester = () => {
+const testAll = () => {
   const test = (convert, expect, exp, ...defs) => {
     const source = (defs || []).concat(`fn main:\n  ${exp.replace(/\n/g, "\n  ")}`).join('\n')
     const tokens = tokenize(source)
@@ -492,12 +493,6 @@ const tester = () => {
   const inf = (expect, exp, ...defs) => test((ret, main) => main.type ? main.type.pretty() : ret, expect, exp, ...defs)
   const check = (expect, exp, ...defs) => test((ret) => str(ret), str(expect), exp, ...defs)
   const error = (expect, exp, ...defs) => test((ret) => ret, str(expect), exp, ...defs)
-  return {inf, reject, check, error}
-}
-
-
-const testAll = () => {
-  const {inf, reject, check, error} = tester()
 
   // -- Tests for type inference
   // primitives
@@ -628,6 +623,7 @@ const testAll = () => {
 
 const interactive = async () => {
   puts('Moa 0.0.1 May 23 2022, 21:26')
+  const hints = {}
   const readline = require('node:readline')
   const rl = readline.createInterface({
     input: process.stdin,
@@ -641,7 +637,8 @@ const interactive = async () => {
       rl.close()
       return
     }
-    let {js, nodes} = compile(cmd)
+    let {js, nodes} = compile(cmd, hints)
+    Object.assign(hints, nodes.hints)
     js = js.replace(/^let |const /g, 'global.')
     try {
       puts(eval(js))
@@ -649,6 +646,7 @@ const interactive = async () => {
       puts(e.stack)
     }
     puts('js:', js)
+    puts('node:', str(nodes))
     puts('type:', showType(nodes))
     rl.prompt()
   }).on('close', () => {
