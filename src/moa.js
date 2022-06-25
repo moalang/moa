@@ -24,6 +24,10 @@ Type.prototype.pretty = function() {
 }
 Token.prototype.toString = Token.prototype.valueOf = function() { return this.code }
 'startsWith match replace'.split(' ').map(m => Token.prototype[m] = function(...a) { return this.code[m](...a) } )
+const showType = o =>
+  Array.isArray(o) && o.length === 1 ? showType(o[0]) :
+  Array.isArray(o) ? `(${o.map(showType).join(' ')})` :
+  o.type || o.code
 
 const fs = require('fs')
 const str = o => Array.isArray(o) ? (o.length === 1 ? str(o[0]) : '(' + o.map(str).join(' ') + ')') :
@@ -32,7 +36,7 @@ const str = o => Array.isArray(o) ? (o.length === 1 ? str(o[0]) : '(' + o.map(st
   typeof o === 'object' && o.constructor === Type ? o.toString() :
   JSON.stringify(o)
 const put = (...a) => process.stdout.write(str(a))
-const puts = (...a) => console.log(...a.map(str))
+const puts = (...a) => { console.log(...a.map(str)); return a[a.length - 1] }
 
 const isOp1 = t => t == '!'
 const isOp2 = t => t && t.toString().match(/^[+\-*%/=><|&^]+$/)
@@ -169,7 +173,7 @@ const infer = nodes => {
     const targs = Array(f.length).fill().map(tvar)
     return tenv[name] =  new Type({name, targs, props: f(...targs)})
   }
-  const none = ttype('none')
+  const tnil = ttype('nil')
   const tint = ttype('int')
   const tbool = ttype('bool')
   const tstring = ttype('string', () => ({ size: tint }))
@@ -233,7 +237,7 @@ const infer = nodes => {
         return env[name] = ft
       } else if (head == 'adt') {
         const name = tail[0].code
-        const f = o => Array.isArray(o) ? [o[0].code, ttype(o[1].code)] : [o.code, none]
+        const f = o => Array.isArray(o) ? [o[0].code, ttype(o[1].code)] : [o.code, tnil]
         const kvs = tail[1].slice(1).map(f)
         const adt = ttype(name, () => Object.fromEntries(kvs))
         kvs.map(([name, alias]) => env[name] = tlambda(alias, adt))
@@ -257,7 +261,7 @@ const infer = nodes => {
         }
         return ret
       } else if (head == 'return') {
-        return analyze(tail[0], env, nonGeneric)
+        return tail[0] ? analyze(tail[0], env, nonGeneric) : tnil
       } else if (head == 'case') {
         for (let i=0; i<tail.length - 1; i+=2) {
           unify(tbool, analyze(tail[i], env, nonGeneric), tail[i])
@@ -332,6 +336,8 @@ const infer = nodes => {
         return tint
       } else if (v.match(/^["`]/)) {
         return tstring
+      } else if (v === 'return') {
+        return tnil // return without value
       } else if (v in env) {
         return fresh(env[v], nonGeneric)
       } else {
@@ -346,7 +352,7 @@ const infer = nodes => {
     '<': tlambda(tint, tint, tbool),
     '!': tlambda(tbool, tbool),
     '&&': tlambda(tbool, tbool, tbool),
-    'if': tlambda(tbool, v1, none),
+    'if': tlambda(tbool, v1, tnil),
     'case': tlambda(tbool, v1, v1, v1),
   }
   '+ - * / % += -= *= /= %='.split(' ').map(op => topEnv[op] = tlambda(tint, tint, tint))
@@ -369,7 +375,8 @@ const generate = nodes => {
   const _case = a => a.length === 0 ? (() => {throw Error('Invalid case expression')})() :
     a.length === 1 ? a[0] :
     `${a[0]} ? ${a[1]} : ` + _case(a.slice(2))
-  const statement = a => a.map((v, i) => a.length - 1 === i ? 'return ' + v : v)
+  const isExp = code => !/^(?:if|for|return)/.test(code)
+  const statement = a => a.map((v, i) => a.length - 1 === i && isExp(v) ? 'return ' + v : v)
   const apply = node => {
     const [head, ...tail] = node
     const args = tail.map(gen)
@@ -381,7 +388,7 @@ const generate = nodes => {
         return args[0] + `(${args.slice(1)})`
       }
     } else if (head == '__block') {
-      return args.length === 1 ? args[0] : '{\n  ' + statement(args).join('\n  ') + '\n}'
+      return args.length === 1 && isExp(args[0]) ? args[0] : '{\n  ' + statement(args).join('\n  ') + '\n}'
     } else if (head == '__array') {
       return `[${args.join(', ')}]`
     } else if (head == '__struct') {
@@ -453,87 +460,38 @@ const generate = nodes => {
 
 
 const tester = () => {
-  const reject = source => {
-    try {
-      infer(parse(tokenize(source)))
-    } catch (e) {
-      if (e.message.match(/^type miss match/)) {
-        process.stdout.write('.')
-        return
-      } else {
-        throw e
-      }
-    }
-    puts('Failed')
-    puts('source:', source)
-    process.exit(1)
-  }
-
-  const inf = (expect, source) => {
-    try {
-      let types = infer(parse(tokenize(source))).map(node => node.type)
-      const actual = types.slice(-1)[0].pretty()
-      if (str(actual) === str(expect)) {
-        process.stdout.write('.')
-      } else {
-        puts('Failed')
-        puts('expect:', expect)
-        puts('actual:', actual)
-        puts('source:', source)
-        process.exit(1)
-      }
-    } catch (e) {
-      puts('Failed')
-      puts('  source:', source)
-      console.error(e)
-      process.exit(1)
-    }
-  }
-
-  const check = (expect, exp, ...defs) => {
+  const test = (convert, expect, exp, ...defs) => {
     const source = (defs || []).concat(`fn main:\n  ${exp.replace(/\n/g, "\n  ")}`).join('\n')
-    const {js, nodes, tokens} = compile(source)
-    let actual
+    const tokens = tokenize(source)
+    let nodes = parse(tokens)
+    let js = ''
+    let ret
     try {
-      actual = eval(js + '\nmain()')
+      nodes = infer(nodes)
+      js = generate(nodes)
+      ret = eval(js + '\nmain()')
     } catch(e) {
-      actual = e.stack
+      ret = e.message
     }
-    if (str(actual) === str(expect)) {
+    const actual = convert(ret, nodes.slice(-1)[0])
+    if (actual === expect) {
       put('.')
     } else {
       puts('Failed')
       puts('source:', source)
       puts('js    :', js)
       puts('nodes :', nodes)
+      puts('types :', showType(nodes))
       puts('tokens:', tokens)
       puts('expect:', expect)
       puts('actual:', actual)
       process.exit(1)
     }
   }
-
-  const error = (expect, exp, ...defs) => {
-    const source = (defs || []).concat(`fn main:\n  ${exp.replace(/\n/g, "\n  ")}`).join('\n')
-    const {js} = compile(source)
-    let actual = 'no exception happen'
-    try {
-      eval(js + '\nmain()')
-    } catch(e) {
-      actual = e.message
-      if (expect === actual) {
-        put('.')
-        return
-      }
-    }
-    puts('Failed')
-    puts('source:', source)
-    puts('js    :', js)
-    puts('expect:', expect)
-    puts('actual:', actual)
-    process.exit(1)
-  }
-
+  const reject = exp => test((ret) => /^type miss match/.test(ret) ? ret.slice(0, 15) : ret, 'type miss match', exp)
+  const inf = (expect, exp) => test((ret, main) => main.type ? main.type.pretty() : ret, expect, exp)
+  const check = (expect, exp, ...defs) => test((ret) => str(ret), str(expect), exp, ...defs)
+  const error = (expect, exp, ...defs) => test((ret) => ret, str(expect), exp, ...defs)
   return {inf, reject, check, error}
 }
 
@@ -552,7 +510,7 @@ const testAll = () => {
   // branch
   inf('int', 'case true 1 2')
   inf('bool', 'case true true true')
-  inf('none', 'if true: return 1')
+  inf('nil', 'if true: return')
   inf('int', 'fn f:\n  if true: return 1  \n  2\nf()')
   // value
   inf('int', 'fn value 1')
@@ -595,6 +553,7 @@ const testAll = () => {
   inf('(bool (1 1))', 'fn f x x\nfn g y y\nfn h b (case b (f g) (g f))')
   // type errors
   reject('(+ 1 true)')
+  reject('if true: return 1')
   reject('fn f:\n  if true: return 1  \n  "hi"\nf()')
 
   // -- Tests for executions
@@ -675,10 +634,6 @@ const interactive = async () => {
     output: process.stdout,
     prompt: '> '
   })
-  const typeTree = o =>
-    Array.isArray(o) && o.length === 1 ? typeTree(o[0]) :
-    Array.isArray(o) ? `(${o.map(typeTree).join(' ')})` :
-    o.type || o.code
   rl.prompt()
   rl.on('line', (line) => {
     const cmd = line.trim()
@@ -694,7 +649,7 @@ const interactive = async () => {
       puts(e.stack)
     }
     puts('js:', js)
-    puts('type:', typeTree(nodes))
+    puts('type:', showType(nodes))
     rl.prompt()
   }).on('close', () => {
     puts('Bye👋')
