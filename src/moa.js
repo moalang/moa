@@ -469,7 +469,7 @@ const tester = () => {
     process.exit(1)
   }
 
-  const inf = (source, expect) => {
+  const inf = (expect, source) => {
     try {
       let types = infer(parse(tokenize(source))).map(node => node.type)
       const actual = types.slice(-1)[0].pretty()
@@ -502,7 +502,7 @@ const tester = () => {
     if (str(actual) === str(expect)) {
       put('.')
     } else {
-      puts('FAILURE')
+      puts('Failed')
       puts('source:', source)
       puts('js    :', js)
       puts('nodes :', nodes)
@@ -526,7 +526,7 @@ const tester = () => {
         return
       }
     }
-    puts('FAILURE')
+    puts('Failed')
     puts('source:', source)
     puts('js    :', js)
     puts('expect:', expect)
@@ -543,56 +543,56 @@ const testAll = () => {
 
   // -- Tests for type inference
   // primitives
-  inf('1', 'int')
-  inf('true', 'bool')
-  inf('false', 'bool')
+  inf('int', '1')
+  inf('bool', 'true')
+  inf('bool', 'false')
   // exp
-  inf('+ 1 1', 'int')
-  inf('< 1 1', 'bool')
+  inf('int', '+ 1 1')
+  inf('bool', '< 1 1')
   // branch
-  inf('case true 1 2', 'int')
-  inf('case true true true', 'bool')
-  inf('if true: return 1', 'none')
-  inf('fn f:\n  if true: return 1  \n  2\nf()', 'int')
+  inf('int', 'case true 1 2')
+  inf('bool', 'case true true true')
+  inf('none', 'if true: return 1')
+  inf('int', 'fn f:\n  if true: return 1  \n  2\nf()')
   // value
-  inf('fn value 1', 'int')
+  inf('int', 'fn value 1')
   // lambda
-  inf('() => 1', 'int')
-  inf('x => x + 1', '(int int)')
+  inf('int', '() => 1')
+  inf('(int int)', 'x => x + 1')
   // simple function
-  inf('fn inc a (+ a 1)', '(int int)')
-  inf('fn add a b (+ a b)', '(int int int)')
+  inf('(int int)', 'fn inc a (+ a 1)')
+  inf('(int int int)', 'fn add a b (+ a b)')
   // generic function
-  inf('fn f a a', '(1 1)')
-  inf('fn f a b a', '(1 2 1)')
-  inf('fn f a b b', '(1 2 2)')
-  inf('fn f a a\nf 1', 'int')
-  inf('fn f a a\nf 1\nf true', 'bool')
+  inf('(1 1)', 'fn f a a')
+  inf('(1 2 1)', 'fn f a b a')
+  inf('(1 2 2)', 'fn f a b b')
+  inf('int', 'fn f a a\nf 1')
+  inf('bool', 'fn f a a\nf 1\nf true')
   // struct
-  inf('{a=1}.a', 'int')
-  inf('{a=1 b="hi"}.b', 'string')
+  inf('int', '{a=1}.a')
+  inf('string', '{a=1 b="hi"}.b')
   // string
-  inf('"hi".size', 'int')
+  inf('int', '"hi".size')
   // generic array
-  inf('[].size', 'int')
-  inf('[1][0]', 'int')
-  inf('["hi"][0]', 'string')
+  inf('int', '[].size')
+  inf('int', '[1][0]')
+  inf('string', '["hi"][0]')
   // combinations
-  inf('fn f x (+ x 1)\nfn g x (+ x 2)\n(+ (f 1) (g 1))', 'int')
-  inf('fn _ f g x (g (f x))', '((1 2) (2 3) 1 3)')
-  inf('fn _ x y z (x z (y z))', '((1 2 3) (1 2) 1 3)')
-  inf('fn _ b x (case (x b) x (x => b))', '(bool (bool bool) (bool bool))')
-  inf('fn _ x (case true x (case x true false))', '(bool bool)')
-  inf('fn _ x y (case x x y)', '(bool bool bool)')
-  inf('fn _ n ((x => (x (y => y))) (f => (f n)))', '(1 1)')
-  inf('fn _ x y (x y)', '((1 2) 1 2)')
-  inf('fn _ x y (x (y x))', '((1 2) ((1 2) 1) 2)')
-  inf('fn _ h t f x (f h (t f x))', '(1 ((1 2 3) 4 2) (1 2 3) 4 3)')
-  inf('fn _ x y (x (y x) (y x))', '((1 1 2) ((1 1 2) 1) 2)')
-  inf('fn id x x\nfn f y (id (y id))', '(((1 1) 2) 2)')
-  inf('fn id x x\nfn f (case (id true) (id 1) (id 2))', 'int')
-  inf('fn f x (3)\nfn g (+ (f true) (f 4))', 'int')
-  inf('fn f x x\nfn g y y\nfn h b (case b (f g) (g f))', '(bool (1 1))')
+  inf('int', 'fn f x (+ x 1)\nfn g x (+ x 2)\n(+ (f 1) (g 1))')
+  inf('((1 2) (2 3) 1 3)', 'fn _ f g x (g (f x))')
+  inf('((1 2 3) (1 2) 1 3)', 'fn _ x y z (x z (y z))')
+  inf('(bool (bool bool) (bool bool))', 'fn _ b x (case (x b) x (x => b))')
+  inf('(bool bool)', 'fn _ x (case true x (case x true false))')
+  inf('(bool bool bool)', 'fn _ x y (case x x y)')
+  inf('(1 1)', 'fn _ n ((x => (x (y => y))) (f => (f n)))')
+  inf('((1 2) 1 2)', 'fn _ x y (x y)')
+  inf('((1 2) ((1 2) 1) 2)', 'fn _ x y (x (y x))')
+  inf('(1 ((1 2 3) 4 2) (1 2 3) 4 3)', 'fn _ h t f x (f h (t f x))')
+  inf('((1 1 2) ((1 1 2) 1) 2)', 'fn _ x y (x (y x) (y x))')
+  inf('(((1 1) 2) 2)', 'fn id x x\nfn f y (id (y id))')
+  inf('int', 'fn id x x\nfn f (case (id true) (id 1) (id 2))')
+  inf('int', 'fn f x (3)\nfn g (+ (f true) (f 4))')
+  inf('(bool (1 1))', 'fn f x x\nfn g y y\nfn h b (case b (f g) (g f))')
   // type errors
   reject('(+ 1 true)')
   reject('fn f:\n  if true: return 1  \n  "hi"\nf()')

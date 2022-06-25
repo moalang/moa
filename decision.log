@@ -1,9 +1,10 @@
 Principle
 - Universal minimal programming language
 
-Version 1.x -- core
+Version 0.1 -- core
 - [x] Type inference
 - [x] Compile to JavaScript
+- [ ] Embedded testing framework
 - [x] Embedded types
   - [x] int
   - [x] float
@@ -12,40 +13,43 @@ Version 1.x -- core
   - [x] dictionary
   - [x] struct
   - [x] algebraic data type
+  - [ ] set
+  - [ ] tuple
+Version 0.2 -- standard library
+- [ ] Embedded io
+  - [ ] time
+  - [ ] random
+- [ ] Embedded module
+  - [ ] module system
+  - [ ] math
+  - [ ] regexp
+  - [ ] heapq
+  - [ ] bisect
+  - [ ] array
+  - [ ] decimal
+  - [ ] path
+  - [ ] mime
+  - [ ] base64
+  - [ ] json
+  - [ ] zip
+  - [ ] gzip
+  - [ ] tar
+  - [ ] csv
+  - [ ] hmac
+  - [ ] hash
+  - [ ] xml
+  - [ ] html
+  - [ ] uuid
 - [x] No dependency in runtime
-- [ ] Error handloing
-- [ ] Embedded testing framework
+- [x] Error handloing
 
-Version 2.x -- standard library
-- [ ] time
-- [ ] random
-- [ ] math
+Version 0.2 -- standard library
 - [ ] iterator
-- [ ] regexp
 - [ ] async (sleep, coroutine)
-- [ ] set
-- [ ] tuple
 
-Version 3.x -- server side
+Version 0.3 -- server side
 - [ ] Compile to Go
 
-Version 4.x -- algorithms and protocol
+Version 1.0 -- algorithms and protocol
 - [ ] package manager
-- [ ] heapq
-- [ ] bisect
-- [ ] array
 - [ ] weakref
-- [ ] decimal
-- [ ] path
-- [ ] mime
-- [ ] base64
-- [ ] json
-- [ ] zip
-- [ ] gzip
-- [ ] tar
-- [ ] csv
-- [ ] hmac
-- [ ] hash
-- [ ] xml
-- [ ] html
-- [ ] uuid
