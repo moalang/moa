@@ -18,4 +18,4 @@ bottom:
 id: [A-Za-z_][A-Za-z0-9_]*
 op1: "!"
 op2: [+-/%*=<>|&^;]+
-keywords: qw(let var fn struct adt if return case match fail)
+keywords: qw(let var fn struct adt if return case match fail test)

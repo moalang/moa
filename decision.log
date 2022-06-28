@@ -4,7 +4,7 @@ Principle
 Version 0.1 -- core
 - [x] Type inference
 - [x] Compile to JavaScript
-- [ ] Embedded testing framework
+- [x] Embedded testing framework
 - [x] Embedded types
   - [x] int
   - [x] float
@@ -15,7 +15,11 @@ Version 0.1 -- core
   - [x] algebraic data type
   - [ ] set
   - [ ] tuple
-Version 0.2 -- standard library
+- [x] No dependency in runtime
+- [x] Error handloing
+Version 0.2 -- server side
+- [ ] Compile to Go
+Version 0.3 -- standard library
 - [ ] Embedded io
   - [ ] time
   - [ ] random
@@ -40,15 +44,10 @@ Version 0.2 -- standard library
   - [ ] xml
   - [ ] html
   - [ ] uuid
-- [x] No dependency in runtime
-- [x] Error handloing
 
 Version 0.2 -- standard library
 - [ ] iterator
 - [ ] async (sleep, coroutine)
-
-Version 0.3 -- server side
-- [ ] Compile to Go
 
 Version 1.0 -- algorithms and protocol
 - [ ] package manager

@@ -173,11 +173,14 @@ const infer = (nodes, hints) => {
     const targs = Array(f.length).fill().map(tvar)
     return tenv[name] =  new Type({name, targs, props: f(...targs)})
   }
+  const v1 = tvar()
   const tnil = ttype('nil')
   const tint = ttype('int')
   const tbool = ttype('bool')
   const tstring = ttype('string', () => ({ size: tint }))
   const tarray = ttype('array', t => ({ size: tint }))
+  const ttest = ttype('__test', () => ({ eq: tlambda(v1, v1, tnil) }))
+
   const prune = t => (t.dynamic && t.instance) ? t.instance = prune(t.instance) : t
   const fresh = (type, nonGeneric) => {
     const d = {}
@@ -214,7 +217,6 @@ const infer = (nodes, hints) => {
       a.types.forEach((t,i) => unify(t, b.types[i], node))
     }
   }
-  const v1 = tvar()
   const analyze = (node, env, nonGeneric) => node.type = _assert(_analyze(node, env, nonGeneric), node)
   const _assert = (type, node) => type || (() => {throw Error(`Type can not be infered ${node}`)})()
   const _analyze = (node, env, nonGeneric) => {
@@ -272,6 +274,9 @@ const infer = (nodes, hints) => {
         }
         unify(ret, analyze(tail[tail.length - 1], env, nonGeneric), tail[tail.length - 1])
         return ret
+      } else if (head == 'test') {
+        const newEnv = Object.assign({[tail[0].code]: ttest}, env)
+        return analyze(tail.slice(1), newEnv, nonGeneric)
       } else if (head == '__call') {
         if (tail[0] == 'fail') {
           analyze(tail.slice(1), env, nonGeneric)
@@ -450,10 +455,12 @@ const generate = nodes => {
         (() => {throw Error(`Unexpected condition of match ${a}`)})()
       const match = tail[1].slice(1).map(f).join('\n  ') + error
       return `(__ => ${match})(${args[0]})`
+    } else if (head == 'test') {
+      return `const __test = ${tail[0]} => ` + gen(tail[1])
 
     // general
     } else {
-      return `${head}(${args})`
+      return `${gen(head)}(${args})`
     }
   }
   return nodes.map(gen).join(';\n')
@@ -468,9 +475,16 @@ const testAll = () => {
     let js = ''
     let ret
     try {
+      const __tester = {
+        eq: (a,b) => {
+          if (str(a) !== str(b)) {
+            throw Error(`Test failed: expect(${a}) but actual(${b})`)
+          }
+        }
+      }
       nodes = infer(nodes)
       js = generate(nodes)
-      ret = eval(js + '\nmain()')
+      ret = eval(js + "\ntypeof __test !== 'undefined' && __test(__tester)\nmain()")
     } catch(e) {
       ret = e.message
     }
@@ -596,7 +610,7 @@ const testAll = () => {
   // | id                              # id       : name
   check(1, 'a', 'let a 1')
 
-  // qw(let var fn struct adt if return case match fail)
+  // qw(let var fn struct adt if return case match fail test)
   check(1, 'n', 'let n 1')
   check(1, 'var n 0\nn+=1\nn')
   check(1, 'f()', 'fn f: 1')
@@ -610,6 +624,9 @@ const testAll = () => {
   check(1, 'match a(1):\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
   check(2, 'match b("hi"):\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
   check(0, 'match c:\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
+  check(1, '1', 'test t: t.eq 1 1')
+  check('Test failed: expect(1) but actual(0)', '1', 'test t: t.eq 1 0')
+
   error('hi', 'fail("hi")')
   error('Zero division error', '1/0')
 
