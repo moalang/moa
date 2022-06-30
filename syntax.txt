@@ -6,7 +6,7 @@ prop: "." id
 call: "(" exp+ ")"
 at: "[" exp "]"
 bottom:
-| "(" exp  ")"                    # priority  : 1 * (2 + 3)
+| "(" exp ")"                     # priority  : 1 * (2 + 3)
 | "(" exp exp+ ")"                # apply     : f(a) == (f a)
 | "[" exp* "]"                    # array     : [], [1 2]
 | "{" id* (id ":" exp)* "}"       # dictionary: {}, {one "two":2}
