@@ -28,11 +28,11 @@ Type.prototype.pretty = function() {
 }
 Token.prototype.toString = Token.prototype.valueOf = function() { return this.code }
 'startsWith match replace'.split(' ').map(m => Token.prototype[m] = function(...a) { return this.code[m](...a) } )
+
 const showType = o =>
   Array.isArray(o) && o.length === 1 ? showType(o[0]) :
   Array.isArray(o) ? `(${o.map(showType).join(' ')})` :
   o.type || o.code
-
 const fs = require('fs')
 const str = o => Array.isArray(o) ? (o.length === 1 ? str(o[0]) : '(' + o.map(str).join(' ') + ')') :
   typeof o === 'string' ? o :
@@ -377,7 +377,7 @@ const infer = (nodes, hints) => {
     '&&': tlambda(tbool, tbool, tbool),
     'if': tlambda(tbool, v1, tnil),
     'case': tlambda(tbool, v1, v1, v1),
-    'now': ttime,
+    'time': tlambda(tint, tint, tint, tint, tint, tint, ttime),
   }, hints || {})
   '+ - * / % += -= *= /= %='.split(' ').map(op => topEnv[op] = tlambda(tint, tint, tint))
   const defs = 'fn struct'.split(' ')
@@ -486,7 +486,7 @@ const generate = nodes => {
       return `${gen(head)}(${args})`
     }
   }
-  const js = 'let now = {year: 2001, month: 2, day: 3, hour: 4, minute: 5, second: 6}'
+  const js = 'const time = (year,month,day,hour,minute,second) => ({year,month,day,hour,minute,second})'
   return js + '\n' + nodes.map(gen).join(';\n')
 }
 
@@ -573,7 +573,7 @@ const testAll = () => {
   inf('array(int)', '[1]')
   inf('set(int)', '[1].set')
   // time
-  inf('time', 'now')
+  inf('time', 'time(2001 2 3 4 5 6)')
   // combinations
   inf('int', '((f 1) + (g 1))', 'fn f x: x + 1', 'fn g x: x + 2')
   inf('((1 2) (2 3) 1 3)', 'fn _ f g x: g f(x)')
@@ -640,7 +640,7 @@ const testAll = () => {
   // | id                              # id       : name
   check(1, 'a', 'let a 1')
 
-  // qw(let var fn struct adt if return case match fail test now)
+  // qw(let var fn struct adt if return case match fail test)
   check(1, 'n', 'let n 1')
   check(1, 'var n 0\nn+=1\nn')
   check(1, 'f()', 'fn f: 1')
@@ -656,7 +656,7 @@ const testAll = () => {
   check(0, 'match c:\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
   check(1, '1', 'test t: t.eq 1 1')
   check('Test failed: expect(1) but actual(0)', '1', 'test t: t.eq 1 0')
-  check('2001/2/3 4:5:6', '`$now.year/$now.month/$now.day $now.hour:$now.minute:$now.second`')
+  check('2001/2/3 4:5:6', '`$now.year/$now.month/$now.day $now.hour:$now.minute:$now.second`', 'let now time(2001 2 3 4 5 6)')
 
   error('hi', 'fail("hi")')
   error('Zero division error', '1/0')
@@ -704,14 +704,14 @@ const interactive = async () => {
 
 
 const main = () => {
-  const paths = process.argv.slice(2)
-  if (paths.length === 0) {
-    interactive()
-  } else if (paths[0] === '--test') {
+  const [cmd, ...args] = process.argv.slice(2)
+  if (cmd === 'selfcheck') {
     testAll()
-  } else {
-    const moa = paths.map(path => fs.readFileSync(path, 'utf-8')).join('\n\n')
+  } else if (cmd === 'compile') {
+    const moa = args.map(path => fs.readFileSync(path, 'utf-8')).join('\n\n')
     puts(compile(moa).js)
+  } else {
+    interactive()
   }
 }
 
