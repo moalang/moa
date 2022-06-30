@@ -286,6 +286,9 @@ const infer = (nodes, hints) => {
           return analyze(tail, env, nonGeneric)
         }
       } else if (head == '__block') {
+        if (tail.length === 1 && tail[0].length === 0) {
+          return tnil
+        }
         predict(env, tail)
         const ret = tail.map(line => analyze(line, env, nonGeneric)).slice(-1)[0]
         const f = node => node[0] == 'if' ? g(node[2]) : ''
@@ -386,6 +389,9 @@ const generate = nodes => {
   const isExp = code => !/^(?:if|for|return)/.test(code)
   const statement = a => a.map((v, i) => a.length - 1 === i && isExp(v) ? 'return ' + v : v)
   const apply = node => {
+    if (node.length === 0) {
+      return 'undefined'
+    }
     const [head, ...tail] = node
     const args = tail.map(gen)
     // internal marks
@@ -477,6 +483,7 @@ const testAll = () => {
     let nodes = parse(tokens)
     let js = ''
     let ret
+    let stack
     try {
       const __tester = {
         eq: (a,b) => {
@@ -490,6 +497,7 @@ const testAll = () => {
       ret = eval(js + "\ntypeof __test !== 'undefined' && __test(__tester)\nmain()")
     } catch(e) {
       ret = e.message
+      stack = e.stack
     }
     const actual = convert(ret, nodes.slice(-1)[0])
     if (actual === expect) {
@@ -503,6 +511,7 @@ const testAll = () => {
       puts('tokens:', tokens)
       puts('expect:', expect)
       puts('actual:', actual)
+      puts('stack :', stack)
       process.exit(1)
     }
   }
@@ -597,7 +606,11 @@ const testAll = () => {
   // | "[" exp* "]"                    # array    : [], [1 2]
   check([], '[]')
   check([1, 2], '[1 2]')
-  // | "{" id* (id "=" exp)* "}"       # struct   : {}, {one two=2}
+  // | "{" id* (id "=" exp)* "}"       # struct    : (), (one:one), (one two:2)
+  check(undefined, '()')
+  check({one: 1}, '{one=1}')
+  check({one: 1, two: 2}, '{one two=2}', 'let one 1')
+  // | "{" id* (id "=" exp)* "}"       # dictionary: {}, {one two:2}
   check({}, '{}')
   check({one: 1, two: 2}, '{one two=2}', 'let one 1')
   // | '"' [^"]* '"'                   # string   : "hi"

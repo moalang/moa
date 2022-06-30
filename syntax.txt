@@ -6,15 +6,16 @@ prop: "." id
 call: "(" exp+ ")"
 at: "[" exp "]"
 bottom:
-| "(" exp  ")"                    # priority : 1 * (2 + 3)
-| "(" exp exp+ ")"                # apply    : f(a) == (f a)
-| "[" exp* "]"                    # array    : [], [1 2]
-| "{" id* (id "=" exp)* "}"       # struct   : {}, {one two=2}
-| '"' [^"]* '"'                   # string   : "hi"
-| '`' ("$" unit | [^"])* '`'      # template : `hi $user.name`
-| id ("," id)* "=>" exp           # lambda   : a,b => a + b
-| [0-9]+ ("." [0-9]+)?            # number   : 1, 0.5
-| id                              # id       : name,
+| "(" exp  ")"                    # priority  : 1 * (2 + 3)
+| "(" exp exp+ ")"                # apply     : f(a) == (f a)
+| "[" exp* "]"                    # array     : [], [1 2]
+| "{" id* (id "=" exp)* "}"       # struct    : (), (one:one), (one two:2)
+| "{" id* (id "=" exp)* "}"       # dictionary: {}, {one two:2}
+| '"' [^"]* '"'                   # string    : "hi"
+| '`' ("$" unit | [^"])* '`'      # template  : `hi $user.name`
+| id ("," id)* "=>" exp           # lambda    : a,b => a + b
+| [0-9]+ ("." [0-9]+)?            # number    : 1, 0.5
+| id                              # id        : name,
 id: [A-Za-z_][A-Za-z0-9_]*
 op1: "!"
 op2: [+-/%*=<>|&^;]+
