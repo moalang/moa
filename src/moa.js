@@ -27,7 +27,7 @@ Type.prototype.pretty = function() {
   return this.toString().replace(/\d+/g, t => o[t] ||= Object.keys(o).length + 1)
 }
 Token.prototype.toString = Token.prototype.valueOf = function() { return this.code }
-'startsWith match replace'.split(' ').map(m => Token.prototype[m] = function(...a) { return this.code[m](...a) } )
+'startsWith match replace slice'.split(' ').map(m => Token.prototype[m] = function(...a) { return this.code[m](...a) } )
 
 const showType = o =>
   Array.isArray(o) && o.length === 1 ? showType(o[0]) :
@@ -99,7 +99,7 @@ const tokenize = source => {
     }
     return tokens.flatMap(convert).concat(close(indent / 2)).map(t => new Token(t))
   }
-  return simplify(source.split(/((?: |\n|#[^\n]*)+|[0-9]+(?:\.[0-9]+)?|[A-Za-z0-9_]+(?:,[A-Za-z0-9_]+)*|[+\-*%/=><|&^]+|"[^"]*"|`[^`]*`|.)/g).filter(x => x))
+  return simplify(source.split(/((?: |\n|#[^\n]*)+|[0-9]+(?:\.[0-9]+)?|[+\-*%/=><|&^]+|r?"[^"]*"|`[^`]*`|[A-Za-z0-9_]+(?:,[A-Za-z0-9_]+)*|.)/g).filter(x => x))
 }
 const parse = tokens => {
   let pos = 0
@@ -184,6 +184,7 @@ const infer = (nodes, hints) => {
   const tint = ttype('int')
   const tbool = ttype('bool')
   const tstring = ttype('string', { size: tint })
+  const tregexp = ttype('regexp', { test: tlambda(tstring, tbool) })
   const tset = t => ttype('set', { size: tint, at: tlambda(t, tbool) }, t)
   const tarray = t => ttype('array', { size: tint, set: tset(t), at: tlambda(tint, t) }, t)
   const tdict = (k, v) => ttype('dictionary', { keys: tarray(k), values: tarray(v), at: tlambda(k, v) }, k, v)
@@ -332,8 +333,13 @@ const infer = (nodes, hints) => {
         return tlambda(...targs.map(t => t.type), analyze(tail[1], newEnv, nonGeneric.concat(targs.map(t => t.type.name))))
       } else if (head == '.') {
         const type = analyze(tail[0], env, nonGeneric)
-        const name = tail[1].code
-        return type.props[name] || (() => {throw Error(`'${name}' not found in '${Object.keys(type.props)}' of ${type}`)})()
+        const name = Array.isArray(tail[1]) ? (tail[1][0] == '__call' ? tail[1][1] : tail[1][0]) : tail[1].code
+        const ft = type.props[name] || (() => {throw Error(`'${name}' not found in '${Object.keys(type.props)}' of ${type}`)})()
+        if (Array.isArray(tail[1]) && tail[1][0] == '__call') {
+          return tlambda(...ft.types.slice(tail[1].slice(2).length))
+        } else {
+          return ft
+        }
       } else if (head.array && tail.length) {
         const t = analyze(head, env, nonGeneric)
         if (tail.length !== 1) {
@@ -358,6 +364,8 @@ const infer = (nodes, hints) => {
       const v = node.code
       if (v.match(/^[0-9]/)) {
         return tint
+      } else if (v.match(/^r["`]/)) {
+        return tregexp
       } else if (v.match(/^["`]/)) {
         return tstring
       } else if (v === 'return') {
@@ -399,7 +407,9 @@ const generate = nodes => {
   const gen = o => Array.isArray(o) ? apply(o) :
     o == '__array' ? '[]' :
     o == '__dict' ? '({})' :
-    o.startsWith('`') ? template(o) : o
+    o.startsWith('r"') ? `RegExp(${o.slice(1)})` :
+    o.startsWith('`') ? template(o) :
+    o
   const template = s => s.replace(/\$[A-Za-z0-9_.]+/g, x => '${' + x.slice(1) + '}')
   const _case = a => a.length === 0 ? (() => {throw Error('Invalid case expression')})() :
     a.length === 1 ? a[0] :
@@ -541,7 +551,6 @@ const testAll = () => {
   const inf = (expect, exp, ...defs) => test((ret, main) => main.type ? main.type.pretty() : ret, expect, exp, ...defs)
   const check = (expect, exp, ...defs) => test((ret) => str(ret), str(expect), exp, ...defs)
   const error = (expect, exp, ...defs) => test((ret) => ret, str(expect), exp, ...defs)
-  inf('bool', '[1].set[1]')
 
   // -- Tests for type inference
   // primitives
@@ -577,6 +586,9 @@ const testAll = () => {
   inf('array(int)', '{"a":1}.values')
   // string
   inf('int', '"hi".size')
+  // regexp
+  inf('regexp', 'r"hi"')
+  inf('bool', 'r"hi".test("h")')
   // generic array
   inf('int', '[].size')
   inf('int', '[1][0]')
@@ -646,6 +658,9 @@ const testAll = () => {
   // | '`' ("$" unit | [^"])* '`'      # template : `hi $user.name`
   check('hi moa', '`hi $name`', 'let name "moa"')
   check('a\nb', 'v', 'let v `a\nb`')
+  // | '"' [^"]* '"'                   # regexp    : r"hi"
+  check(true, 'r"^h".test("hi")')
+  check(false, 'r"^h".test("bye")')
   // | id ("," id)* "=>" exp           # lambda   : a,b => a + b
   check(1, 'f(a => 1)', 'fn f g: g()')
   check(3, 'f(a,b => 3)', 'fn f g: g(1 2)')

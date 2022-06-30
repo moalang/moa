@@ -12,6 +12,7 @@ bottom:
 | "{" id* (id ":" exp)* "}"       # dictionary: {}, {one "two":2}
 | '"' [^"]* '"'                   # string    : "hi"
 | '`' ("$" unit | [^"])* '`'      # template  : `hi $user.name`
+| '"' [^"]* '"'                   # regexp    : r"hi"
 | id ("," id)* "=>" exp           # lambda    : a,b => a + b
 | [0-9]+ ("." [0-9]+)?            # number    : 1, 0.5
 | id                              # id        : name,
