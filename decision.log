@@ -10,11 +10,11 @@ Version 0.1 -- core
   - [x] float
   - [x] string
   - [x] vector
-  - [x] dictionary
+  - [ ] dictionary
   - [x] struct
   - [x] algebraic data type
-  - [ ] now
-  - [ ] time
+  - [x] now
+  - [x] time
   - [ ] set
   - [ ] tuple
 - [x] No dependency in runtime

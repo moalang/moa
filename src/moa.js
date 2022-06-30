@@ -283,7 +283,7 @@ const infer = (nodes, hints) => {
           analyze(tail.slice(1), env, nonGeneric)
           return tvar()
         } else {
-          return analyze(tail[0], env, nonGeneric)
+          return analyze(tail, env, nonGeneric)
         }
       } else if (head == '__block') {
         predict(env, tail)
@@ -530,8 +530,8 @@ const testAll = () => {
   inf('int', '() => 1')
   inf('(int int)', 'x => x + 1')
   // simple function
-  inf('(int int)', 'fn inc a (+ a 1)')
-  inf('(int int int)', 'fn add a b (+ a b)')
+  inf('(int int)', 'fn inc a: a + 1')
+  inf('(int int int)', 'fn add a b: a + b')
   // generic function
   inf('(1 1)', 'fn f a a')
   inf('(1 2 1)', 'fn f a b a')
@@ -550,23 +550,23 @@ const testAll = () => {
   // time
   inf('time', 'now')
   // combinations
-  inf('int', '(+ (f 1) (g 1))', 'fn f x (+ x 1)', 'fn g x (+ x 2)')
-  inf('((1 2) (2 3) 1 3)', 'fn _ f g x (g (f x))')
-  inf('((1 2 3) (1 2) 1 3)', 'fn _ x y z (x z (y z))')
-  inf('(bool (bool bool) (bool bool))', 'fn _ b x (case (x b) x (x => b))')
-  inf('(bool bool)', 'fn _ x (case true x (case x true false))')
-  inf('(bool bool bool)', 'fn _ x y (case x x y)')
-  inf('(1 1)', 'fn _ n ((x => (x (y => y))) (f => (f n)))')
-  inf('((1 2) 1 2)', 'fn _ x y (x y)')
-  inf('((1 2) ((1 2) 1) 2)', 'fn _ x y (x (y x))')
-  inf('(1 ((1 2 3) 4 2) (1 2 3) 4 3)', 'fn _ h t f x (f h (t f x))')
-  inf('((1 1 2) ((1 1 2) 1) 2)', 'fn _ x y (x (y x) (y x))')
-  inf('(((1 1) 2) 2)', 'fn f y (id (y id))', 'fn id x x')
-  inf('int', 'fn f (case (id true) (id 1) (id 2))', 'fn id x x')
-  inf('int', 'fn g (+ (f true) (f 4))', 'fn f x (3)')
-  inf('(bool (1 1))', 'fn h b (case b (f g) (g f))', 'fn f x x', 'fn g y y')
+  inf('int', '((f 1) + (g 1))', 'fn f x: x + 1', 'fn g x: x + 2')
+  inf('((1 2) (2 3) 1 3)', 'fn _ f g x: g f(x)')
+  inf('((1 2 3) (1 2) 1 3)', 'fn _ x y z: x z y(z)')
+  inf('(bool (bool bool) (bool bool))', 'fn _ b x: case x(b) x x => b')
+  inf('(bool bool)', 'fn _ x: case true x case(x true false)')
+  inf('(bool bool bool)', 'fn _ x y: case x x y')
+  inf('(1 1)', 'fn _ n: (x => x(y => y))(f => f(n))')
+  inf('((1 2) 1 2)', 'fn _ x y: x y')
+  inf('((1 2) ((1 2) 1) 2)', 'fn _ x y: x y(x)')
+  inf('(1 ((1 2 3) 4 2) (1 2 3) 4 3)', 'fn _ h t f x: f h t(f x)')
+  inf('((1 1 2) ((1 1 2) 1) 2)', 'fn _ x y: x y(x) y(x)')
+  inf('(((1 1) 2) 2)', 'fn f y: id y(id)', 'fn id x x')
+  inf('int', 'fn f: case id(true) id(1) id(2)', 'fn id x x')
+  inf('int', 'fn g: f(true) + f(4)', 'fn f x: 3')
+  inf('(bool (1 1))', 'fn h b: case b f(g) g(f)', 'fn f x x', 'fn g y y')
   // type errors
-  reject('(+ 1 true)')
+  reject('1 + true')
   reject('if true: return 1')
   reject('f()', 'fn f:\n  if true: return 1  \n  "hi"')
 
