@@ -9,7 +9,7 @@ bottom:
 | "(" exp  ")"                    # priority  : 1 * (2 + 3)
 | "(" exp exp+ ")"                # apply     : f(a) == (f a)
 | "[" exp* "]"                    # array     : [], [1 2]
-| "{" id* (id "=" exp)* "}"       # dictionary: {}, {one two=2}
+| "{" id* (id "=" exp)* "}"       # dictionary: {}, {one "two":2}
 | '"' [^"]* '"'                   # string    : "hi"
 | '`' ("$" unit | [^"])* '`'      # template  : `hi $user.name`
 | id ("," id)* "=>" exp           # lambda    : a,b => a + b

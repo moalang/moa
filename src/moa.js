@@ -39,7 +39,7 @@ const put = (...a) => process.stdout.write(str(a))
 const puts = (...a) => { console.log(...a.map(str)); return a[a.length - 1] }
 
 const isOp1 = t => t == '!'
-const isOp2 = t => t && t.toString().match(/^[+\-*%/=><|&^]+$/)
+const isOp2 = t => t && t.toString().match(/^[+\-*%/=><|&^]+$/) || t == '__pair'
 const isAssign = t => '+= -= *= /= %= ='.split(' ').includes(t.code)
 
 const compile = (source, hints) => {
@@ -84,8 +84,12 @@ const tokenize = source => {
       if (token === '[' && prev && prev.match(/^[A-Za-z0-9_)\]]/)) {
         return '__at'
       }
-      if (token === ':' && pred && !pred.includes('\n')) {
-        return '__line'
+      if (token === ':') {
+        if (nesting >= 1) {
+          return '__pair'
+        } else if (pred && !pred.includes('\n')) {
+          return '__line'
+        }
       }
       return token
     }
@@ -606,9 +610,9 @@ const testAll = () => {
   // | "[" exp* "]"                    # array    : [], [1 2]
   check([], '[]')
   check([1, 2], '[1 2]')
-  // | "{" id* (id "=" exp)* "}"       # dictionary: {}, {one two=2}
+  // | "{" id* (id "=" exp)* "}"       # dictionary: {}, {one "two":2}
   check({}, '{}')
-  check({one: 1, two: 2}, '{one two=2}', 'let one 1')
+  check({one: 1, two: 2}, '{one "two":2}', 'let one 1')
   // | '"' [^"]* '"'                   # string   : "hi"
   check('hi', '"hi"')
   // | '`' ("$" unit | [^"])* '`'      # template : `hi $user.name`
