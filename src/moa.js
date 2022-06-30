@@ -147,7 +147,7 @@ const parse = tokens => {
     if (token.match(/^[A-Za-z0-9_"`}\])]/) || isOp1(token) || isOp2(token)) {
       return token
     } else if (token == '{') {
-      return many(exp, '}', a => [new Token('__struct'), ...a])
+      return many(exp, '}', a => [new Token('__dict'), ...a])
     } else if (token == '(') {
       return unnest(many(exp, ')'))
     } else if (token == '[') {
@@ -304,7 +304,7 @@ const infer = (nodes, hints) => {
         const index = analyze(tail[1], env, nonGeneric)
         unify(tint, index, tail)
         return ary.targs[0]
-      } else if (head == '__struct') {
+      } else if (head == '__dict') {
         const kvs = tail.map(x => Array.isArray(x) ?
           [x[1].code, analyze(x[2], env, nonGeneric)] :
           [x.code, analyze(x, env, nonGeneric)])
@@ -337,7 +337,7 @@ const infer = (nodes, hints) => {
       }
     } else if (node == '__array') {
       return fresh(tarray, nonGeneric)
-    } else if (node == '__struct') {
+    } else if (node == '__dict') {
       return ttype('', () => ({}))
     } else {
       const v = node.code
@@ -380,7 +380,7 @@ const generate = nodes => {
   }
   const gen = o => Array.isArray(o) ? apply(o) :
     o == '__array' ? '[]' :
-    o == '__struct' ? '({})' :
+    o == '__dict' ? '({})' :
     o.startsWith('`') ? template(o) : o
   const template = s => s.replace(/\$[A-Za-z0-9_.]+/g, x => '${' + x.slice(1) + '}')
   const _case = a => a.length === 0 ? (() => {throw Error('Invalid case expression')})() :
@@ -405,7 +405,7 @@ const generate = nodes => {
       return args.length === 1 && isExp(args[0]) ? args[0] : '{\n  ' + statement(args).join('\n  ') + '\n}'
     } else if (head == '__array') {
       return `[${args.join(', ')}]`
-    } else if (head == '__struct') {
+    } else if (head == '__dict') {
       const kvs = tail.map(o => Array.isArray(o) ? `${o[1]}:${o[2]}` : o).join(',')
       return `({${kvs}})`
     } else if (head == '__at') {
