@@ -606,11 +606,7 @@ const testAll = () => {
   // | "[" exp* "]"                    # array    : [], [1 2]
   check([], '[]')
   check([1, 2], '[1 2]')
-  // | "{" id* (id "=" exp)* "}"       # struct    : (), (one:one), (one two:2)
-  check(undefined, '()')
-  check({one: 1}, '{one=1}')
-  check({one: 1, two: 2}, '{one two=2}', 'let one 1')
-  // | "{" id* (id "=" exp)* "}"       # dictionary: {}, {one two:2}
+  // | "{" id* (id "=" exp)* "}"       # dictionary: {}, {one two=2}
   check({}, '{}')
   check({one: 1, two: 2}, '{one two=2}', 'let one 1')
   // | '"' [^"]* '"'                   # string   : "hi"

@@ -10,7 +10,7 @@ Version 0.1 -- core
   - [x] float
   - [x] string
   - [x] vector
-  - [ ] dictionary
+  - [x] dictionary
   - [x] struct
   - [x] algebraic data type
   - [x] now
