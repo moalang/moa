@@ -9,10 +9,14 @@ function Token(code, type) {
 function Type(params) {
   this.name = params.name || ''
   this.types = params.types || []
-  this.targs = params.targs || []
   this.props = params.props || {}
+  this.targs = params.targs || []
   this.dynamic = params.dynamic || false
   this.instance = params.instance || undefined
+}
+Type.prototype.baseName = function() {
+  const show = a => a.length ? `(${a.map(t => t.baseName()).join(' ')})` : ''
+  return this.instance ? this.instance.baseName() : this.name
 }
 Type.prototype.toString = function() {
   const show = a => a.length ? `(${a.map(t => t.toString()).join(' ')})` : ''
@@ -169,22 +173,22 @@ const infer = (nodes, hints) => {
   const tenv = {}
   const tvar = () => new Type({name: (++tvarSequence).toString(), dynamic: true})
   const tlambda = (...types) => types.length === 1 ? types[0] : new Type({types})
-  const ttype = (name, f) => {
-    if (name && name in tenv) {
+  const ttype = (name, props, ...targs) => {
+    if (targs.length === 0 && name && name in tenv) {
       return tenv[name]
     }
-    f ||= () => ({})
-    const targs = Array(f.length).fill().map(tvar)
-    return tenv[name] =  new Type({name, targs, props: f(...targs)})
+    return tenv[name] =  new Type({name, props, targs})
   }
   const v1 = tvar()
   const tnil = ttype('nil')
   const tint = ttype('int')
   const tbool = ttype('bool')
-  const tstring = ttype('string', () => ({ size: tint }))
-  const tarray = ttype('array', t => ({ size: tint }))
-  const ttime = ttype('time', () => ({ year: tint, month: tint, day: tint, hour: tint, minute: tint, second: tint }))
-  const ttest = ttype('__test', () => ({ eq: tlambda(v1, v1, tnil) }))
+  const tstring = ttype('string', { size: tint })
+  const tset = t => ttype('set', { size: tint }, t)
+  const tarray = t => ttype('array', { size: tint, set: tset(t) }, t)
+  const tdict = (k, v) => ttype('dictionary', { keys: tarray(k), values: tarray(v) }, k, v)
+  const ttime = ttype('time', { year: tint, month: tint, day: tint, hour: tint, minute: tint, second: tint })
+  const ttest = ttype('__test', { eq: tlambda(v1, v1, tnil) })
 
   const prune = t => (t.dynamic && t.instance) ? t.instance = prune(t.instance) : t
   const fresh = (type, nonGeneric) => {
@@ -195,7 +199,7 @@ const infer = (nodes, hints) => {
         if (nonGeneric.includes(p.name)) {
           return p
         } else {
-        return d[p.name] ||= tvar()
+          return d[p.name] ||= tvar()
         }
       } else {
         const q = new Type(p)
@@ -300,7 +304,7 @@ const infer = (nodes, hints) => {
         tail.map(f)
         return ret
       } else if (head == '__array') {
-        const ta = fresh(tarray, nonGeneric)
+        const ta = tarray(tvar())
         tail.map(x => unify(ta.targs[0], analyze(x, env, nonGeneric), x))
         return ta
       } else if (head == '__at') {
@@ -309,11 +313,17 @@ const infer = (nodes, hints) => {
         unify(tint, index, tail)
         return ary.targs[0]
       } else if (head == '__dict') {
-        const kvs = tail.map(x => Array.isArray(x) ?
-          [x[1].code, analyze(x[2], env, nonGeneric)] :
-          [x.code, analyze(x, env, nonGeneric)])
-        const name = 'struct_' + kvs.flatMap(([k,v]) => [k, v.toString()]).join('_')
-        return ttype(name, () => Object.fromEntries(kvs))
+        const td = tdict(tvar(), tvar())
+        for (const x of tail) {
+          if (Array.isArray(x)) {
+            unify(td.targs[0], analyze(x[1], env, nonGeneric))
+            unify(td.targs[1], analyze(x[2], env, nonGeneric))
+          } else {
+            unify(td.targs[0], tstring)
+            unify(td.targs[1], analyze(x, env, nonGeneric))
+          }
+        }
+        return td
       } else if (head == '=>') {
         const newEnv = Object.assign({}, env)
         const targs = tail[0].code ? tail[0].code.split(',').map((s,i) => new Token(s, tvar())) : []
@@ -322,7 +332,7 @@ const infer = (nodes, hints) => {
       } else if (head == '.') {
         const type =  analyze(tail[0], env, nonGeneric)
         const name = tail[1].code
-        return type.props[name] || (() => {throw Error(`${name} not found in ${type}:${Object.keys(type.props)}`)})()
+        return type.props[name] || (() => {throw Error(`'${name}' not found in '${Object.keys(type.props)}' of ${type}`)})()
       } else if (head.array && tail.length) {
         const t = analyze(head, env, nonGeneric)
         if (tail.length !== 1) {
@@ -340,7 +350,7 @@ const infer = (nodes, hints) => {
         return analyze(head, env, nonGeneric)
       }
     } else if (node == '__array') {
-      return fresh(tarray, nonGeneric)
+      return tarray(tvar())
     } else if (node == '__dict') {
       return ttype('', () => ({}))
     } else {
@@ -380,6 +390,7 @@ const infer = (nodes, hints) => {
 const generate = nodes => {
   const embedded = {
     'array_size': (o, name) => `${gen(o)}.length`,
+    'array_set': (o, name) => `((d,a) => a.flatMap(x => x in d ? [] : [d[x]=x]))({}, ${gen(o)})`,
     'string_size': (o, name) => `${gen(o)}.length`
   }
   const gen = o => Array.isArray(o) ? apply(o) :
@@ -417,7 +428,7 @@ const generate = nodes => {
 
     // operators
     } else if (head == '.') {
-      const key = tail[0].type.toString() + '_' + args[1]
+      const key = tail[0].type.baseName() + '_' + args[1]
       if (key in embedded) {
         return embedded[key](args[0], args[1], args.slice(2).map(gen))
       } else {
@@ -551,15 +562,16 @@ const testAll = () => {
   inf('(1 2 2)', 'fn f a b b')
   inf('int', 'fn f a a\nf 1')
   inf('bool', 'fn f a a\nf 1\nf true')
-  // struct
-  inf('int', '{a=1}.a')
-  inf('string', '{a=1 b="hi"}.b')
+  // dict
+  inf('dictionary(string int)', '{"a":1}')
   // string
   inf('int', '"hi".size')
   // generic array
   inf('int', '[].size')
   inf('int', '[1][0]')
   inf('string', '["hi"][0]')
+  inf('array(int)', '[1]')
+  inf('set(int)', '[1].set')
   // time
   inf('time', 'now')
   // combinations
@@ -610,6 +622,7 @@ const testAll = () => {
   // | "[" exp* "]"                    # array    : [], [1 2]
   check([], '[]')
   check([1, 2], '[1 2]')
+  check([1, 2], '[1 1 2].set')
   // | "{" id* (id "=" exp)* "}"       # dictionary: {}, {one "two":2}
   check({}, '{}')
   check({one: 1, two: 2}, '{one "two":2}', 'let one 1')
