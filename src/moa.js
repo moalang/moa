@@ -133,7 +133,7 @@ const parse = tokens => {
       return [pred, lhs, exp()]
     } else if (pred == '.') {
       const rhs = exp()
-      if (Array.isArray(rhs) && isOp1(rhs[0]) || isOp2(rhs[0])) {
+      if (Array.isArray(rhs) && isOp1(rhs[0]) || isOp2(rhs[0]) || rhs[0] == '__at') {
         return [rhs[0], [pred, lhs, rhs[1]], rhs[2]]
       } else {
         return [pred, lhs, rhs]
@@ -184,7 +184,7 @@ const infer = (nodes, hints) => {
   const tint = ttype('int')
   const tbool = ttype('bool')
   const tstring = ttype('string', { size: tint })
-  const tset = t => ttype('set', { size: tint }, t)
+  const tset = t => ttype('set', { size: tint, at: tlambda(t, tbool) }, t)
   const tarray = t => ttype('array', { size: tint, set: tset(t), at: tlambda(tint, t) }, t)
   const tdict = (k, v) => ttype('dictionary', { keys: tarray(k), values: tarray(v), at: tlambda(k, v) }, k, v)
   const ttime = ttype('time', { year: tint, month: tint, day: tint, hour: tint, minute: tint, second: tint })
@@ -427,7 +427,11 @@ const generate = nodes => {
       const kvs = tail.map(o => Array.isArray(o) ? `${o[1]}:${o[2]}` : o).join(',')
       return `({${kvs}})`
     } else if (head == '__at') {
-      return args[0] + `[${args[1]}]`
+      if (tail[0].type.baseName() === 'set') {
+        return args[0] + `.includes(${args[1]})`
+      } else {
+        return args[0] + `[${args[1]}]`
+      }
 
     // operators
     } else if (head == '.') {
@@ -537,6 +541,7 @@ const testAll = () => {
   const inf = (expect, exp, ...defs) => test((ret, main) => main.type ? main.type.pretty() : ret, expect, exp, ...defs)
   const check = (expect, exp, ...defs) => test((ret) => str(ret), str(expect), exp, ...defs)
   const error = (expect, exp, ...defs) => test((ret) => ret, str(expect), exp, ...defs)
+  inf('bool', '[1].set[1]')
 
   // -- Tests for type inference
   // primitives
@@ -629,6 +634,8 @@ const testAll = () => {
   check([], '[]')
   check([1, 2], '[1 2]')
   check([1, 2], '[1 1 2].set')
+  check(true, '[1].set[1]')
+  check(false, '[1].set[2]')
   // | "{" id* (id ":" exp)* "}"       # dictionary: {}, {one "two":2}
   check({}, '{}')
   check({one: 1, two: 2}, '{one "two":2}', 'let one 1')
