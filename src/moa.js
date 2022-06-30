@@ -85,7 +85,7 @@ const tokenize = source => {
       if (token === '(' && prev && prev.match(/^[A-Za-z0-9_)\]]/)) {
         return '__call'
       }
-      if (token === '[' && prev && prev.match(/^[A-Za-z0-9_)\]]/)) {
+      if (token === '[' && prev && prev.match(/^[A-Za-z0-9_)\]}\]]/)) {
         return '__at'
       }
       if (token === ':') {
@@ -185,8 +185,8 @@ const infer = (nodes, hints) => {
   const tbool = ttype('bool')
   const tstring = ttype('string', { size: tint })
   const tset = t => ttype('set', { size: tint }, t)
-  const tarray = t => ttype('array', { size: tint, set: tset(t) }, t)
-  const tdict = (k, v) => ttype('dictionary', { keys: tarray(k), values: tarray(v) }, k, v)
+  const tarray = t => ttype('array', { size: tint, set: tset(t), at: tlambda(tint, t) }, t)
+  const tdict = (k, v) => ttype('dictionary', { keys: tarray(k), values: tarray(v), at: tlambda(k, v) }, k, v)
   const ttime = ttype('time', { year: tint, month: tint, day: tint, hour: tint, minute: tint, second: tint })
   const ttest = ttype('__test', { eq: tlambda(v1, v1, tnil) })
 
@@ -226,7 +226,7 @@ const infer = (nodes, hints) => {
       a.types.forEach((t,i) => unify(t, b.types[i], node))
     }
   }
-  const analyze = (node, env, nonGeneric) => node.type = _assert(_analyze(node, env, nonGeneric), node)
+  const analyze = (node, env, nonGeneric) => node.type = _assert(prune(_analyze(node, env, nonGeneric), node))
   const _assert = (type, node) => type || (() => {throw Error(`Type can not be infered ${node}`)})()
   const _analyze = (node, env, nonGeneric) => {
     if (Array.isArray(node)) {
@@ -308,10 +308,11 @@ const infer = (nodes, hints) => {
         tail.map(x => unify(ta.targs[0], analyze(x, env, nonGeneric), x))
         return ta
       } else if (head == '__at') {
-        const ary = analyze(tail[0], env, nonGeneric)
+        const object = analyze(tail[0], env, nonGeneric)
         const index = analyze(tail[1], env, nonGeneric)
-        unify(tint, index, tail)
-        return ary.targs[0]
+        const ret = tvar()
+        unify(tlambda(index, ret), object.props.at)
+        return ret
       } else if (head == '__dict') {
         const td = tdict(tvar(), tvar())
         for (const x of tail) {
@@ -330,7 +331,7 @@ const infer = (nodes, hints) => {
         targs.map(arg => newEnv[arg.code] = arg.type)
         return tlambda(...targs.map(t => t.type), analyze(tail[1], newEnv, nonGeneric.concat(targs.map(t => t.type.name))))
       } else if (head == '.') {
-        const type =  analyze(tail[0], env, nonGeneric)
+        const type = analyze(tail[0], env, nonGeneric)
         const name = tail[1].code
         return type.props[name] || (() => {throw Error(`'${name}' not found in '${Object.keys(type.props)}' of ${type}`)})()
       } else if (head.array && tail.length) {
@@ -391,7 +392,9 @@ const generate = nodes => {
   const embedded = {
     'array_size': (o, name) => `${gen(o)}.length`,
     'array_set': (o, name) => `((d,a) => a.flatMap(x => x in d ? [] : [d[x]=x]))({}, ${gen(o)})`,
-    'string_size': (o, name) => `${gen(o)}.length`
+    'string_size': (o, name) => `${gen(o)}.length`,
+    'dictionary_keys': (o, name) => `Object.keys(${gen(o)})`,
+    'dictionary_values': (o, name) => `Object.values(${gen(o)})`,
   }
   const gen = o => Array.isArray(o) ? apply(o) :
     o == '__array' ? '[]' :
@@ -564,6 +567,9 @@ const testAll = () => {
   inf('bool', 'fn f a a\nf 1\nf true')
   // dict
   inf('dictionary(string int)', '{"a":1}')
+  inf('int', '{"a":1}["a"]')
+  inf('array(string)', '{"a":1}.keys')
+  inf('array(int)', '{"a":1}.values')
   // string
   inf('int', '"hi".size')
   // generic array
@@ -623,9 +629,11 @@ const testAll = () => {
   check([], '[]')
   check([1, 2], '[1 2]')
   check([1, 2], '[1 1 2].set')
-  // | "{" id* (id "=" exp)* "}"       # dictionary: {}, {one "two":2}
+  // | "{" id* (id ":" exp)* "}"       # dictionary: {}, {one "two":2}
   check({}, '{}')
   check({one: 1, two: 2}, '{one "two":2}', 'let one 1')
+  check(['one', 'two'], '{one "two":2}.keys', 'let one 1')
+  check([1, 2], '{one "two":2}.values', 'let one 1')
   // | '"' [^"]* '"'                   # string   : "hi"
   check('hi', '"hi"')
   // | '`' ("$" unit | [^"])* '`'      # template : `hi $user.name`
