@@ -13,6 +13,8 @@ Version 0.1 -- core
   - [x] dictionary
   - [x] struct
   - [x] algebraic data type
+  - [ ] now
+  - [ ] time
   - [ ] set
   - [ ] tuple
 - [x] No dependency in runtime
@@ -21,7 +23,6 @@ Version 0.2 -- server side
 - [ ] Compile to Go
 Version 0.3 -- standard library
 - [ ] Embedded io
-  - [ ] time
   - [ ] random
 - [ ] Embedded module
   - [ ] module system

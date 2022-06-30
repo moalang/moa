@@ -179,6 +179,7 @@ const infer = (nodes, hints) => {
   const tbool = ttype('bool')
   const tstring = ttype('string', () => ({ size: tint }))
   const tarray = ttype('array', t => ({ size: tint }))
+  const ttime = ttype('time', () => ({ year: tint, month: tint, day: tint, hour: tint, minute: tint, second: tint }))
   const ttest = ttype('__test', () => ({ eq: tlambda(v1, v1, tnil) }))
 
   const prune = t => (t.dynamic && t.instance) ? t.instance = prune(t.instance) : t
@@ -359,6 +360,7 @@ const infer = (nodes, hints) => {
     '&&': tlambda(tbool, tbool, tbool),
     'if': tlambda(tbool, v1, tnil),
     'case': tlambda(tbool, v1, v1, v1),
+    'now': ttime,
   }, hints || {})
   '+ - * / % += -= *= /= %='.split(' ').map(op => topEnv[op] = tlambda(tint, tint, tint))
   const defs = 'fn struct'.split(' ')
@@ -377,7 +379,7 @@ const generate = nodes => {
     o == '__array' ? '[]' :
     o == '__struct' ? '({})' :
     o.startsWith('`') ? template(o) : o
-  const template = s => s.replace(/\$[^ `]+/g, x => '${' + x.slice(1) + '}')
+  const template = s => s.replace(/\$[A-Za-z0-9_.]+/g, x => '${' + x.slice(1) + '}')
   const _case = a => a.length === 0 ? (() => {throw Error('Invalid case expression')})() :
     a.length === 1 ? a[0] :
     `${a[0]} ? ${a[1]} : ` + _case(a.slice(2))
@@ -463,7 +465,8 @@ const generate = nodes => {
       return `${gen(head)}(${args})`
     }
   }
-  return nodes.map(gen).join(';\n')
+  const js = 'let now = {year: 2001, month: 2, day: 3, hour: 4, minute: 5, second: 6}'
+  return js + '\n' + nodes.map(gen).join(';\n')
 }
 
 
@@ -544,6 +547,8 @@ const testAll = () => {
   inf('int', '[].size')
   inf('int', '[1][0]')
   inf('string', '["hi"][0]')
+  // time
+  inf('time', 'now')
   // combinations
   inf('int', '(+ (f 1) (g 1))', 'fn f x (+ x 1)', 'fn g x (+ x 2)')
   inf('((1 2) (2 3) 1 3)', 'fn _ f g x (g (f x))')
@@ -597,7 +602,6 @@ const testAll = () => {
   check({one: 1, two: 2}, '{one two=2}', 'let one 1')
   // | '"' [^"]* '"'                   # string   : "hi"
   check('hi', '"hi"')
-  check('hi', '"hi"')
   // | '`' ("$" unit | [^"])* '`'      # template : `hi $user.name`
   check('hi moa', '`hi $name`', 'let name "moa"')
   check('a\nb', 'v', 'let v `a\nb`')
@@ -610,7 +614,7 @@ const testAll = () => {
   // | id                              # id       : name
   check(1, 'a', 'let a 1')
 
-  // qw(let var fn struct adt if return case match fail test)
+  // qw(let var fn struct adt if return case match fail test now)
   check(1, 'n', 'let n 1')
   check(1, 'var n 0\nn+=1\nn')
   check(1, 'f()', 'fn f: 1')
@@ -626,6 +630,7 @@ const testAll = () => {
   check(0, 'match c:\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
   check(1, '1', 'test t: t.eq 1 1')
   check('Test failed: expect(1) but actual(0)', '1', 'test t: t.eq 1 0')
+  check('2001/2/3 4:5:6', '`$now.year/$now.month/$now.day $now.hour:$now.minute:$now.second`')
 
   error('hi', 'fail("hi")')
   error('Zero division error', '1/0')
