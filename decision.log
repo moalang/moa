@@ -15,41 +15,10 @@ Version 0.1 -- core
   - [x] algebraic data type
   - [x] now
   - [x] time
-  - [ ] set
-  - [ ] tuple
+  - [x] set
+  - [ ] iterator<T>
 - [x] No dependency in runtime
 - [x] Error handloing
-Version 0.2 -- server side
-- [ ] Compile to Go
-Version 0.3 -- standard library
-- [ ] Embedded io
-  - [ ] random
-- [ ] Embedded module
-  - [ ] module system
-  - [ ] math
-  - [ ] regexp
-  - [ ] heapq
-  - [ ] bisect
-  - [ ] array
-  - [ ] decimal
-  - [ ] path
-  - [ ] mime
-  - [ ] base64
-  - [ ] json
-  - [ ] zip
-  - [ ] gzip
-  - [ ] tar
-  - [ ] csv
-  - [ ] hmac
-  - [ ] hash
-  - [ ] xml
-  - [ ] html
-  - [ ] uuid
 
-Version 0.2 -- standard library
-- [ ] iterator
-- [ ] async (sleep, coroutine)
-
-Version 1.0 -- algorithms and protocol
-- [ ] package manager
-- [ ] weakref
+Version 0.2 -- self boot
+- [ ] Self booting

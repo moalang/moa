@@ -398,11 +398,11 @@ const infer = (nodes, hints) => {
 }
 const generate = nodes => {
   const embedded = {
-    'array_size': (o, name) => `${gen(o)}.length`,
-    'array_set': (o, name) => `((d,a) => a.flatMap(x => x in d ? [] : [d[x]=x]))({}, ${gen(o)})`,
-    'string_size': (o, name) => `${gen(o)}.length`,
-    'dictionary_keys': (o, name) => `Object.keys(${gen(o)})`,
-    'dictionary_values': (o, name) => `Object.values(${gen(o)})`,
+    'array_size': code => `${code}.length`,
+    'array_set': code => `((d,a) => a.flatMap(x => x in d ? [] : [d[x]=x]))({}, ${code})`,
+    'string_size': code => `${code}.length`,
+    'dictionary_keys': code => `Object.keys(${code})`,
+    'dictionary_values': code => `Object.values(${code})`,
   }
   const gen = o => Array.isArray(o) ? apply(o) :
     o == '__array' ? '[]' :
@@ -425,7 +425,7 @@ const generate = nodes => {
     // internal marks
     if (head == '__call') {
       if (tail[0] == 'fail') {
-        return `(() => { throw Error(${gen(tail[1])}) })()`
+        return `(() => { throw Error(${args[1]}) })()`
       } else {
         return args[0] + `(${args.slice(1)})`
       }
@@ -447,12 +447,12 @@ const generate = nodes => {
     } else if (head == '.') {
       const key = tail[0].type.baseName() + '_' + args[1]
       if (key in embedded) {
-        return embedded[key](args[0], args[1], args.slice(2).map(gen))
+        return embedded[key](...args)
       } else {
         if (Array.isArray(args[1])) {
-          return `${gen(args[0])}.${args[1][0]}(${args[1].slice(1).map(gen)})`
+          return `${args[0]}.${args[1][0]}(${args[1].slice(1)})`
         } else {
-          return `${gen(args[0])}.${args[1]}`
+          return `${args[0]}.${args[1]}`
         }
       }
     } else if (isOp1(head)) {
