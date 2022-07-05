@@ -15,7 +15,7 @@ bottom:
 | '"' [^"]* '"'                   # regexp    : r"hi"
 | id ("," id)* "=>" exp           # lambda    : a,b => a + b
 | [0-9]+ ("." [0-9]+)?            # number    : 1, 0.5
-| id                              # id        : name,
+| id                              # id        : name
 id: [A-Za-z_][A-Za-z0-9_]*
 op1: "!"
 op2: [+-/%*=<>|&^;]+
