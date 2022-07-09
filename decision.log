@@ -19,5 +19,11 @@ Version 0.1 -- core
 - [x] No dependency in runtime
 - [x] Error handloing
 
-Version 0.2 -- self boot
+Version 0.2 -- web development
+- [ ] http server
+- [ ] mhtml
+- [ ] mjs
+- [ ] mcss
+
+Version 0.3 -- self boot
 - [ ] Self booting
