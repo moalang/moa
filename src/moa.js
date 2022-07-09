@@ -387,6 +387,8 @@ const infer = (nodes, hints) => {
     'if': tlambda(tbool, v1, tnil),
     'case': tlambda(tbool, v1, v1, v1),
     'time': tlambda(tint, tint, tint, tint, tint, tint, ttime),
+    '++': tlambda(tstring, tstring, tstring),
+    'p': tlambda(v1, v1),
   }, hints || {})
   '+ - * / % += -= *= /= %='.split(' ').map(op => topEnv[op] = tlambda(tint, tint, tint))
   const defs = 'fn struct'.split(' ')
@@ -463,6 +465,8 @@ const generate = nodes => {
         return `((${lhs}) => ${rhs})`
       } else if (head == '/') {
         return `(((l,r) => r === 0 ? (() => { throw Error('Zero division error') })() : l / r)(${lhs},${rhs}))`
+      } else if (head == '++') {
+        return `${lhs} + ${rhs}`
       } else if (isAssign(head)) {
         return `${lhs} ${head} ${rhs}`
       } else {
@@ -503,10 +507,12 @@ const generate = nodes => {
       return `${gen(head)}(${args})`
     }
   }
-  const js = 'const time = (year,month,day,hour,minute,second) => ({year,month,day,hour,minute,second})'
+  const js = (() => {
+    const time = (year,month,day,hour,minute,second) => ({year,month,day,hour,minute,second})
+    const p = (...args) => console.log(...args)
+  }).toString().slice(7, -2)
   return js + '\n' + nodes.map(gen).join(';\n')
 }
-
 
 const testAll = () => {
   const test = (convert, expect, exp, ...defs) => {
@@ -624,6 +630,7 @@ const testAll = () => {
   // node: exp+ ("\n" | (":\n" ("  " node)+)?)
   // exp: unit (op2 exp)*
   check(7, '1 + 2 * 3')
+  check('hi', '"h" ++ "i"')
   // unit: op1? bottom (prop | call | at)*
   check(false, '!true')
   check(true, '!(true && false)')
@@ -687,7 +694,6 @@ const testAll = () => {
   check(1, '1', 'test t: t.eq 1 1')
   check('Test failed: expect(1) but actual(0)', '1', 'test t: t.eq 1 0')
   check('2001/2/3 4:5:6', '`$now.year/$now.month/$now.day $now.hour:$now.minute:$now.second`', 'let now time(2001 2 3 4 5 6)')
-
   error('hi', 'fail("hi")')
   error('Zero division error', '1/0')
 
@@ -732,14 +738,95 @@ const interactive = async () => {
   })
 }
 
+const newProject = () => {
+  const mhtml = `html lang=ja
+  head
+    meta charset=UTF-8
+    title: Template
+    link rel=stylesheet href=style.css
+  body
+    h1: Hello
+    script src=script.js`
+  fs.writeFileSync('index.mhtml', mhtml)
+  fs.writeFileSync('script.mjs', '')
+  fs.writeFileSync('style.mcss', '')
+}
+const startServer = () => {
+  const lib = require('./lib')
+  const filters = {
+    'html': ['mhtml', src => lib.mhtml(src.trim())],
+    'js': ['mjs', src => src.trim() ? compile(src.trim()).js : ''],
+    'css': ['mcss', src => src],
+  }
+  const convert = (ext, path) => {
+    const [newExt, f] = filters[ext] || [ext, src => src]
+    return fs.promises.readFile(path.slice(0, -ext.length) + newExt, {encoding: 'utf-8'}).then(f)
+  }
+  const http = require('http')
+  const url = require('url')
+  const server = http.createServer()
+  const types = {
+    'html': 'text/html; charset=utf-8',
+    'js': 'text/javascript; charset=utf-8',
+    'css': 'text/css; charset=utf-8',
+    'json': 'application/json',
+    'png': 'image/png',
+    'gif': 'image/gif',
+    'jpg': 'image/jpeg',
+    'svg': 'image/svg+xml',
+    'webp': 'image/webp',
+    'mp4': 'video/mp4',
+  }
+  server.on('request', async (req, res) => {
+    try {
+      const r = url.parse(req.url, true)
+      const path = r.path.endsWith('/') ? r.path + 'index.html' : r.path
+      const ext = (m => m ? m[0] : '')(path.match(/(?<=\.)[^.]+$/))
+      if (!ext) {
+        res.writeHead(404, {'Content-Type': type})
+        res.write(`${path} not found`)
+        return
+      }
+      const type = types[ext] || 'text/plain'
+      res.writeHead(200, {'Content-Type': type})
+      const content = await convert(ext, '.' + path.replaceAll('..', ''))
+      res.write(content)
+    } catch (e) {
+      res.write(e.message + '\n')
+      res.write(e.stack.toString())
+    } finally {
+      res.end()
+    }
+  })
+  puts('http://localhost:3000')
+  server.listen('3000')
+}
 
 const main = () => {
+  const { execSync } = require('child_process')
   const [cmd, ...args] = process.argv.slice(2)
+  const get = () => compile(args.map(path => fs.readFileSync(path, 'utf-8')).join('\n\n'))
   if (cmd === 'selfcheck') {
     testAll()
-  } else if (cmd === 'compile') {
-    const moa = args.map(path => fs.readFileSync(path, 'utf-8')).join('\n\n')
-    puts(compile(moa).js)
+    execSync('node moa.js test lib.moa', {stdio: [0, process.stdout, process.stderr]})
+  } else if (cmd === 'run') {
+    eval(get().js + '\nmain()')
+  } else if (cmd === 'test') {
+    const t = (a,b) => {
+      if (JSON.stringify(a) === JSON.stringify(b)) {
+        process.stdout.write('.')
+      } else {
+        console.log('expect:', a)
+        console.log('actual:', b)
+        process.exit(1)
+      }
+    }
+    const js = get().js + `\n__test({eq: ${t.toString()}})\nconsole.log('ok')`
+    eval(js)
+  } else if (cmd === 'new') {
+    newProject()
+  } else if (cmd === 'server') {
+    startServer()
   } else {
     interactive()
   }

@@ -16,7 +16,6 @@ Version 0.1 -- core
   - [x] now
   - [x] time
   - [x] set
-  - [ ] iterator<T>
 - [x] No dependency in runtime
 - [x] Error handloing
 

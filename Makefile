@@ -8,4 +8,4 @@ install:
 
 watch:
 	@-make test
-	@-fswatch -0 -o src/moa.js | xargs -I {} -n1 -0 make test
+	@-fswatch -0 -o src/ | xargs -I {} -n1 -0 make test

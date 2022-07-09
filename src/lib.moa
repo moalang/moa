@@ -1,0 +1,6 @@
+fn mhtml template:
+  p template
+  "mhtml\n\n" ++ template
+
+test t:
+  t.eq "<html></html>" mhtml("html")
