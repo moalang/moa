@@ -174,10 +174,7 @@ const infer = (nodes, hints) => {
   const tvar = () => new Type({name: (++tvarSequence).toString(), dynamic: true})
   const tlambda = (...types) => types.length === 1 ? types[0] : new Type({types})
   const ttype = (name, props, ...targs) => {
-    if (targs.length === 0 && name && name in tenv) {
-      return tenv[name]
-    }
-    return tenv[name] =  new Type({name, props, targs})
+    return tenv[name] = new Type({name, props, targs})
   }
   const v1 = tvar()
   const tnil = ttype('nil')
@@ -190,6 +187,8 @@ const infer = (nodes, hints) => {
   const tdict = (k, v) => ttype('dictionary', { keys: tarray(k), values: tarray(v), at: tlambda(k, v) }, k, v)
   const ttime = ttype('time', { year: tint, month: tint, day: tint, hour: tint, minute: tint, second: tint })
   const ttest = ttype('__test', { eq: tlambda(v1, v1, tnil) })
+
+  const prop = (t, id) => t.props[id] || (() => {throw Error(`'${id}' not found in '${Object.keys(t.props)}' of ${t}`)})()
 
   const prune = t => (t.dynamic && t.instance) ? t.instance = prune(t.instance) : t
   const fresh = (type, nonGeneric) => {
@@ -243,15 +242,15 @@ const infer = (nodes, hints) => {
         return env[name] = ft
       } else if (head == 'struct') {
         const name = tail[0].code
-        const kvs = tail[1].slice(1).map(([name, type]) => [name.code, ttype(type.code)])
-        const ret = ttype(name, () => Object.fromEntries(kvs))
+        const kvs = tail[1].slice(1).map(([name, type]) => [name.code, tenv[type.code]])
+        const ret = ttype(name, Object.fromEntries(kvs))
         const ft = tlambda(...kvs.map(kv => kv[1]), ret)
         return env[name] = ft
       } else if (head == 'adt') {
         const name = tail[0].code
-        const f = o => Array.isArray(o) ? [o[0].code, ttype(o[1].code)] : [o.code, tnil]
+        const f = o => Array.isArray(o) ? [o[0].code, tenv[o[1].code]] : [o.code, tnil]
         const kvs = tail[1].slice(1).map(f)
-        const adt = ttype(name, () => Object.fromEntries(kvs))
+        const adt = ttype(name, Object.fromEntries(kvs))
         kvs.map(([name, alias]) => env[name] = tlambda(alias, adt))
         return env[name] = adt
       } else if (head == 'match') {
@@ -312,7 +311,7 @@ const infer = (nodes, hints) => {
         const object = analyze(tail[0], env, nonGeneric)
         const index = analyze(tail[1], env, nonGeneric)
         const ret = tvar()
-        unify(tlambda(index, ret), object.props.at)
+        unify(tlambda(index, ret), prop(object, 'at'))
         return ret
       } else if (head == '__dict') {
         const td = tdict(tvar(), tvar())
@@ -334,7 +333,7 @@ const infer = (nodes, hints) => {
       } else if (head == '.') {
         const type = analyze(tail[0], env, nonGeneric)
         const name = Array.isArray(tail[1]) ? (tail[1][0] == '__call' ? tail[1][1] : tail[1][0]) : tail[1].code
-        const ft = type.props[name] || (() => {throw Error(`'${name}' not found in '${Object.keys(type.props)}' of ${type}`)})()
+        const ft = prop(type, name)
         if (Array.isArray(tail[1]) && tail[1][0] == '__call') {
           return tlambda(...ft.types.slice(tail[1].slice(2).length))
         } else {
@@ -359,7 +358,7 @@ const infer = (nodes, hints) => {
     } else if (node == '__array') {
       return tarray(tvar())
     } else if (node == '__dict') {
-      return ttype('', () => ({}))
+      return tdict(tvar(), tvar())
     } else {
       const v = node.code
       if (v.match(/^[0-9]/)) {
@@ -700,6 +699,12 @@ const testAll = () => {
   // priority of operators
   check(3, '"hi".size + 1')
   check(3, '1 + "hi".size')
+
+  // string methods
+  check(1, '"a".size')
+  // array methods
+  check(1, '[0].size')
+  //check([1], '[0].map(n => n + 1)')
 
   puts('ok')
 }
