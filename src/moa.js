@@ -830,8 +830,6 @@ const main = () => {
     eval(js)
   } else if (cmd === 'new') {
     newProject()
-  } else if (cmd === 'server') {
-    startServer()
   } else {
     interactive()
   }
