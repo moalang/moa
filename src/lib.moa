@@ -1,5 +1,0 @@
-fn mhtml template:
-  "mhtml " ++ template
-
-test t:
-  t.eq "mhtml html" mhtml("html")

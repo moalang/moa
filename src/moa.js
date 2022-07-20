@@ -392,9 +392,11 @@ const infer = (nodes, hints) => {
   '+ - * / % += -= *= /= %='.split(' ').map(op => topEnv[op] = tlambda(tint, tint, tint))
   const defs = 'fn struct'.split(' ')
   const predict = (env, nodes) => nodes.map(x => Array.isArray(x) && defs.includes(x[0].code) ? env[x[1]] = tvar() : null)
+  const pruneTypes = o => Array.isArray(o) ? o.map(pruneTypes) : o.instance ? o.type = pruneTypes(o.instance) : o
   predict(topEnv, nodes)
   nodes.map(node => analyze(node, topEnv, []))
   nodes.hints = topEnv
+  pruneTypes(nodes)
   return nodes
 }
 const generate = nodes => {
@@ -743,93 +745,12 @@ const interactive = async () => {
   })
 }
 
-const newProject = () => {
-  const mhtml = `html lang=ja
-  head
-    meta charset=UTF-8
-    title: Template
-    link rel=stylesheet href=style.css
-  body
-    h1: Hello
-    script src=script.js`
-  fs.writeFileSync('index.mhtml', mhtml)
-  fs.writeFileSync('script.mjs', '')
-  fs.writeFileSync('style.mcss', '')
-}
-const startServer = () => {
-  const lib = require('./lib')
-  const filters = {
-    'html': ['mhtml', src => lib.mhtml(src.trim())],
-    'js': ['mjs', src => src.trim() ? compile(src.trim()).js : ''],
-    'css': ['mcss', src => src],
-  }
-  const convert = (ext, path) => {
-    const [newExt, f] = filters[ext] || [ext, src => src]
-    return fs.promises.readFile(path.slice(0, -ext.length) + newExt, {encoding: 'utf-8'}).then(f)
-  }
-  const http = require('http')
-  const url = require('url')
-  const server = http.createServer()
-  const types = {
-    'html': 'text/html; charset=utf-8',
-    'js': 'text/javascript; charset=utf-8',
-    'css': 'text/css; charset=utf-8',
-    'json': 'application/json',
-    'png': 'image/png',
-    'gif': 'image/gif',
-    'jpg': 'image/jpeg',
-    'svg': 'image/svg+xml',
-    'webp': 'image/webp',
-    'mp4': 'video/mp4',
-  }
-  server.on('request', async (req, res) => {
-    try {
-      const r = url.parse(req.url, true)
-      const path = r.path.endsWith('/') ? r.path + 'index.html' : r.path
-      const ext = (m => m ? m[0] : '')(path.match(/(?<=\.)[^.]+$/))
-      if (!ext) {
-        res.writeHead(404, {'Content-Type': type})
-        res.write(`${path} not found`)
-        return
-      }
-      const type = types[ext] || 'text/plain'
-      res.writeHead(200, {'Content-Type': type})
-      const content = await convert(ext, '.' + path.replaceAll('..', ''))
-      res.write(content)
-    } catch (e) {
-      res.write(e.message + '\n')
-      res.write(e.stack.toString())
-    } finally {
-      res.end()
-    }
-  })
-  puts('http://localhost:3000')
-  server.listen('3000')
-}
-
 const main = () => {
   const { execSync } = require('child_process')
   const [cmd, ...args] = process.argv.slice(2)
   const get = () => compile(args.map(path => fs.readFileSync(path, 'utf-8')).join('\n\n'))
-  if (cmd === 'selfcheck') {
+  if (cmd === 'test') {
     testAll()
-    execSync('node moa.js test lib.moa', {stdio: [0, process.stdout, process.stderr]})
-  } else if (cmd === 'run') {
-    eval(get().js + '\nmain()')
-  } else if (cmd === 'test') {
-    const t = (a,b) => {
-      if (JSON.stringify(a) === JSON.stringify(b)) {
-        process.stdout.write('.')
-      } else {
-        console.log('expect:', a)
-        console.log('actual:', b)
-        process.exit(1)
-      }
-    }
-    const js = get().js + `\n__test({eq: ${t.toString()}})\nconsole.log('ok')`
-    eval(js)
-  } else if (cmd === 'new') {
-    newProject()
   } else {
     interactive()
   }

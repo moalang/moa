@@ -1,6 +1,6 @@
 test:
 	@printf '\033\143'
-	@(cd src && time node moa.js selfcheck)
+	@(cd src && time node moa.js test)
 
 install:
 	echo "#!node\n\n" | cat - src/moa.js > bin/moa
