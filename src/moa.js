@@ -110,15 +110,16 @@ const infer = nodes => {
     'p': '1 1',
   }
   const set = (t, s) => s.split(' ').map(op => env[op] = t)
+  set('bool', 'true false')
   set('int int bool', '< <= > >=')
   set('bool bool bool', '|| &&')
   set('int int int', '+ - * / % += -= *= /= %=')
   for (const k in env) {
-    env[k] = env[k].split(' ').map(x => parseInt(x) || x)
+    env[k] = env[k].includes(' ') ? env[k].split(' ').map(x => parseInt(x) || x) : env[k]
   }
 
   const newEnv = (env, nodes) => Object.assign({}, env, nodes.reduce((o, n) => (o[n.code] = n.type = newVar(), o), {}))
-  const fresh = a => a.map(x => x in vars ? newVar() : x)
+  const fresh = o => Array.isArray(o) ? o.map(x => x in vars ? newVar() : x) : o
   const unify = (a, b, node) => {
     a = prune(a)
     b = prune(b)
@@ -128,33 +129,21 @@ const infer = nodes => {
       a === b ? a :
       fail(`"${a}" and "${b}" miss mtach around ${str(node)}`)
   }
+  const apply = ([head, ...remains], env) => head == '__stmt' ? stmt(remains, env) :
+        unify(inf(head, env), [...remains.map(x => inf(x, env)), newVar()], [head, ...remains]).slice(-1)[0]
   const inf = (node, env) => node.type ||= _inf(node, env)
-  const _inf = (node, env) => {
-    if (Array.isArray(node)) {
-      const [head, ...remains] = node
-      return head == '__stmt' ? stmt(remains, env) :
-        unify(inf(head, env), [...remains.map(x => inf(x, env)), newVar()], node).slice(-1)[0]
-    } else if (node.code === 'true' || node.code === 'false') {
-      return 'bool'
-    } else if (node.code.match(/^[0-9]+$/)) {
-      return 'int'
-    } else if (node.code.match(/^["`]/)) {
-      return 'string'
-    } else if (node.code.match(/^r["`]/)) {
-      return 'regexp'
-    } else {
-      return fresh(env[node.code]) || fail(`not implemented yet ${node}`)
-    }
-  }
+  const _inf = (node, env) => Array.isArray(node) ? apply(node, env) :
+    node.code.match(/^[0-9]+$/) ? 'int' :
+    node.code.match(/^["`]/) ? 'string' :
+    node.code.match(/^r["`]/) ? 'regexp' :
+    fresh(env[node.code]) || fail(`not implemented yet ${node}`)
   const stmt = (nodes, env) => {
     const exps = []
     for (const node of nodes) {
       if (Array.isArray(node)) {
-        const [head, ...remains] = node
+        const [head, name, ...args] = node
         if (head == 'fn') {
-          const name = remains[0]
-          const args = remains.slice(1, -1)
-          const body = remains[remains.length - 1]
+          const body = args.pop()
           env[name.code] = node.type = inf(body, newEnv(env, args))
           continue
         }
