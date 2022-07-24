@@ -142,21 +142,7 @@ const infer = nodes => {
     node.code.match(/^["`]/) ? 'string' :
     node.code.match(/^r["`]/) ? 'regexp' :
     fresh(env[node.code] || fail(`not implemented yet ${JSON.stringify(node)}`))
-  const stmt = (nodes, env) => {
-    const exps = []
-    for (const node of nodes) {
-      if (Array.isArray(node)) {
-        const [head, name, ...args] = node
-        if (head == 'fn') {
-          const body = args.pop()
-          env[name.code] = node.type = inf(body, newEnv(env, args))
-          continue
-        }
-      }
-      exps.push(node)
-    }
-    return nodes.type = exps.length ? exps.map(x => inf(x, env)).slice(-1)[0] : 'nil'
-  }
+  const stmt = (nodes, env) => nodes.type = nodes.length ? nodes.map(x => inf(x, env)).slice(-1)[0] : 'nil'
   stmt(nodes, env)
   return nodes
 }
