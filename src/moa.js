@@ -95,14 +95,10 @@ const parse = tokens => {
   return until(() => consumeLine(0), t => t.indent === 0)
 }
 
-
-
-
 const infer = nodes => {
   let tid = 1
-  const vars = {1: undefined}
-  const newVar = () => (vars[++tid] = undefined, tid)
-  const prune = t => vars[t] && tvars[t] ? prune(tvars[t]) : t
+  const newVar = () => ({id: tid++, instance: null})
+  const prune = t => t.instance ? t.instance = prune(t.instance) : t
   const env = {
     'if': 'bool 1 nil',
     'case': 'bool 1 1 1',
@@ -119,13 +115,14 @@ const infer = nodes => {
   }
 
   const newEnv = (env, nodes) => Object.assign({}, env, nodes.reduce((o, n) => (o[n.code] = n.type = newVar(), o), {}))
-  const fresh = o => Array.isArray(o) ? o.map(x => x in vars ? newVar() : x) : o
+  const fresh = o => Array.isArray(o) ? o.map(x => x.match(/^[0-9]/) ? newVar() : x) : o
   const unify = (a, b, node) => {
     a = prune(a)
     b = prune(b)
     return Array.isArray(a) && Array.isArray(b) && a.length === b.length ? a.map((x, i) => unify(x, b[i], node)) :
-      a in vars ? b :
-      b in vars ? a :
+      a.id && b.id && a.id === b.id ? a :
+      a.id ? a.instance = b :
+      b.id ? b.instance = a :
       a === b ? a :
       fail(`"${a}" and "${b}" miss mtach around ${str(node)}`)
   }
