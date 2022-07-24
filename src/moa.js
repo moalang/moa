@@ -12,6 +12,7 @@ const newType = ({name='', types=[], targs=[]}) => ({name, types, targs})
 const str = o => Array.isArray(o) ? '(' + o.map(str).join(' ') + ')' :
   typeof o === 'string' ? o :
   typeof o === 'object' && 'code' in o ? showNode(o) :
+  typeof o === 'object' && 'tid' in o ? `${o.tid}${o.instance ? '-' + str(o.instance) : ''}` :
   JSON.stringify(o)
 const showNode = n => n.code + (n.type ? `[${n.type.toString()}]` : '')
 const isOp2 = t => t && t.toString().match(/^[+\-*%/=><|&^]+$/)
@@ -77,28 +78,30 @@ const parse = tokens => {
       }
     }
   }
-  const consumeLine = indent => {
-    const line = until(bottom, t => t.indent === indent && t.code !== ':')
-    if (tokens[pos].code === ':') {
-      const nextIndent = tokens[++pos].indent
-      if (indent === nextIndent) {
-        line.push(until(bottom, t => t.indent === indent))
-      } else if (indent < nextIndent) {
-        const lines = until(() => bottom(nextIndent), t => t.indent === nextIndent)
-        line.push([newToken('__stmt'), ...lines])
+  const unnest = o => Array.isArray(o) && o.length === 1 ? unnest(o[0]) : o
+  const consumeLine = () => {
+    const head = tokens[pos]
+    const ary = until(bottom, t => t.line === head.line && t.indent === head.indent && t.code !== ':')
+    if (pos < tokens.length && tokens[pos].code === ':') {
+      const nt = tokens[++pos]
+      if (head.indent === nt.indent) {
+        ary.push(unnest(until(bottom, t => t.line === nt.line)))
+      } else if (head.indent < nt.indent) {
+        const nest = until(() => consumeLine(), t => t.indent === nt.indent)
+        ary.push(nest.length >= 2 ? [newToken('__stmt'), ...nest] : unnest(nest))
       } else {
         fail(`Line is endded with ":" but the following indentations are not expected ${tokens[pos]}`)
       }
     }
-    return line
+    return ary.length === 1 ? ary[0] : ary
   }
-  return until(() => consumeLine(0), t => t.indent === 0)
+  return until(() => consumeLine(), t => t.indent === 0)
 }
 
 const infer = nodes => {
   let tid = 1
-  const newVar = () => ({id: tid++, instance: null})
   const prune = t => t.instance ? t.instance = prune(t.instance) : t
+  const newVar = () => (o => { o.toString = () => str(o); return o } )({tid: tid++, instance: null})
   const env = {
     'if': 'bool 1 nil',
     'case': 'bool 1 1 1',
@@ -111,29 +114,34 @@ const infer = nodes => {
   set('bool bool bool', '|| &&')
   set('int int int', '+ - * / % += -= *= /= %=')
   for (const k in env) {
-    env[k] = env[k].includes(' ') ? env[k].split(' ').map(x => parseInt(x) || x) : env[k]
+    env[k] = env[k].includes(' ') ? env[k].split(' ') : env[k]
   }
 
   const newEnv = (env, nodes) => Object.assign({}, env, nodes.reduce((o, n) => (o[n.code] = n.type = newVar(), o), {}))
-  const fresh = o => Array.isArray(o) ? o.map(x => x.match(/^[0-9]/) ? newVar() : x) : o
+  const fresh = o => Array.isArray(o) ? (d => o.map(x => x.match(/^[0-9]/) ? d[x] ||= newVar() : x))({}) : o
   const unify = (a, b, node) => {
     a = prune(a)
     b = prune(b)
     return Array.isArray(a) && Array.isArray(b) && a.length === b.length ? a.map((x, i) => unify(x, b[i], node)) :
-      a.id && b.id && a.id === b.id ? a :
-      a.id ? a.instance = b :
-      b.id ? b.instance = a :
+      a.tid && b.tid && a.tid === b.tid ? a :
+      a.tid ? a.instance = b :
+      b.tid ? b.instance = a :
       a === b ? a :
-      fail(`"${a}" and "${b}" miss mtach around ${str(node)}`)
+      fail(`"${str(a)}" and "${str(b)}" miss mtach around ${str(node)}`)
   }
-  const apply = ([head, ...remains], env) => head == '__stmt' ? stmt(remains, env) :
-        unify(inf(head, env), [...remains.map(x => inf(x, env)), newVar()], [head, ...remains]).slice(-1)[0]
+  const apply = ([head, ...remains], env) =>
+    head === undefined ? fail(`Empty apply`) :
+    head == 'fn' ? env[remains[0].code] = inf(remains[remains.length - 1], newEnv(env, remains.slice(1, -1))) :
+    head == 'return' ? (remains.length === 0 ? 'nil' : inf(remains[0])) :
+    head == '__stmt' ? stmt(remains, env) :
+    unify(inf(head, env), [...remains.map(x => inf(x, env)), newVar()], [head, ...remains]).slice(-1)[0]
   const inf = (node, env) => node.type ||= _inf(node, env)
   const _inf = (node, env) => Array.isArray(node) ? apply(node, env) :
+    node.code === 'return' ? 'nil' :
     node.code.match(/^[0-9]+$/) ? 'int' :
     node.code.match(/^["`]/) ? 'string' :
     node.code.match(/^r["`]/) ? 'regexp' :
-    fresh(env[node.code]) || fail(`not implemented yet ${node}`)
+    fresh(env[node.code] || fail(`not implemented yet ${JSON.stringify(node)}`))
   const stmt = (nodes, env) => {
     const exps = []
     for (const node of nodes) {
@@ -147,7 +155,7 @@ const infer = nodes => {
       }
       exps.push(node)
     }
-    return nodes.type = exps.map(node => inf(node, env)).slice(-1)[0]
+    return nodes.type = exps.length ? exps.map(x => inf(x, env)).slice(-1)[0] : 'nil'
   }
   stmt(nodes, env)
   return nodes
@@ -287,6 +295,8 @@ const testAll = () => {
   const inf = (expect, exp, ...defs) => test((_, node) => node.type, expect, exp, ...defs)
   const check = (expect, exp, ...defs) => test((ret) => str(ret), str(expect), exp, ...defs)
   const error = (expect, exp, ...defs) => test((ret) => ret, str(expect), exp, ...defs)
+  inf('int', 'if true: return 1\n2')
+
   // -- Tests for type inference
   // primitives
   inf('int', '0')
@@ -295,26 +305,18 @@ const testAll = () => {
   // exp
   inf('int', '1 + 1')
   inf('bool', '1 < 1')
-
-  // -- Tests for executions
-  check(1, '1')
-  return
-/*
-  // -- Tests for type inference
-  // primitives
-  inf('int', '1')
-  inf('bool', 'true')
-  inf('bool', 'false')
-  // exp
-  inf('int', '+ 1 1')
-  inf('bool', '< 1 1')
   // branch
   inf('int', 'case true 1 2')
   inf('bool', 'case true true true')
   inf('nil', 'if true: return')
   inf('int', 'if true: return 1\n2')
   // value
-  inf('int', 'fn value 1')
+  inf('int', 'fn value: 1')
+
+  // -- Tests for executions
+  check(1, '1')
+  return
+/*
   // lambda
   inf('int', '() => 1')
   inf('(int int)', 'x => x + 1')
