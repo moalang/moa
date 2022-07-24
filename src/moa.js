@@ -133,7 +133,7 @@ const infer = nodes => {
     head === undefined ? fail(`Empty apply`) :
     head == 'fn' ? env[remains[0].code] = inf(remains[remains.length - 1], newEnv(env, remains.slice(1, -1))) :
     head == 'return' ? (remains.length === 0 ? 'nil' : inf(remains[0])) :
-    head == '__stmt' ? stmt(remains, env) :
+    head == '__stmt' ? remains.map(x => inf(x, env)).slice(-1)[0] :
     unify(inf(head, env), [...remains.map(x => inf(x, env)), newVar()], [head, ...remains]).slice(-1)[0]
   const inf = (node, env) => node.type ||= _inf(node, env)
   const _inf = (node, env) => Array.isArray(node) ? apply(node, env) :
@@ -142,8 +142,7 @@ const infer = nodes => {
     node.code.match(/^["`]/) ? 'string' :
     node.code.match(/^r["`]/) ? 'regexp' :
     fresh(env[node.code] || fail(`not implemented yet ${JSON.stringify(node)}`))
-  const stmt = (nodes, env) => nodes.type = nodes.length ? nodes.map(x => inf(x, env)).slice(-1)[0] : 'nil'
-  stmt(nodes, env)
+  nodes.map(x => inf(x, env))
   return nodes
 }
 
