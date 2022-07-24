@@ -102,17 +102,16 @@ const infer = nodes => {
   let tid = 1
   const prune = t => t.instance ? t.instance = prune(t.instance) : t
   const newVar = () => (o => { o.toString = () => str(o); return o } )({tid: tid++, instance: null})
-  const env = {
-    'if': 'bool 1 nil',
-    'case': 'bool 1 1 1',
-    '++': 'string string string',
-    'p': '1 1',
-  }
-  const set = (t, s) => s.split(' ').map(op => env[op] = t)
-  set('bool', 'true false')
-  set('int int bool', '< <= > >=')
-  set('bool bool bool', '|| &&')
-  set('int int int', '+ - * / % += -= *= /= %=')
+  const env = {}
+  const define = (s, t) => s.split(' ').map(op => env[op] = t)
+  define('if', 'bool 1 nil')
+  define('case', 'bool 1 1 1')
+  define('++', 'string string string')
+  define('p', '1 1')
+  define('true false', 'bool')
+  define('< <= > >=', 'int int bool')
+  define('|| &&', 'bool bool bool')
+  define('+ - * / % += -= *= /= %=', 'int int int')
   for (const k in env) {
     env[k] = env[k].includes(' ') ? env[k].split(' ') : env[k]
   }
