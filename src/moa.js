@@ -5,14 +5,15 @@ Error.stackTraceLimit = 100
 const fs = require('fs')
 const put = (...a) => process.stdout.write(...a.map(str))
 const puts = (...a) => { console.log(...a.map(str)); return a[a.length - 1] }
-const fail = (message, ...a) => { throw Error(`${message}${a.length ? str(a) : ''}`) }
+const fail = (message, ...a) => { throw Error(`${message}${a.length ? '\n' + str(a) : ''}`) }
 
 const newToken = (code, pos=0, indent=0, line=0, type=undefined) => ({code, pos, indent, line, type, toString: () => code})
 const newType = ({name='', types=[], targs=[]}) => ({name, types, targs})
 const str = o => Array.isArray(o) ? '(' + o.map(str).join(' ') + ')' :
   typeof o === 'string' ? o :
   typeof o === 'object' && 'code' in o ? showNode(o) :
-  typeof o === 'object' && 'tid' in o ? `${o.tid}${o.instance ? '-' + str(o.instance) : ''}` :
+  typeof o === 'object' && 'instance' in o ? str(o.instance) :
+  typeof o === 'object' && 'tid' in o ? o.tid :
   JSON.stringify(o)
 const showNode = n => n.code + (n.type ? `[${n.type.toString()}]` : '')
 const isOp2 = t => t && t.toString().match(/^[+\-*%/=><|&^]+$/)
@@ -40,68 +41,79 @@ const tokenize = source => {
 
 const parse = tokens => {
   let pos = 0
-  const until = (unit, guard) => {
+  const until = (unit, guard, opt={}) => {
     const a = []
     while (pos < tokens.length && guard(tokens[pos])) {
       a.push(unit(tokens[pos]))
     }
+    if (opt.drop && !guard(tokens[pos])) {
+      ++pos
+    }
     return a
   }
   const bottom = () => {
-    const lhs = tokens[pos++] || fail('EOT')
-    if (lhs.code === '{') {
-      return [newToken('__dict'), ...until(bottom, t => t !== '}')]
-    } else if (lhs.code === '(') {
-      return bottom()
-    } else if (lhs.code === '[') {
-      return [newToken('__array'), ...until(bottom, ']')]
-    } else if (pos >= tokens.length) {
-      return lhs
+    const token = tokens[pos++] || fail('EOT', {tokens})
+    if (token.code === '{') {
+      return [newToken('__dict'), ...until(exp, t => t.code !== '}', {drop: true})]
+    } else if (token.code === '(') {
+      return until(exp, t => t.code !== ')', {drop: true})
+    } else if (token.code === '[') {
+      return [newToken('__array'), ...until(exp, t => t.code !== ']', {drop: true})]
     } else {
-      const pred = tokens[pos++]
-      if (pred.code === '.') {
-        const rhs = bottom()
-        if (Array.isArray(rhs) && isOp2(rhs[0]) || rhs[0] == '__at') {
-          return [rhs[0], [pred, lhs, rhs[1]], rhs[2]]
-        } else {
-          return [pred, lhs, rhs]
-        }
-      } else if (pred.code === '(', lhs.pos + lhs.code.length === pred.pos) {
-        return [newToken('__call'), lhs, ...until(bottom, t => t.code !== ')')]
-      } else if (pred.code === '[', lhs.pos + lhs.code.length === pred.pos) {
-        return [newToken('__at'), lhs, ...until(bottom, t => t.code !== ']')]
-      } else if (isOp2(pred)) {
-        return [pred, lhs, bottom()]
+      return token
+    }
+  }
+  const exp = () => {
+    const lhs = bottom()
+    if (pos >= tokens.length) {
+      return lhs
+    }
+    const pred = tokens[pos++]
+    if (pred.code === '.') {
+      const rhs = bottom()
+      if (Array.isArray(rhs) && isOp2(rhs[0]) || rhs[0] == '__at') {
+        return [rhs[0], [pred, lhs, rhs[1]], rhs[2]]
       } else {
-        --pos
-        return lhs
+        return [pred, lhs, rhs]
       }
+    } else if (pred.code === '(' && lhs.pos + lhs.code.length === pred.pos) {
+      return [newToken('__call'), lhs, ...until(exp, t => t.code !== ')', {drop: true})]
+    } else if (pred.code === '[' && lhs.pos + lhs.code.length === pred.pos) {
+      return [newToken('__at'), lhs, ...until(exp, t => t.code !== ']', {drop: true})]
+    } else if (pred.code === '=>') {
+      return [pred, lhs, exp()]
+    } else if (isOp2(pred)) {
+      return [pred, lhs, exp()]
+    } else {
+      --pos
+      return lhs
     }
   }
   const unnest = o => Array.isArray(o) && o.length === 1 ? unnest(o[0]) : o
   const consumeLine = () => {
     const head = tokens[pos]
-    const ary = until(bottom, t => t.line === head.line && t.indent === head.indent && t.code !== ':')
+    const ary = until(exp, t => t.line === head.line && t.indent === head.indent && t.code !== ':')
     if (pos < tokens.length && tokens[pos].code === ':') {
       const nt = tokens[++pos]
       if (head.indent === nt.indent) {
-        ary.push(unnest(until(bottom, t => t.line === nt.line)))
+        ary.push(unnest(until(exp, t => t.line === nt.line)))
       } else if (head.indent < nt.indent) {
         const nest = until(() => consumeLine(), t => t.indent === nt.indent)
         ary.push(nest.length >= 2 ? [newToken('__stmt'), ...nest] : unnest(nest))
       } else {
-        fail(`Line is endded with ":" but the following indentations are not expected ${tokens[pos]}`)
+        fail(`Line is endded with ":" but the following indentations are not expected ${tokens[pos]}`, {tokens})
       }
     }
     return ary.length === 1 ? ary[0] : ary
   }
-  return until(() => consumeLine(), t => t.indent === 0)
+  return until(consumeLine, t => t.indent === 0)
 }
 
 const infer = nodes => {
   let tid = 1
   const prune = t => t.instance ? t.instance = prune(t.instance) : t
   const newVar = () => (o => { o.toString = () => str(o); return o } )({tid: tid++, instance: null})
+  const newVars = o => (Array.isArray(o) ? o : [o]).map(t => [t.code, newVar()])
   const env = {}
   const define = (s, t) => s.split(' ').map(op => env[op] = t)
   define('if', 'bool 1 nil')
@@ -126,21 +138,22 @@ const infer = nodes => {
       a.tid ? a.instance = b :
       b.tid ? b.instance = a :
       a === b ? a :
-      fail(`"${str(a)}" and "${str(b)}" miss mtach around ${str(node)}`)
+      fail(`type miss match between '${str(a)}' and '${str(b)}' around ${str(node)}`, {nodes})
   }
-  const apply = ([head, ...remains], env) =>
-    head === undefined ? fail(`Empty apply`) :
+  const call = ([head, ...remains], env) =>
+    head === undefined ? fail(`Empty call`, {nodes}) :
     head == 'fn' ? env[remains[0].code] = inf(remains[remains.length - 1], newEnv(env, remains.slice(1, -1))) :
     head == 'return' ? (remains.length === 0 ? 'nil' : inf(remains[0])) :
     head == '__stmt' ? remains.map(x => inf(x, env)).slice(-1)[0] :
+    head == '=>' ? (params => [...params.map(x => x[1]), inf(remains[1], Object.assign({}, env, Object.fromEntries(params)))])(newVars(remains[0])) :
     unify(inf(head, env), [...remains.map(x => inf(x, env)), newVar()], [head, ...remains]).slice(-1)[0]
   const inf = (node, env) => node.type ||= _inf(node, env)
-  const _inf = (node, env) => Array.isArray(node) ? apply(node, env) :
+  const _inf = (node, env) => Array.isArray(node) ? call(node, env) :
     node.code === 'return' ? 'nil' :
     node.code.match(/^[0-9]+$/) ? 'int' :
     node.code.match(/^["`]/) ? 'string' :
     node.code.match(/^r["`]/) ? 'regexp' :
-    fresh(env[node.code] || fail(`not implemented yet ${JSON.stringify(node)}`))
+    fresh(env[node.code] || fail(`not implemented yet ${JSON.stringify(node)}`, {nodes, env}))
   nodes.map(x => inf(x, env))
   return nodes
 }
@@ -191,6 +204,8 @@ const generate = nodes => {
     } else if (head == '.') {
       const key = tail[0].type.name + '_' + args[1]
       return key in embedded ? embedded[key](...args) : `${args[0]}.${args[1]}`
+    } else if (head.code === '=>') {
+      return `(${(Array.isArray(tail[0]) ? tail[0] : [tail[0].code]).join(", ")}) => ${args[1]}`
     } else if (isOp2(head)) {
       const [lhs, rhs] = args
       if (head == '=>') {
@@ -276,10 +291,9 @@ const testAll = () => {
     }
   }
   const reject = (exp, ...defs) => test((ret) => /^type miss match/.test(ret) ? ret.slice(0, 15) : ret, 'type miss match', exp, ...defs)
-  const inf = (expect, exp, ...defs) => test((_, node) => node.type, expect, exp, ...defs)
+  const inf = (expect, exp, ...defs) => test((_, node) => str(node.type), expect, exp, ...defs)
   const check = (expect, exp, ...defs) => test((ret) => str(ret), str(expect), exp, ...defs)
   const error = (expect, exp, ...defs) => test((ret) => ret, str(expect), exp, ...defs)
-  inf('int', 'if true: return 1\n2')
 
   // -- Tests for type inference
   // primitives
@@ -296,14 +310,14 @@ const testAll = () => {
   inf('int', 'if true: return 1\n2')
   // value
   inf('int', 'fn value: 1')
+  // lambda
+  inf('(int)', '() => 1')
+  inf('(int int)', 'x => x + 1')
 
   // -- Tests for executions
   check(1, '1')
   return
 /*
-  // lambda
-  inf('int', '() => 1')
-  inf('(int int)', 'x => x + 1')
   // simple function
   inf('(int int)', 'fn inc a: a + 1')
   inf('(int int int)', 'fn add a b: a + b')
