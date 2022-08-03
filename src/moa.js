@@ -6,6 +6,7 @@ const fs = require('fs')
 const put = (...a) => process.stdout.write(...a.map(str))
 const puts = (...a) => { console.log(...a.map(str)); return a[a.length - 1] }
 const fail = (message, ...a) => { throw Error(`${message}${a.length ? '\n' + str(a) : ''}`) }
+const many = (a, f, g) => { while (f()) { a.push(g()) }; return a }
 
 const newToken = (code, pos=0, indent=0, line=0, type=undefined) => ({code, pos, indent, line, type, toString: () => code})
 const newType = ({name='', types=[], targs=[]}) => ({name, types, targs})
@@ -41,26 +42,15 @@ const tokenize = source => {
 
 const parse = tokens => {
   let pos = 0
-  const until = (unit, guard, opt={}) => {
-    const a = []
-    while (pos < tokens.length && guard(tokens[pos])) {
-      a.push(unit(tokens[pos]))
-    }
-    if (opt.drop && !guard(tokens[pos])) {
-      ++pos
-    }
-    return a
-  }
+  const until = (unit, guard) => many([], () => pos < tokens.length && guard(tokens[pos]), () => unit(tokens[pos]))
+  const bracket = (unit, end) => (a => { ++pos; return a } )(until(unit, t => t.code !== end))
   const bottom = () => {
     const token = tokens[pos++] || fail('EOT', {tokens})
-    if (token.code === '{') {
-      return [newToken('__dict'), ...until(exp, t => t.code !== '}', {drop: true})]
-    } else if (token.code === '(') {
-      return until(exp, t => t.code !== ')', {drop: true})
-    } else if (token.code === '[') {
-      return [newToken('__array'), ...until(exp, t => t.code !== ']', {drop: true})]
-    } else {
-      return token
+    switch (token.code) {
+      case '{': return [newToken('__dict'), ...bracket(exp, '}')]
+      case '(': return bracket(exp, ')')
+      case '[': return [newToken('__array'), ...bracket(exp, ']')]
+      default: return token
     }
   }
   const exp = () => {
@@ -68,26 +58,16 @@ const parse = tokens => {
     if (pos >= tokens.length) {
       return lhs
     }
+    const curr = tokens[pos-1]
     const pred = tokens[pos++]
+    const close = curr.pos + curr.code.length === pred.pos
     if (pred.code === '.') {
       const rhs = bottom()
-      if (Array.isArray(rhs) && isOp2(rhs[0]) || rhs[0] == '__at') {
-        return [rhs[0], [pred, lhs, rhs[1]], rhs[2]]
-      } else {
-        return [pred, lhs, rhs]
-      }
-    } else if (pred.code === '(' && lhs.pos + lhs.code.length === pred.pos) {
-      return [newToken('__call'), lhs, ...until(exp, t => t.code !== ')', {drop: true})]
-    } else if (pred.code === '[' && lhs.pos + lhs.code.length === pred.pos) {
-      return [newToken('__at'), lhs, ...until(exp, t => t.code !== ']', {drop: true})]
-    } else if (pred.code === '=>') {
-      return [pred, lhs, exp()]
-    } else if (isOp2(pred)) {
-      return [pred, lhs, exp()]
-    } else {
-      --pos
-      return lhs
-    }
+      return isOp2(rhs[0]) || rhs[0] == '__at' ? [rhs[0], [pred, lhs, rhs[1]], rhs[2]] : [pred, lhs, rhs]
+    } else if (pred.code === '(' && close) { return [newToken('__call'), lhs, ...bracket(exp, ')')]
+    } else if (pred.code === '[' && close) { return [newToken('__at'), lhs, ...bracket(exp, ']')]
+    } else if (isOp2(pred)) { return [pred, lhs, exp()]
+    } else { --pos; return lhs }
   }
   const unnest = o => Array.isArray(o) && o.length === 1 ? unnest(o[0]) : o
   const consumeLine = () => {
@@ -98,8 +78,8 @@ const parse = tokens => {
       if (head.indent === nt.indent) {
         ary.push(unnest(until(exp, t => t.line === nt.line)))
       } else if (head.indent < nt.indent) {
-        const nest = until(() => consumeLine(), t => t.indent === nt.indent)
-        ary.push(nest.length >= 2 ? [newToken('__stmt'), ...nest] : unnest(nest))
+        const nest = until(consumeLine, t => t.indent === nt.indent)
+        ary.push(nest.length === 1 ? unnest(nest) : [newToken('__stmt'), ...nest])
       } else {
         fail(`Line is endded with ":" but the following indentations are not expected ${tokens[pos]}`, {tokens})
       }

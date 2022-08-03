@@ -6,17 +6,50 @@ prop: "." id
 call: "(" exp+ ")"
 at: "[" exp "]"
 bottom:
-| "(" exp ")"                     # priority  : 1 * (2 + 3)
-| "(" exp exp+ ")"                # apply     : f(a) == (f a)
-| "[" exp* "]"                    # array     : [], [1 2]
-| "{" id* (id ":" exp)* "}"       # dictionary: {}, {one "two":2}
-| '"' [^"]* '"'                   # string    : "hi"
-| '`' ("$" unit | [^"])* '`'      # template  : `hi $user.name`
-| '"' [^"]* '"'                   # regexp    : r"hi"
-| id ("," id)* "=>" exp           # lambda    : a,b => a + b
-| [0-9]+ ("." [0-9]+)?            # number    : 1, 0.5
-| id                              # id        : name
+| "(" exp ")"                  # priority  : 1 * (2 + 3)
+| "[" exp* "]"                 # array     : [], [1 2]
+| "{" id* (exp ":" exp)* "}"   # dictionary: {}, {one "two":2}
+| '"' [^"]* '"'                # string    : "hi"
+| '`' ("$" unit | [^"])* '`'   # template  : `hi $user.name`
+| '"' [^"]* '"'                # regexp    : r"hi"
+| id ("," id)* "=>" exp        # lambda    : a,b => a + b
+| [0-9]+ ("." [0-9]+)?         # number    : 1, 0.5
+| id                           # id        : name
 id: [A-Za-z_][A-Za-z0-9_]*
 op1: "!"
 op2: [+-/%*=<>|&^;]+
 keywords: qw(let var fn struct adt if return case match fail test)
+
+idea for bottom:
+| "(" id* (id ":" exp)* ")"    # struct: (), (one "two":2)
+| id ("," id)* "=>" exp        # lambda    : a,b => a + b
+| "\" id* ":" exp              # lambda    : \a b: a + b
+
+a,b => a + b
+|x| x
+|a b| a + b
+|| 1 + 2
+
+Symbols
+_          part of id
+.          delimitor to access field or method of object
+" `        string
+#          comment
++ - * / %  calculation
+( )        priority
+[ ]        list
+{ }        dictionary
+< > =      comparing
+,          delimitor for arguments in lambda expression
+:          delimitor between reserved words and the following block which defined indent
+\ undefined
+^ undefined
+? undefined
+@ undefined
+& undefined
+| undefined
+~ undefined
+' undefined
+! undefined
+$ undefined
+; undefined
