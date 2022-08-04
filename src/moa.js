@@ -151,85 +151,55 @@ const generate = nodes => {
     o.code.startsWith('`') ? template(o) :
     o.code
   const template = s => s.replace(/\$[A-Za-z0-9_.]+/g, x => '${' + x.slice(1) + '}')
+  const isExp = code => !/^(?:if|for|return)/.test(code)
   const _case = a => a.length === 0 ? (() => {throw Error('Invalid case expression')})() :
     a.length === 1 ? a[0] :
     `${a[0]} ? ${a[1]} : ` + _case(a.slice(2))
-  const isExp = code => !/^(?:if|for|return)/.test(code)
   const statement = a => a.map((v, i) => a.length - 1 === i && isExp(v) ? 'return ' + v : v)
+  const method = (key, args) => key in embedded ? embedded[key](...args) : `${args[0]}.${args[1]}`
+  const struct = (name, fields) => `const ${name} = (${fields}) => ({${fields}})`
+  const match = args => {
+    const error = '(()=>{throw Error(`Unmatch error: "${__.__tag}"`)})()'
+    const g = a => a.length === 3 ? `__.__tag === '${a[0]}' ? (${gen(a[1])} => ${gen(a[2])})(__.__val) : ` :
+      a.length === 2 ? `__.__tag === '${a[0]}' ? ${gen(a[1])} : ` :
+      (() => {throw Error(`Unexpected condition of match ${a}`)})()
+    const match = tail[1].slice(1).map(g).join('\n  ') + error
+    return `(__ => ${match})(${args[0]})`
+  }
+  const adt = o => Array.isArray(o) ?
+    `const ${o[0]} = __val => ({__tag:'${o[0]}',__val})` :
+    `const ${o} = {__tag:'${o}'}`
+  const op2 = (head, lhs, rhs) => {
+    switch (head.code) {
+      case '=>': return `((${lhs}) => ${rhs})`
+      case '/': return `(((l,r) => r === 0 ? (() => { throw Error('Zero division error') })() : l / r)(${lhs},${rhs}))`
+      case '++': return `${lhs}.toString() + ${rhs}.toString()`
+      default: return isAssign(head) ? `${lhs} ${head} ${rhs}` : `(${lhs} ${head} ${rhs})`
+    }
+  }
   const apply = node => {
     if (node.length === 0) {
       return 'undefined'
     }
     const [head, ...tail] = node
     const args = tail.map(gen)
-    // internal marks
-    if (head == '__stmt') {
-      args[args.length - 1] = `return ${args[args.length - 1]}`
-      return `(() => { ${args.join('\n')} })()`
-    } else if (head == '__call') {
-      if (tail[0] == 'fail') {
-        return `(() => { throw Error(${args[1]}) })()`
-      } else {
-        return args[0] + `(${args.slice(1)})`
-      }
-    } else if (head == '__array') {
-      return `[${args.join(', ')}]`
-    } else if (head == '__dict') {
-      const kvs = tail.map(o => Array.isArray(o) ? `${o[1]}:${o[2]}` : o).join(',')
-      return `({${kvs}})`
-    } else if (head == '__at') {
-      return `${args[0]}[${args[1]}]`
-
-    // operators
-    } else if (head == '.') {
-      const key = tail[0].type.name + '_' + args[1]
-      return key in embedded ? embedded[key](...args) : `${args[0]}.${args[1]}`
-    } else if (head.code === '=>') {
-      return `(${(Array.isArray(tail[0]) ? tail[0] : [tail[0].code]).join(", ")}) => ${args[1]}`
-    } else if (isOp2(head)) {
-      const [lhs, rhs] = args
-      if (head == '=>') {
-        return `((${lhs}) => ${rhs})`
-      } else if (head == '/') {
-        return `(((l,r) => r === 0 ? (() => { throw Error('Zero division error') })() : l / r)(${lhs},${rhs}))`
-      } else if (head == '++') {
-        return `${lhs}.toString() + ${rhs}.toString()`
-      } else if (isAssign(head)) {
-        return `${lhs} ${head} ${rhs}`
-      } else {
-        return `(${lhs} ${head} ${rhs})`
-      }
-
-    // keywords
-    } else if (head == 'let') {
-      return `const ${args[0]} = ${args[1]}`
-    } else if (head == 'var') {
-      return `let ${args[0]} = ${args[1]}`
-    } else if (head == 'fn') {
-      return `const ${args[0]} = (${args.slice(1, -1)}) => ${args[args.length - 1]}`
-    } else if (head == 'struct') {
-      const names = tail[1].slice(1).map(x => x[0])
-      return `const ${tail[0]} = (${names}) => ({${names}})`
-    } else if (head == 'adt') {
-      const f = o => Array.isArray(o) ?
-        `const ${o[0]} = __val => ({__tag:'${o[0]}',__val})` :
-        `const ${o} = {__tag:'${o}'}`
-      return tail[1].slice(1).map(f).join('\n')
-    } else if (head == 'if') {
-      return `if (${args[0]}) { ${args[1]} }`
-    } else if (head == 'case') {
-      return _case(args)
-    } else if (head == 'match') {
-      const error = '(()=>{throw Error(`Unmatch error: "${__.__tag}"`)})()'
-      const f = a => a.length === 3 ? `__.__tag === '${a[0]}' ? (${gen(a[1])} => ${gen(a[2])})(__.__val) : ` :
-        a.length === 2 ? `__.__tag === '${a[0]}' ? ${gen(a[1])} : ` :
-        (() => {throw Error(`Unexpected condition of match ${a}`)})()
-      const match = tail[1].slice(1).map(f).join('\n  ') + error
-      return `(__ => ${match})(${args[0]})`
-
-    // general
-    } else {
-      return `${gen(head)}(${args})`
+    switch (head.code) {
+      case '__stmt': return `(() => { ${statement(args)} })()`
+      case '__call': return tail[0] == 'fail' ?  `(() => { throw Error(${args[1]}) })()` : args[0] + `(${args.slice(1)})`
+      case '__array': return `[${args.join(', ')}]`
+      case '__dict': return `({${ tail.map(o => Array.isArray(o) ? `${o[1]}:${o[2]}` : o).join(',') }})`
+      case '__at': return `${args[0]}[${args[1]}]`
+      case '=>': return `(${(Array.isArray(tail[0]) ? tail[0] : [tail[0].code]).join(", ")}) => ${args[1]}`
+      case '.': return method(tail[0].type.name + '_' + args[1], args)
+      case 'let': return `const ${args[0]} = ${args[1]}`
+      case 'var': return `let ${args[0]} = ${args[1]}`
+      case 'fn': return `const ${args[0]} = (${args.slice(1, -1)}) => ${args[args.length - 1]}`
+      case 'struct': return struct(tail[0], tail[1].slice(1).map(x => x[0]))
+      case 'adt': return tail[1].slice(1).map(adt).join('\n')
+      case 'if': return `if (${args[0]}) { ${args[1]} }`
+      case 'case': return _case(args)
+      case 'match': match(args)
+      default: return isOp2(head) ? op2(head, args[0], args[1]) : `${gen(head)}(${args})`
     }
   }
   return nodes.map(gen).join(';\n')
