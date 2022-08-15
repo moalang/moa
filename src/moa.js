@@ -10,13 +10,15 @@ const many = (a, f, g) => { while (f()) { a.push(g()) }; return a }
 
 const newToken = (code, pos=0, indent=0, line=0, type=undefined) => ({code, pos, indent, line, type, toString: () => code})
 const newType = ({name='', types=[], targs=[]}) => ({name, types, targs})
-const str = o => Array.isArray(o) ? '(' + o.map(str).join(' ') + ')' :
+const str = o =>
+  Array.isArray(o) ? showNode('(' + o.map(str).join(' ') + ')', o.type) :
   typeof o === 'string' ? o :
-  typeof o === 'object' && 'code' in o ? showNode(o) :
-  typeof o === 'object' && 'instance' in o ? str(o.instance) :
-  typeof o === 'object' && 'tid' in o ? o.tid :
+  typeof o === 'object' && 'code' in o ? showNode(o.code, o.type) : // for node
+  typeof o === 'object' && o.instance ? str(o.instance) :           // for type
+  typeof o === 'object' && 'tid' in o ? o.tid :                     // for type
   JSON.stringify(o)
-const showNode = n => n.code + (n.type ? `[${n.type.toString()}]` : '')
+const showNode = (base, type) => base + (type ? `[${type.toString()}]` : '')
+const simplifyType = t => (d => t.replace(/\d+/g, s => d[s] ||= Object.keys(d).length + 1))({})
 const isOp2 = t => t && t.toString().match(/^[+\-*%/=><|&^]+$/)
 const isAssign = t => '+= -= *= /= %= ='.split(' ').includes(t.code)
 
@@ -42,6 +44,7 @@ const tokenize = source => {
 
 const parse = tokens => {
   let pos = 0
+  const to_a = o => Array.isArray(o) ? o : [o]
   const until = (unit, guard) => many([], () => pos < tokens.length && guard(tokens[pos]), () => unit(tokens[pos]))
   const bracket = (unit, end) => (a => { ++pos; return a } )(until(unit, t => t.code !== end))
   const bottom = () => {
@@ -66,6 +69,7 @@ const parse = tokens => {
       return isOp2(rhs[0]) || rhs[0] == '__at' ? [rhs[0], [pred, lhs, rhs[1]], rhs[2]] : [pred, lhs, rhs]
     } else if (pred.code === '(' && close) { return [newToken('__call'), lhs, ...bracket(exp, ')')]
     } else if (pred.code === '[' && close) { return [newToken('__at'), lhs, ...bracket(exp, ']')]
+    } else if (pred.code === '=>') { return [pred, to_a(lhs), exp()]
     } else if (isOp2(pred)) { return [pred, lhs, exp()]
     } else { --pos; return lhs }
   }
@@ -93,7 +97,14 @@ const infer = nodes => {
   let tid = 1
   const prune = t => t.instance ? t.instance = prune(t.instance) : t
   const newVar = () => (o => { o.toString = () => str(o); return o } )({tid: tid++, instance: null})
-  const newVars = o => (Array.isArray(o) ? o : [o]).map(t => [t.code, newVar()])
+  const newVars = o => o.map(t => [t.code, newVar()])
+  const func = (a, env) => a.length === 1 ? inf(a[0], env) : body(a, env)
+  const body = (a, env) => {
+    const args = a.slice(0, -1).map((t, i) => [t.code, t.type = newVar()])
+    const v = newVar()
+    const ret = unify(v, inf(a[a.length - 1], Object.assign({}, env, Object.fromEntries(args))), a)
+    return [...args.map(x => x[1]), ret]
+  }
   const env = {}
   const define = (s, t) => s.split(' ').map(op => env[op] = t)
   define('if', 'bool 1 nil')
@@ -109,7 +120,7 @@ const infer = nodes => {
   }
 
   const newEnv = (env, nodes) => Object.assign({}, env, nodes.reduce((o, n) => (o[n.code] = n.type = newVar(), o), {}))
-  const fresh = o => Array.isArray(o) ? (d => o.map(x => x.match(/^[0-9]/) ? d[x] ||= newVar() : x))({}) : o
+  const fresh = o => Array.isArray(o) ? (d => o.map(x => x.match(/^[0-9]/) ? (d[x] ||= newVar()) : x))({}) : o
   const unify = (a, b, node) => {
     a = prune(a)
     b = prune(b)
@@ -122,10 +133,11 @@ const infer = nodes => {
   }
   const call = ([head, ...remains], env) =>
     head === undefined ? fail(`Empty call`, {nodes}) :
-    head == 'fn' ? env[remains[0].code] = inf(remains[remains.length - 1], newEnv(env, remains.slice(1, -1))) :
+    head == 'fn' ? (a => unify(env[remains[0].code] = newVar(), func(a, env), a))(remains.slice(1)) :
     head == 'return' ? (remains.length === 0 ? 'nil' : inf(remains[0])) :
     head == '__stmt' ? remains.map(x => inf(x, env)).slice(-1)[0] :
-    head == '=>' ? (params => [...params.map(x => x[1]), inf(remains[1], Object.assign({}, env, Object.fromEntries(params)))])(newVars(remains[0])) :
+    head == '__call' ? call(remains, env) :
+    head == '=>' ? func([...remains[0], remains[1]], env) :
     unify(inf(head, env), [...remains.map(x => inf(x, env)), newVar()], [head, ...remains]).slice(-1)[0]
   const inf = (node, env) => node.type ||= _inf(node, env)
   const _inf = (node, env) => Array.isArray(node) ? call(node, env) :
@@ -241,7 +253,7 @@ const testAll = () => {
     }
   }
   const reject = (exp, ...defs) => test((ret) => /^type miss match/.test(ret) ? ret.slice(0, 15) : ret, 'type miss match', exp, ...defs)
-  const inf = (expect, exp, ...defs) => test((_, node) => str(node.type), expect, exp, ...defs)
+  const inf = (expect, exp, ...defs) => test((_, node) => simplifyType(str(node.type)), expect, exp, ...defs)
   const check = (expect, exp, ...defs) => test((ret) => str(ret), str(expect), exp, ...defs)
   const error = (expect, exp, ...defs) => test((ret) => ret, str(expect), exp, ...defs)
 
@@ -261,22 +273,23 @@ const testAll = () => {
   // value
   inf('int', 'fn value: 1')
   // lambda
-  inf('(int)', '() => 1')
+  inf('int', '() => 1')
   inf('(int int)', 'x => x + 1')
+  // simple function
+  inf('(int int)', 'fn inc a: a + 1')
+  inf('(int int int)', 'fn add a b: a + b')
+  // recursion function
+  inf('int', 'fn f a: 1 + f(a)\nf 2')
+  // generic function
+  inf('(1 1)', 'fn f a: a')
+  inf('(1 2 1)', 'fn f a b: a')
+  inf('(1 2 2)', 'fn f a b: b')
+  inf('int', 'f 1', 'fn f a: a')
 
   // -- Tests for executions
   check(1, '1')
   return
 /*
-  // simple function
-  inf('(int int)', 'fn inc a: a + 1')
-  inf('(int int int)', 'fn add a b: a + b')
-  // generic function
-  inf('(1 1)', 'fn f a a')
-  inf('(1 2 1)', 'fn f a b a')
-  inf('(1 2 2)', 'fn f a b b')
-  inf('int', 'fn f a a\nf 1')
-  inf('bool', 'fn f a a\nf 1\nf true')
   // dict
   inf('dictionary(string int)', '{"a":1}')
   inf('int', '{"a":1}["a"]')
