@@ -9,13 +9,13 @@ const fail = (message, ...a) => { throw Error(`${message}${a.length ? '\n' + str
 const many = (a, f, g) => { while (f()) { a.push(g()) }; return a }
 
 const newToken = (code, pos=0, indent=0, line=0, type=undefined) => ({code, pos, indent, line, type, toString: () => code})
-const newType = ({name='', types=[], targs=[]}) => ({name, types, targs})
 const str = o =>
   Array.isArray(o) ? showNode('(' + o.map(str).join(' ') + ')', o.type) :
   typeof o === 'string' ? o :
-  typeof o === 'object' && 'code' in o ? showNode(o.code, o.type) : // for node
-  typeof o === 'object' && o.instance ? str(o.instance) :           // for type
-  typeof o === 'object' && 'tid' in o ? o.tid :                     // for type
+  typeof o === 'object' && 'code' in o ? showNode(o.code, o.type) :    // for node
+  typeof o === 'object' && o.instance ? str(o.instance) :              // for type
+  typeof o === 'object' && 'tid' in o ? o.tid :                        // for type
+  typeof o === 'object' && 'targs' in o ? `${o.name}${str(o.targs)}` : // for type
   JSON.stringify(o)
 const showNode = (base, type) => base + (type ? `[${type.toString()}]` : '')
 const simplifyType = t => (d => t.replace(/\d+/g, s => d[s] ||= Object.keys(d).length + 1))({})
@@ -25,12 +25,11 @@ const isAssign = t => '+= -= *= /= %= ='.split(' ').includes(t.code)
 const tokenize = source => {
   const texts = source.split(/((?: |\n|#[^\n]*)+|[0-9]+(?:\.[0-9]+)?|[+\-*%/=><|&^]+|r?"[^"]*"|`[^`]*`|[A-Za-z0-9_]+(?:,[A-Za-z0-9_]+)*|.)/g).filter(x => x)
   const tokens = []
-  let pos = -texts[0].length
+  let pos = 0
   let line = 1
   let indent = 0
   for (const t of texts) {
     const brs = t.split('\n')
-    pos += t.length
     line += brs.length - 1
     if (brs.length >= 2) {
       indent = brs[brs.length - 1].length
@@ -38,6 +37,7 @@ const tokenize = source => {
     if (t.replace(/[ \t\n]+/, '')) {
       tokens.push(newToken(t.trim(), pos, indent, line))
     }
+    pos += t.length
   }
   return tokens
 }
@@ -98,28 +98,25 @@ const infer = nodes => {
   const prune = t => t.instance ? t.instance = prune(t.instance) : t
   const newVar = () => (o => { o.toString = () => str(o); return o } )({tid: tid++, instance: null})
   const newVars = o => o.map(t => [t.code, newVar()])
+  //const isNonGeneric = (name, env) => `___${name}` in env
+  //const addNonGenerics = names => names.map((name, i) => [name, i.toString()])
   const func = (a, env) => a.length === 1 ? inf(a[0], env) : body(a, env)
   const body = (a, env) => {
-    const args = a.slice(0, -1).map((t, i) => [t.code, t.type = newVar()])
-    const v = newVar()
-    const ret = unify(v, inf(a[a.length - 1], Object.assign({}, env, Object.fromEntries(args))), a)
+    const args = a.slice(0, -1).map((t, i) => [t.code, newVar()])
+    const ret = inf(a[a.length - 1], Object.assign({}, env, Object.fromEntries(args)))
     return [...args.map(x => x[1]), ret]
   }
   const env = {}
-  const define = (s, t) => s.split(' ').map(op => env[op] = t)
-  define('if', 'bool 1 nil')
-  define('case', 'bool 1 1 1')
+  const define = (s, t) => s.split(' ').map(op => env[op] = t.includes(' ') ? t.split(' ') : t)
+  define('if', 'bool 0 nil')
+  define('case', 'bool 0 0 0')
   define('++', 'string string string')
-  define('p', '1 1')
+  define('p', '0 0')
   define('true false', 'bool')
   define('< <= > >=', 'int int bool')
   define('|| &&', 'bool bool bool')
   define('+ - * / % += -= *= /= %=', 'int int int')
-  for (const k in env) {
-    env[k] = env[k].includes(' ') ? env[k].split(' ') : env[k]
-  }
 
-  const newEnv = (env, nodes) => Object.assign({}, env, nodes.reduce((o, n) => (o[n.code] = n.type = newVar(), o), {}))
   const fresh = o => Array.isArray(o) ? (d => o.map(x => x.match(/^[0-9]/) ? (d[x] ||= newVar()) : x))({}) : o
   const unify = (a, b, node) => {
     a = prune(a)
@@ -132,11 +129,12 @@ const infer = nodes => {
       fail(`type miss match between '${str(a)}' and '${str(b)}' around ${str(node)}`, {nodes})
   }
   const call = ([head, ...remains], env) =>
-    head === undefined ? fail(`Empty call`, {nodes}) :
     head == 'fn' ? (a => unify(env[remains[0].code] = newVar(), func(a, env), a))(remains.slice(1)) :
     head == 'return' ? (remains.length === 0 ? 'nil' : inf(remains[0])) :
     head == '__stmt' ? remains.map(x => inf(x, env)).slice(-1)[0] :
     head == '__call' ? call(remains, env) :
+    head == '__array' ? fail("not implemented yet 1") :
+    head == '__dict' ?  fail("not implemented yet 2") :
     head == '=>' ? func([...remains[0], remains[1]], env) :
     unify(inf(head, env), [...remains.map(x => inf(x, env)), newVar()], [head, ...remains]).slice(-1)[0]
   const inf = (node, env) => node.type ||= _inf(node, env)
@@ -146,7 +144,7 @@ const infer = nodes => {
     node.code.match(/^["`]/) ? 'string' :
     node.code.match(/^r["`]/) ? 'regexp' :
     fresh(env[node.code] || fail(`not implemented yet ${JSON.stringify(node)}`, {nodes, env}))
-  nodes.map(x => inf(x, env))
+  nodes.map(x => inf(x, env, {}))
   return nodes
 }
 
@@ -256,6 +254,8 @@ const testAll = () => {
   const inf = (expect, exp, ...defs) => test((_, node) => simplifyType(str(node.type)), expect, exp, ...defs)
   const check = (expect, exp, ...defs) => test((ret) => str(ret), str(expect), exp, ...defs)
   const error = (expect, exp, ...defs) => test((ret) => ret, str(expect), exp, ...defs)
+  //inf('bool', 'f 1\nf true', 'fn f a: a')
+  //return
 
   // -- Tests for type inference
   // primitives
@@ -285,6 +285,9 @@ const testAll = () => {
   inf('(1 2 1)', 'fn f a b: a')
   inf('(1 2 2)', 'fn f a b: b')
   inf('int', 'f 1', 'fn f a: a')
+  //inf('bool', 'f 1\nf true', 'fn f a: a')
+  // array
+  //inf('array(1)', '[]')
 
   // -- Tests for executions
   check(1, '1')
