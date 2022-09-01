@@ -1,7 +1,5 @@
 top: line*
-line:
-| keyword? exp+ ("\n" | (":\n" ("  " line)+))
-| exp+ "\n"
+line: keyword? exp+ ("\n" | (":\n" ("  " line)+))
 exp: unit (op2 exp)*
 unit: op1? bottom (prop | call | at)*
 prop: "." id
@@ -22,14 +20,18 @@ op1: "!"
 op2: [+-/%*=<>|&^;]+
 keyword: qw(let var fn struct adt if return case match fail test)
 
-# Ideas for bottom
-| "(" id* (id ":" exp)* ")" # struct: (), (one two:2)
-| id ("," id)* ":" exp      # lambda: f(x: x), (a,b: a + b)
-| "\" id+ "=>" exp          # lambda: \a b => a + b
 
-# Idea to support optinal arguments
+# Ideas for bottom
+| "(" id* (id ":" exp)* ")"    # struct    : (), (one:one), (one two three:3)
+| id ("," id)* "=>" exp        # lambda    : a,b => a + b
+| id ("," id)* ":" exp         # lambda    : f(x: x), (a,b: a + b)
+| "\" id+ "=>" exp             # lambda    : \a b => a + b
+
+
+# Ideas for function
 fn f a b="default" c?: ...
 fn main: f 1 b="something" c=2
+
 
 # Symbols
 _          part of id

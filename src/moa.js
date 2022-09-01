@@ -98,8 +98,6 @@ const infer = nodes => {
   const prune = t => t.instance ? t.instance = prune(t.instance) : t
   const newVar = () => (o => { o.toString = () => str(o); return o } )({tid: tid++, instance: null})
   const newVars = o => o.map(t => [t.code, newVar()])
-  //const isNonGeneric = (name, env) => `___${name}` in env
-  //const addNonGenerics = names => names.map((name, i) => [name, i.toString()])
   const func = (a, env) => a.length === 1 ? inf(a[0], env) : body(a, env)
   const body = (a, env) => {
     const args = a.slice(0, -1).map((t, i) => [t.code, newVar()])
@@ -107,7 +105,8 @@ const infer = nodes => {
     return [...args.map(x => x[1]), ret]
   }
   const env = {}
-  const define = (s, t) => s.split(' ').map(op => env[op] = t.includes(' ') ? t.split(' ') : t)
+  const fresh = a => (d => a.map(x => x.match(/^[0-9]/) ? (d[x] ||= newVar()) : x))({})
+  const define = (s, t) => s.split(' ').map(op => env[op] = t.includes(' ') ? fresh(t.split(' ')) : t)
   define('if', 'bool 0 nil')
   define('case', 'bool 0 0 0')
   define('++', 'string string string')
@@ -117,7 +116,7 @@ const infer = nodes => {
   define('|| &&', 'bool bool bool')
   define('+ - * / % += -= *= /= %=', 'int int int')
 
-  const fresh = o => Array.isArray(o) ? (d => o.map(x => x.match(/^[0-9]/) ? (d[x] ||= newVar()) : x))({}) : o
+  const lookup = (env, node) => env[node.code] || fail(`not implemented yet ${JSON.stringify(node)}`, {env})
   const unify = (a, b, node) => {
     a = prune(a)
     b = prune(b)
@@ -143,7 +142,7 @@ const infer = nodes => {
     node.code.match(/^[0-9]+$/) ? 'int' :
     node.code.match(/^["`]/) ? 'string' :
     node.code.match(/^r["`]/) ? 'regexp' :
-    fresh(env[node.code] || fail(`not implemented yet ${JSON.stringify(node)}`, {nodes, env}))
+    lookup(env, node)
   nodes.map(x => inf(x, env, {}))
   return nodes
 }
@@ -254,8 +253,6 @@ const testAll = () => {
   const inf = (expect, exp, ...defs) => test((_, node) => simplifyType(str(node.type)), expect, exp, ...defs)
   const check = (expect, exp, ...defs) => test((ret) => str(ret), str(expect), exp, ...defs)
   const error = (expect, exp, ...defs) => test((ret) => ret, str(expect), exp, ...defs)
-  //inf('bool', 'f 1\nf true', 'fn f a: a')
-  //return
 
   // -- Tests for type inference
   // primitives
@@ -285,9 +282,9 @@ const testAll = () => {
   inf('(1 2 1)', 'fn f a b: a')
   inf('(1 2 2)', 'fn f a b: b')
   inf('int', 'f 1', 'fn f a: a')
-  //inf('bool', 'f 1\nf true', 'fn f a: a')
+  //inf('bool', 'f 1\nf true', 'fn f a: a') // This compiler does not support this pattern yet
   // array
-  //inf('array(1)', '[]')
+  inf('array(1)', '[]')
 
   // -- Tests for executions
   check(1, '1')
