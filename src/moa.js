@@ -12,10 +12,10 @@ const newToken = (code, pos=0, indent=0, line=0, type=undefined) => ({code, pos,
 const str = o =>
   Array.isArray(o) ? showNode('(' + o.map(str).join(' ') + ')', o.type) :
   typeof o === 'string' ? o :
-  typeof o === 'object' && 'code' in o ? showNode(o.code, o.type) :    // for node
-  typeof o === 'object' && o.instance ? str(o.instance) :              // for type
-  typeof o === 'object' && 'tid' in o ? o.tid :                        // for type
-  typeof o === 'object' && 'targs' in o ? `${o.name}${str(o.targs)}` : // for type
+  typeof o === 'object' && 'code' in o ? showNode(o.code, o.type) :          // for node
+  typeof o === 'object' && o.instance ? str(o.instance) :                    // for type
+  typeof o === 'object' && 'generics' in o ? `${o.name}${str(o.generics)}` : // for type
+  typeof o === 'object' && 'tid' in o ? o.tid :                              // for type
   JSON.stringify(o)
 const showNode = (base, type) => base + (type ? `[${type.toString()}]` : '')
 const simplifyType = t => (d => t.replace(/\d+/g, s => d[s] ||= Object.keys(d).length + 1))({})
@@ -95,18 +95,27 @@ const parse = tokens => {
 
 const infer = nodes => {
   let tid = 1
-  const prune = t => t.instance ? t.instance = prune(t.instance) : t
   const newVar = () => (o => { o.toString = () => str(o); return o } )({tid: tid++, instance: null})
   const newVars = o => o.map(t => [t.code, newVar()])
+  const toVars = a => (d => a.map(x => x.toString().match(/^[0-9]/) ? (d[x] ||= newVar()) : x))({})
+  const newType = (name, generics) => ({
+    name,
+    generics,
+    instanciate: () => ({name, generics: toVars(generics)})
+  })
+
+  const prune = t => t.instance ? t.instance = prune(t.instance) : t
   const func = (a, env) => a.length === 1 ? inf(a[0], env) : body(a, env)
   const body = (a, env) => {
     const args = a.slice(0, -1).map((t, i) => [t.code, newVar()])
     const ret = inf(a[a.length - 1], Object.assign({}, env, Object.fromEntries(args)))
     return [...args.map(x => x[1]), ret]
   }
-  const env = {}
-  const fresh = a => (d => a.map(x => x.match(/^[0-9]/) ? (d[x] ||= newVar()) : x))({})
-  const define = (s, t) => s.split(' ').map(op => env[op] = t.includes(' ') ? fresh(t.split(' ')) : t)
+
+  const env = {
+    __array: newType('array', [1]),
+  }
+  const define = (s, t) => s.split(' ').map(op => env[op] = t.includes(' ') ? toVars(t.split(' ')) : t)
   define('if', 'bool 0 nil')
   define('case', 'bool 0 0 0')
   define('++', 'string string string')
@@ -116,7 +125,8 @@ const infer = nodes => {
   define('|| &&', 'bool bool bool')
   define('+ - * / % += -= *= /= %=', 'int int int')
 
-  const lookup = (env, node) => env[node.code] || fail(`not implemented yet ${JSON.stringify(node)}`, {env})
+  const extend = o => o.instanciate ? o.instanciate() : o
+  const lookup = (env, node) => extend(env[node.code] || fail(`not found ${JSON.stringify(node)}`, {env}))
   const unify = (a, b, node) => {
     a = prune(a)
     b = prune(b)
@@ -124,7 +134,7 @@ const infer = nodes => {
       a.tid && b.tid && a.tid === b.tid ? a :
       a.tid ? a.instance = b :
       b.tid ? b.instance = a :
-      a === b ? a :
+      str(a) === str(b) ? a :
       fail(`type miss match between '${str(a)}' and '${str(b)}' around ${str(node)}`, {nodes})
   }
   const call = ([head, ...remains], env) =>
@@ -132,7 +142,7 @@ const infer = nodes => {
     head == 'return' ? (remains.length === 0 ? 'nil' : inf(remains[0])) :
     head == '__stmt' ? remains.map(x => inf(x, env)).slice(-1)[0] :
     head == '__call' ? call(remains, env) :
-    head == '__array' ? fail("not implemented yet 1") :
+    head == '__array' ? (t => { remains.map(x => unify(inf(x, env), t.generics[0])); return t })(lookup(env, head)) :
     head == '__dict' ?  fail("not implemented yet 2") :
     head == '=>' ? func([...remains[0], remains[1]], env) :
     unify(inf(head, env), [...remains.map(x => inf(x, env)), newVar()], [head, ...remains]).slice(-1)[0]
@@ -285,6 +295,8 @@ const testAll = () => {
   //inf('bool', 'f 1\nf true', 'fn f a: a') // This compiler does not support this pattern yet
   // array
   inf('array(1)', '[]')
+  inf('array(int)', '[1]')
+  inf('array(string)', '["hi"]')
 
   // -- Tests for executions
   check(1, '1')
