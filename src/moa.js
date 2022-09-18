@@ -15,7 +15,7 @@ const str = o =>
   typeof o === 'object' && 'code' in o ? showNode(o.code, o.type) :          // for node
   typeof o === 'object' && o.instance ? str(o.instance) :                    // for type
   typeof o === 'object' && 'generics' in o ? `${o.name}${str(o.generics)}` : // for type
-  typeof o === 'object' && 'tid' in o ? o.tid :                              // for type
+  typeof o === 'object' && 'tid' in o ? o.tid.toString() :                   // for type
   JSON.stringify(o)
 const showNode = (base, type) => base + (type ? `<${type.toString()}>` : '')
 const simplifyType = t => (d => t.replace(/\d+/g, s => d[s] ||= Object.keys(d).length + 1))({})
@@ -56,21 +56,19 @@ const parse = tokens => {
       default: return token
     }
   }
-  const exp = () => {
-    const lhs = bottom()
-    if (pos >= tokens.length) {
-      return lhs
-    }
+  const exp = () => right(bottom())
+  const right = lhs => {
+    if (pos >= tokens.length) { return lhs }
     const curr = tokens[pos-1]
     const pred = tokens[pos++]
     const close = curr.pos + curr.code.length === pred.pos
     if (pred.code === '.') {
       const rhs = bottom()
-      return isOp2(rhs[0]) || rhs[0] == '__at' ? [rhs[0], [pred, lhs, rhs[1]], rhs[2]] : [pred, lhs, rhs]
-    } else if (pred.code === '(' && close) { return [newToken('__call'), lhs, ...bracket(exp, ')')]
-    } else if (pred.code === '[' && close) { return [newToken('__at'), lhs, ...bracket(exp, ']')]
-    } else if (pred.code === '=>') { return [pred, to_a(lhs), exp()]
-    } else if (isOp2(pred)) { return [pred, lhs, exp()]
+      return right(isOp2(rhs[0]) || rhs[0] == '__at' ? [rhs[0], [pred, lhs, rhs[1]], rhs[2]] : [pred, lhs, rhs])
+    } else if (pred.code === '(' && close) { return right([newToken('__call'), lhs, ...bracket(exp, ')')])
+    } else if (pred.code === '[' && close) { return right([newToken('__at'), lhs, ...bracket(exp, ']')])
+    } else if (pred.code === '=>') { return right([pred, to_a(lhs), exp()])
+    } else if (isOp2(pred)) { return right([pred, lhs, exp()])
     } else { --pos; return lhs }
   }
   const unnest = o => Array.isArray(o) && o.length === 1 ? unnest(o[0]) : o
@@ -104,26 +102,23 @@ const infer = nodes => {
     fail(`${str(type)}.${name} not found`)
   }
   let tid = 1
+  const singlify = a => a.length === 1 ? a[0] : a
   const newVar = () => (o => { o.toString = () => str(o); return o } )({tid: tid++, instance: null})
   const newVars = o => o.map(t => [t.code, newVar()])
   const toVars = a => (d => a.map(x => x.toString().match(/^[0-9]/) ? (d[x] ||= newVar()) : x))({})
   const newType = (name, generics) => ({
     name,
     generics,
+    isGeneric: generics.length > 0,
     copy: () => ({name, generics: toVars(generics)})
   })
 
-  const prune = t => t.instance ? t.instance = prune(t.instance) : t
-  const func = (a, env) => a.length === 1 ? inf(a[0], env) : body(a, env)
-  const body = (a, env) => {
-    const args = a.slice(0, -1).map((t, i) => [t.code, newVar()])
-    const ret = inf(a[a.length - 1], Object.assign({}, env, Object.fromEntries(args)))
-    return [...args.map(x => x[1]), ret]
-  }
-
+  const prune = t => Array.isArray(t) ? (t.length === 1 ? prune(t[0]) : t.map(prune)) :
+    t.instance ? t.instance = prune(t.instance) :
+    t
   const env = {
-    __array: newType('array', [1]),
-    __dict: newType('dict', [1, 2]),
+    __array: newType('array', [newVar()]),
+    __dict: newType('dict', [newVar(), newVar()]),
   }
   const define = (s, t) => s.split(' ').map(op => env[op] = t.includes(' ') ? toVars(t.split(' ')) : t)
   define('if', 'bool 0 nil')
@@ -135,8 +130,16 @@ const infer = nodes => {
   define('|| &&', 'bool bool bool')
   define('+ - * / % += -= *= /= %=', 'int int int')
 
-  const instanciate = o => o.copy ? o.copy() : o
-  const lookup = (env, node) => instanciate(env[node.code] || fail(`not found ${JSON.stringify(node)}`, {env}))
+  const func = (a, env) => a.length === 1 ? stmt(a, env) : lambda(a, env)
+  const lambda = (a, env) => {
+    const args = a.slice(0, -1).map((t, i) => [t.code, newVar()])
+    const ret = inf(a[a.length - 1], Object.assign({}, env, Object.fromEntries(args)))
+    return [...args.map(x => x[1]), ret]
+  }
+  const copy = o => o.isGeneric ? _copy(o, {}) : o
+  const _copy = (o, ids) => Array.isArray(o) ? o.map(x => _copy(x, ids)) : __copy(prune(o), ids)
+  const __copy = (o, ids) => o.isGeneric ? o.copy() : o.tid ? ids[o.tid] ||= newVar() : o
+  const lookup = (env, node) => env[node.code] || fail(`not found ${JSON.stringify(node)}`, Object.keys(env))
   const unify = (a, b, node) => {
     a = prune(a)
     b = prune(b)
@@ -147,11 +150,19 @@ const infer = nodes => {
       str(a) === str(b) ? a :
       fail(`type miss match between '${str(a)}' and '${str(b)}' around ${str(node)}`, str(nodes))
   }
-  const singlify = a => a.length === 1 ? a[0] : a
+  const stmt = (nodes, env) => {
+    for (const node of nodes) {
+      if (Array.isArray(node) && node[0].code === 'fn') {
+        env[node[1].code] = Object.assign(node.slice(1, -1).map(_ => newVar()), {isGeneric: true})
+      }
+    }
+    nodes.map(node => inf(node, env)).slice(-1)[0]
+    return nodes.map(node => inf(node, env)).slice(-1)[0]
+  }
   const call = ([head, ...remains], env) =>
-    head == 'fn' ? (a => unify(env[remains[0].code] = newVar(), func(a, env), a))(remains.slice(1)) :
+    head == 'fn' ? (exp => unify(lookup(env, remains[0]), exp, remains))(func(remains.slice(1), env)) :
     head == 'return' ? (remains.length === 0 ? 'nil' : inf(remains[0], env)) :
-    head == '__stmt' ? remains.map(x => inf(x, env)).slice(-1)[0] :
+    head == '__stmt' ? stmt(remains, env) :
     head == '__call' ? call(remains, env) :
     head == '__array' ? (t => { remains.map(x => unify(inf(x, env), t.generics[0])); return t })(lookup(env, head)) :
     head == '__dict' ?  (t => { remains.map((x, i) => i % 2 == 0 ? unify(t.generics[0], inf(x, env)) : unify(t.generics[1], inf(x, env))) ; return t })(lookup(env, head)) :
@@ -166,8 +177,8 @@ const infer = nodes => {
     node.code.match(/^[0-9]+$/) ? 'int' :
     node.code.match(/^["`]/) ? 'string' :
     node.code.match(/^r["`]/) ? 'regexp' :
-    lookup(env, node)
-  nodes.map(x => inf(x, env, {}))
+    copy(lookup(env, node))
+  stmt(nodes, env)
   return nodes
 }
 
@@ -277,7 +288,6 @@ const testAll = () => {
   const inf = (expect, exp, ...defs) => test((_, node) => simplifyType(str(node.type)), expect, exp, ...defs)
   const check = (expect, exp, ...defs) => test((ret) => str(ret), str(expect), exp, ...defs)
   const error = (expect, exp, ...defs) => test((ret) => ret, str(expect), exp, ...defs)
-  inf('bool', 'r"hi".test("h")')
 
   // -- Tests for type inference
   // primitives
@@ -305,6 +315,7 @@ const testAll = () => {
   // exp
   inf('int', '1 + 1')
   inf('bool', '1 < 1')
+  inf('bool', 'true && r"hi".test("h")')
   // branch
   inf('int', 'case true 1 2')
   inf('bool', 'case true true true')
@@ -325,17 +336,7 @@ const testAll = () => {
   inf('(1 2 1)', 'fn f a b: a')
   inf('(1 2 2)', 'fn f a b: b')
   inf('int', 'f 1', 'fn f a: a')
-  //inf('bool', 'f 1\nf true', 'fn f a: a') // This compiler does not support this pattern yet
-  // array
-  inf('array(1)', '[]')
-  inf('array(int)', '[1]')
-  inf('array(string)', '["hi"]')
-
-  // -- Tests for executions
-  check(1, '1')
-/*
-  // time
-  inf('time', 'time(2001 2 3 4 5 6)')
+  inf('bool', 'f 1\nf true', 'fn f a: a')
   // combinations
   inf('int', '((f 1) + (g 1))', 'fn f x: x + 1', 'fn g x: x + 2')
   inf('((1 2) (2 3) 1 3)', 'fn _ f g x: g f(x)')
@@ -348,10 +349,14 @@ const testAll = () => {
   inf('((1 2) ((1 2) 1) 2)', 'fn _ x y: x y(x)')
   inf('(1 ((1 2 3) 4 2) (1 2 3) 4 3)', 'fn _ h t f x: f h t(f x)')
   inf('((1 1 2) ((1 1 2) 1) 2)', 'fn _ x y: x y(x) y(x)')
-  inf('(((1 1) 2) 2)', 'fn f y: id y(id)', 'fn id x x')
+  inf('(((1 1) 2) 2)', 'fn f y: id y(id)', 'fn id x: x')
   inf('int', 'fn f: case id(true) id(1) id(2)', 'fn id x x')
   inf('int', 'fn g: f(true) + f(4)', 'fn f x: 3')
   inf('(bool (1 1))', 'fn h b: case b f(g) g(f)', 'fn f x x', 'fn g y y')
+
+  // -- Tests for executions
+  check(1, '1')
+/*
   // type errors
   reject('1 + true')
   reject('if true: return 1')
