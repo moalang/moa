@@ -94,6 +94,10 @@ const parse = tokens => {
 }
 
 const infer = nodes => {
+  const method = (type, name, args) => {
+    if (type === 'string' && name === 'size') { return 'int' }
+    fail(`${type}.${name} not found`)
+  }
   let tid = 1
   const newVar = () => (o => { o.toString = () => str(o); return o } )({tid: tid++, instance: null})
   const newVars = o => o.map(t => [t.code, newVar()])
@@ -145,6 +149,7 @@ const infer = nodes => {
     head == '__array' ? (t => { remains.map(x => unify(inf(x, env), t.generics[0])); return t })(lookup(env, head)) :
     head == '__dict' ?  fail("not implemented yet 2") :
     head == '=>' ? func([...remains[0], remains[1]], env) :
+    head == '.' ? method(inf(remains[0]), remains[1].code, ...remains.slice(2)) :
     unify(inf(head, env), [...remains.map(x => inf(x, env)), newVar()], [head, ...remains]).slice(-1)[0]
   const inf = (node, env) => node.type ||= _inf(node, env)
   const _inf = (node, env) => Array.isArray(node) ? call(node, env) :
@@ -209,7 +214,7 @@ const generate = nodes => {
       case '__dict': return `({${ tail.map(o => Array.isArray(o) ? `${o[1]}:${o[2]}` : o).join(',') }})`
       case '__at': return `${args[0]}[${args[1]}]`
       case '=>': return `(${(Array.isArray(tail[0]) ? tail[0] : [tail[0].code]).join(", ")}) => ${args[1]}`
-      case '.': return method(tail[0].type.name + '_' + args[1], args)
+      case '.': return method(tail[0].type + '_' + args[1], args)
       case 'let': return `const ${args[0]} = ${args[1]}`
       case 'var': return `let ${args[0]} = ${args[1]}`
       case 'fn': return `const ${args[0]} = (${args.slice(1, -1)}) => ${args[args.length - 1]}`
@@ -269,6 +274,9 @@ const testAll = () => {
   inf('int', '0')
   inf('bool', 'true')
   inf('bool', 'false')
+  inf('string', '"hi"')
+  // method
+  inf('int', '"hi".size')
   // exp
   inf('int', '1 + 1')
   inf('bool', '1 < 1')
@@ -300,7 +308,6 @@ const testAll = () => {
 
   // -- Tests for executions
   check(1, '1')
-  return
 /*
   // dict
   inf('dictionary(string int)', '{"a":1}')
