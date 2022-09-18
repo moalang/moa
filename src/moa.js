@@ -3,7 +3,7 @@
 Error.stackTraceLimit = 100
 
 const fs = require('fs')
-const put = (...a) => process.stdout.write(...a.map(str))
+const put = (...a) => { process.stdout.write(...a.map(str)); return a[a.length - 1] }
 const puts = (...a) => { console.log(...a.map(str)); return a[a.length - 1] }
 const fail = (message, ...a) => { throw Error(`${message}${a.length ? '\n' + str(a) : ''}`) }
 const many = (a, f, g) => { while (f()) { a.push(g()) }; return a }
@@ -17,7 +17,7 @@ const str = o =>
   typeof o === 'object' && 'generics' in o ? `${o.name}${str(o.generics)}` : // for type
   typeof o === 'object' && 'tid' in o ? o.tid :                              // for type
   JSON.stringify(o)
-const showNode = (base, type) => base + (type ? `[${type.toString()}]` : '')
+const showNode = (base, type) => base + (type ? `<${type.toString()}>` : '')
 const simplifyType = t => (d => t.replace(/\d+/g, s => d[s] ||= Object.keys(d).length + 1))({})
 const isOp2 = t => t && t.toString().match(/^[+\-*%/=><|&^]+$/)
 const isAssign = t => '+= -= *= /= %= ='.split(' ').includes(t.code)
@@ -96,7 +96,12 @@ const parse = tokens => {
 const infer = nodes => {
   const method = (type, name, args) => {
     if (type === 'string' && name === 'size') { return 'int' }
-    fail(`${type}.${name} not found`)
+    if (type === 'regexp' && name === 'test') { return ['string', 'bool'] }
+    if (type.name === 'array' && name === '__at') { return type.generics[0] }
+    if (type.name === 'dict' && name === '__at') { return type.generics[1] }
+    if (type.name === 'dict' && name === 'keys') { return newType('array', type.generics.slice(0, 1)) }
+    if (type.name === 'dict' && name === 'values') { return newType('array', type.generics.slice(1)) }
+    fail(`${str(type)}.${name} not found`)
   }
   let tid = 1
   const newVar = () => (o => { o.toString = () => str(o); return o } )({tid: tid++, instance: null})
@@ -105,7 +110,7 @@ const infer = nodes => {
   const newType = (name, generics) => ({
     name,
     generics,
-    instanciate: () => ({name, generics: toVars(generics)})
+    copy: () => ({name, generics: toVars(generics)})
   })
 
   const prune = t => t.instance ? t.instance = prune(t.instance) : t
@@ -118,6 +123,7 @@ const infer = nodes => {
 
   const env = {
     __array: newType('array', [1]),
+    __dict: newType('dict', [1, 2]),
   }
   const define = (s, t) => s.split(' ').map(op => env[op] = t.includes(' ') ? toVars(t.split(' ')) : t)
   define('if', 'bool 0 nil')
@@ -129,8 +135,8 @@ const infer = nodes => {
   define('|| &&', 'bool bool bool')
   define('+ - * / % += -= *= /= %=', 'int int int')
 
-  const extend = o => o.instanciate ? o.instanciate() : o
-  const lookup = (env, node) => extend(env[node.code] || fail(`not found ${JSON.stringify(node)}`, {env}))
+  const instanciate = o => o.copy ? o.copy() : o
+  const lookup = (env, node) => instanciate(env[node.code] || fail(`not found ${JSON.stringify(node)}`, {env}))
   const unify = (a, b, node) => {
     a = prune(a)
     b = prune(b)
@@ -139,18 +145,21 @@ const infer = nodes => {
       a.tid ? a.instance = b :
       b.tid ? b.instance = a :
       str(a) === str(b) ? a :
-      fail(`type miss match between '${str(a)}' and '${str(b)}' around ${str(node)}`, {nodes})
+      fail(`type miss match between '${str(a)}' and '${str(b)}' around ${str(node)}`, str(nodes))
   }
+  const singlify = a => a.length === 1 ? a[0] : a
   const call = ([head, ...remains], env) =>
     head == 'fn' ? (a => unify(env[remains[0].code] = newVar(), func(a, env), a))(remains.slice(1)) :
-    head == 'return' ? (remains.length === 0 ? 'nil' : inf(remains[0])) :
+    head == 'return' ? (remains.length === 0 ? 'nil' : inf(remains[0], env)) :
     head == '__stmt' ? remains.map(x => inf(x, env)).slice(-1)[0] :
     head == '__call' ? call(remains, env) :
     head == '__array' ? (t => { remains.map(x => unify(inf(x, env), t.generics[0])); return t })(lookup(env, head)) :
-    head == '__dict' ?  fail("not implemented yet 2") :
+    head == '__dict' ?  (t => { remains.map((x, i) => i % 2 == 0 ? unify(t.generics[0], inf(x, env)) : unify(t.generics[1], inf(x, env))) ; return t })(lookup(env, head)) :
+    head == '__at' ?  method(inf(remains[0], env), '__at', remains[1]) :
     head == '=>' ? func([...remains[0], remains[1]], env) :
-    head == '.' ? method(inf(remains[0]), remains[1].code, ...remains.slice(2)) :
-    unify(inf(head, env), [...remains.map(x => inf(x, env)), newVar()], [head, ...remains]).slice(-1)[0]
+    head == '.' ? method(inf(remains[0], env), remains[1].code, ...remains.slice(2)) :
+    remains.length === 0 ? inf(head, env) :
+    unify(inf(head, env), singlify([...remains.map(x => inf(x, env)), newVar()]), [head, ...remains]).slice(-1)[0]
   const inf = (node, env) => node.type ||= _inf(node, env)
   const _inf = (node, env) => Array.isArray(node) ? call(node, env) :
     node.code === 'return' ? 'nil' :
@@ -171,7 +180,7 @@ const generate = nodes => {
     'dictionary_values': code => `Object.values(${code})`,
   }
   const gen = o => Array.isArray(o) ? apply(o) :
-    o.code.startsWith('r"') ? `RegExp(${o.slice(1)})` :
+    o.code.startsWith('r"') ? `RegExp(${o.code.slice(1)})` :
     o.code.startsWith('`') ? template(o) :
     o.code
   const template = s => s.replace(/\$[A-Za-z0-9_.]+/g, x => '${' + x.slice(1) + '}')
@@ -268,6 +277,7 @@ const testAll = () => {
   const inf = (expect, exp, ...defs) => test((_, node) => simplifyType(str(node.type)), expect, exp, ...defs)
   const check = (expect, exp, ...defs) => test((ret) => str(ret), str(expect), exp, ...defs)
   const error = (expect, exp, ...defs) => test((ret) => ret, str(expect), exp, ...defs)
+  inf('bool', 'r"hi".test("h")')
 
   // -- Tests for type inference
   // primitives
@@ -275,8 +285,23 @@ const testAll = () => {
   inf('bool', 'true')
   inf('bool', 'false')
   inf('string', '"hi"')
-  // method
+  inf('regexp', 'r"hi"')
+  // generic array
+  inf('array(1)', '[]')
+  inf('array(int)', '[1]')
+  inf('array(string)', '[""]')
+  inf('int', '[1][0]')
+  inf('string', '[""][0]')
+  inf('string', '[""][0]')
+  // generic dictionary
+  inf('dict(1 2)', '{}')
+  inf('dict(string int)', '{"a" 2}')
+  inf('int', '{"a" 2}["a"]')
+  inf('array(string)', '{"a" 2}.keys')
+  inf('array(int)', '{"a" 2}.values')
+  // methods
   inf('int', '"hi".size')
+  inf('bool', 'r"hi".test("h")')
   // exp
   inf('int', '1 + 1')
   inf('bool', '1 < 1')
@@ -309,22 +334,6 @@ const testAll = () => {
   // -- Tests for executions
   check(1, '1')
 /*
-  // dict
-  inf('dictionary(string int)', '{"a":1}')
-  inf('int', '{"a":1}["a"]')
-  inf('array(string)', '{"a":1}.keys')
-  inf('array(int)', '{"a":1}.values')
-  // string
-  inf('int', '"hi".size')
-  // regexp
-  inf('regexp', 'r"hi"')
-  inf('bool', 'r"hi".test("h")')
-  // generic array
-  inf('int', '[].size')
-  inf('int', '[1][0]')
-  inf('string', '["hi"][0]')
-  inf('array(int)', '[1]')
-  inf('set(int)', '[1].set')
   // time
   inf('time', 'time(2001 2 3 4 5 6)')
   // combinations

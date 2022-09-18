@@ -8,7 +8,7 @@ at: "[" exp "]"
 bottom:
 | "(" exp ")"                  # priority  : 1 * (2 + 3)
 | "[" exp* "]"                 # array     : [], [1 2]
-| "{" id* (exp ":" exp)* "}"   # dictionary: {}, {one "two":2 variable:3}
+| "{" (exp exp)* "}"           # dictionary: {}, {a "a" (1 + 2) "b"}
 | '"' [^"]* '"'                # string    : "hi"
 | '`' ("$" unit | [^"])* '`'   # template  : `hi $user.name`
 | '"' [^"]* '"'                # regexp    : r"hi"
@@ -22,15 +22,24 @@ keyword: qw(let var fn struct adt if return case match fail test)
 
 
 # Ideas for bottom
-| "(" id* (id ":" exp)* ")"    # struct    : (), (one:one), (one two three:3)
+| "(" id* (id ":" exp)* ")"    # struct    : (), (one=one), (one two three=3)
 | id ("," id)* "=>" exp        # lambda    : a,b => a + b
 | id ("," id)* ":" exp         # lambda    : f(x: x), (a,b: a + b)
 | "\" id+ "=>" exp             # lambda    : \a b => a + b
 
 
 # Ideas for function
-fn f a b="default" c?: ...
-fn main: f 1 b="something" c=2
+ft f1: int (b=string c=int?)
+fn f1 a (b="default" c?): ...
+ft f2: int? (b=string c=int?)?
+fn f2 a? (b="default" c?)?: ...
+fn main:
+  f1 1 b="something"
+  f1 1 b="something" c=2
+  f2
+  f2 1
+  f2 (b="something")
+  f2 (b="something" c=3)
 
 
 # Symbols
