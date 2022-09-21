@@ -17,7 +17,7 @@ const str = o =>
   typeof o === 'object' && 'generics' in o ? `${o.name}${str(o.generics)}` : // for type
   typeof o === 'object' && 'tid' in o ? o.tid.toString() :                   // for type
   JSON.stringify(o)
-const showNode = (base, type) => base + (type ? `<${type.toString()}>` : '')
+const showNode = (base, type) => base + (type ? `<${str(type)}>` : '')
 const simplifyType = t => (d => t.replace(/\d+/g, s => d[s] ||= Object.keys(d).length + 1))({})
 const isOp1 = t => t && t.toString() === '!'
 const isOp2 = t => t && t.toString().match(/^[+\-*%/=><|&^]+$/)
@@ -99,8 +99,8 @@ const parse = tokens => {
 
 const infer = nodes => {
   const method = (type, name, args) => {
-    if (type === 'string' && name === 'size') { return 'int' }
-    if (type === 'regexp' && name === 'test') { return ['string', 'bool'] }
+    if (str(type) === 'string' && name === 'size') { return 'int' }
+    if (str(type) === 'regexp' && name === 'test') { return ['string', 'bool'] }
     if (type.name === 'array' && name === '__at') { return type.generics[0] }
     if (type.name === 'dict' && name === '__at') { return type.generics[1] }
     if (type.name === 'dict' && name === 'keys') { return newType('array', type.generics.slice(0, 1)) }
@@ -170,7 +170,7 @@ const infer = nodes => {
     head == 'let' ? (env[remains[0].code] = inf(remains[1], env)) :
     head == 'return' ? (remains.length === 0 ? 'nil' : inf(remains[0], env)) :
     head == '__stmt' ? stmt(remains, env) :
-    head == '__call' ? call(remains, env) :
+    head == '__call' ? (remains.length === 1 ? call(remains, env)[0] : call(remains, env)) :
     head == '__array' ? (t => { remains.map(x => unify(inf(x, env), t.generics[0])); return t })(lookup(env, head)) :
     head == '__dict' ?  (t => { remains.map((x, i) => i % 2 == 0 ? unify(t.generics[0], inf(x, env)) : unify(t.generics[1], inf(x, env))) ; return t })(lookup(env, head)) :
     head == '__at' ?  method(inf(remains[0], env), '__at', remains[1]) :
@@ -304,7 +304,6 @@ const testAll = () => {
   const inf = (expect, exp, ...defs) => test((_, node) => simplifyType(str(node.type)), expect, exp, ...defs)
   const eq = (expect, exp, ...defs) => test((ret) => str(ret), str(expect), exp, ...defs)
   const error = (expect, exp, ...defs) => test((ret) => ret, str(expect), exp, ...defs)
-  eq(1, 'f()[1].size', 'fn f: ["a" "b"]')
 
   // -- Tests for type inference
   // primitives
