@@ -99,6 +99,7 @@ const parse = tokens => {
 
 const infer = nodes => {
   const method = (type, name, args) => {
+    type = prune(type)
     if (str(type) === 'string' && name === 'size') { return 'int' }
     if (str(type) === 'regexp' && name === 'test') { return ['string', 'bool'] }
     if (type.name === 'array' && name === '__at') { return type.generics[0] }
@@ -121,10 +122,7 @@ const infer = nodes => {
   const prune = t => Array.isArray(t) ? (t.length === 1 ? prune(t[0]) : t.map(prune)) :
     t.instance ? t.instance = prune(t.instance) :
     t
-  const env = {
-    __array: newType('array', [newVar()]),
-    __dict: newType('dict', [newVar(), newVar()]),
-  }
+  const env = {}
   const define = (s, t) => s.split(' ').map(op => env[op] = t.includes(' ') ? toVars(t.split(' ')) : t)
   define('if', 'bool 0 nil')
   define('case', 'bool 0 0 0')
@@ -145,7 +143,10 @@ const infer = nodes => {
   const copy = o => o.isGeneric ? _copy(o, {}) : o
   const _copy = (o, ids) => Array.isArray(o) ? o.map(x => _copy(x, ids)) : __copy(prune(o), ids)
   const __copy = (o, ids) => o.isGeneric ? o.copy() : o.tid ? ids[o.tid] ||= newVar() : o
-  const lookup = (env, node) => env[node.code] || fail(`not found ${JSON.stringify(node)}`, Object.keys(env))
+  const lookup = (env, node) =>
+    node.code === '__array' ? newType('array', [newVar()]) :
+    node.code === '__dict' ? newType('dict', [newVar(), newVar()]) :
+    env[node.code] || fail(`not found ${JSON.stringify(node)}`, Object.keys(env))
   const unify = (a, b, node) => {
     a = prune(a)
     b = prune(b)
@@ -316,6 +317,7 @@ const testAll = () => {
   inf('array(1)', '[]')
   inf('array(int)', '[1]')
   inf('array(string)', '[""]')
+  inf('array(array(1))', '[[]]')
   inf('int', '[1][0]')
   inf('string', '[""][0]')
   inf('string', '[""][0]')
@@ -388,9 +390,13 @@ const testAll = () => {
   eq(2, '"hi".size')
   // call: "(" exp+ ")"
   eq(1, 'f()', 'fn f: 1')
+  eq(3, 'add(1 2)', 'fn add a b: a + b')
+  eq(1, 'f()(1)', 'fn f: g\nfn g x: x')
   // at: "[" exp "]"
   eq(1, '[1 2][0]')
   eq(2, '[1 2][1]')
+  eq(2, 'a[1]', 'let a [1 2]')
+  eq(1, 'a[0][0]', 'let a [[1]]')
   // bottom:
   // | "(" exp ")"                  # priority  : 1 * (2 + 3)
   eq(3, '(1 + 2)')
@@ -422,12 +428,6 @@ const testAll = () => {
   // keyword: qw(let var fn struct adt if return case match fail test)
 
 /*
-  eq(1, 'f()[1].size', 'fn f: ["a" "b"]')
-  // prop: "." id
-  eq(2, '"hi".size')
-  // call: "(" exp+ ")"
-  eq(3, 'add(1 2)', 'fn add a b: a + b')
-  eq(1, 'f()(1)', 'fn f: g\nfn g x: x')
   // at: "[" exp "]"
   eq(2, '[1 2][1]')
   eq(2, 'a[1]', 'let a [1 2]')
