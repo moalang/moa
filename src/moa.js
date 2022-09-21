@@ -19,6 +19,7 @@ const str = o =>
   JSON.stringify(o)
 const showNode = (base, type) => base + (type ? `<${type.toString()}>` : '')
 const simplifyType = t => (d => t.replace(/\d+/g, s => d[s] ||= Object.keys(d).length + 1))({})
+const isOp1 = t => t && t.toString() === '!'
 const isOp2 = t => t && t.toString().match(/^[+\-*%/=><|&^]+$/)
 const isAssign = t => '+= -= *= /= %= ='.split(' ').includes(t.code)
 
@@ -72,6 +73,7 @@ const parse = tokens => {
     } else if (pred.code === '(' && close) { return right([newToken('__call'), lhs, ...bracket(exp, ')')])
     } else if (pred.code === '[' && close) { return right([newToken('__at'), lhs, ...bracket(exp, ']')])
     } else if (pred.code === '=>') { return right([pred, to_a(lhs), exp()])
+    } else if (isOp1(pred)) { return [lhs, exp()]
     } else if (isOp2(pred)) { return right([pred, lhs, exp()])
     } else { --pos; return lhs }
   }
@@ -103,7 +105,7 @@ const infer = nodes => {
     if (type.name === 'dict' && name === '__at') { return type.generics[1] }
     if (type.name === 'dict' && name === 'keys') { return newType('array', type.generics.slice(0, 1)) }
     if (type.name === 'dict' && name === 'values') { return newType('array', type.generics.slice(1)) }
-    fail(`${str(type)}.${name} not found`)
+    fail(`${str(type)}.${name} can not be inferred`)
   }
   let tid = 1
   const newVar = () => (o => { o.toString = () => str(o); return o } )({tid: tid++, instance: null})
@@ -130,6 +132,7 @@ const infer = nodes => {
   define('p', '0 0')
   define('true false', 'bool')
   define('< <= > >=', 'int int bool')
+  define('!', 'bool bool')
   define('|| &&', 'bool bool bool')
   define('+ - * / % += -= *= /= %=', 'int int int')
 
@@ -219,6 +222,7 @@ const generate = nodes => {
   const adt = o => Array.isArray(o) ?
     `const ${o[0]} = __val => ({__tag:'${o[0]}',__val})` :
     `const ${o} = {__tag:'${o}'}`
+  const op1 = (head, lhs) => head.code + '(' + lhs + ')'
   const op2 = (head, lhs, rhs) => {
     switch (head.code) {
       case '=>': return `((${lhs}) => ${rhs})`
@@ -249,7 +253,14 @@ const generate = nodes => {
       case 'if': return `if (${args[0]}) { ${args[1]} }`
       case 'case': return _case(args)
       case 'match': match(args)
-      default: return isOp2(head) ? op2(head, args[0], args[1]) : args.length === 0 ? gen(head) : `${gen(head)}(${args})`
+      default:
+        if (isOp1(head)) {
+          return op1(head, args[0])
+        } else if (isOp2(head)) {
+          return op2(head, args[0], args[1])
+        } else {
+          return args.length === 0 ? gen(head) : `${gen(head)}(${args})`
+        }
     }
   }
   return stdlib + nodes.map(gen).join(';\n')
@@ -293,6 +304,7 @@ const testAll = () => {
   const inf = (expect, exp, ...defs) => test((_, node) => simplifyType(str(node.type)), expect, exp, ...defs)
   const eq = (expect, exp, ...defs) => test((ret) => str(ret), str(expect), exp, ...defs)
   const error = (expect, exp, ...defs) => test((ret) => ret, str(expect), exp, ...defs)
+  eq(1, 'f()[1].size', 'fn f: ["a" "b"]')
 
   // -- Tests for type inference
   // primitives
@@ -368,7 +380,11 @@ const testAll = () => {
   // exp: unit (op2 exp)*
   eq(3, '1 + 2')
   eq(7, '1 + 2 * 3')
+  eq('hi', '"h" ++ "i"')
   // unit: op1? bottom (prop | call | at)*
+  eq(false, '!true')
+  eq(true, '!(true && false)')
+  eq(1, 'f()[1].size', 'fn f: ["a" "b"]')
   // prop: "." id
   eq(2, '"hi".size')
   // call: "(" exp+ ")"
@@ -407,15 +423,6 @@ const testAll = () => {
   // keyword: qw(let var fn struct adt if return case match fail test)
 
 /*
-  // -- Tests for executions
-  // top: node*
-  // node: exp+ ("\n" | (":\n" ("  " node)+)?)
-  // exp: unit (op2 exp)*
-  eq(7, '1 + 2 * 3')
-  eq('hi', '"h" ++ "i"')
-  // unit: op1? bottom (prop | call | at)*
-  eq(false, '!true')
-  eq(true, '!(true && false)')
   eq(1, 'f()[1].size', 'fn f: ["a" "b"]')
   // prop: "." id
   eq(2, '"hi".size')
