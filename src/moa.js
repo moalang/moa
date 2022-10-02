@@ -104,8 +104,8 @@ const infer = nodes => {
     if (str(type) === 'regexp' && name === 'test') { return ['string', 'bool'] }
     if (type.name === 'array' && name === '__at') { return type.generics[0] }
     if (type.name === 'dict' && name === '__at') { return type.generics[1] }
-    if (type.name === 'dict' && name === 'keys') { return newType('array', type.generics.slice(0, 1), []) }
-    if (type.name === 'dict' && name === 'values') { return newType('array', type.generics.slice(1), []) }
+    if (type.name === 'dict' && name === 'keys') { return newArray(type.generics[0]) }
+    if (type.name === 'dict' && name === 'values') { return newArray(type.generics[1]) }
     if (type.name in env) { return env[type.name][name] || fail(`${type.name} has not ${name}`) }
     fail(`${str(type)}.${name} can not be inferred`)
   }
@@ -146,8 +146,8 @@ const infer = nodes => {
   const _copy = (o, ids) => Array.isArray(o) ? o.map(x => _copy(x, ids)) : __copy(prune(o), ids)
   const __copy = (o, ids) => o.isGeneric ? o.copy() : o.tid ? ids[o.tid] ||= newVar() : o
   const lookup = (env, node) =>
-    node.code === '__array' ? newType('array', [newVar()], []) :
-    node.code === '__dict' ? newType('dict', [newVar(), newVar()], []) :
+    node.code === '__array' ? newArray() :
+    node.code === '__dict' ? newDict() :
     env[node.code] || fail(`not found ${JSON.stringify(node)}`, Object.keys(env))
   const unify = (a, b, node) => {
     a = prune(a)
@@ -168,6 +168,8 @@ const infer = nodes => {
     nodes.map(node => inf(node, env)).slice(-1)[0]
     return nodes.map(node => inf(node, env)).slice(-1)[0]
   }
+  const newArray = (t) => newType('array', [t || newVar()], [])
+  const newDict = (k, v) => newType('dict', [k || newVar(), v || newVar()], [])
   const newStruct = (a, env) => {
     const tenv = {}
     const targs = a.slice(1, -1).map(t => [t.code, tenv[t.code] = tvar()])
