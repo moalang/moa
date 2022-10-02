@@ -20,7 +20,7 @@ $ echo 'puts "Hello, Moa"' > main.moa
 $ moa run main.moa
 Hello, Moa
 ```
-4. Compile to the program as another programming language
+4. Compile the program to another programming languages
 ```
 $ moa js main.moa
 console.log('Hello, moa')

@@ -98,25 +98,27 @@ const parse = tokens => {
 }
 
 const infer = nodes => {
-  const method = (type, name, args) => {
+  const method = (type, name, args, env) => {
     type = prune(type)
     if (str(type) === 'string' && name === 'size') { return 'int' }
     if (str(type) === 'regexp' && name === 'test') { return ['string', 'bool'] }
     if (type.name === 'array' && name === '__at') { return type.generics[0] }
     if (type.name === 'dict' && name === '__at') { return type.generics[1] }
-    if (type.name === 'dict' && name === 'keys') { return newType('array', type.generics.slice(0, 1)) }
-    if (type.name === 'dict' && name === 'values') { return newType('array', type.generics.slice(1)) }
+    if (type.name === 'dict' && name === 'keys') { return newType('array', type.generics.slice(0, 1), []) }
+    if (type.name === 'dict' && name === 'values') { return newType('array', type.generics.slice(1), []) }
+    if (type.name in env) { return env[type.name][name] || fail(`${type.name} has not ${name}`) }
     fail(`${str(type)}.${name} can not be inferred`)
   }
   let tid = 1
   const newVar = () => (o => { o.toString = () => str(o); return o } )({tid: tid++, instance: null})
   const newVars = o => o.map(t => [t.code, newVar()])
   const toVars = a => (d => a.map(x => x.toString().match(/^[0-9]/) ? (d[x] ||= newVar()) : x))({})
-  const newType = (name, generics) => ({
+  const newType = (name, generics, props) => ({
     name,
     generics,
+    props,
     isGeneric: generics.length > 0,
-    copy: () => ({name, generics: toVars(generics)})
+    copy: () => ({name, generics: toVars(generics), props, isGeneric: generics.length > 0})
   })
 
   const prune = t => Array.isArray(t) ? (t.length === 1 ? prune(t[0]) : t.map(prune)) :
@@ -144,8 +146,8 @@ const infer = nodes => {
   const _copy = (o, ids) => Array.isArray(o) ? o.map(x => _copy(x, ids)) : __copy(prune(o), ids)
   const __copy = (o, ids) => o.isGeneric ? o.copy() : o.tid ? ids[o.tid] ||= newVar() : o
   const lookup = (env, node) =>
-    node.code === '__array' ? newType('array', [newVar()]) :
-    node.code === '__dict' ? newType('dict', [newVar(), newVar()]) :
+    node.code === '__array' ? newType('array', [newVar()], []) :
+    node.code === '__dict' ? newType('dict', [newVar(), newVar()], []) :
     env[node.code] || fail(`not found ${JSON.stringify(node)}`, Object.keys(env))
   const unify = (a, b, node) => {
     a = prune(a)
@@ -166,25 +168,34 @@ const infer = nodes => {
     nodes.map(node => inf(node, env)).slice(-1)[0]
     return nodes.map(node => inf(node, env)).slice(-1)[0]
   }
+  const newStruct = (a, env) => {
+    const tenv = {}
+    const targs = a.slice(1, -1).map(t => [t.code, tenv[t.code] = tvar()])
+    const props = a[a.length - 1].slice(1).map(([name, type]) => [name.code, tenv[type.code] || type.code])
+    const type = newType(a[0].code, targs.map(a => a[1]), props)
+    return env[a[0].code] = props.map(([_,type]) => type).concat([type])
+  }
   const call = ([head, ...remains], env) =>
     head == 'fn' ? (exp => unify(lookup(env, remains[0]), exp, remains))(func(remains.slice(1), env)) :
     head == 'let' ? (env[remains[0].code] = inf(remains[1], env)) :
+    head == 'var' ? (env[remains[0].code] = inf(remains[1], env)) :
     head == 'return' ? (remains.length === 0 ? 'nil' : inf(remains[0], env)) :
+    head == 'struct' ? (env[remains[0].code] = newStruct(remains, env)) :
     head == '__stmt' ? stmt(remains, env) :
     head == '__call' ? (remains.length === 1 ? call(remains, env)[0] : call(remains, env)) :
     head == '__array' ? (t => { remains.map(x => unify(inf(x, env), t.generics[0])); return t })(lookup(env, head)) :
     head == '__dict' ?  (t => { remains.map((x, i) => i % 2 == 0 ? unify(t.generics[0], inf(x, env)) : unify(t.generics[1], inf(x, env))) ; return t })(lookup(env, head)) :
-    head == '__at' ?  method(inf(remains[0], env), '__at', remains[1]) :
+    head == '__at' ?  method(inf(remains[0], env), '__at', remains[1], env) :
     head == '=>' ? func([...remains[0], remains[1]], env) :
-    head == '.' ? method(inf(remains[0], env), remains[1].code, ...remains.slice(2)) :
+    head == '.' ? method(inf(remains[0], env), remains[1].code, ...remains.slice(2), env) :
     remains.length === 0 ? inf(head, env) :
     unify(inf(head, env), [...remains.map(x => inf(x, env)), newVar()], [head, ...remains]).slice(-1)[0]
   const inf = (node, env) => node.type ||= _inf(node, env)
   const _inf = (node, env) => Array.isArray(node) ? call(node, env) :
     node.code === 'return' ? 'nil' :
-    node.code.match(/^[0-9]+$/) ? 'int' :
-    node.code.match(/^["`]/) ? 'string' :
-    node.code.match(/^r["`]/) ? 'regexp' :
+    node.code && node.code.match(/^[0-9]+$/) ? 'int' :
+    node.code && node.code.match(/^["`]/) ? 'string' :
+    node.code && node.code.match(/^r["`]/) ? 'regexp' :
     copy(lookup(env, node))
   stmt(nodes, env)
   return nodes
@@ -305,6 +316,7 @@ const testAll = () => {
   const inf = (expect, exp, ...defs) => test((_, node) => simplifyType(str(node.type)), expect, exp, ...defs)
   const eq = (expect, exp, ...defs) => test((ret) => str(ret), str(expect), exp, ...defs)
   const error = (expect, exp, ...defs) => test((ret) => ret, str(expect), exp, ...defs)
+  eq({name: 'apple', price: 199}, 'item("apple" 199)', 'struct item:\n  name string\n  price int')
 
   // -- Tests for type inference
   // primitives
@@ -378,6 +390,21 @@ const testAll = () => {
   // top: line*
   eq(3, 'a + b()', 'let a 1\nfn b 2')
   // line: keyword? exp+ ("\n" | (":\n" ("  " line)+))
+  eq(1, 'let n 1\nn')
+  eq(1, 'var n 0\nn+=1\nn')
+  eq(1, 'f()', 'fn f: 1')
+  eq({name: 'apple', price: 199}, 'item("apple" 199)', 'struct item:\n  name string\n  price int')
+  //eq(1, 'if true: return 1\n2')
+  //eq(2, 'if false: return 1\n2')
+  //eq(1, 'case true 1 2')
+  //eq(2, 'case false 1 2')
+  //eq(2, 'case false 1 true 2 3')
+  //eq(3, 'case false 1 false 2 3')
+  //eq(1, 'match a(1):\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
+  //eq(2, 'match b("hi"):\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
+  //eq(0, 'match c:\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
+  //error('hi', 'fail("hi")')
+  //error('Zero division error', '1/0')
   // exp: unit (op2 exp)*
   eq(3, '1 + 2')
   eq(7, '1 + 2 * 3')
