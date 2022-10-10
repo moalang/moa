@@ -126,8 +126,9 @@ const infer = nodes => {
     t
   const env = {}
   const define = (s, t) => s.split(' ').map(op => env[op] = t.includes(' ') ? toVars(t.split(' ')) : t)
+  define('fail', 'string 0')
   define('if', 'bool 0 nil')
-  define('case', 'bool 0 0 0')
+  define('when', 'bool 0 0 0')
   define('++', 'string string string')
   define('p', '0 0')
   define('true false', 'bool')
@@ -219,9 +220,9 @@ const generate = nodes => {
     o.code
   const template = s => s.replace(/\$[A-Za-z0-9_.]+/g, x => '${___str(' + x.slice(1) + ')}')
   const isExp = code => !/^(?:if|for|return)/.test(code)
-  const _case = a => a.length === 0 ? (() => {throw Error('Invalid case expression')})() :
+  const when = a => a.length === 0 ? (() => {throw Error('Invalid when expression')})() :
     a.length === 1 ? a[0] :
-    `${a[0]} ? ${a[1]} : ` + _case(a.slice(2))
+    `${a[0]} ? ${a[1]} : ` + when(a.slice(2))
   const stmt = a => a.map((v, i) => a.length - 1 === i && isExp(v) ? 'return ' + v : v).join('\n')
   const method = (key, args) => key in embedded ? embedded[key](...args) : `${args[0]}.${args[1]}`
   const struct = (name, fields) => `const ${name} = (${fields}) => ({${fields}})`
@@ -265,7 +266,7 @@ const generate = nodes => {
       case 'struct': return struct(tail[0], tail[1].slice(1).map(x => x[0]))
       case 'adt': return tail[1].slice(1).map(adt).join('\n')
       case 'if': return `if (${args[0]}) { ${args[1]} }`
-      case 'case': return _case(args)
+      case 'when': return when(args)
       case 'match': match(args)
       default:
         if (isOp1(head)) {
@@ -349,8 +350,8 @@ const testAll = () => {
   inf('bool', '1 < 1')
   inf('bool', 'true && r"hi".test("h")')
   // branch
-  inf('int', 'case true 1 2')
-  inf('bool', 'case true true true')
+  inf('int', 'when true 1 2')
+  inf('bool', 'when true true true')
   inf('nil', 'if true: return')
   inf('int', 'if true: return 1\n2')
   // variable
@@ -375,18 +376,18 @@ const testAll = () => {
   inf('int', '((f 1) + (g 1))', 'fn f x: x + 1', 'fn g x: x + 2')
   inf('((1 2) (2 3) 1 3)', 'fn _ f g x: g f(x)')
   inf('((1 2 3) (1 2) 1 3)', 'fn _ x y z: x z y(z)')
-  inf('(bool (bool bool) (bool bool))', 'fn _ b x: case x(b) x x => b')
-  inf('(bool bool)', 'fn _ x: case true x case(x true false)')
-  inf('(bool bool bool)', 'fn _ x y: case x x y')
+  inf('(bool (bool bool) (bool bool))', 'fn _ b x: when x(b) x x => b')
+  inf('(bool bool)', 'fn _ x: when true x when(x true false)')
+  inf('(bool bool bool)', 'fn _ x y: when x x y')
   inf('(1 1)', 'fn _ n: (x => x(y => y))(f => f(n))')
   inf('((1 2) 1 2)', 'fn _ x y: x y')
   inf('((1 2) ((1 2) 1) 2)', 'fn _ x y: x y(x)')
   inf('(1 ((1 2 3) 4 2) (1 2 3) 4 3)', 'fn _ h t f x: f h t(f x)')
   inf('((1 1 2) ((1 1 2) 1) 2)', 'fn _ x y: x y(x) y(x)')
   inf('(((1 1) 2) 2)', 'fn f y: id y(id)', 'fn id x: x')
-  inf('int', 'fn f: case id(true) id(1) id(2)', 'fn id x x')
+  inf('int', 'fn f: when id(true) id(1) id(2)', 'fn id x x')
   inf('int', 'fn g: f(true) + f(4)', 'fn f x: 3')
-  inf('(bool (1 1))', 'fn h b: case b f(g) g(f)', 'fn f x x', 'fn g y y')
+  inf('(bool (1 1))', 'fn h b: when b f(g) g(f)', 'fn f x x', 'fn g y y')
 
   // -- Tests for executions
   // top: line*
@@ -398,15 +399,13 @@ const testAll = () => {
   eq({name: 'apple', price: 199}, 'item("apple" 199)', 'struct item:\n  name string\n  price int')
   eq(1, 'if true: return 1\n2')
   eq(2, 'if false: return 1\n2')
-  eq(1, 'case true 1 2')
-  eq(2, 'case false 1 2')
-  //eq(2, 'case false 1 true 2 3')
-  //eq(3, 'case false 1 false 2 3')
+  eq(1, 'when true 1 2')
+  eq(2, 'when false 1 2')
   //eq(1, 'match a(1):\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
   //eq(2, 'match b("hi"):\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
   //eq(0, 'match c:\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
-  //error('hi', 'fail("hi")')
-  //error('Zero division error', '1/0')
+  error('hi', 'fail("hi")')
+  error('Zero division error', '1/0')
   // exp: unit (op2 exp)*
   eq(3, '1 + 2')
   eq(7, '1 + 2 * 3')
