@@ -178,12 +178,52 @@ const infer = nodes => {
     const type = newType(a[0].code, targs.map(a => a[1]), props)
     return env[a[0].code] = props.map(([_,type]) => type).concat([type])
   }
+  const newAdt = (a, env) => {
+    const adt = a[0].code
+    const tenv = {}
+    const targs = a.slice(1, -1).map(t => tenv[t.code] = newVar())
+    const props = a[1].slice(1).map(node => {
+      if (Array.isArray(node)) {
+        const tag = node[0].code
+        const tname = node[1].code
+        const type = tenv[tname] || tname
+        env[tag] = [type, adt]
+        return [tag, tname]
+      } else {
+        const tag = node.code
+        env[tag] = adt
+        return [tag, adt]
+      }
+    })
+    return env[adt] = newType(adt, targs, props)
+  }
+  const match = (a, env) => {
+    const target = inf(a[0], env)
+    const adt = env[target] || fail(`${target} is not defined in match`)
+    const ret = newVar()
+    for (const branch of a[1].slice(1)) {
+      const tag = branch[0].code
+      if (branch.length >= 3) {
+        const alias = branch[1].code
+        const newEnv = Object.assign({[alias]: adt.props.find(p => p[0] === tag)[1]}, env)
+        const exp = inf(branch.slice(2), newEnv)
+        unify(ret, exp)
+      } else {
+        const exp = inf(branch[1], env)
+        unify(ret, exp)
+      }
+    }
+    return ret
+    //eq(1, 'match a(1):\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
+  }
   const call = ([head, ...remains], env) =>
     head == 'fn' ? (exp => unify(lookup(env, remains[0]), exp, remains))(func(remains.slice(1), env)) :
     head == 'let' ? (env[remains[0].code] = inf(remains[1], env)) :
     head == 'var' ? (env[remains[0].code] = inf(remains[1], env)) :
     head == 'return' ? (remains.length === 0 ? 'nil' : inf(remains[0], env)) :
     head == 'struct' ? (env[remains[0].code] = newStruct(remains, env)) :
+    head == 'adt' ? newAdt(remains, env) :
+    head == 'match' ? match(remains, env) :
     head == '__stmt' ? stmt(remains, env) :
     head == '__call' ? (remains.length === 1 ? call(remains, env)[0] : call(remains, env)) :
     head == '__array' ? (t => { remains.map(x => unify(inf(x, env), t.generics[0])); return t })(lookup(env, head)) :
@@ -226,13 +266,22 @@ const generate = nodes => {
   const stmt = a => a.map((v, i) => a.length - 1 === i && isExp(v) ? 'return ' + v : v).join('\n')
   const method = (key, args) => key in embedded ? embedded[key](...args) : `${args[0]}.${args[1]}`
   const struct = (name, fields) => `const ${name} = (${fields}) => ({${fields}})`
-  const match = args => {
-    const error = '(()=>{throw Error(`Unmatch error: "${__.__tag}"`)})()'
-    const g = a => a.length === 3 ? `__.__tag === '${a[0]}' ? (${gen(a[1])} => ${gen(a[2])})(__.__val) : ` :
-      a.length === 2 ? `__.__tag === '${a[0]}' ? ${gen(a[1])} : ` :
-      (() => {throw Error(`Unexpected condition of match ${a}`)})()
-    const match = tail[1].slice(1).map(g).join('\n  ') + error
-    return `(__ => ${match})(${args[0]})`
+  const match = a => {
+    const target = gen(a[0])
+    const exps = []
+    for (const node of a[1].slice(1)) {
+      const tag = node[0].code
+      if (node.length >= 3) {
+        const alias = node[1].code
+        const exp = gen(node.slice(2))
+        exps.push(`__.__tag ==='${tag}' ? (${alias} => ${exp})(__.__val)`)
+      } else {
+        const exp = gen(node.slice(1))
+        exps.push(`__.__tag ==='${tag}' ? ${exp}`)
+      }
+    }
+    const match = exps.join(' :\n  ') + ' : (()=>{throw Error(`Unmatch error: ${__.__tag}`)})()'
+    return `(__ => ${match})(${target})`
   }
   const adt = o => Array.isArray(o) ?
     `const ${o[0]} = __val => ({__tag:'${o[0]}',__val})` :
@@ -267,7 +316,7 @@ const generate = nodes => {
       case 'adt': return tail[1].slice(1).map(adt).join('\n')
       case 'if': return `if (${args[0]}) { ${args[1]} }`
       case 'when': return when(args)
-      case 'match': match(args)
+      case 'match': return match(tail)
       default:
         if (isOp1(head)) {
           return op1(head, args[0])
@@ -401,9 +450,9 @@ const testAll = () => {
   eq(2, 'if false: return 1\n2')
   eq(1, 'when true 1 2')
   eq(2, 'when false 1 2')
-  //eq(1, 'match a(1):\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
-  //eq(2, 'match b("hi"):\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
-  //eq(0, 'match c:\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
+  eq(1, 'match a(1):\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
+  eq(2, 'match b("hi"):\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
+  eq(0, 'match c:\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
   error('hi', 'fail("hi")')
   error('Zero division error', '1/0')
   // exp: unit (op2 exp)*
