@@ -117,6 +117,9 @@ const infer = nodes => {
     type = prune(type)
     if (str(type) === 'string' && name === 'size') { return 'int' }
     if (str(type) === 'regexp' && name === 'test') { return ['string', 'bool'] }
+    if (type.name === 'array' && name === 'size') { return 'int' }
+    if (type.name === 'array' && name === 'map') { return (t => [[type.generics[0], t], newArray(t)])(newVar()) }
+    if (type.name === 'array' && name === 'filter') { return [[type.generics[0], 'bool'], type] }
     if (type.name === 'array' && name === '__at') { return type.generics[0] }
     if (type.name === 'dict' && name === '__at') { return type.generics[1] }
     if (type.name === 'dict' && name === 'keys') { return newArray(type.generics[0]) }
@@ -150,6 +153,7 @@ const infer = nodes => {
   define('true false', 'bool')
   define('++', 'string string string')
   define('< <= > >=', 'int int bool')
+  define('==', '0 0 bool')
   define('!', 'bool bool')
   define('|| &&', 'bool bool bool')
   define('+ - * / % += -= *= /= %=', 'int int int')
@@ -231,7 +235,6 @@ const infer = nodes => {
       }
     }
     return ret
-    //eq(1, 'match a(1):\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
   }
   const call = ([head, ...remains], env) =>
     head == 'fn' && remains[0] == '__test' ? ['__tester', 'string'] :
@@ -313,6 +316,7 @@ const generate = nodes => {
       default: return isAssign(head) ? `${lhs} ${head} ${rhs}` : `(${lhs} ${head} ${rhs})`
     }
   }
+  const base_type = t => t && t.name || t
   const apply = node => {
     if (node.length === 0) {
       return 'undefined'
@@ -326,7 +330,7 @@ const generate = nodes => {
       case '__dict': return `({${args.map((x, i) => x + (i%2 === 0 ? ":" : ",")).join(" ")}})`
       case '__at': return `${args[0]}[${args[1]}]`
       case '=>': return `((${(Array.isArray(tail[0]) ? tail[0] : [tail[0].code]).join(", ")}) => ${args[1]})`
-      case '.': return method(tail[0].type + '_' + args[1], args)
+      case '.': return method(base_type(tail[0].type) + '_' + args[1], args)
       case 'let': return `const ${args[0]} = ${args[1]}`
       case 'var': return `let ${args[0]} = ${args[1]}`
       case 'fn': return `const ${args[0]} = (${args.slice(1, -1)}) => ${args[args.length - 1]}`
@@ -523,71 +527,15 @@ const testAll = () => {
   // op2: [+-/%*=<>|&^;]+
   // keyword: qw(let var fn struct if return when fail adt match test)
 
-/*
-  // at: "[" exp "]"
-  eq(2, '[1 2][1]')
-  eq(2, 'a[1]', 'let a [1 2]')
-  eq(1, 'a[0][0]', 'let a [[1]]')
-  // bottom:
-  // | "(" exp  ")"                    # priority : 1 * (2 + 3)
-  eq(9, '(1 + 2) * 3')
-  // | "(" exp exp+ ")"                # apply    : f(a) == (f a)
-  eq(3, '(add 1 2)', 'fn add a b: a + b')
-  // | "[" exp* "]"                    # array    : [], [1 2]
-  eq([], '[]')
-  eq([1, 2], '[1 2]')
-  eq([1, 2], '[1 1 2].set')
-  eq(true, '[1].set[1]')
-  eq(false, '[1].set[2]')
-  // | "{" id* (id ":" exp)* "}"       # dictionary: {}, {one "two":2}
-  eq({}, '{}')
-  eq({one: 1, two: 2}, '{one "two":2}', 'let one 1')
-  eq(['one', 'two'], '{one "two":2}.keys', 'let one 1')
-  eq([1, 2], '{one "two":2}.values', 'let one 1')
-  // | '"' [^"]* '"'                   # string   : "hi"
-  eq('hi', '"hi"')
-  // | '`' ("$" unit | [^"])* '`'      # template : `hi $user.name`
-  eq('hi moa', '`hi $name`', 'let name "moa"')
-  eq('a\nb', 'v', 'let v `a\nb`')
-  // | '"' [^"]* '"'                   # regexp    : r"hi"
-  eq(true, 'r"^h".test("hi")')
-  eq(false, 'r"^h".test("bye")')
-  // | id ("," id)* "=>" exp           # lambda   : a,b => a + b
-  eq(1, 'f(a => 1)', 'fn f g: g()')
-  eq(3, 'f(a,b => 3)', 'fn f g: g(1 2)')
-  // | [0-9]+ ("." [0-9]+)?            # number   : 1, 0.5
-  eq(1, '1')
-  eq(0.5, '0.5')
-  // | id                              # id       : name
-  eq(1, 'a', 'let a 1')
-
-  // qw(let var fn struct adt if return case match fail)
-  eq(1, 'n', 'let n 1')
-  eq(1, 'var n 0\nn+=1\nn')
-  eq(1, 'f()', 'fn f: 1')
-  eq({name: 'apple', price: 199}, 'item("apple" 199)', 'struct item:\n  name string\n  price int')
-  eq(1, 'if true: return 1\n2')
-  eq(2, 'if false: return 1\n2')
-  eq(1, 'case true 1 2')
-  eq(2, 'case false 1 2')
-  eq(2, 'case false 1 true 2 3')
-  eq(3, 'case false 1 false 2 3')
-  eq(1, 'match a(1):\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
-  eq(2, 'match b("hi"):\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
-  eq(0, 'match c:\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
-  error('hi', 'fail("hi")')
-  error('Zero division error', '1/0')
-
-  // priority of operators
+  // priority
   eq(3, '"hi".size + 1')
   eq(3, '1 + "hi".size')
 
-  // string methods
+  // methods
   eq(1, '"a".size')
-  // array methods
   eq(1, '[0].size')
-  //eq([1], '[0].map(n => n + 1)')
-*/
+  eq([1], '[0].map(n => n + 1)')
+  eq([2, 4], '[1 2 3 4].filter(n => (n % 2) == 0)')
 
   puts('ok')
 }
