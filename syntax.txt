@@ -18,7 +18,7 @@ bottom:
 id: [A-Za-z_][A-Za-z0-9_]*
 op1: "!"
 op2: [+-/%*=<>|&^;]+
-keyword: qw(let var fn struct adt if return when match fail test)
+keyword: qw(let var fn struct if return when fail adt match test)
 
 
 # Ideas for bottom
@@ -65,3 +65,42 @@ _          part of id
 ! undefined
 $ undefined
 ; undefined
+
+
+# Basic usage
+struct user:
+  display-name string
+  email string
+  hashed-password string
+
+struct board:
+  title string
+  threads thread*
+  owners user+
+
+struct thread:
+  title string
+  owners user+
+
+database:
+  users user*
+  boards board*
+
+fn context:
+
+
+fn main: net.http.listen 8080 handler
+  handler r:
+    if r.method == "post":
+      database.transaction db => dispatch_post db io
+
+# Advanced usage
+struct array a:
+  values a*
+
+struct dict k v:
+  keys k
+  vals v
+
+struct item:
+  cache dict(string array(int))

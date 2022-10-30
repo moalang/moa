@@ -16,6 +16,7 @@ const str = o =>
   typeof o === 'object' && o.instance ? str(o.instance) :                    // for type
   typeof o === 'object' && 'generics' in o ? `${o.name}${str(o.generics)}` : // for type
   typeof o === 'object' && 'tid' in o ? o.tid.toString() :                   // for type
+  typeof o === 'object' && '__type' in o ? o.__type() :                      // for type
   JSON.stringify(o)
 const showNode = (base, type) => base + (type ? `<${str(type)}>` : '')
 const simplifyType = t => (d => t.replace(/\d+/g, s => d[s] ||= Object.keys(d).length + 1))({})
@@ -24,7 +25,20 @@ const isOp2 = t => t && t.toString().match(/^[+\-*%/=><|&^]+$/)
 const isAssign = t => '+= -= *= /= %= ='.split(' ').includes(t.code)
 
 const stdlib = (() => {
-const ___str = o => typeof o === 'function' && o.length === 0 ? ___str(o()) : o
+const __str = o => typeof o === 'function' && o.length === 0 ? __str(o()) : o
+const __state = {
+  tests: [],
+  error: undefined,
+  ret: undefined,
+}
+const __tester = {
+  eq: (a, b) => {
+    a = JSON.stringify(a)
+    b = JSON.stringify(b)
+    __state.tests.push(a === b)
+    return a === b
+  }
+}
 }).toString().slice(8, -1)
 
 const tokenize = source => {
@@ -94,7 +108,8 @@ const parse = tokens => {
     }
     return ary.length === 1 ? ary[0] : ary
   }
-  return until(consumeLine, t => t.indent === 0)
+  const desugar = a => a[0] == 'test' ? [newToken('fn'), newToken('__test'), ...a.slice(1)] : a
+  return until(consumeLine, t => t.indent === 0).map(desugar)
 }
 
 const infer = nodes => {
@@ -124,14 +139,16 @@ const infer = nodes => {
   const prune = t => Array.isArray(t) ? (t.length === 1 ? prune(t[0]) : t.map(prune)) :
     t.instance ? t.instance = prune(t.instance) :
     t
-  const env = {}
+  const env = {
+    __tester: newType('__tester', [], [['eq', '0 0 bool']]),
+  }
   const define = (s, t) => s.split(' ').map(op => env[op] = t.includes(' ') ? toVars(t.split(' ')) : t)
   define('fail', 'string 0')
   define('if', 'bool 0 nil')
   define('when', 'bool 0 0 0')
-  define('++', 'string string string')
   define('p', '0 0')
   define('true false', 'bool')
+  define('++', 'string string string')
   define('< <= > >=', 'int int bool')
   define('!', 'bool bool')
   define('|| &&', 'bool bool bool')
@@ -217,6 +234,7 @@ const infer = nodes => {
     //eq(1, 'match a(1):\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
   }
   const call = ([head, ...remains], env) =>
+    head == 'fn' && remains[0] == '__test' ? ['__tester', 'string'] :
     head == 'fn' ? (exp => unify(lookup(env, remains[0]), exp, remains))(func(remains.slice(1), env)) :
     head == 'let' ? (env[remains[0].code] = inf(remains[1], env)) :
     head == 'var' ? (env[remains[0].code] = inf(remains[1], env)) :
@@ -230,7 +248,7 @@ const infer = nodes => {
     head == '__dict' ?  (t => { remains.map((x, i) => i % 2 == 0 ? unify(t.generics[0], inf(x, env)) : unify(t.generics[1], inf(x, env))) ; return t })(lookup(env, head)) :
     head == '__at' ?  method(inf(remains[0], env), '__at', remains[1], env) :
     head == '=>' ? func([...remains[0], remains[1]], env) :
-    head == '.' ? method(inf(remains[0], env), remains[1].code, ...remains.slice(2), env) :
+    head == '.' ? method(inf(remains[0], env), remains[1].code, remains.slice(2), env) :
     remains.length === 0 ? inf(head, env) :
     unify(inf(head, env), [...remains.map(x => inf(x, env)), newVar()], [head, ...remains]).slice(-1)[0]
   const inf = (node, env) => node.type ||= _inf(node, env)
@@ -258,7 +276,7 @@ const generate = nodes => {
     o.code.startsWith('r"') ? `RegExp(${o.code.slice(1)})` :
     o.code.startsWith('`') ? template(o.code) :
     o.code
-  const template = s => s.replace(/\$[A-Za-z0-9_.]+/g, x => '${___str(' + x.slice(1) + ')}')
+  const template = s => s.replace(/\$[A-Za-z0-9_.]+/g, x => '${__str(' + x.slice(1) + ')}')
   const isExp = code => !/^(?:if|for|return)/.test(code)
   const when = a => a.length === 0 ? (() => {throw Error('Invalid when expression')})() :
     a.length === 1 ? a[0] :
@@ -344,13 +362,13 @@ const testAll = () => {
   const test = (convert, expect, exp, ...defs) => {
     const source = (defs || []).concat(`fn __main:\n  ${exp.replace(/\n/g, "\n  ")}`).join('\n')
     const {tokens, nodes, js, error} = compile(source)
-    let ret
+    let state = {}
     try {
-      ret = eval(`${js}\n__main()`)
+      state = eval(`${js}\n__state.ret = __main()\n__state`)
     } catch (e) {
-      ret = e.message
+      state.error = e
     }
-    const actual = convert(ret, nodes.slice(-1)[0])
+    const actual = convert(state, nodes.slice(-1)[0])
     if (actual === expect) {
       put('.')
     } else {
@@ -366,9 +384,9 @@ const testAll = () => {
     }
   }
   const inf = (expect, exp, ...defs) => test((_, node) => simplifyType(str(node.type)), expect, exp, ...defs)
-  const eq = (expect, exp, ...defs) => test((ret) => str(ret), str(expect), exp, ...defs)
-  const error = (expect, exp, ...defs) => test((ret) => ret, str(expect), exp, ...defs)
-  eq({name: 'apple', price: 199}, 'item("apple" 199)', 'struct item:\n  name string\n  price int')
+  const eq = (expect, exp, ...defs) => test(state => str(state.ret), str(expect), exp, ...defs)
+  const error = (expect, exp, ...defs) => test(state => state.error.message, str(expect), exp, ...defs)
+  const ut = (expect, tests, ...defs) => test(state => state.tests.map(b => 'x.'[Math.floor(b)]).join(''), str(expect), '__test(__tester)', 'test t:\n  ' + tests.replace('\n', '\n  '), ...defs)
 
   // -- Tests for type inference
   // primitives
@@ -450,11 +468,12 @@ const testAll = () => {
   eq(2, 'if false: return 1\n2')
   eq(1, 'when true 1 2')
   eq(2, 'when false 1 2')
+  error('hi', 'fail("hi")')
   eq(1, 'match a(1):\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
   eq(2, 'match b("hi"):\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
   eq(0, 'match c:\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
-  error('hi', 'fail("hi")')
   error('Zero division error', '1/0')
+  ut('.x', 't.eq 3 add(1 2)\nt.eq 9 add(1 3)', 'fn add a b: a + b')
   // exp: unit (op2 exp)*
   eq(3, '1 + 2')
   eq(7, '1 + 2 * 3')
@@ -502,7 +521,7 @@ const testAll = () => {
   // id: [A-Za-z_][A-Za-z0-9_]*
   // op1: "!"
   // op2: [+-/%*=<>|&^;]+
-  // keyword: qw(let var fn struct adt if return case match fail test)
+  // keyword: qw(let var fn struct if return when fail adt match test)
 
 /*
   // at: "[" exp "]"
