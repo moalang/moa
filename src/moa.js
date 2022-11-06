@@ -21,7 +21,7 @@ const str = o =>
 const showNode = (base, type) => base + (type ? `<${str(type)}>` : '')
 const simplifyType = t => (d => t.replace(/\d+/g, s => d[s] ||= Object.keys(d).length + 1))({})
 const isOp1 = t => t && t.toString() === '!'
-const isOp2 = t => t && t.toString().match(/^[+\-*%/=><|&^]+$/)
+const isOp2 = t => t && t.toString().match(/^[+\-*%/=><|&^!]+$/)
 const isAssign = t => '+= -= *= /= %= ='.split(' ').includes(t.code)
 
 const stdlib = (() => {
@@ -42,7 +42,7 @@ const __tester = {
 }).toString().slice(8, -1)
 
 const tokenize = source => {
-  const texts = source.split(/((?: |\n|#[^\n]*)+|[0-9]+(?:\.[0-9]+)?|[+\-*%/=><|&^]+|r?"[^"]*"|`[^`]*`|[A-Za-z0-9_]+(?:,[A-Za-z0-9_]+)*|.)/g).filter(x => x)
+  const texts = source.split(/((?: |\n|#[^\n]*)+|[0-9]+(?:\.[0-9]+)?|[+\-*%/=><|&^!]+|r?"[^"]*"|`[^`]*`|[A-Za-z0-9_]+(?:,[A-Za-z0-9_]+)*|.)/g).filter(x => x)
   const tokens = []
   let pos = 0
   let line = 1
@@ -153,10 +153,10 @@ const infer = nodes => {
   define('true false', 'bool')
   define('++', 'string string string')
   define('< <= > >=', 'int int bool')
-  define('==', '0 0 bool')
+  define('== !=', '0 0 bool')
   define('!', 'bool bool')
   define('|| &&', 'bool bool bool')
-  define('+ - * / % += -= *= /= %=', 'int int int')
+  define('+ - * / % += -= *= /= %= //', 'int int int')
 
   const func = (a, env) => a.length === 1 ? stmt(a, env) : lambda(a, env)
   const lambda = (a, env) => {
@@ -312,6 +312,7 @@ const generate = nodes => {
     switch (head.code) {
       case '=>': return `((${lhs}) => ${rhs})`
       case '/': return `(((l,r) => r === 0 ? (() => { throw Error('Zero division error') })() : l / r)(${lhs},${rhs}))`
+      case '//': return `Math.floor(${lhs} / ${rhs})`
       case '++': return `${lhs}.toString() + ${rhs}.toString()`
       default: return isAssign(head) ? `${lhs} ${head} ${rhs}` : `(${lhs} ${head} ${rhs})`
     }
@@ -476,11 +477,22 @@ const testAll = () => {
   eq(1, 'match a(1):\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
   eq(2, 'match b("hi"):\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
   eq(0, 'match c:\n  a v: v\n  b v: v.size\n  c: 0', 'adt ab:\n  a int\n  b string\n  c')
-  error('Zero division error', '1/0')
   ut('.x', 't.eq 3 add(1 2)\nt.eq 9 add(1 3)', 'fn add a b: a + b')
   // exp: unit (op2 exp)*
   eq(3, '1 + 2')
+  eq(1, '2 - 1')
+  eq(6, '2 * 3')
+  eq(1.5, '3 / 2')
+  error('Zero division error', '1/0')
+  eq(1, '3 // 2')
+  eq(1, '4 % 3')
   eq(7, '1 + 2 * 3')
+  eq(true, '1 == 1')
+  eq(false, '1 != 1')
+  eq(false, '1 < 1')
+  eq(true, '1 <= 1')
+  eq(false, '1 > 1')
+  eq(true, '1 >= 1')
   eq('hi', '"h" ++ "i"')
   // unit: op1? bottom (prop | call | at)*
   eq(false, '!true')
@@ -524,7 +536,7 @@ const testAll = () => {
   eq(1, 'id()', 'fn id: 1')
   // id: [A-Za-z_][A-Za-z0-9_]*
   // op1: "!"
-  // op2: [+-/%*=<>|&^;]+
+  // op2: [+-/%*=<>|&^;!]+
   // keyword: qw(let var fn struct if return when fail adt match test)
 
   // priority

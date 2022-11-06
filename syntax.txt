@@ -82,17 +82,24 @@ struct thread:
   title string
   owners user+
 
-database:
+db:
   users user*
   boards board*
 
-fn context:
+context:
+  net.http.listen.request
+  db(users boards)
 
+fn main:
+  r <- net.http.listen 8080
+  db <- db.begin
+  do dispatch r.path:
+    dispatch path: match path
+      "/": index
+    index: ...
 
-fn main: net.http.listen 8080 handler
-  handler r:
-    if r.method == "post":
-      database.transaction db => dispatch_post db io
+t <- test
+t.eq 1 1
 
 # Advanced usage
 struct array a:
