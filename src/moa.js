@@ -71,7 +71,7 @@ const parse = tokens => {
     switch (token.code) {
       case '{': return [newToken('__dict'), ...bracket(exp, '}')]
       case '(': return bracket(exp, ')')
-      case '[': return [newToken('__array'), ...bracket(exp, ']')]
+      case '[': return [newToken('__list'), ...bracket(exp, ']')]
       default: return token
     }
   }
@@ -117,10 +117,11 @@ const infer = nodes => {
     type = prune(type)
     if (str(type) === 'string' && name === 'size') { return 'int' }
     if (str(type) === 'regexp' && name === 'test') { return ['string', 'bool'] }
-    if (type.name === 'array' && name === 'size') { return 'int' }
-    if (type.name === 'array' && name === 'map') { return (t => [[type.generics[0], t], newArray(t)])(newVar()) }
-    if (type.name === 'array' && name === 'filter') { return [[type.generics[0], 'bool'], type] }
-    if (type.name === 'array' && name === '__at') { return type.generics[0] }
+    if (type.name === 'list' && name === 'size') { return 'int' }
+    if (type.name === 'list' && name === 'map') { return (t => [[type.generics[0], t], newArray(t)])(newVar()) }
+    if (type.name === 'list' && name === 'filter') { return [[type.generics[0], 'bool'], type] }
+    if (type.name === 'list' && name === 'uniq') { return type }
+    if (type.name === 'list' && name === '__at') { return type.generics[0] }
     if (type.name === 'dict' && name === '__at') { return type.generics[1] }
     if (type.name === 'dict' && name === 'keys') { return newArray(type.generics[0]) }
     if (type.name === 'dict' && name === 'values') { return newArray(type.generics[1]) }
@@ -168,7 +169,7 @@ const infer = nodes => {
   const _copy = (o, ids) => Array.isArray(o) ? o.map(x => _copy(x, ids)) : __copy(prune(o), ids)
   const __copy = (o, ids) => o.isGeneric ? o.copy() : o.tid ? ids[o.tid] ||= newVar() : o
   const lookup = (env, node) =>
-    node.code === '__array' ? newArray() :
+    node.code === '__list' ? newArray() :
     node.code === '__dict' ? newDict() :
     env[node.code] || fail(`not found ${JSON.stringify(node)}`, Object.keys(env))
   const unify = (a, b, node) => {
@@ -190,7 +191,7 @@ const infer = nodes => {
     nodes.map(node => inf(node, env)).slice(-1)[0]
     return nodes.map(node => inf(node, env)).slice(-1)[0]
   }
-  const newArray = (t) => newType('array', [t || newVar()], [])
+  const newArray = (t) => newType('list', [t || newVar()], [])
   const newDict = (k, v) => newType('dict', [k || newVar(), v || newVar()], [])
   const newStruct = (a, env) => {
     const tenv = {}
@@ -247,7 +248,7 @@ const infer = nodes => {
     head == 'match' ? match(remains, env) :
     head == '__stmt' ? stmt(remains, env) :
     head == '__call' ? (remains.length === 1 ? call(remains, env)[0] : call(remains, env)) :
-    head == '__array' ? (t => { remains.map(x => unify(inf(x, env), t.generics[0])); return t })(lookup(env, head)) :
+    head == '__list' ? (t => { remains.map(x => unify(inf(x, env), t.generics[0])); return t })(lookup(env, head)) :
     head == '__dict' ?  (t => { remains.map((x, i) => i % 2 == 0 ? unify(t.generics[0], inf(x, env)) : unify(t.generics[1], inf(x, env))) ; return t })(lookup(env, head)) :
     head == '__at' ?  method(inf(remains[0], env), '__at', remains[1], env) :
     head == '=>' ? func([...remains[0], remains[1]], env) :
@@ -267,14 +268,14 @@ const infer = nodes => {
 
 const generate = nodes => {
   const embedded = {
-    'array_size': code => `${code}.length`,
-    'array_set': code => `((d,a) => a.flatMap(x => x in d ? )] : [d[x]=x]))({}, ${code})`,
+    'list_size': code => `${code}.length`,
+    'list_uniq': code => `((d,a) => a.flatMap(x => x in d ? [] : [d[x]=x]))({}, ${code})`,
     'string_size': code => `${code}.length`,
     'dictionary_keys': code => `Object.keys(${code})`,
     'dictionary_values': code => `Object.values(${code})`,
   }
   const gen = o => Array.isArray(o) ? apply(o) :
-    o.code === '__array' ? '[]' :
+    o.code === '__list' ? '[]' :
     o.code === '__dict' ? '({})' :
     o.code.startsWith('r"') ? `RegExp(${o.code.slice(1)})` :
     o.code.startsWith('`') ? template(o.code) :
@@ -327,7 +328,7 @@ const generate = nodes => {
     switch (head.code) {
       case '__stmt': return `(() => { ${stmt(args)} })()`
       case '__call': return tail[0] == 'fail' ?  `(() => { throw Error(${args[1]}) })()` : args[0] + `(${args.slice(1)})`
-      case '__array': return `[${args.join(', ')}]`
+      case '__list': return `[${args.join(', ')}]`
       case '__dict': return `({${args.map((x, i) => x + (i%2 === 0 ? ":" : ",")).join(" ")}})`
       case '__at': return `${args[0]}[${args[1]}]`
       case '=>': return `((${(Array.isArray(tail[0]) ? tail[0] : [tail[0].code]).join(", ")}) => ${args[1]})`
@@ -400,11 +401,11 @@ const testAll = () => {
   inf('bool', 'false')
   inf('string', '"hi"')
   inf('regexp', 'r"hi"')
-  // generic array
-  inf('array(1)', '[]')
-  inf('array(int)', '[1]')
-  inf('array(string)', '[""]')
-  inf('array(array(1))', '[[]]')
+  // generic list
+  inf('list(1)', '[]')
+  inf('list(int)', '[1]')
+  inf('list(string)', '[""]')
+  inf('list(list(1))', '[[]]')
   inf('int', '[1][0]')
   inf('string', '[""][0]')
   inf('string', '[""][0]')
@@ -412,8 +413,8 @@ const testAll = () => {
   inf('dict(1 2)', '{}')
   inf('dict(string int)', '{"a" 2}')
   inf('int', '{"a" 2}["a"]')
-  inf('array(string)', '{"a" 2}.keys')
-  inf('array(int)', '{"a" 2}.values')
+  inf('list(string)', '{"a" 2}.keys')
+  inf('list(int)', '{"a" 2}.values')
   // methods
   inf('int', '"hi".size')
   inf('bool', 'r"hi".test("h")')
@@ -546,6 +547,7 @@ const testAll = () => {
   // methods
   eq(1, '"a".size')
   eq(1, '[0].size')
+  eq([1, 2], '[1 2 1].uniq')
   eq([1], '[0].map(n => n + 1)')
   eq([2, 4], '[1 2 3 4].filter(n => (n % 2) == 0)')
 
