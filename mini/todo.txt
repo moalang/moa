@@ -1,0 +1,57 @@
+# Interpriter
+[ ] int
+[ ] string
+[ ] list
+[ ] dict
+[ ] set
+[ ] struct
+[ ] algebric data type
+[ ] binary operators
+[ ] some methods
+
+# First release
+[ ] debug print
+[ ] compile to JavaScript
+[ ] type inference
+[ ] type class
+[ ] self boot
+[ ] time
+[ ] random
+[ ] http server
+[ ] http client
+
+# Core syntax
+top; unit+
+unit:
+| "(" top ")"
+| "[^"]+"
+| `[^"]+`
+| !
+| [+-/*%<>!=|&]+
+| [^ ]+
+
+Syntax sugars
+- f(...)      # (f ...)
+- o.m         # (. o m)
+- a b         # (a b)
+- a = b       # (= a () b)
+- a b = c     # (c = a (b) c)
+- a op2 b     # (op2 a b)
+- op1 a       # (op1 a)
+- a b: c      # (: (a b) (c))
+- a b:
+  c
+  d e         # (: (a b) (c (d e)))
+
+Example
+inc n = n + 1 # (= inc (n) (+ n 1))
+main =
+  x = 1
+  match x:
+    case 1: "one"
+    case _: "others"
+  # (= main () ((= x 1) (: match x ((: caes 1 "one") (: case _ "others))))
+
+Syntax sugar ides
+- [...]     -> list(...)
+- {k:v ...} -> dict("k" v)
