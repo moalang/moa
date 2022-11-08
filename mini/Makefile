@@ -1,6 +1,7 @@
 test:
 	clear
-	node mini.js
+	-node parse.js
 
 watch:
-	fswatch -0 mini.js | xargs -I {} -n1 -0 make
+	-make test
+	fswatch -0 parse.js | xargs -I {} -n1 -0 make
