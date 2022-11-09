@@ -26,14 +26,12 @@ const puts = (...a) => { console.log(a.map(str).join(' ')); return a[0] }
 const dump = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
 const convert = source => {
-  const tokens = source.split(/([()\[\]!]|[0-9.]+|[ \t\r\n]+)/).filter(t => t.length > 0)
+  const tokens = source.split(/([()\[\]!]|[0-9.]+|[ \t\r\n]+|"[^"]*"|`[^`]*`|[A-Za-z0-9_]+)/).filter(t => t.length > 0)
   let pos = 0
   const inc = () => {
     const old = pos
     ++pos
-    while (pos < tokens.length && /[ \t\r\n]/.test(tokens[pos])) {
-      ++pos
-    }
+    many([], t => t, t => /[ \t\r\n]/.test(t))
     return old
   }
   const many = (a, f, g) => {
@@ -43,10 +41,9 @@ const convert = source => {
     };
     return a
   }
-  const to_a = o => Array.isArray(o) ? o : [o]
   const until = (a, f, mark) => many(a, f, t => t !== mark || (inc() && false))
   const call = o => tokens[pos] === '(' ? _call(o, consume(tokens[pos])[0]) : o
-  const _call = (o, a) => a.length === 0 ? ['__call', o] : to_a(o).concat(a)
+  const _call = (o, a) => a.length === 0 ? ['__call', o] : [o].concat(a)
   const bottom = t => tokens[pos] === '.' ? inc() && ['.', t, tokens[inc()]] :
     t === '[' ? until(['list'], consume, ']') :
     t === '(' ? until([], consume, ')') :
@@ -58,14 +55,15 @@ const convert = source => {
       a.slice(0, 2).concat(op2(a.slice(2)))
     const def = a => _def(a, a.findIndex(t => t === '='))
     const _def = (a, n) => n === -1 ? a : ['=', a[0], a.slice(1, n), a.slice(n+1)]
-    return Array.isArray(o) ? (o.length === 1 ? unwrap(o[0]) : def(op2(o)).map(unwrap)) : o
+    const block = a => _block(a, a.findIndex(t => t === ':'))
+    const _block = (a, n) => n === -1 ? a : [':', a.slice(0, n), a.slice(n+1)]
+    return Array.isArray(o) ? (o.length === 1 ? unwrap(o[0]) : block(def(op2(o))).map(unwrap)) : o
   }
   return unwrap(many([], consume))
 }
 const stringify = a => Array.isArray(a) ? `(${a.map(stringify).join(' ')})` : str(a)
 const assert = (expect, fact, src) => expect === fact ? put('.') : fail(`Expected '${expect}' but got '${fact}' in '${src}'`)
 const test = (expect, src) => assert(expect, stringify(convert(src)), src)
-test('(__call (. f m))', 'f.m()')
 
 // primitives
 test('1', '1')
@@ -91,14 +89,21 @@ test('(+ (+ 1 2) 3)', '(1 + 2) + 3')
 // function call
 test('(__call f)', 'f()')
 test('(f 1)', 'f(1)')
+//test('(f (+ 1 2))', 'f(1 + 2)')
 
 // method call
 test('(. f m)', 'f.m')
 test('(__call (. f m))', 'f.m()')
+test('((. f m) a)', 'f.m(a)')
+test('((. f m) a b)', 'f.m(a b)')
 
 // define function
 test('(= f () 1)', 'f = 1')
 test('(= f n n)', 'f n = n')
 test('(= f (a b) (+ a b))', 'f a b = a + b')
+
+// indent based block
+test('(: a b)', 'a: b')
+
 
 puts('ok')
