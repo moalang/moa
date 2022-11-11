@@ -42,7 +42,7 @@ const convert = source => {
     return a
   }
   const until = (a, f, mark) => many(a, f, t => t !== mark || (inc() && false))
-  const call = o => tokens[pos] === '(' ? _call(o, consume(tokens[pos])[0]) : o
+  const call = o => tokens[pos] === '(' && /[A-Za-z0-9_]/.test(tokens[pos - 1]) ? _call(o, consume(tokens[pos])[0]) : o
   const _call = (o, a) => a.length === 0 ? ['__call', o] : [o].concat(a)
   const bottom = t => tokens[pos] === '.' ? inc() && ['.', t, tokens[inc()]] :
     t === '[' ? until(['list'], consume, ']') :
@@ -51,13 +51,14 @@ const convert = source => {
   const consume = t => call(bottom(t))
   const unwrap = o => {
     const op2 = a => a.length <= 2 ? a :
-      /[+\-*/%|&<>!=.]/.test(a[1]) && a[1] !== '=' ? [a[1], a[0], op2(a.slice(2))] :
-      a.slice(0, 2).concat(op2(a.slice(2)))
+      /[+\-*/%|&<>!=.]/.test(a[1]) && a[1] !== '=' ? op2([[a[1], a[0], a[2]], ...a.slice(3)]) :
+      [a[0], ...op2(a.slice(1))]
     const def = a => _def(a, a.findIndex(t => t === '='))
     const _def = (a, n) => n === -1 ? a : ['=', a[0], a.slice(1, n), a.slice(n+1)]
     const block = a => _block(a, a.findIndex(t => t === ':'))
     const _block = (a, n) => n === -1 ? a : [':', a.slice(0, n), a.slice(n+1)]
-    return Array.isArray(o) ? (o.length === 1 ? unwrap(o[0]) : block(def(op2(o))).map(unwrap)) : o
+    const unnest = a => a.length === 1 ? a[0] : a
+    return Array.isArray(o) ? (o.length === 1 ? unwrap(o[0]) : unnest(block(def(op2(o)))).map(unwrap)) : o
   }
   return unwrap(many([], consume))
 }
@@ -78,18 +79,18 @@ test('(! true)', '!true')
 
 // binary operators
 test('(+ 1 2)', '1 + 2')
-test('(+ 1 (+ 2 3))', '1 + 2 + 3')
+test('(+ (+ 1 2) 3)', '1 + 2 + 3')
 
 // parentheses
 test('1', '(1)')
 test('(f 1)', '(f 1)')
 test('(+ 1 2)', '(1 + 2)')
-test('(+ (+ 1 2) 3)', '(1 + 2) + 3')
+test('(+ 1 (+ 2 3))', '1 + (2 + 3)')
 
 // function call
 test('(__call f)', 'f()')
 test('(f 1)', 'f(1)')
-//test('(f (+ 1 2))', 'f(1 + 2)')
+test('(f (+ 1 2))', 'f(1 + 2)')
 
 // method call
 test('(. f m)', 'f.m')
