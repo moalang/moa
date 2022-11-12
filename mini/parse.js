@@ -28,16 +28,20 @@ const fail = m => { throw new Error(m) }
 const convert = source => {
   const tokens = source.split(/([()\[\]!]|[0-9.]+|[ \t\r\n]+|"[^"]*"|`[^`]*`|[A-Za-z0-9_]+)/).filter(t => t.length > 0)
   let pos = 0
-  const many = (a, f, g) => {
-    g ||= () => true;
-    while(pos < tokens.length && g(tokens[pos])) {
-      a.push(f())
+  const many = (a, f) => {
+    while (pos < tokens.length) {
+      const ret = f(tokens[pos])
+      if (typeof ret === 'string' || Array.isArray(ret) || ret === true) {
+        a.push(ret)
+      } else {
+        break
+      }
     }
     return a
   }
-  const chomp = t => (many([], _ => _, t => t.match(/^[ \t]+$/) && ++pos), t)
+  const chomp = t => (pos < tokens.length && tokens[pos].match(/^[ \t]+/) && ++pos, t)
   const consume = () => chomp(tokens[pos++])
-  const until = (a, mark) => many(a, unit, t => t !== mark || (consume(), false))
+  const until = (a, mark) => many(a, t => t === mark ? ++pos : unit())
   const call = o => tokens[pos] === '(' && !' \t'.includes(tokens[pos - 1]) ? ++pos && _call(o, until([], ')')) : o
   const _call = (o, a) => a.length === 0 ? ['__call', o] : [o].concat(a)
   const indent = s => s.split(/[\r\n]/).slice(-1)[0].length
@@ -56,8 +60,8 @@ const convert = source => {
     const unnest = a => a.length === 1 ? a[0] : a
     return Array.isArray(o) ? (o.length === 1 ? unwrap(o[0]) : unnest(block(op2(o))).map(unwrap)) : o
   }
-  const line = () => many([], unit, t => !'\r\n'.includes(t))
-  const lines = () => mark('__do', many([], line, t => '\r\n'.includes(t) ? ++pos : true))
+  const line = () => many([], t => '\r\n'.includes(t) ? ++pos : unit())
+  const lines = () => mark('__do', many([], line))
   const mark = (m, a) => a.length >= 2 ? [m, ...a] : a
   return unwrap(lines())
 }
