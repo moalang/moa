@@ -44,11 +44,12 @@ const convert = source => {
   const until = (a, mark) => many(a, t => t === mark ? ++pos : unit())
   const call = o => tokens[pos] === '(' && !' \t'.includes(tokens[pos - 1]) ? ++pos && _call(o, until([], ')')) : o
   const _call = (o, a) => a.length === 0 ? ['__call', o] : [o].concat(a)
-  const indent = s => s.split(/[\r\n]/).slice(-1)[0].length
+  const indent = s => s === undefined ? 0 : s.match(/[\r\n]/) ? s.split(/[\r\n]/).slice(-1)[0].length : -1
   const bottom = t =>
     tokens[pos] === '.' ? (consume(), ['.', t, consume()]) :
     t === '[' ? until(['list'], ']') :
     t === '(' ? until([], ')') :
+    indent(t) >= 1 ? lines(indent(t)) :
     t
   const unit = () => call(bottom(consume()))
   const unwrap = o => {
@@ -60,10 +61,10 @@ const convert = source => {
     const unnest = a => a.length === 1 ? a[0] : a
     return Array.isArray(o) ? (o.length === 1 ? unwrap(o[0]) : unnest(block(op2(o))).map(unwrap)) : o
   }
-  const line = () => many([], t => '\r\n'.includes(t) ? ++pos : unit())
-  const lines = () => mark('__do', many([], line))
+  const line = n => many([], t => n === indent(t) ? ++pos : unit())
+  const lines = n => mark('__do', many([], _ => line(n)))
   const mark = (m, a) => a.length >= 2 ? [m, ...a] : a
-  return unwrap(lines())
+  return unwrap(lines(0))
 }
 const stringify = a => Array.isArray(a) ? `(${a.map(stringify).join(' ')})` : str(a)
 const assert = (expect, fact, src) => expect === fact ? put('.') : fail(`Expected '${expect}' but got '${fact}' in '${src}'`)
@@ -115,5 +116,8 @@ test('(__do a b)', 'a\nb')
 test('(__do (a b) c)', 'a b\nc')
 test('(__do a (b c))', 'a\nb c')
 
+// indent
+test('(: loop () a)', 'loop:\n  a')
+test('(: loop () (__do a b))', 'loop:\n  a\n  b')
 
 puts('ok')
