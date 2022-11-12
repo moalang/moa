@@ -28,24 +28,25 @@ const fail = m => { throw new Error(m) }
 const convert = source => {
   const tokens = source.split(/([()\[\]!]|[0-9.]+|[ \t\r\n]+|"[^"]*"|`[^`]*`|[A-Za-z0-9_]+)/).filter(t => t.length > 0)
   let pos = 0
-  const consume = () => (x => (many([], t => t, t => ' \t\r\n'.includes(t)), x))(tokens[pos++])
   const many = (a, f, g) => {
     g ||= () => true;
     while(pos < tokens.length && g(tokens[pos])) {
-      a.push(f(consume()))
+      a.push(f())
     }
     return a
   }
-  const until = (a, f, mark) => many(a, f, t => t !== mark || (consume(), false))
-  const call = o => tokens[pos] === '(' && !' \t'.includes(tokens[pos - 1]) ? ++pos && _call(o, until([], t=>t, ')')) : o
+  const chomp = t => (many([], _ => _, t => t.match(/^[ \t]+$/) && ++pos), t)
+  const consume = () => chomp(tokens[pos++])
+  const until = (a, mark) => many(a, unit, t => t !== mark || (consume(), false))
+  const call = o => tokens[pos] === '(' && !' \t'.includes(tokens[pos - 1]) ? ++pos && _call(o, until([], ')')) : o
   const _call = (o, a) => a.length === 0 ? ['__call', o] : [o].concat(a)
   const indent = s => s.split(/[\r\n]/).slice(-1)[0].length
   const bottom = t =>
     tokens[pos] === '.' ? (consume(), ['.', t, consume()]) :
-    t === '[' ? until(['list'], unit, ']') :
-    t === '(' ? until([], unit, ')') :
+    t === '[' ? until(['list'], ']') :
+    t === '(' ? until([], ')') :
     t
-  const unit = t => call(bottom(t))
+  const unit = () => call(bottom(consume()))
   const unwrap = o => {
     const op2 = a => a.length <= 2 ? a :
       '+-*/%|&<>!=.'.includes(a[1]) && a[1] !== '=' && a[1] !== ':' ? op2([[a[1], a[0], a[2]], ...a.slice(3)]) :
