@@ -28,29 +28,24 @@ const fail = m => { throw new Error(m) }
 const convert = source => {
   const tokens = source.split(/([()\[\]!]|[0-9.]+|[ \t\r\n]+|"[^"]*"|`[^`]*`|[A-Za-z0-9_]+)/).filter(t => t.length > 0)
   let pos = 0
-  const inc = () => {
-    const old = pos
-    ++pos
-    many([], t => t, t => /[ \t\r\n]/.test(t))
-    return old
-  }
+  const consume = () => (x => (many([], t => t, t => ' \t\r\n'.includes(t)), x))(tokens[pos++])
   const many = (a, f, g) => {
     g ||= () => true;
     while(pos < tokens.length && g(tokens[pos])) {
-      a.push(f(tokens[inc()]))
-    };
+      a.push(f(consume()))
+    }
     return a
   }
-  const until = (a, f, mark) => many(a, f, t => t !== mark || (inc() && false))
-  const call = o => tokens[pos] === '(' && tokens[pos - 1].match(/[A-Za-z0-9_]/) ? _call(o, consume(tokens[pos])[0]) : o
+  const until = (a, f, mark) => many(a, f, t => t !== mark || (consume(), false))
+  const call = o => tokens[pos] === '(' && tokens[pos - 1].match(/[A-Za-z0-9_]/) ? _call(o, unit(tokens[pos])[0]) : o
   const _call = (o, a) => a.length === 0 ? ['__call', o] : [o].concat(a)
   const indent = s => s.split(/[\r\n]/).slice(-1)[0].length
   const bottom = t =>
-    tokens[pos] === '.' ? inc() && ['.', t, tokens[inc()]] :
-    t === '[' ? until(['list'], consume, ']') :
-    t === '(' ? until([], consume, ')') :
+    tokens[pos] === '.' ? (consume(), ['.', t, consume()]) :
+    t === '[' ? until(['list'], unit, ']') :
+    t === '(' ? until([], unit, ')') :
     t
-  const consume = t => call(bottom(t))
+  const unit = t => call(bottom(t))
   const unwrap = o => {
     const op2 = a => a.length <= 2 ? a :
       a[1].match(/[+\-*/%|&<>!:=.]/) && a[1] !== '=' && a[1] !== ':' ? op2([[a[1], a[0], a[2]], ...a.slice(3)]) :
@@ -60,7 +55,7 @@ const convert = source => {
     const unnest = a => a.length === 1 ? a[0] : a
     return Array.isArray(o) ? (o.length === 1 ? unwrap(o[0]) : unnest(block(op2(o))).map(unwrap)) : o
   }
-  return unwrap(many([], consume))
+  return unwrap(many([], unit))
 }
 const stringify = a => Array.isArray(a) ? `(${a.map(stringify).join(' ')})` : str(a)
 const assert = (expect, fact, src) => expect === fact ? put('.') : fail(`Expected '${expect}' but got '${fact}' in '${src}'`)
