@@ -42,29 +42,30 @@ const convert = source => {
     return a
   }
   const until = (a, f, mark) => many(a, f, t => t !== mark || (inc() && false))
-  const call = o => tokens[pos] === '(' && /[A-Za-z0-9_]/.test(tokens[pos - 1]) ? _call(o, consume(tokens[pos])[0]) : o
+  const call = o => tokens[pos] === '(' && tokens[pos - 1].match(/[A-Za-z0-9_]/) ? _call(o, consume(tokens[pos])[0]) : o
   const _call = (o, a) => a.length === 0 ? ['__call', o] : [o].concat(a)
-  const bottom = t => tokens[pos] === '.' ? inc() && ['.', t, tokens[inc()]] :
+  const indent = s => s.split(/[\r\n]/).slice(-1)[0].length
+  const bottom = t =>
+    tokens[pos] === '.' ? inc() && ['.', t, tokens[inc()]] :
     t === '[' ? until(['list'], consume, ']') :
     t === '(' ? until([], consume, ')') :
     t
   const consume = t => call(bottom(t))
   const unwrap = o => {
     const op2 = a => a.length <= 2 ? a :
-      /[+\-*/%|&<>!=.]/.test(a[1]) && a[1] !== '=' ? op2([[a[1], a[0], a[2]], ...a.slice(3)]) :
+      a[1].match(/[+\-*/%|&<>!:=.]/) && a[1] !== '=' && a[1] !== ':' ? op2([[a[1], a[0], a[2]], ...a.slice(3)]) :
       [a[0], ...op2(a.slice(1))]
-    const def = a => _def(a, a.findIndex(t => t === '='))
-    const _def = (a, n) => n === -1 ? a : ['=', a[0], a.slice(1, n), a.slice(n+1)]
-    const block = a => _block(a, a.findIndex(t => t === ':'))
-    const _block = (a, n) => n === -1 ? a : [':', a.slice(0, n), a.slice(n+1)]
+    const block = a => _block(a, a.findIndex(t => ':='.includes(t)))
+    const _block = (a, n) => n === -1 ? a : [a[n], a[0], a.slice(1, n), a.slice(n+1)]
     const unnest = a => a.length === 1 ? a[0] : a
-    return Array.isArray(o) ? (o.length === 1 ? unwrap(o[0]) : unnest(block(def(op2(o)))).map(unwrap)) : o
+    return Array.isArray(o) ? (o.length === 1 ? unwrap(o[0]) : unnest(block(op2(o))).map(unwrap)) : o
   }
   return unwrap(many([], consume))
 }
 const stringify = a => Array.isArray(a) ? `(${a.map(stringify).join(' ')})` : str(a)
 const assert = (expect, fact, src) => expect === fact ? put('.') : fail(`Expected '${expect}' but got '${fact}' in '${src}'`)
 const test = (expect, src) => assert(expect, stringify(convert(src)), src)
+//test('(__do a b)', 'a\nb')
 
 // primitives
 test('1', '1')
@@ -103,8 +104,16 @@ test('(= f () 1)', 'f = 1')
 test('(= f n n)', 'f n = n')
 test('(= f (a b) (+ a b))', 'f a b = a + b')
 
+// block
+test('(: loop () a)', 'loop: a')
+test('(: if cond a)', 'if cond: a')
+
 // indent based block
-test('(: a b)', 'a: b')
+//test('(: a b)', 'a: b')
+//test('(: a (b c))', 'a: b c')
+//test('(: a b)', 'a:\n  b')
+//test('(: a (b c))', 'a:\n  b c')
+//test('(: a (__stmt b c)', 'a:\n  b\n  c')
 
 
 puts('ok')
