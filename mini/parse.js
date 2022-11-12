@@ -37,7 +37,7 @@ const convert = source => {
     return a
   }
   const until = (a, f, mark) => many(a, f, t => t !== mark || (consume(), false))
-  const call = o => tokens[pos] === '(' && tokens[pos - 1].match(/[A-Za-z0-9_]/) ? _call(o, unit(tokens[pos])[0]) : o
+  const call = o => tokens[pos] === '(' && !' \t'.includes(tokens[pos - 1]) ? ++pos && _call(o, until([], t=>t, ')')) : o
   const _call = (o, a) => a.length === 0 ? ['__call', o] : [o].concat(a)
   const indent = s => s.split(/[\r\n]/).slice(-1)[0].length
   const bottom = t =>
@@ -48,7 +48,7 @@ const convert = source => {
   const unit = t => call(bottom(t))
   const unwrap = o => {
     const op2 = a => a.length <= 2 ? a :
-      a[1].match(/[+\-*/%|&<>!:=.]/) && a[1] !== '=' && a[1] !== ':' ? op2([[a[1], a[0], a[2]], ...a.slice(3)]) :
+      '+-*/%|&<>!=.'.includes(a[1]) && a[1] !== '=' && a[1] !== ':' ? op2([[a[1], a[0], a[2]], ...a.slice(3)]) :
       [a[0], ...op2(a.slice(1))]
     const block = a => _block(a, a.findIndex(t => ':='.includes(t)))
     const _block = (a, n) => n === -1 ? a : [a[n], a[0], a.slice(1, n), a.slice(n+1)]
