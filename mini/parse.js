@@ -56,12 +56,14 @@ const convert = source => {
     const unnest = a => a.length === 1 ? a[0] : a
     return Array.isArray(o) ? (o.length === 1 ? unwrap(o[0]) : unnest(block(op2(o))).map(unwrap)) : o
   }
-  return unwrap(many([], unit))
+  const line = () => many([], unit, t => !'\r\n'.includes(t))
+  const lines = () => mark('__do', many([], line, t => '\r\n'.includes(t) ? ++pos : true))
+  const mark = (m, a) => a.length >= 2 ? [m, ...a] : a
+  return unwrap(lines())
 }
 const stringify = a => Array.isArray(a) ? `(${a.map(stringify).join(' ')})` : str(a)
 const assert = (expect, fact, src) => expect === fact ? put('.') : fail(`Expected '${expect}' but got '${fact}' in '${src}'`)
 const test = (expect, src) => assert(expect, stringify(convert(src)), src)
-//test('(__do a b)', 'a\nb')
 
 // primitives
 test('1', '1')
@@ -104,12 +106,10 @@ test('(= f (a b) (+ a b))', 'f a b = a + b')
 test('(: loop () a)', 'loop: a')
 test('(: if cond a)', 'if cond: a')
 
-// indent based block
-//test('(: a b)', 'a: b')
-//test('(: a (b c))', 'a: b c')
-//test('(: a b)', 'a:\n  b')
-//test('(: a (b c))', 'a:\n  b c')
-//test('(: a (__stmt b c)', 'a:\n  b\n  c')
+// top level
+test('(__do a b)', 'a\nb')
+test('(__do (a b) c)', 'a b\nc')
+test('(__do a (b c))', 'a\nb c')
 
 
 puts('ok')
