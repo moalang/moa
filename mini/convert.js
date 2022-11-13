@@ -1,4 +1,8 @@
-const { parse } = require('./parse.js')
+/*
+ * This program converts some nodes in an internal expression based on type inference.
+ * [ ] Infer types
+ * [ ] Convert a method call to a function call
+ */
 const dump = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
 const str = o => typeof o === 'string' ? o :
@@ -53,10 +57,12 @@ const infer = root => {
   }
   return prune(inferTop(root, tenv)).toString()
 }
+const convert = root => infer(root)
 
-module.exports = { infer }
+module.exports = { convert }
 
 if (require.main === module) {
+  const { parse } = require('./parse.js')
   const assert = (expect, fact, src) => put(expect === fact ? '.' : fail(`Expect: '${expect}' but got '${fact}'. src='${src}'`))
   const test = (expect, src) => assert(expect, infer(parse(src)), src)
 

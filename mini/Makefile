@@ -1,8 +1,9 @@
 test:
 	clear
 	-node parse.js
-	-node infer.js
+	-node convert.js
+	-node generate.js
 
 watch:
 	-make test
-	fswatch -0 parse.js infer.js | xargs -I {} -n1 -0 make
+	fswatch -0 *.js | xargs -I {} -n1 -0 make

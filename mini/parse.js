@@ -1,20 +1,20 @@
 /*
- * This program converts Moa program to internal expression, which is inspired by Lisp.
+ * This program converts a Moa program to an internal expression, which is inspired by Lisp.
  *
  * Syntax sugars
- * - f(...)      # (f ...)
- * - o.m         # (. o m)
- * - a b         # (a b)
- * - a = b       # (= a () b)
- * - a b = c     # (c = a b c)
- * - a b c = d   # (c = a (b c) d)
- * - a op2 b     # (op2 a b)
- * - op1 a       # (op1 a)
- * - a b: c      # (: (a b) (c))
- * - a b:
+ * [x] f(...)      # (f ...)
+ * [x] o.m         # (. o m)
+ * [x] a b         # (a b)
+ * [x] a = b       # (= a () b)
+ * [x] a b = c     # (c = a b c)
+ * [x] a b c = d   # (c = a (b c) d)
+ * [x] a op2 b     # (op2 a b)
+ * [x] op1 a       # (op1 a)
+ * [x] a b: c      # (: (a b) (c))
+ * [x] a b:
  *     c
  *     d e       # (: (a b) (c (d e)))
-*/
+ */
 const str = o =>
   typeof o === 'string' ? o :
   Array.isArray(o) ? `(${o.map(str).join(' ')})` :
