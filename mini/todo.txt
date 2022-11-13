@@ -1,19 +1,26 @@
 # Features
 [ ] num, int, float
 [ ] string
-[ ] list
-[ ] dict
-[ ] set
+[ ] lambda
+[ ] list(t)
+[ ] dict(k v)
+[ ] set(t)
+[ ] tuple
+[ ] time
 [ ] struct
 [ ] algebric data type
 [ ] binary operators
 [ ] regexp, matchdata
-[ ] p, pp
-[ ] time
-[ ] db
-[ ] use time
-[ ] use random
-[ ] use http serve request
+[ ] fail(t), catch a b :: a b
+[ ] use io now random
+
+# Commercial features
+[ ] use mrpc define
+
+# Next features
+[ ] bytes
+[ ] use data ref weakref copy deepcopy zlib gzip bz2 zip tar json md5 hmac base64 hex
+[ ] use moa parse generate
 
 # Core syntax
 top; unit+
