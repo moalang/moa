@@ -1,3 +1,5 @@
+const { parse } = require('./parse.js')
+const dump = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
 const str = o => typeof o === 'string' ? o :
   Array.isArray(o) ? `(${o.map(str).join(' ')})` :
@@ -5,25 +7,6 @@ const str = o => typeof o === 'string' ? o :
   JSON.stringify(o)
 const put = (...a) => { process.stdout.write(a.map(str).join(' ')); return a[0] }
 const puts = (...a) => { console.log(a.map(str).join(' ')); return a[0] }
-const parse = src => {
-  let i = 0
-  const tokens = src.split(/[() \r\n]/).filter(t => t.trim())
-  const isOp2 = t => t.match(/^[+\-*/%<>=!|&]+$/)
-  const consume = () => {
-    const token = tokens[i++]
-    if (isOp2(token)) {
-      const lhs = consume()
-      const rhs = consume()
-      return [token, lhs, rhs]
-    }
-    return token
-  }
-  const nodes = []
-  while (i < tokens.length) {
-    nodes.push(consume())
-  }
-  return nodes
-}
 const infer = root => {
   let unique = 1
   const tvar = (tid) => ({tid: tid, instance: null, toString: () => tid.toString()})
@@ -33,7 +16,7 @@ const infer = root => {
   const prune = t => t.instance ? t.instance = prune(t.instance) : t
   const tint = type('int')
   const treal = type('real')
-  const renv = {
+  const tclasses = {
     num: [tint, treal],
   }
   const tenv = {
@@ -59,8 +42,8 @@ const infer = root => {
         l.tid ? assign(l, r) :
         r.tid ? assign(r, l) :
         l.toString() === r.toString() ? l :
-        l.name in renv ? l.instance = narrow(renv[l.name], r) :
-        r.name in renv ? r.instance = narrow(renv[r.name], l) :
+        l.name in tclasses ? l.instance = narrow(tclasses[l.name], r) :
+        r.name in tclasses ? r.instance = narrow(tclasses[r.name], l) :
         fail(`Unmatch ${l} and ${r}`)
     }
     const apply = ([head, ...argv]) => argv.reduce((ret, x) => unify(ret, inf(x)), inf(head))
@@ -72,16 +55,21 @@ const infer = root => {
   }
   return prune(inferTop(root, tenv)).toString()
 }
-const test = (expect, fact, src) => put(expect === fact ? '.' : fail(`Expect: '${expect}' but got '${fact}'. src='${src}'`))
-const testType = (expect, src) => test(expect, infer(parse(src)), src)
 
-testType('num', '1')
-testType('real', '1.2')
-testType('real', '(real 1)')
-testType('num', '(+ 1 2)')
-testType('real', '(+ 1.0 2.0)')
-testType('real', '(+ 1 2.0)')
-testType('real', '(+ 1.0 2)')
-testType('real', '(+ (+ 1 2) 3.0)')
-testType('real', '(+ (+ 1.0 2.0) 3)')
-puts('ok')
+module.exports = { infer }
+
+if (require.main === module) {
+  const test = (expect, fact, src) => put(expect === fact ? '.' : fail(`Expect: '${expect}' but got '${fact}'. src='${src}'`))
+  const testType = (expect, src) => test(expect, infer(parse(src)), src)
+
+  testType('num', '1')
+  testType('real', '1.2')
+  testType('real', 'real(1)')
+  testType('num', '1 + 2')
+  testType('real', '1.0 + 2.0')
+  testType('real', '1 + 2.0')
+  testType('real', '1.0 + 2')
+  testType('real', '1 + 2 + 3.0')
+  testType('real', '1.0 + 2.0 + 3')
+  puts('ok')
+}

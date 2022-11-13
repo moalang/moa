@@ -23,7 +23,7 @@ const put = (...a) => { process.stdout.write(a.map(str).join(' ')); return a[0] 
 const puts = (...a) => { console.log(a.map(str).join(' ')); return a[0] }
 const dump = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
-const convert = source => {
+const parse = source => {
   const tokens = source.split(/([()\[\]!]|[0-9.]+|[ \t\r\n]+|"[^"]*"|`[^`]*`|[A-Za-z0-9_]+)/).filter(t => t.length > 0)
   let pos = 0
   const many = (a, f) => {
@@ -66,62 +66,67 @@ const convert = source => {
   tokens.unshift('\n')
   return unwrap(statement())
 }
-const stringify = a => Array.isArray(a) ? `(${a.map(stringify).join(' ')})` : str(a)
-const assert = (expect, fact, src) => expect === fact ? put('.') : fail(`Expected '${expect}' but got '${fact}' in '${src}'`)
-const test = (expect, src) => assert(expect, stringify(convert(src)), src)
 
-// primitives
-test('1', '1')
-test('1.0', '1.0')
-test('id', 'id')
-test('"hi"', '"hi"')
-test('list', '[]')
-test('(list 1)', '[1]')
+module.exports = { parse }
 
-// single operator
-test('(! true)', '!true')
+if (require.main === module) {
+  const stringify = a => Array.isArray(a) ? `(${a.map(stringify).join(' ')})` : str(a)
+  const assert = (expect, fact, src) => expect === fact ? put('.') : fail(`Expected '${expect}' but got '${fact}' in '${src}'`)
+  const test = (expect, src) => assert(expect, stringify(parse(src)), src)
 
-// binary operators
-test('(+ 1 2)', '1 + 2')
-test('(+ (+ 1 2) 3)', '1 + 2 + 3')
+  // primitives
+  test('1', '1')
+  test('1.0', '1.0')
+  test('id', 'id')
+  test('"hi"', '"hi"')
+  test('list', '[]')
+  test('(list 1)', '[1]')
 
-// parentheses
-test('1', '(1)')
-test('(f 1)', '(f 1)')
-test('(+ 1 2)', '(1 + 2)')
-test('(+ 1 (+ 2 3))', '1 + (2 + 3)')
+  // single operator
+  test('(! true)', '!true')
 
-// function call
-test('(__call f)', 'f()')
-test('(f 1)', 'f(1)')
-test('(f (+ 1 2))', 'f(1 + 2)')
+  // binary operators
+  test('(+ 1 2)', '1 + 2')
+  test('(+ (+ 1 2) 3)', '1 + 2 + 3')
 
-// method call
-test('(. f m)', 'f.m')
-test('(__call (. f m))', 'f.m()')
-test('((. f m) a)', 'f.m(a)')
-test('((. f m) a b)', 'f.m(a b)')
+  // parentheses
+  test('1', '(1)')
+  test('(f 1)', '(f 1)')
+  test('(+ 1 2)', '(1 + 2)')
+  test('(+ 1 (+ 2 3))', '1 + (2 + 3)')
 
-// define function
-test('(= f () 1)', 'f = 1')
-test('(= f n n)', 'f n = n')
-test('(= f (a b) (+ a b))', 'f a b = a + b')
+  // function call
+  test('(__call f)', 'f()')
+  test('(f 1)', 'f(1)')
+  test('(f (+ 1 2))', 'f(1 + 2)')
 
-// block
-test('(: a () b)', 'a: b')
-test('(: a b c)', 'a b: c')
+  // method call
+  test('(. f m)', 'f.m')
+  test('(__call (. f m))', 'f.m()')
+  test('((. f m) a)', 'f.m(a)')
+  test('((. f m) a b)', 'f.m(a b)')
 
-// top level
-test('(__do a b)', 'a\nb')
-test('(__do (a b) c)', 'a b\nc')
-test('(__do a (b c))', 'a\nb c')
+  // define function
+  test('(= f () 1)', 'f = 1')
+  test('(= f n n)', 'f n = n')
+  test('(= f (a b) (+ a b))', 'f a b = a + b')
 
-// indent
-test('(: a () b)', 'a:\n  b')
-test('(: a () (: b () c))', 'a:\n  b:\n    c')
-test('(: a () (: b () (__do c d)))', 'a:\n  b:\n    c\n    d')
-test('(: a () (__do (: b () c) d))', 'a:\n  b:\n    c\n  d')
-test('(__do (: a () (: b () c)) d)', 'a:\n  b:\n    c\nd')
-test('(__do (: a () (__do b (: c () d) e)) f)', 'a:\n  b\n  c:\n    d\n  e\nf')
+  // block
+  test('(: a () b)', 'a: b')
+  test('(: a b c)', 'a b: c')
 
-puts('ok')
+  // top level
+  test('(__do a b)', 'a\nb')
+  test('(__do (a b) c)', 'a b\nc')
+  test('(__do a (b c))', 'a\nb c')
+
+  // indent
+  test('(: a () b)', 'a:\n  b')
+  test('(: a () (: b () c))', 'a:\n  b:\n    c')
+  test('(: a () (: b () (__do c d)))', 'a:\n  b:\n    c\n    d')
+  test('(: a () (__do (: b () c) d))', 'a:\n  b:\n    c\n  d')
+  test('(__do (: a () (: b () c)) d)', 'a:\n  b:\n    c\nd')
+  test('(__do (: a () (__do b (: c () d) e)) f)', 'a:\n  b\n  c:\n    d\n  e\nf')
+
+  puts('ok')
+}
