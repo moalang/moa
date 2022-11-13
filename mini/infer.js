@@ -15,15 +15,15 @@ const infer = root => {
   const type = (name, ...generics) => ({name, generics, toString: () => `${name}${generics.length ? `(${generics.map((g, i) => g.instance ? g.instance.toString() : i).join(' ')})` : ''}`})
   const prune = t => t.instance ? t.instance = prune(t.instance) : t
   const tint = type('int')
-  const treal = type('real')
+  const tfloat = type('float')
   const tclasses = {
-    num: [tint, treal],
+    num: [tint, tfloat],
   }
   const tenv = {
     int: () => tint,
     '+': () => (t => [t, t, t])(type('num')),
     'int': () => [type('num'), tint],
-    'real': () => [type('num'), treal],
+    'float': () => [type('num'), tfloat],
     'list': () => (t => [t, type('list', t)])(repeat(tvar())),
     '__empty': () => type('list', tvar()),
   }
@@ -46,7 +46,7 @@ const infer = root => {
     const apply = ([head, ...argv]) => derepeat(argv.reduce((ret, x) => unify(ret, inf(x)), inf(head)))
     const derepeat = a => Array.isArray(a) && a[0].repeatable ? derepeat(a.slice(1)) : a
     const value = v => v.match(/^[0-9]+$/) ? tclass('num') :
-      v.match(/^[0-9]+\.[0-9]+$/) ? treal :
+      v.match(/^[0-9]+\.[0-9]+$/) ? tfloat :
       v in env ? env[v]() :
       fail(`Unknown value '${v}'`)
     return Array.isArray(node) ? apply(node) : value(node)
@@ -62,28 +62,28 @@ if (require.main === module) {
 
   // primitives
   test('num', '1')
-  test('real', '1.2')
+  test('float', '1.2')
 
   // generics
   test('list(0)', '[]')
   test('list(num)', '[1]')
-  test('list(real)', '[1.0]')
+  test('list(float)', '[1.0]')
   test('list(num)', '[1 2]')
-  test('list(real)', '[1 2.0]')
-  test('list(real)', '[1 2.0 3]')
+  test('list(float)', '[1 2.0]')
+  test('list(float)', '[1 2.0 3]')
 
   // type cast
   test('int', 'int(1)')
-  test('real', 'real(1)')
-  test('int', 'int(real(1))')
-  test('real', 'real(int(1))')
+  test('float', 'float(1)')
+  test('int', 'int(float(1))')
+  test('float', 'float(int(1))')
 
   // type class
   test('num', '1 + 2')
-  test('real', '1.0 + 2.0')
-  test('real', '1 + 2.0')
-  test('real', '1.0 + 2')
-  test('real', '1 + 2 + 3.0')
-  test('real', '1.0 + 2.0 + 3')
+  test('float', '1.0 + 2.0')
+  test('float', '1 + 2.0')
+  test('float', '1.0 + 2')
+  test('float', '1 + 2 + 3.0')
+  test('float', '1.0 + 2.0 + 3')
   puts('ok')
 }

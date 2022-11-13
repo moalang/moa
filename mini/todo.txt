@@ -1,5 +1,5 @@
-# Interpriter
-[ ] int
+# Features
+[ ] num, int, float
 [ ] string
 [ ] list
 [ ] dict
@@ -7,18 +7,13 @@
 [ ] struct
 [ ] algebric data type
 [ ] binary operators
-[ ] some methods
-
-# First release
-[ ] debug print
-[ ] compile to JavaScript
-[ ] type inference
-[ ] type class
-[ ] self boot
+[ ] regexp, matchdata
+[ ] p, pp
 [ ] time
-[ ] random
-[ ] http server
-[ ] http client
+[ ] db
+[ ] use time
+[ ] use random
+[ ] use http serve request
 
 # Core syntax
 top; unit+
