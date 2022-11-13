@@ -37,8 +37,7 @@ const parse = source => {
     }
     return a
   }
-  const chomp = t => (pos < tokens.length && tokens[pos].match(/^[ \t]+/) && ++pos, t)
-  const consume = () => chomp(tokens[pos++])
+  const consume = () => ((tokens[pos].match(/^[ \t]+$/) && ++pos), tokens[pos++])
   const until = (a, end) => many(a, t => t === end ? ++pos : unit())
   const call = o => tokens[pos] === '(' && !' \t'.includes(tokens[pos - 1]) ? ++pos && _call(o, until([], ')')) : o
   const _call = (o, a) => a.length === 0 ? ['__call', o] : [o].concat(a)
@@ -127,6 +126,10 @@ if (require.main === module) {
   test('(: a () (__do (: b () c) d))', 'a:\n  b:\n    c\n  d')
   test('(__do (: a () (: b () c)) d)', 'a:\n  b:\n    c\nd')
   test('(__do (: a () (__do b (: c () d) e)) f)', 'a:\n  b\n  c:\n    d\n  e\nf')
+
+  // combinations
+  test('(! (a b))', '!a(b)')
+  test('(+ (a b) c)', 'a(b) + c')
 
   puts('ok')
 }

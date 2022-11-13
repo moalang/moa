@@ -61,13 +61,20 @@ if (require.main === module) {
   const assert = (expect, fact, src) => put(expect === fact ? '.' : fail(`Expect: '${expect}' but got '${fact}'. src='${src}'`))
   const test = (expect, src) => assert(expect, infer(parse(src)), src)
 
+  // primitives
   test('num', '1')
+  test('real', '1.2')
+
+  // type cast
   test('int', 'int(1)')
   test('real', 'real(1)')
-  test('real', '1.2')
+  test('int', 'int(real(1))')
+  test('real', 'real(int(1))')
+
+  // type class
   test('num', '1 + 2')
-  test('real', '1.0 + 2.0')
   test('real', '1 + 2.0')
+  test('real', '1.0 + 2.0')
   test('real', '1.0 + 2')
   test('real', '1 + 2 + 3.0')
   test('real', '1.0 + 2.0 + 3')
