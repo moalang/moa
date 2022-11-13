@@ -61,11 +61,12 @@ const convert = source => {
     return Array.isArray(o) ? (o.length === 1 ? unwrap(o[0]) : unnest(block(op2(o))).map(unwrap)) : o
   }
   const mark = (m, a) => a.length >= 2 ? [m, ...a] : a
-  const block = a => ':='.includes(a.slice(-1)[0]) && tokens[pos].match(/[\r\n]/) ? [...a, lines(indent(tokens[pos]))] : a
+  const block = a => ':='.includes(a.slice(-1)[0]) && tokens[pos].match(/[\r\n]/) ? [...a, statement()] : a
   const line = () => block(many([], t => !t.match(/[\r\n]/) && unit()))
-  const lines = n => mark('__do', many([], t => indent(t) === n ? (++pos, line()) : false))
+  const lines = n => many([], t => indent(t) === n ? (++pos, line()) : false)
+  const statement = () => mark('__do', lines(indent(tokens[pos])))
   tokens.unshift('\n')
-  return unwrap(lines(0))
+  return unwrap(statement())
 }
 const stringify = a => Array.isArray(a) ? `(${a.map(stringify).join(' ')})` : str(a)
 const assert = (expect, fact, src) => expect === fact ? put('.') : fail(`Expected '${expect}' but got '${fact}' in '${src}'`)
