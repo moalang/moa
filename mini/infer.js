@@ -70,6 +70,7 @@ if (require.main === module) {
   // generics
   test('list(0)', '[]')
   test('list(num)', '[1]')
+  test('list(real)', '[1.0]')
 
   // type cast
   test('int', 'int(1)')
