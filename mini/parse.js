@@ -1,7 +1,5 @@
 /*
- * This program convert Moa program to internal expression to runtime.
- * Moa program is optimized for developers to read and write.
- * The internal expression is optimized for machine, which is inspired by Lisp style.
+ * This program converts Moa program to internal expression, which is inspired by Lisp.
  *
  * Syntax sugars
  * - f(...)      # (f ...)
@@ -14,8 +12,8 @@
  * - op1 a       # (op1 a)
  * - a b: c      # (: (a b) (c))
  * - a b:
- *   c
- *   d e         # (: (a b) (c (d e)))
+ *     c
+ *     d e       # (: (a b) (c (d e)))
 */
 const str = o =>
   typeof o === 'string' ? o :
