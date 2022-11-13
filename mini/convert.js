@@ -53,18 +53,19 @@ const infer = root => {
       v.match(/^[0-9]+\.[0-9]+$/) ? tfloat :
       v in env ? env[v]() :
       fail(`Unknown value '${v}'`)
-    return Array.isArray(node) ? apply(node) : value(node)
+    return node.type = Array.isArray(node) ? apply(node) : value(node)
   }
-  return prune(inferTop(root, tenv)).toString()
+  return prune(inferTop(root, tenv))
 }
-const convert = root => infer(root)
+const fix = o => (Array.isArray(o) ? o.map(fix) : o.type = o.type.toString(), o)
+const convert = root => (infer(root), fix(root))
 
 module.exports = { convert }
 
 if (require.main === module) {
   const { parse } = require('./parse.js')
   const assert = (expect, fact, src) => put(expect === fact ? '.' : fail(`Expect: '${expect}' but got '${fact}'. src='${src}'`))
-  const test = (expect, src) => assert(expect, infer(parse(src)), src)
+  const test = (expect, src) => assert(expect, infer(parse(src)).toString(), src)
 
   // primitives
   test('num', '1')
@@ -91,5 +92,9 @@ if (require.main === module) {
   test('float', '1.0 + 2')
   test('float', '1 + 2 + 3.0')
   test('float', '1.0 + 2.0 + 3')
+
+  // convert
+  assert('num', convert(parse('1 + 2')).type.toString(), '1 + 2')
+
   puts('ok')
 }

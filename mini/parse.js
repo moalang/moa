@@ -17,6 +17,7 @@
  */
 const str = o =>
   typeof o === 'string' ? o :
+  o instanceof String ? o.toString() :
   Array.isArray(o) ? `(${o.map(str).join(' ')})` :
   JSON.stringify(o)
 const put = (...a) => { process.stdout.write(a.map(str).join(' ')); return a[0] }
@@ -48,6 +49,11 @@ const parse = source => {
     t === '(' ? until([], ')') :
     t
   const unit = () => call(bottom(consume()))
+  const mark = (m, a) => a.length >= 2 ? [m, ...a] : a
+  const block = a => ':='.includes(a.slice(-1)[0]) && tokens[pos].match(/[\r\n]/) ? [...a, statement()] : a
+  const line = () => block(many([], t => !t.match(/[\r\n]/) && unit()))
+  const lines = n => many([], t => indent(t) === n ? (++pos, line()) : false)
+  const statement = () => mark('__do', lines(indent(tokens[pos])))
   const unwrap = o => {
     const op2 = a => a.length <= 2 ? a :
       '+-*/%|&<>!=.'.includes(a[1]) && a[1] !== '=' && a[1] !== ':' ? op2([[a[1], a[0], a[2]], ...a.slice(3)]) :
@@ -55,13 +61,9 @@ const parse = source => {
     const block = a => _block(a, a.findIndex(t => ':='.includes(t)))
     const _block = (a, n) => n === -1 ? a : [a[n], a[0], a.slice(1, n), a.slice(n+1)]
     const unnest = a => a.length === 1 ? a[0] : a
-    return Array.isArray(o) ? (o.length === 1 ? unwrap(o[0]) : unnest(block(op2(o))).map(unwrap)) : o
+    const to_obj = o => typeof o === 'string' ? new String(o) : o
+    return Array.isArray(o) ? (o.length === 1 ? unwrap(o[0]) : unnest(block(op2(o))).map(unwrap)) : to_obj(o)
   }
-  const mark = (m, a) => a.length >= 2 ? [m, ...a] : a
-  const block = a => ':='.includes(a.slice(-1)[0]) && tokens[pos].match(/[\r\n]/) ? [...a, statement()] : a
-  const line = () => block(many([], t => !t.match(/[\r\n]/) && unit()))
-  const lines = n => many([], t => indent(t) === n ? (++pos, line()) : false)
-  const statement = () => mark('__do', lines(indent(tokens[pos])))
   tokens.unshift('\n')
   return unwrap(statement())
 }

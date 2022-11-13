@@ -12,7 +12,7 @@ const put = (...a) => { process.stdout.write(a.map(str).join(' ')); return a[0] 
 const puts = (...a) => { console.log(a.map(str).join(' ')); return a[0] }
 
 const generate = root => {
-  return 1
+  return root.toString()
 }
 
 module.exports = { generate }
