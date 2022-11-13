@@ -10,9 +10,8 @@ const puts = (...a) => { console.log(a.map(str).join(' ')); return a[0] }
 const infer = root => {
   let unique = 1
   const tvar = (tid) => ({tid: tid, instance: null, toString: () => tid.toString()})
-  const klass = name => ({name, instance: null, toString: () => name})
+  const tclass = name => ({name, instance: null, toString: () => name})
   const type = name => ({name, toString: () => name})
-  const isVar = t => typeof t === 'number'
   const prune = t => t.instance ? t.instance = prune(t.instance) : t
   const tint = type('int')
   const treal = type('real')
@@ -47,7 +46,7 @@ const infer = root => {
         fail(`Unmatch ${l} and ${r}`)
     }
     const apply = ([head, ...argv]) => argv.reduce((ret, x) => unify(ret, inf(x)), inf(head))
-    const value = v => v.match(/^[0-9]+$/) ? klass('num') :
+    const value = v => v.match(/^[0-9]+$/) ? tclass('num') :
        v.match(/^[0-9]+\.[0-9]+$/) ? treal :
       v in env ? env[v]() :
       fail(`Unknown value '${v}'`)
@@ -59,17 +58,18 @@ const infer = root => {
 module.exports = { infer }
 
 if (require.main === module) {
-  const test = (expect, fact, src) => put(expect === fact ? '.' : fail(`Expect: '${expect}' but got '${fact}'. src='${src}'`))
-  const testType = (expect, src) => test(expect, infer(parse(src)), src)
+  const assert = (expect, fact, src) => put(expect === fact ? '.' : fail(`Expect: '${expect}' but got '${fact}'. src='${src}'`))
+  const test = (expect, src) => assert(expect, infer(parse(src)), src)
 
-  testType('num', '1')
-  testType('real', '1.2')
-  testType('real', 'real(1)')
-  testType('num', '1 + 2')
-  testType('real', '1.0 + 2.0')
-  testType('real', '1 + 2.0')
-  testType('real', '1.0 + 2')
-  testType('real', '1 + 2 + 3.0')
-  testType('real', '1.0 + 2.0 + 3')
+  test('num', '1')
+  test('int', 'int(1)')
+  test('real', 'real(1)')
+  test('real', '1.2')
+  test('num', '1 + 2')
+  test('real', '1.0 + 2.0')
+  test('real', '1 + 2.0')
+  test('real', '1.0 + 2')
+  test('real', '1 + 2 + 3.0')
+  test('real', '1.0 + 2.0 + 3')
   puts('ok')
 }
