@@ -28,7 +28,7 @@ const infer = root => {
   }
   const inferTop = (node, env) => {
     const inf = node => inferTop(node, env)
-    const unify = (l, r) => {
+    const unify = (l, r, f) => {
       l = prune(l)
       r = prune(r)
       if (Array.isArray(l)) {
@@ -45,7 +45,7 @@ const infer = root => {
         l.toString() === r.toString() ? l :
         l.name in tclasses ? l.instance = narrow(tclasses[l.name], r) :
         r.name in tclasses ? r.instance = narrow(tclasses[r.name], l) :
-        fail(`Unmatch ${l} and ${r}`)
+        f ? f() : fail(`Unmatch ${l} and ${r}`)
     }
     const apply = ([head, ...argv]) => argv.reduce((ret, x) => unify(ret, inf(x)), inf(head))
     const value = v => v.match(/^[0-9]+$/) ? tclass('num') :
