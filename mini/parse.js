@@ -41,7 +41,7 @@ const convert = source => {
   }
   const chomp = t => (pos < tokens.length && tokens[pos].match(/^[ \t]+/) && ++pos, t)
   const consume = () => chomp(tokens[pos++])
-  const until = (a, mark) => many(a, t => t === mark ? ++pos : unit())
+  const until = (a, end) => many(a, t => t === end ? ++pos : unit())
   const call = o => tokens[pos] === '(' && !' \t'.includes(tokens[pos - 1]) ? ++pos && _call(o, until([], ')')) : o
   const _call = (o, a) => a.length === 0 ? ['__call', o] : [o].concat(a)
   const indent = s => s === undefined ? 0 : s.match(/[\r\n]/) ? s.split(/[\r\n]/).slice(-1)[0].length : -1
@@ -49,7 +49,6 @@ const convert = source => {
     tokens[pos] === '.' ? (consume(), ['.', t, consume()]) :
     t === '[' ? until(['list'], ']') :
     t === '(' ? until([], ')') :
-    indent(t) >= 1 ? lines(indent(t)) :
     t
   const unit = () => call(bottom(consume()))
   const unwrap = o => {
@@ -61,9 +60,11 @@ const convert = source => {
     const unnest = a => a.length === 1 ? a[0] : a
     return Array.isArray(o) ? (o.length === 1 ? unwrap(o[0]) : unnest(block(op2(o))).map(unwrap)) : o
   }
-  const line = n => many([], t => n === indent(t) ? ++pos : unit())
-  const lines = n => mark('__do', many([], _ => line(n)))
   const mark = (m, a) => a.length >= 2 ? [m, ...a] : a
+  const block = a => ':='.includes(a.slice(-1)[0]) && tokens[pos].match(/[\r\n]/) ? [...a, lines(indent(tokens[pos]))] : a
+  const line = () => block(many([], t => !t.match(/[\r\n]/) && unit()))
+  const lines = n => mark('__do', many([], t => indent(t) === n ? (++pos, line()) : false))
+  tokens.unshift('\n')
   return unwrap(lines(0))
 }
 const stringify = a => Array.isArray(a) ? `(${a.map(stringify).join(' ')})` : str(a)
@@ -108,8 +109,8 @@ test('(= f n n)', 'f n = n')
 test('(= f (a b) (+ a b))', 'f a b = a + b')
 
 // block
-test('(: loop () a)', 'loop: a')
-test('(: if cond a)', 'if cond: a')
+test('(: a () b)', 'a: b')
+test('(: a b c)', 'a b: c')
 
 // top level
 test('(__do a b)', 'a\nb')
@@ -117,7 +118,11 @@ test('(__do (a b) c)', 'a b\nc')
 test('(__do a (b c))', 'a\nb c')
 
 // indent
-test('(: loop () a)', 'loop:\n  a')
-test('(: loop () (__do a b))', 'loop:\n  a\n  b')
+test('(: a () b)', 'a:\n  b')
+test('(: a () (: b () c))', 'a:\n  b:\n    c')
+test('(: a () (: b () (__do c d)))', 'a:\n  b:\n    c\n    d')
+test('(: a () (__do (: b () c) d))', 'a:\n  b:\n    c\n  d')
+test('(__do (: a () (: b () c)) d)', 'a:\n  b:\n    c\nd')
+test('(__do (: a () (__do b (: c () d) e)) f)', 'a:\n  b\n  c:\n    d\n  e\nf')
 
 puts('ok')
