@@ -9,9 +9,9 @@ const put = (...a) => { process.stdout.write(a.map(str).join(' ')); return a[0] 
 const puts = (...a) => { console.log(a.map(str).join(' ')); return a[0] }
 const infer = root => {
   let unique = 1
-  const tvar = (tid) => ({tid: tid, instance: null, toString: () => tid.toString()})
+  const tvar = () => (tid => ({tid, instance: null, toString: () => tid.toString()}))(unique++)
   const tclass = name => ({name, instance: null, toString: () => name})
-  const type = name => ({name, toString: () => name})
+  const type = (name, ...generics) => ({name, generics, toString: () => `${name}${generics.length ? `(${generics.map((g, i) => g.instance ? g.instance.toString() : i).join(' ')})` : ''}`})
   const prune = t => t.instance ? t.instance = prune(t.instance) : t
   const tint = type('int')
   const treal = type('real')
@@ -23,6 +23,8 @@ const infer = root => {
     '+': () => (t => [t, t, t])(type('num')),
     'int': () => [type('num'), tint],
     'real': () => [type('num'), treal],
+    'list': () => (t => [t, type('list', t)])(tvar()),
+    '__empty': () => type('list', tvar()),
   }
   const inferTop = (node, env) => {
     const inf = node => inferTop(node, env)
@@ -47,7 +49,7 @@ const infer = root => {
     }
     const apply = ([head, ...argv]) => argv.reduce((ret, x) => unify(ret, inf(x)), inf(head))
     const value = v => v.match(/^[0-9]+$/) ? tclass('num') :
-       v.match(/^[0-9]+\.[0-9]+$/) ? treal :
+      v.match(/^[0-9]+\.[0-9]+$/) ? treal :
       v in env ? env[v]() :
       fail(`Unknown value '${v}'`)
     return Array.isArray(node) ? apply(node) : value(node)
@@ -65,6 +67,10 @@ if (require.main === module) {
   test('num', '1')
   test('real', '1.2')
 
+  // generics
+  test('list(0)', '[]')
+  test('list(num)', '[1]')
+
   // type cast
   test('int', 'int(1)')
   test('real', 'real(1)')
@@ -73,8 +79,8 @@ if (require.main === module) {
 
   // type class
   test('num', '1 + 2')
-  test('real', '1 + 2.0')
   test('real', '1.0 + 2.0')
+  test('real', '1 + 2.0')
   test('real', '1.0 + 2')
   test('real', '1 + 2 + 3.0')
   test('real', '1.0 + 2.0 + 3')

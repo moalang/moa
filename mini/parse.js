@@ -44,7 +44,7 @@ const parse = source => {
   const indent = s => s === undefined ? 0 : s.match(/[\r\n]/) ? s.split(/[\r\n]/).slice(-1)[0].length : -1
   const bottom = t =>
     tokens[pos] === '.' ? (consume(), ['.', t, consume()]) :
-    t === '[' ? until(['list'], ']') :
+    t === '[' ? (a => a.length === 1 ? '__empty' : a)(until(['list'], ']')) :
     t === '(' ? until([], ')') :
     t
   const unit = () => call(bottom(consume()))
@@ -78,7 +78,7 @@ if (require.main === module) {
   test('1.0', '1.0')
   test('id', 'id')
   test('"hi"', '"hi"')
-  test('list', '[]')
+  test('__empty', '[]')
   test('(list 1)', '[1]')
 
   // single operator
