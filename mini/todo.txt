@@ -1,18 +1,91 @@
-# Features
-[ ] num, int, float
-[ ] string
-[ ] lambda
-[ ] list(t)
-[ ] dict(k v)
-[ ] set(t)
-[ ] tuple
-[ ] time
+# Embedded function
+- fail(t)
+- catch a b :: a b
+- io now random
+
+# User defined type
 [ ] struct
 [ ] algebric data type
-[ ] binary operators
-[ ] regexp, matchdata
-[ ] fail(t), catch a b :: a b
-[ ] use io now random
+
+# Types and methods
+- io
+[ ] p a :: void
+[ ] now :: time
+[ ] random :: int
+- binary operators
+[ ] == !=
+- bool
+[ ] || &&
+- opt(a)
+[ ] fmap b :: (a b) opt(b)
+[ ] bool :: bool
+- num, int, float
+[ ] + - * / % < > <= >=
+- bool
+- string
+[ ] size :: int
+[ ] at :: int string
+[ ] ++ :: string string string
+[ ] slice :: int int string
+[ ] split :: string list(string)
+[ ] rsplit :: regexp list(string)
+[ ] index :: string list(int)
+[ ] find :: regexp list(match)
+[ ] replace :: string string string
+[ ] replace :: regexp (match string) string
+[ ] tr :: string string
+[ ] reverse :: string
+[ ] < > <= >=
+strip?
+- list(a)
+[ ] size :: int
+[ ] at :: int a
+[ ] map b :: (a b) list(b)
+[ ] filter :: (a bool) list(a)
+[ ] flatMap b :: (a list(b)) list(b)
+[ ] concat :: list(a) list(a)
+[ ] take :: int list(a)
+[ ] take_while :: (a bool) list(a)
+[ ] drop :: int list(a)
+[ ] drop_while :: (a bool) list(a)
+[ ] slice :: int int list(a)
+[ ] sort :: list(a)
+[ ] sort_by b :: (a b) list(a)
+[ ] push! :: a+ list(a)
+[ ] insert! :: int a+ list(a)
+[ ] pop! :: a
+[ ] shift! :: a
+[ ] unshift! :: a+ list(a)
+[ ] reverse :: list(a)
+[ ] zip b :: list(b) list(tuple(a b))
+[ ] empty :: bool
+[ ] present :: bool
+sample?
+shufle?
+first?
+last?
+- dict(k v)
+[ ] size :: int
+[ ] at :: k v
+[ ] keys :: list(k)
+[ ] values :: list(v)
+[ ] filter :: (k v bool) dict(k v)
+[ ] find b :: (k v opt(b)) list(b)
+[ ] list :: list(tuple(k v))
+- set(a)
+[ ] includes :: a bool
+[ ] - :: set(t) set(a)
+[ ] | :: set(t) set(a)
+[ ] & :: set(t) set(a)
+- tuple(t...)
+[ ] 0, 1 ...
+- time
+[ ] year, month, day, hour, minute, sec, wday, mday, yday
+- lambda
+- regexp
+- match
+[ ] string :: string
+[ ] pos :: int
 
 # Commercial features
 [ ] use mrpc define
