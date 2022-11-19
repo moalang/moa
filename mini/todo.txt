@@ -1,132 +1,95 @@
-# Embedded function
-- fail(t)
-- catch a b :: a b
-- io now random
+[ ] 例外の設計を考える
+
+Embedded functions
+[ ] throw a :: any
+[ ] catch a b :: a b
+
+Embedded errors
+[ ] zdiv
+[ ] index
+[ ] key
 
 # User defined type
 [ ] struct
 [ ] algebric data type
 
 # Types and methods
-- io
-[ ] p a :: void
-[ ] now :: time
-[ ] random :: int
+- log
+[ ] debug, info, warn, error :: a a
+
 - binary operators
 [ ] == !=
+[ ] < > <= >=
+
 - bool
-[ ] || &&
-- opt(a)
-[ ] fmap b :: (a b) opt(b)
-[ ] bool :: bool
-- num, int, float
-[ ] + - * / % < > <= >=
-- bool
+[ ] ||, && :: bool bool bool
+
+- num(a), int, float
+[ ] + - * % :: a a a
+[ ] < > <= >= :: a a bool
+[ ] / :: a a a # :zdiv
+
 - string
+[ ] ++ :: string string string
 [ ] size :: int
 [ ] at :: int string
-[ ] ++ :: string string string
 [ ] slice :: int int string
 [ ] split :: string list(string)
-[ ] rsplit :: regexp list(string)
 [ ] index :: string list(int)
-[ ] find :: regexp list(match)
-[ ] replace :: string string string
-[ ] replace :: regexp (match string) string
-[ ] tr :: string string
+[ ] replace :: string string int? string
 [ ] reverse :: string
-[ ] < > <= >=
-strip?
+[ ] tr :: string string int? string
+
 - list(a)
+[ ] ++ a :: list(a) list(a) list(a)
 [ ] size :: int
-[ ] at :: int a
+[ ] at :: int a  #index
 [ ] map b :: (a b) list(b)
 [ ] filter :: (a bool) list(a)
-[ ] flatMap b :: (a list(b)) list(b)
-[ ] concat :: list(a) list(a)
-[ ] take :: int list(a)
-[ ] take_while :: (a bool) list(a)
-[ ] drop :: int list(a)
-[ ] drop_while :: (a bool) list(a)
 [ ] slice :: int int list(a)
-[ ] sort :: list(a)
-[ ] sort_by b :: (a b) list(a)
-[ ] push! :: a+ list(a)
-[ ] insert! :: int a+ list(a)
-[ ] pop! :: a
-[ ] shift! :: a
-[ ] unshift! :: a+ list(a)
+[ ] sort b :: (a b)? list(a)
 [ ] reverse :: list(a)
 [ ] zip b :: list(b) list(tuple(a b))
 [ ] empty :: bool
 [ ] present :: bool
-sample?
-shufle?
-first?
-last?
+
 - dict(k v)
 [ ] size :: int
-[ ] at :: k v
+[ ] at :: k v #key
 [ ] keys :: list(k)
 [ ] values :: list(v)
 [ ] filter :: (k v bool) dict(k v)
-[ ] find b :: (k v opt(b)) list(b)
 [ ] list :: list(tuple(k v))
+[ ] include :: k bool
+[ ] empty :: bool
+[ ] present :: bool
+
 - set(a)
-[ ] includes :: a bool
-[ ] - :: set(t) set(a)
-[ ] | :: set(t) set(a)
-[ ] & :: set(t) set(a)
+[ ] size :: int
+[ ] - :: set(a) set(a)
+[ ] | :: set(a) set(a)
+[ ] & :: set(a) set(a)
+[ ] include :: a bool
+[ ] empty :: bool
+[ ] present :: bool
+
 - tuple(t...)
 [ ] 0, 1 ...
+
 - time
 [ ] year, month, day, hour, minute, sec, wday, mday, yday
-- lambda
+[ ] time.now
+
 - regexp
+[ ] split :: string list(string)
+[ ] find :: string list(match)
+[ ] replace :: (match string) string
+
 - match
 [ ] string :: string
 [ ] pos :: int
 
+- lambda
+
 # Commercial features
 [ ] use mrpc define
-
-# Next features
-[ ] bytes
-[ ] use data ref weakref copy deepcopy zlib gzip bz2 zip tar json md5 hmac base64 hex
-[ ] use moa parse generate
-
-# Core syntax
-top; unit+
-unit:
-| "(" top ")"
-| "[^"]+"
-| `[^"]+`
-| !
-| [+-/*%<>!=|&]+
-| [^ ]+
-
-Syntax sugars
-- f(...)      # (f ...)
-- o.m         # (. o m)
-- a b         # (a b)
-- a = b       # (= a () b)
-- a b = c     # (c = a (b) c)
-- a op2 b     # (op2 a b)
-- op1 a       # (op1 a)
-- a b: c      # (: (a b) (c))
-- a b:
-  c
-  d e         # (: (a b) (c (d e)))
-
-Example
-inc n = n + 1 # (= inc (n) (+ n 1))
-main =
-  x = 1
-  match x:
-    case 1: "one"
-    case _: "others"
-  # (= main () ((= x 1) (: match x ((: caes 1 "one") (: case _ "others))))
-
-Syntax sugar ides
-- [...]     -> list(...)
-- {k:v ...} -> dict("k" v)

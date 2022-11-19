@@ -2,7 +2,7 @@ test:
 	clear
 	-node parse.js
 	-node convert.js
-	-node generate.js
+	-node compile.js
 
 watch:
 	-make test

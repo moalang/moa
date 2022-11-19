@@ -1,6 +1,6 @@
 /*
  * This program converts some nodes in an internal expression based on type inference.
- * [ ] Infer types
+ * [ ] Type inference
  * [ ] Convert a method call to a function call
  */
 const dump = o => { console.dir(o, {depth: null}); return o }
@@ -18,13 +18,17 @@ const infer = root => {
   const tclass = name => ({name, instance: null, toString: () => name})
   const type = (name, ...generics) => ({name, generics, toString: () => `${name}${generics.length ? `(${generics.map((g, i) => g.instance ? g.instance.toString() : i).join(' ')})` : ''}`})
   const prune = t => t.instance ? t.instance = prune(t.instance) : t
+  const tbool = type('bool')
   const tint = type('int')
   const tfloat = type('float')
+  const tstring = type('string')
   const tclasses = {
     num: [tint, tfloat],
   }
   const tenv = {
     int: () => tint,
+    'true': () => tbool,
+    'false': () => tbool,
     '+': () => (t => [t, t, t])(type('num')),
     'int': () => [type('num'), tint],
     'float': () => [type('num'), tfloat],
@@ -51,6 +55,8 @@ const infer = root => {
     const derepeat = a => Array.isArray(a) && a[0].repeatable ? derepeat(a.slice(1)) : a
     const value = v => v.match(/^[0-9]+$/) ? tclass('num') :
       v.match(/^[0-9]+\.[0-9]+$/) ? tfloat :
+      v.startsWith('"') ? tstring :
+      v.startsWith('`') ? tstring :
       v in env ? env[v]() :
       fail(`Unknown value '${v}'`)
     return node.type = Array.isArray(node) ? apply(node) : value(node)
@@ -68,8 +74,12 @@ if (require.main === module) {
   const test = (expect, src) => assert(expect, infer(parse(src)).toString(), src)
 
   // primitives
+  test('bool', 'true')
+  test('bool', 'false')
   test('num', '1')
   test('float', '1.2')
+  test('string', '"hi"')
+  test('string', '`hi`')
 
   // generics
   test('list(0)', '[]')
