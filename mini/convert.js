@@ -6,8 +6,9 @@
 const dump = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
 const str = o => typeof o === 'string' ? o :
-  Array.isArray(o) ? `(${o.map(str).join(' ')})` :
-  o.tid || o.type ? o.toString() :
+  Array.isArray(o) ? `(${o.map(str).join(' ')})${o.repeatable ? '*' : ''}` :
+  o.instance ? str(o.instance) :
+  o.tid || o.type || o.name ? o.toString() + (o.repeatable ? '*' : '') :
   JSON.stringify(o)
 const put = (...a) => { process.stdout.write(a.map(str).join(' ')); return a[0] }
 const puts = (...a) => { console.log(a.map(str).join(' ')); return a[0] }
@@ -34,14 +35,15 @@ const infer = root => {
     'float': () => [type('num'), tfloat],
     'list': () => (t => [t, type('list', t)])(repeat(tvar())),
     'set': () => (t => [t, type('set', t)])(repeat(tvar())),
+    'dict': () => (a => [a, type('dict', a[0], a[1])])(repeat([tvar(), tvar()])),
   }
   const inferTop = (node, env) => {
     const inf = node => inferTop(node, env)
     const unify = (l, r, f) => {
       l = prune(l)
       r = prune(r)
-      const narrow = (ts, target) => ts.find(t => t.toString() === target.toString()) || fail(`No compatible '${ts}' '${target}'`)
-      return Array.isArray(l) && l[0].repeatable && unify(l[0], r, () => false) ? (prune(l[0]), l) :
+      const narrow = (ts, target) => ts.find(t => t.toString() === target.toString()) || fail(`Not compatible '${ts}' '${target}'`)
+      const ret = Array.isArray(l) && l[0].repeatable && unify(l[0], r, () => false) ? (Array.isArray(l[0]) ? [...l[0].slice(1), l] : (prune(l[0]), l)) :
         Array.isArray(l) ? (unify(l[0], r), l.length === 2 ? l[1] : l.slice(1)) :
         l.tid && r.tid ? r.instane = l :
         l.tid ? l.instance = r :
@@ -50,6 +52,7 @@ const infer = root => {
         l.name in tclasses ? l.instance = narrow(tclasses[l.name], r) :
         r.name in tclasses ? r.instance = narrow(tclasses[r.name], l) :
         f ? f() : fail(`Unmatch ${l} and ${r}`)
+      return ret
     }
     const squash = x => Array.isArray(x) && x[0].repeatable ? squash(x.slice(1)) : x
     const apply = ([head, ...argv]) => head == '__call' && argv.length === 1 ? squash(value(argv[0])) :
@@ -83,7 +86,7 @@ if (require.main === module) {
   test('string', '"hi"')
   test('string', '`hi`')
 
-  // generics
+  // containers
   test('list(0)', '[]')
   test('list(num)', '[1]')
   test('list(float)', '[1.0]')
@@ -92,6 +95,8 @@ if (require.main === module) {
   test('list(float)', '[1 2.0 3]')
   test('set(0)', 'set()')
   test('set(num)', 'set(1)')
+  test('dict(0 1)', 'dict()')
+  test('dict(string num)', 'dict("a" 1)')
 
   // type cast
   test('int', 'int(1)')
