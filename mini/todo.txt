@@ -1,13 +1,10 @@
-[ ] 例外の設計を考える
+[ ] Design for error handling
+[ ] Implement types
+[ ] Implement methods
 
-Embedded functions
+Exception?
 [ ] throw a :: any
 [ ] catch a b :: a b
-
-Embedded errors
-[ ] zdiv
-[ ] index
-[ ] key
 
 # User defined type
 [ ] struct
@@ -27,7 +24,7 @@ Embedded errors
 - num(a), int, float
 [ ] + - * % :: a a a
 [ ] < > <= >= :: a a bool
-[ ] / :: a a a # :zdiv
+[ ] / :: a a a @zdiv
 
 - string
 [ ] ++ :: string string string
@@ -43,7 +40,7 @@ Embedded errors
 - list(a)
 [ ] ++ a :: list(a) list(a) list(a)
 [ ] size :: int
-[ ] at :: int a  #index
+[ ] at :: int a @index
 [ ] map b :: (a b) list(b)
 [ ] filter :: (a bool) list(a)
 [ ] slice :: int int list(a)
@@ -55,7 +52,7 @@ Embedded errors
 
 - dict(k v)
 [ ] size :: int
-[ ] at :: k v #key
+[ ] at :: k v @key
 [ ] keys :: list(k)
 [ ] values :: list(v)
 [ ] filter :: (k v bool) dict(k v)
@@ -93,3 +90,16 @@ Embedded errors
 
 # Commercial features
 [ ] use mrpc define
+
+
+
+
+# Idea for the exception
+div a 0 = @zdiv
+div a b = a / b
+calc =
+  a = 10
+  b = 0
+  c = div a b |zdiv 0
+main = net.http req =>
+  s = req.query "s" |key throw bad-request
