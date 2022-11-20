@@ -16,11 +16,13 @@ const compile = root => {
   const map = {
     '__call,list': '[]',
     '__call,set': '[]',
+    '__call,dict': '({})',
   }
   const value = x => x in map ? map[x] : x.toString()
   const apply = ([h,...t]) =>
     h == 'list' ? `[${t.map(js).join(',')}]` :
     h == 'set' ? `[${t.map(js).join(',')}]` :
+    h == 'dict' ? '({' + [...Array(t.length / 2).keys()].map(i => `[${t[i*2]}]: ${compile(t[i*2+1])}`).join(', ') + '})' :
     `${h}(${t.map(js).join(',')})`
   const js = x => Array.isArray(x) ? (x in map ? map[x] : apply(x)) : value(x)
   return js(root)
@@ -31,8 +33,8 @@ module.exports = { compile }
 if (require.main === module) {
   const { parse } = require('./parse.js')
   const { convert } = require('./convert.js')
-  const assert = (expect, fact, src) => put(str(expect) === str(fact) ? '.' : fail(`Expect: '${expect}' but got '${fact}'. src='${src}'`))
-  const test = (expect, src) => assert(expect, eval(compile(convert(parse(src)))), src)
+  const assert = (expect, fact, src) => put(expect === fact ? '.' : fail(`Expect: '${expect}' but got '${fact}'. src='${src}'`))
+  const test = (expect, src) => assert(str(expect), str(eval(compile(convert(parse(src))))), src)
 
   // primitives
   test(true, 'true')
@@ -48,6 +50,9 @@ if (require.main === module) {
   test([1,2], '[1 2]')
   test([], 'set()')
   test([1], 'set(1)')
+  test({}, 'dict()')
+  test({s:1}, 'dict("s" 1)')
+  test({1:2}, 'dict(1 2)')
 
   puts('ok')
 }
