@@ -1,6 +1,20 @@
-[ ] Design for error handling
-[ ] Implement types
-[ ] Implement methods
+- Design for error handling
+- Implement types
+[x] bool
+[x] int
+[x] float
+[x] num
+[x] string
+[x] list a
+[x] set a
+[ ] dict k v
+[ ] tuple ...
+[ ] type ...
+[ ] regexp ...
+[ ] match ...
+[ ] user defined struct
+[ ] user defined algebraic data type
+- Implement methods
 
 Exception?
 [ ] throw a :: any

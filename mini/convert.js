@@ -1,6 +1,6 @@
 /*
  * This program converts some nodes in an internal expression based on type inference.
- * [ ] Type inference
+ * [x] Basic type inference
  * [ ] Convert a method call to a function call
  */
 const dump = o => { console.dir(o, {depth: null}); return o }
@@ -33,7 +33,7 @@ const infer = root => {
     'int': () => [type('num'), tint],
     'float': () => [type('num'), tfloat],
     'list': () => (t => [t, type('list', t)])(repeat(tvar())),
-    '__empty': () => type('list', tvar()),
+    'set': () => (t => [t, type('set', t)])(repeat(tvar())),
   }
   const inferTop = (node, env) => {
     const inf = node => inferTop(node, env)
@@ -51,9 +51,11 @@ const infer = root => {
         r.name in tclasses ? r.instance = narrow(tclasses[r.name], l) :
         f ? f() : fail(`Unmatch ${l} and ${r}`)
     }
-    const apply = ([head, ...argv]) => derepeat(argv.reduce((ret, x) => unify(ret, inf(x)), inf(head)))
+    const squash = x => Array.isArray(x) && x[0].repeatable ? squash(x.slice(1)) : x
+    const apply = ([head, ...argv]) => head == '__call' && argv.length === 1 ? squash(value(argv[0])) :
+      derepeat(argv.reduce((ret, x) => unify(ret, inf(x)), inf(head)))
     const derepeat = a => Array.isArray(a) && a[0].repeatable ? derepeat(a.slice(1)) : a
-    const value = v => v.match(/^[0-9]+$/) ? tclass('num') :
+    const value = v => v.type = v.match(/^[0-9]+$/) ? tclass('num') :
       v.match(/^[0-9]+\.[0-9]+$/) ? tfloat :
       v.startsWith('"') ? tstring :
       v.startsWith('`') ? tstring :
@@ -63,7 +65,7 @@ const infer = root => {
   }
   return prune(inferTop(root, tenv))
 }
-const fix = o => (Array.isArray(o) ? o.map(fix) : o.type = o.type.toString(), o)
+const fix = o => (Array.isArray(o) ? o.map(fix) : o.type && (o.type = o.type.toString()), o)
 const convert = root => (infer(root), fix(root))
 
 module.exports = { convert }
@@ -88,6 +90,8 @@ if (require.main === module) {
   test('list(num)', '[1 2]')
   test('list(float)', '[1 2.0]')
   test('list(float)', '[1 2.0 3]')
+  test('set(0)', 'set()')
+  test('set(num)', 'set(1)')
 
   // type cast
   test('int', 'int(1)')
