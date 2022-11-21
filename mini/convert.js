@@ -17,7 +17,7 @@ const infer = root => {
   const repeat = t => (t.repeatable = true, t)
   const tvar = () => (tid => ({tid, instance: null, toString: () => tid.toString()}))(unique++)
   const tclass = name => ({name, instance: null, toString: () => name})
-  const type = (name, ...generics) => ({name, generics, toString: () => `${name}${generics.length ? `(${generics.map((g, i) => g.instance ? g.instance.toString() : i).join(' ')})` : ''}`})
+  const type = (name, ...generics) => ({name, generics, toString: () => `${name}${generics.length ? `(${generics.map((g, i) => g.instance ? g.instance.toString() : g.toString()).join(' ')})` : ''}`})
   const prune = t => t.instance ? t.instance = prune(t.instance) : t
   const tbool = type('bool')
   const tint = type('int')
@@ -56,6 +56,8 @@ const infer = root => {
     }
     const squash = x => Array.isArray(x) && x[0].repeatable ? squash(x.slice(1)) : x
     const apply = ([head, ...argv]) => head == '__call' && argv.length === 1 ? squash(value(argv[0])) :
+      head == 'tuple' ? type('tuple', ...argv.map(inf)) :
+      head == '.' && argv[1].match(/^[0-9]+$/) ? inf(argv[0]).generics[argv[1]] :
       derepeat(argv.reduce((ret, x) => unify(ret, inf(x)), inf(head)))
     const derepeat = a => Array.isArray(a) && a[0].repeatable ? derepeat(a.slice(1)) : a
     const value = v => v.type = v.match(/^[0-9]+$/) ? tclass('num') :
@@ -77,6 +79,7 @@ if (require.main === module) {
   const { parse } = require('./parse.js')
   const assert = (expect, fact, src) => put(expect === fact ? '.' : fail(`Expect: '${expect}' but got '${fact}'. src='${src}'`))
   const test = (expect, src) => assert(expect, infer(parse(src)).toString(), src)
+  test('num', 'tuple(1).0')
 
   // primitives
   test('bool', 'true')
@@ -87,16 +90,22 @@ if (require.main === module) {
   test('string', '`hi`')
 
   // containers
-  test('list(0)', '[]')
+  test('list(1)', '[]')
   test('list(num)', '[1]')
   test('list(float)', '[1.0]')
   test('list(num)', '[1 2]')
   test('list(float)', '[1 2.0]')
   test('list(float)', '[1 2.0 3]')
-  test('set(0)', 'set()')
+  test('set(1)', 'set()')
   test('set(num)', 'set(1)')
-  test('dict(0 1)', 'dict()')
+  test('dict(1 2)', 'dict()')
   test('dict(string num)', 'dict("a" 1)')
+  test('tuple(num)', 'tuple(1)')
+  test('tuple(num float)', 'tuple(1 0.0)')
+  test('tuple(num float string)', 'tuple(1 0.0 "a")')
+
+  // property
+  test('num', 'tuple(1).0')
 
   // type cast
   test('int', 'int(1)')

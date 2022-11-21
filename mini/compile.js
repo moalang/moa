@@ -22,7 +22,9 @@ const compile = root => {
   const apply = ([h,...t]) =>
     h == 'list' ? `[${t.map(js).join(',')}]` :
     h == 'set' ? `[${t.map(js).join(',')}]` :
+    h == 'tuple' ? `[${t.map(js).join(',')}]` :
     h == 'dict' ? '({' + [...Array(t.length / 2).keys()].map(i => `[${t[i*2]}]: ${compile(t[i*2+1])}`).join(', ') + '})' :
+    h == '.' && t[1].match(/^[0-9]+$/) ? `${compile(t[0])}[${t[1]}]` : // tuple(...).1
     `${h}(${t.map(js).join(',')})`
   const js = x => Array.isArray(x) ? (x in map ? map[x] : apply(x)) : value(x)
   return js(root)
@@ -53,6 +55,9 @@ if (require.main === module) {
   test({}, 'dict()')
   test({s:1}, 'dict("s" 1)')
   test({1:2}, 'dict(1 2)')
+  test([1,2], 'tuple(1 2)')
+  test(1, 'tuple(1 2.0).0')
+  test(2.0, 'tuple(1 2.0).1')
 
   puts('ok')
 }
