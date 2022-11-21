@@ -23,6 +23,7 @@ const infer = root => {
   const tint = type('int')
   const tfloat = type('float')
   const tstring = type('string')
+  const tregexp = type('regexp')
   const tclasses = {
     num: [tint, tfloat],
   }
@@ -62,6 +63,7 @@ const infer = root => {
     const derepeat = a => Array.isArray(a) && a[0].repeatable ? derepeat(a.slice(1)) : a
     const value = v => v.type = v.match(/^[0-9]+$/) ? tclass('num') :
       v.match(/^[0-9]+\.[0-9]+$/) ? tfloat :
+      v.startsWith('r"') ? tregexp :
       v.startsWith('"') ? tstring :
       v.startsWith('`') ? tstring :
       v in env ? env[v]() :
@@ -88,6 +90,7 @@ if (require.main === module) {
   test('float', '1.2')
   test('string', '"hi"')
   test('string', '`hi`')
+  test('regexp', 'r"hi"')
 
   // containers
   test('list(1)', '[]')

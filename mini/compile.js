@@ -18,7 +18,9 @@ const compile = root => {
     '__call,set': '[]',
     '__call,dict': '({})',
   }
-  const value = x => x in map ? map[x] : x.toString()
+  const value = x => x in map ? map[x] :
+    x.startsWith('r"') ? `(new RegExp(${x.slice(1)}))` :
+    x.toString()
   const apply = ([h,...t]) =>
     h == 'list' ? `[${t.map(js).join(',')}]` :
     h == 'set' ? `[${t.map(js).join(',')}]` :
@@ -45,6 +47,7 @@ if (require.main === module) {
   test(1.2, '1.2')
   test('hi', '"hi"')
   test('hi', '`hi`')
+  test(/hi/, 'r"hi"')
 
   // containers
   test([], '[]')
