@@ -58,12 +58,14 @@ const infer = root => {
     }
     const flat = a => Array.isArray(a) && a.length == 1 && a[0][0] == '__do' ? a[0].slice(1).map(flat) : a
     const struct = (name, fields) => (tprops[name] = fields, [...fields.map(f => type(f[1])), type(name)])
+    const adt = (t, fields) => fields.map(f => Array.isArray(f) ? tenv[f[0]] = () => [...f.slice(1).map(x => type(x)), t] : tenv[f] = () => t)
     const squash = x => Array.isArray(x) && x[0].repeatable ? squash(x.slice(1)) : x
     const apply = ([head, ...argv]) => head == '__call' && argv.length === 1 ? squash(value(argv[0])) :
       head == 'tuple' ? type('tuple', ...argv.map(inf)) :
       head == '.' && argv[1].match(/^[0-9]+$/) ? inf(argv[0]).generics[argv[1]] :
       head == '__do' ? argv.map(inf).slice(-1)[0] :
       head == ':' && argv[0] == 'struct' ? env[argv[1]] = () => struct(argv[1], flat(argv.slice(2))) :
+      head == ':' && argv[0] == 'adt' ? (t => (env[t.name] = t, adt(t, flat(argv.slice(2)))))(type(argv[1])) :
       head == '.' ? Object.fromEntries(tprops[inf(argv[0]).name])[argv[1]] :
       derepeat(argv.reduce((ret, x) => unify(ret, inf(x)), inf(head)))
     const derepeat = a => Array.isArray(a) && a[0].repeatable ? derepeat(a.slice(1)) : a
@@ -134,6 +136,16 @@ if (require.main === module) {
   test('item', 'struct item:\n  name string\n  price int\nitem("moa" 1)')
   test('string', 'struct item:\n  name string\n  price int\nitem("moa" 1).name')
   test('int', 'struct item:\n  name string\n  price int\nitem("moa" 1).price')
+
+  // user defined algeblaic data type
+  test('ab', 'adt ab:\n  a\n  b\na')
+  test('ab', 'adt ab:\n  a\n  b\nb')
+  test('ab', 'adt ab:\n  a string\n  b int\na "a"')
+  test('ab', 'adt ab:\n  a string\n  b int\nb 1')
+
+  // branch
+  //test('1', 'adt ab:\n  a\n  b\nwhen a:\n  a: 1\n  b: 2')
+
 
   // test for exported function
   assert('num', convert(parse('1 + 2')).type.toString(), '1 + 2')
