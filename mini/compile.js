@@ -18,6 +18,8 @@ const compile = root => {
     '__call,set': '[]',
     '__call,dict': '({})',
   }
+  const struct = (name, fields) => `const ${name} = (${fields.map(f => f[0])}) => ({${fields.map(f => f[0])}})`
+  const flat = a => Array.isArray(a) && a.length == 1 && a[0][0] == '__do' ? a[0].slice(1).map(flat) : a
   const value = x => x in map ? map[x] :
     x.startsWith('r"') ? `(new RegExp(${x.slice(1)}))` :
     x.toString()
@@ -27,6 +29,9 @@ const compile = root => {
     h == 'tuple' ? `[${t.map(js).join(',')}]` :
     h == 'dict' ? '({' + [...Array(t.length / 2).keys()].map(i => `[${t[i*2]}]: ${compile(t[i*2+1])}`).join(', ') + '})' :
     h == '.' && t[1].match(/^[0-9]+$/) ? `${compile(t[0])}[${t[1]}]` : // tuple(...).1
+    h == '__do' ? t.map(js).join('\n') :
+    h == ':' && t[0] == 'struct' ? struct(t[1], flat(t.slice(2))) :
+    h == '.' ? compile(t[0]) + '.' + t[1] :
     `${h}(${t.map(js).join(',')})`
   const js = x => Array.isArray(x) ? (x in map ? map[x] : apply(x)) : value(x)
   return js(root)
@@ -61,6 +66,10 @@ if (require.main === module) {
   test([1,2], 'tuple(1 2)')
   test(1, 'tuple(1 2.0).0')
   test(2.0, 'tuple(1 2.0).1')
+
+  // user defined type
+  test('moa', 'struct item:\n  name string\nitem("moa").name')
+  test(1, 'struct item:\n  name string\n  price int\nitem("moa" 1).price')
 
   puts('ok')
 }

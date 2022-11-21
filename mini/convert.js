@@ -38,6 +38,7 @@ const infer = root => {
     'set': () => (t => [t, type('set', t)])(repeat(tvar())),
     'dict': () => (a => [a, type('dict', a[0], a[1])])(repeat([tvar(), tvar()])),
   }
+  const tprops = {}
   const inferTop = (node, env) => {
     const inf = node => inferTop(node, env)
     const unify = (l, r, f) => {
@@ -55,10 +56,15 @@ const infer = root => {
         f ? f() : fail(`Unmatch ${l} and ${r}`)
       return ret
     }
+    const flat = a => Array.isArray(a) && a.length == 1 && a[0][0] == '__do' ? a[0].slice(1).map(flat) : a
+    const struct = (name, fields) => (tprops[name] = fields, [...fields.map(f => type(f[1])), type(name)])
     const squash = x => Array.isArray(x) && x[0].repeatable ? squash(x.slice(1)) : x
     const apply = ([head, ...argv]) => head == '__call' && argv.length === 1 ? squash(value(argv[0])) :
       head == 'tuple' ? type('tuple', ...argv.map(inf)) :
       head == '.' && argv[1].match(/^[0-9]+$/) ? inf(argv[0]).generics[argv[1]] :
+      head == '__do' ? argv.map(inf).slice(-1)[0] :
+      head == ':' && argv[0] == 'struct' ? env[argv[1]] = () => struct(argv[1], flat(argv.slice(2))) :
+      head == '.' ? Object.fromEntries(tprops[inf(argv[0]).name])[argv[1]] :
       derepeat(argv.reduce((ret, x) => unify(ret, inf(x)), inf(head)))
     const derepeat = a => Array.isArray(a) && a[0].repeatable ? derepeat(a.slice(1)) : a
     const value = v => v.type = v.match(/^[0-9]+$/) ? tclass('num') :
@@ -81,7 +87,6 @@ if (require.main === module) {
   const { parse } = require('./parse.js')
   const assert = (expect, fact, src) => put(expect === fact ? '.' : fail(`Expect: '${expect}' but got '${fact}'. src='${src}'`))
   const test = (expect, src) => assert(expect, infer(parse(src)).toString(), src)
-  test('num', 'tuple(1).0')
 
   // primitives
   test('bool', 'true')
@@ -124,7 +129,13 @@ if (require.main === module) {
   test('float', '1 + 2 + 3.0')
   test('float', '1.0 + 2.0 + 3')
 
-  // convert
+  // user defined struct
+  test('item', 'struct item:\n  name string\nitem("moa")')
+  test('item', 'struct item:\n  name string\n  price int\nitem("moa" 1)')
+  test('string', 'struct item:\n  name string\n  price int\nitem("moa" 1).name')
+  test('int', 'struct item:\n  name string\n  price int\nitem("moa" 1).price')
+
+  // test for exported function
   assert('num', convert(parse('1 + 2')).type.toString(), '1 + 2')
 
   puts('ok')
