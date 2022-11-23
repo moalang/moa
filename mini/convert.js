@@ -32,6 +32,7 @@ const infer = root => {
     'true': () => tbool,
     'false': () => tbool,
     '+': () => (t => [t, t, t])(type('num')),
+    'string': () => [tvar(), tstring],
     'int': () => [type('num'), tint],
     'float': () => [type('num'), tfloat],
     'list': () => (t => [t, type('list', t)])(repeat(tvar())),
@@ -56,6 +57,7 @@ const infer = root => {
         f ? f() : fail(`Unmatch ${l} and ${r}`)
       return ret
     }
+    const when = (t, cs) => (cs.map(c => unify(t, inf(c[2]))), cs.reduce((a,b) => unify(a, inf(b.slice(3))), tvar()))
     const flat = a => Array.isArray(a) && a.length == 1 && a[0][0] == '__do' ? a[0].slice(1).map(flat) : a
     const struct = (name, fields) => (tprops[name] = fields, [...fields.map(f => type(f[1])), type(name)])
     const adt = (t, fields) => fields.map(f => Array.isArray(f) ? tenv[f[0]] = () => [...f.slice(1).map(x => type(x)), t] : tenv[f] = () => t)
@@ -66,6 +68,7 @@ const infer = root => {
       head == '__do' ? argv.map(inf).slice(-1)[0] :
       head == ':' && argv[0] == 'struct' ? env[argv[1]] = () => struct(argv[1], flat(argv.slice(2))) :
       head == ':' && argv[0] == 'adt' ? (t => (env[t.name] = t, adt(t, flat(argv.slice(2)))))(type(argv[1])) :
+      head == ':' && argv[0] == 'when' ? when(inf(argv[1]), flat(argv.slice(2))) :
       head == '.' ? Object.fromEntries(tprops[inf(argv[0]).name])[argv[1]] :
       derepeat(argv.reduce((ret, x) => unify(ret, inf(x)), inf(head)))
     const derepeat = a => Array.isArray(a) && a[0].repeatable ? derepeat(a.slice(1)) : a
@@ -130,6 +133,7 @@ if (require.main === module) {
   test('float', '1.0 + 2')
   test('float', '1 + 2 + 3.0')
   test('float', '1.0 + 2.0 + 3')
+  test('string', 'string(1)')
 
   // user defined struct
   test('item', 'struct item:\n  name string\nitem("moa")')
@@ -144,7 +148,8 @@ if (require.main === module) {
   test('ab', 'adt ab:\n  a string\n  b int\nb 1')
 
   // branch
-  //test('1', 'adt ab:\n  a\n  b\nwhen a:\n  a: 1\n  b: 2')
+  test('float', 'adt ab:\n  a\n  b\nwhen a:\n  case a: 1\n  case b: 2.0')
+  //test('string', 'adt ab:\n  a string\n  b int\nwhen a("hi"):\n  a s: s\n  b n: string(n)')
 
 
   // test for exported function
