@@ -4,6 +4,6 @@ watch:
 
 test:
 	clear
-	-node parse.js
-	-node convert.js
-	-node compile.js
+	node parse.js
+	node convert.js
+	node compile.js

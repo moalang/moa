@@ -5,9 +5,11 @@
  */
 const dump = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
-const str = o => typeof o === 'string' ? o :
-  Array.isArray(o) ? `(${o.map(str).join(' ')})${o.repeatable ? '*' : ''}` :
-  o.instance ? str(o.instance) :
+const str = o => Array.isArray(o) && o.length === 1 ? _str(o[0]) : _str(o)
+const _str = o => typeof o === 'string' ? o :
+  o instanceof String ? o.toString() :
+  Array.isArray(o) ? `(${o.map(_str).join(' ')})${o.repeatable ? '*' : ''}` :
+  o.instance ? _str(o.instance) :
   o.tid || o.type || o.name ? o.toString() + (o.repeatable ? '*' : '') :
   JSON.stringify(o)
 const put = (...a) => { process.stdout.write(a.map(str).join(' ')); return a[0] }
@@ -42,6 +44,8 @@ const infer = root => {
   const tprops = {}
   const inferTop = (node, env) => {
     const inf = node => inferTop(node, env)
+    const wrap = args => (a => ({a, env: Object.assign(Object.fromEntries(a.map(x => [x[0], () => x[1]])), env)}))(to_a(args).map(a => [a, tvar()]))
+    const to_a = o => !Array.isArray(o) ? [o] : o[0] == ',' ? o.slice(1) : o
     const unify = (l, r, f) => {
       l = prune(l)
       r = prune(r)
@@ -57,7 +61,8 @@ const infer = root => {
         f ? f() : fail(`Unmatch ${l} and ${r}`)
       return ret
     }
-    const when = (t, cs) => (cs.map(c => unify(t, inf(c[2]))), cs.reduce((a,b) => unify(a, inf(b.slice(3))), tvar()))
+    const switch_ = (t, cs) => switch__(t, cs.map(c => [x => Array.isArray(c[2]) ? inferTop(x, wrap(c[2].slice(1)).env) : inf(x), ...c.slice(1)]))
+    const switch__ = (t, cs) => (cs.map(c => unify(t, c[0](c[2]))), cs.reduce((r,c) => unify(r, c[0](c.slice(3))), tvar()))
     const flat = a => Array.isArray(a) && a.length == 1 && a[0][0] == '__do' ? a[0].slice(1).map(flat) : a
     const struct = (name, fields) => (tprops[name] = fields, [...fields.map(f => type(f[1])), type(name)])
     const adt = (t, fields) => fields.map(f => Array.isArray(f) ? tenv[f[0]] = () => [...f.slice(1).map(x => type(x)), t] : tenv[f] = () => t)
@@ -68,7 +73,9 @@ const infer = root => {
       head == '__do' ? argv.map(inf).slice(-1)[0] :
       head == ':' && argv[0] == 'struct' ? env[argv[1]] = () => struct(argv[1], flat(argv.slice(2))) :
       head == ':' && argv[0] == 'adt' ? (t => (env[t.name] = t, adt(t, flat(argv.slice(2)))))(type(argv[1])) :
-      head == ':' && argv[0] == 'when' ? when(inf(argv[1]), flat(argv.slice(2))) :
+      head == ':' && argv[0] == 'switch' ? switch_(inf(argv[1]), flat(argv.slice(2))) :
+      //head == '=>' ? (a => [...a.map(x => x[1]), inferTop(argv[1], Object.assign(Object.fromEntries(a.map(x => [x[0], () => x[1]]), env)))])(to_a(argv[0]).map(a => [a, tvar()])) :
+      head == '=>' ? (a => [...a.map(x => x[1]), inferTop(argv[1], Object.assign(Object.fromEntries(a.map(x => [x[0], () => x[1]]), env)))])(to_a(argv[0]).map(a => [a, tvar()])) :
       head == '.' ? Object.fromEntries(tprops[inf(argv[0]).name])[argv[1]] :
       derepeat(argv.reduce((ret, x) => unify(ret, inf(x)), inf(head)))
     const derepeat = a => Array.isArray(a) && a[0].repeatable ? derepeat(a.slice(1)) : a
@@ -78,7 +85,7 @@ const infer = root => {
       v.startsWith('"') ? tstring :
       v.startsWith('`') ? tstring :
       v in env ? env[v]() :
-      fail(`Unknown value '${v}'`)
+      fail(`Unknown value '${v}' on env='${Object.keys(env)}'`)
     return node.type = Array.isArray(node) ? apply(node) : value(node)
   }
   return prune(inferTop(root, tenv))
@@ -91,7 +98,7 @@ module.exports = { convert }
 if (require.main === module) {
   const { parse } = require('./parse.js')
   const assert = (expect, fact, src) => put(expect === fact ? '.' : fail(`Expect: '${expect}' but got '${fact}'. src='${src}'`))
-  const test = (expect, src) => assert(expect, infer(parse(src)).toString(), src)
+  const test = (expect, src) => assert(expect, str(infer(parse(src))), src)
 
   // primitives
   test('bool', 'true')
@@ -101,6 +108,9 @@ if (require.main === module) {
   test('string', '"hi"')
   test('string', '`hi`')
   test('regexp', 'r"hi"')
+  test('(1 1)', 'a => a')
+  test('(1 2 1)', 'a,b => a')
+  test('(1 2 2)', 'a,b => b')
 
   // containers
   test('list(1)', '[]')
@@ -148,8 +158,8 @@ if (require.main === module) {
   test('ab', 'adt ab:\n  a string\n  b int\nb 1')
 
   // branch
-  test('float', 'adt ab:\n  a\n  b\nwhen a:\n  case a: 1\n  case b: 2.0')
-  //test('string', 'adt ab:\n  a string\n  b int\nwhen a("hi"):\n  a s: s\n  b n: string(n)')
+  test('float', 'adt ab:\n  a\n  b\nswitch a:\n  case a: 1\n  case b: 2.0')
+  test('string', 'adt ab:\n  a string\n  b int\nswitch a "hi":\n  case a s: s\n  case b n: string(n)')
 
 
   // test for exported function
