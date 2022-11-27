@@ -1,18 +1,5 @@
 - Design for error handling
-- Implement types
-[x] bool
-[x] int
-[x] float
-[x] num
-[x] string
-[x] list a
-[x] set a
-[x] dict k v
-[x] tuple ...
-[x] regexp ...
-[ ] match ...
-[x] user defined struct
-[ ] user defined algebraic data type
+[x] Implement types
 - Implement methods
 
 Exception?
@@ -20,8 +7,8 @@ Exception?
 [ ] catch a b :: a b
 
 # User defined type
-[ ] struct
-[ ] algebric data type
+[x] struct
+[x] algebric data type
 
 # Types and methods
 - log
