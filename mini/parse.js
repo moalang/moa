@@ -22,7 +22,7 @@ const puts = (...a) => { console.log(a.map(str).join(' ')); return a[0] }
 const dump = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
 const parse = source => {
-  const tokens = source.split(/([()\[\]!]|(?:[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+|r?"[^"]*"|`[^`]*`|[A-Za-z0-9_]+)/).filter(t => t.length > 0)
+  const tokens = source.split(/((?:!=)|[()\[\]!]|(?:[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+|r?"[^"]*"|`[^`]*`|[A-Za-z0-9_]+)/).filter(t => t.length > 0)
   let pos = 0
   const many = (a, f) => {
     while (pos < tokens.length) {
@@ -71,6 +71,7 @@ if (require.main === module) {
   const stringify = a => Array.isArray(a) ? `(${a.map(stringify).join(' ')})` : str(a)
   const assert = (expect, fact, src) => expect === fact ? put('.') : fail(`Expected '${expect}' but got '${fact}' in '${src}'`)
   const test = (expect, src) => assert(expect, stringify(parse(src)), src)
+  test('(!= 1 1)', '1 != 1')
 
   // primitives
   test('1', '1')
@@ -89,6 +90,7 @@ if (require.main === module) {
   // binary operators
   test('(+ 1 2)', '1 + 2')
   test('(+ (+ 1 2) 3)', '1 + 2 + 3')
+  test('(!= 1 1)', '1 != 1')
 
   // parentheses
   test('1', '(1)')

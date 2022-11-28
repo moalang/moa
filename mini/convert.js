@@ -33,7 +33,6 @@ const infer = root => {
     int: () => tint,
     'true': () => tbool,
     'false': () => tbool,
-    '+': () => (t => [t, t, t])(type('num')),
     'string': () => [tvar(), tstring],
     'int': () => [type('num'), tint],
     'float': () => [type('num'), tfloat],
@@ -41,6 +40,9 @@ const infer = root => {
     'set': () => (t => [t, type('set', t)])(repeat(tvar())),
     'dict': () => (a => [a, type('dict', a[0], a[1])])(repeat([tvar(), tvar()])),
   }
+  '+ - * / % ** //'.split(' ').map(op => tenv[op] = () => (t => [t, t, t])(type('num')))
+  '&& ||'.split(' ').map(op => tenv[op] = () => [tbool, tbool, tbool])
+  '== != < <= > >='.split(' ').map(op => tenv[op] = () => (t => [t, t, t])(tvar()))
   const tprops = {}
   const inferTop = (node, env) => {
     const inf = node => inferTop(node, env)
@@ -74,9 +76,9 @@ const infer = root => {
       head == ':' && argv[0] == 'struct' ? env[argv[1]] = () => struct(argv[1], flat(argv.slice(2))) :
       head == ':' && argv[0] == 'adt' ? (t => (env[t.name] = t, adt(t, flat(argv.slice(2)))))(type(argv[1])) :
       head == ':' && argv[0] == 'switch' ? switch_(inf(argv[1]), flat(argv.slice(2))) :
-      //head == '=>' ? (a => [...a.map(x => x[1]), inferTop(argv[1], Object.assign(Object.fromEntries(a.map(x => [x[0], () => x[1]]), env)))])(to_a(argv[0]).map(a => [a, tvar()])) :
-      head == '=>' ? (a => [...a.map(x => x[1]), inferTop(argv[1], Object.assign(Object.fromEntries(a.map(x => [x[0], () => x[1]]), env)))])(to_a(argv[0]).map(a => [a, tvar()])) :
+      head == '=>' ? (x => [...x.a.map(y => y[1]), inferTop(argv[1], x.env)])(wrap(to_a(argv[0]))) :
       head == '.' ? Object.fromEntries(tprops[inf(argv[0]).name])[argv[1]] :
+      head == '!' ? unify(inf(argv[0]), tbool) :
       derepeat(argv.reduce((ret, x) => unify(ret, inf(x)), inf(head)))
     const derepeat = a => Array.isArray(a) && a[0].repeatable ? derepeat(a.slice(1)) : a
     const value = v => v.type = v.match(/^[0-9]+$/) ? tclass('num') :
@@ -136,15 +138,6 @@ if (require.main === module) {
   test('int', 'int(float(1))')
   test('float', 'float(int(1))')
 
-  // type class
-  test('num', '1 + 2')
-  test('float', '1.0 + 2.0')
-  test('float', '1 + 2.0')
-  test('float', '1.0 + 2')
-  test('float', '1 + 2 + 3.0')
-  test('float', '1.0 + 2.0 + 3')
-  test('string', 'string(1)')
-
   // user defined struct
   test('item', 'struct item:\n  name string\nitem("moa")')
   test('item', 'struct item:\n  name string\n  price int\nitem("moa" 1)')
@@ -156,11 +149,20 @@ if (require.main === module) {
   test('ab', 'adt ab:\n  a\n  b\nb')
   test('ab', 'adt ab:\n  a string\n  b int\na "a"')
   test('ab', 'adt ab:\n  a string\n  b int\nb 1')
-
-  // branch
   test('float', 'adt ab:\n  a\n  b\nswitch a:\n  case a: 1\n  case b: 2.0')
   test('string', 'adt ab:\n  a string\n  b int\nswitch a "hi":\n  case a s: s\n  case b n: string(n)')
 
+  // binary operators and type class
+  test('num', '1 + 2')
+  test('float', '1.0 + 2.0')
+  test('float', '1 + 2.0')
+  test('float', '1.0 + 2')
+  test('float', '1 + 2 + 3.0')
+  test('float', '1.0 + 2.0 + 3')
+  test('string', 'string(1)')
+
+  // single operator
+  test('bool', '!true')
 
   // test for exported function
   assert('num', convert(parse('1 + 2')).type.toString(), '1 + 2')
