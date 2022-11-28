@@ -12,7 +12,7 @@ Exception?
 
 # Types and methods
 - log
-[ ] debug, info, warn, error :: a a
+[ ] debug, info, warn, error :: a b* a
 
 - binary operators
 [x] == !=

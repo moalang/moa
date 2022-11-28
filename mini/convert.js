@@ -92,7 +92,7 @@ const infer = root => {
   }
   return prune(inferTop(root, tenv))
 }
-const fix = o => (Array.isArray(o) ? o.map(fix) : o.type && (o.type = o.type.toString()), o)
+const fix = o => (o.type && (o.type = o.type.toString()), Array.isArray(o) && o.map(fix), o)
 const convert = root => (infer(root), fix(root))
 
 module.exports = { convert }
@@ -165,7 +165,7 @@ if (require.main === module) {
   test('bool', '!true')
 
   // test for exported function
-  assert('num', convert(parse('1 + 2')).type.toString(), '1 + 2')
+  assert('num', convert(parse('1 + 2')).type, '1 + 2')
 
   puts('ok')
 }

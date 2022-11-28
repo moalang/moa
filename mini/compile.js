@@ -33,12 +33,18 @@ const compile = root => {
   const switch_ = (t, cs) => `(__target => ${cs.map(c => Array.isArray(c) ? caseValue(c) : caseTag(c)).join(' : ')} : (() => {throw new Error("switch unmatch")})() )(${js(t)})`
   const caseValue = c => `__target.__tag === '${c[2][0]}' ? (${c[2][1]} => ${js(c[3])})(__target.__val)`
   const caseTag = c => `__target.__tag === '${c[2]}' ? ${js(c[3])}`
+  const string = (s,t) =>
+      t.startsWith('tuple(') ? `'tuple(' + ${s}.map(x => x.toString()).join(' ') + ')'` :
+      t.startsWith('list(') ? `'[' + ${s}.map(x => x.toString()).join(' ') + ']'` :
+      t.startsWith('set(') ? `'set(' + ${s}.map(x => x.toString()).join(' ') + ')'` :
+      t.startsWith('dict(') ? `'dict(' + Object.entries(${s}).map(x => x.map(y => y.toString()).join(' ')).join(' ') + ')'` :
+      `(${s}).toString()`
   const value = x => x in map ? map[x] :
     x.startsWith('r"') ? `(new RegExp(${x.slice(1)}))` :
     x.toString()
   const apply = ([h,...t]) =>
     h == 'list' ? `[${t.map(js).join(',')}]` :
-    h == 'string' ? `(${js(t)}).toString()` :
+    h == 'string' ? string(js(t[0]), t[0].type) :
     h == 'set' ? `[${t.map(js).join(',')}]` :
     h == 'tuple' ? `[${t.map(js).join(',')}]` :
     h == 'dict' ? '({' + [...Array(t.length / 2).keys()].map(i => `[${t[i*2]}]: ${compile(t[i*2+1])}`).join(', ') + '})' :
@@ -93,6 +99,15 @@ if (require.main === module) {
   test([1,2], 'tuple(1 2)')
   test(1, 'tuple(1 2.0).0')
   test(2.0, 'tuple(1 2.0).1')
+  test('[]', 'string([])')
+  test('[1]', 'string([1])')
+  test('[1 2]', 'string([1 2])')
+  test('set()', 'string(set())')
+  test('set(1)', 'string(set(1))')
+  test('set(1 2)', 'string(set(1 2))')
+  test('dict()', 'string(dict())')
+  test('dict(1 2)', 'string(dict(1 2))')
+  test('tuple(1 2)', 'string(tuple(1 2))')
 
   // single operator
   test(false, '!true')
