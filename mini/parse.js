@@ -71,7 +71,6 @@ if (require.main === module) {
   const stringify = a => Array.isArray(a) ? `(${a.map(stringify).join(' ')})` : str(a)
   const assert = (expect, fact, src) => expect === fact ? put('.') : fail(`Expected '${expect}' but got '${fact}' in '${src}'`)
   const test = (expect, src) => assert(expect, stringify(parse(src)), src)
-  test('(!= 1 1)', '1 != 1')
 
   // primitives
   test('1', '1')

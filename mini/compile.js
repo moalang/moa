@@ -11,6 +11,13 @@ const str = o =>
   JSON.stringify(o)
 const put = (...a) => { process.stdout.write(a.map(str).join(' ')); return a[0] }
 const puts = (...a) => { console.log(a.map(str).join(' ')); return a[0] }
+const rescue = f => {
+  try {
+    f()
+  } catch (e) {
+    return e.message
+  }
+}
 
 const compile = root => {
   const map = {
@@ -18,10 +25,10 @@ const compile = root => {
     '__call,set': '[]',
     '__call,dict': '({})',
   }
-  const struct = (name, fields) => `const ${name} = (${fields.map(f => f[0])}) => ({${fields.map(f => f[0])}})`
+  const struct = (name, fields) => `const ${name} = (${fields.map(f => f[0])}) => ({${fields.map(f => f[0])}, toString() { return '${name}(' + ${fields.map(f => f[1] == 'string' ? 'JSON.stringify(' + f[0] + ')' : '(' + f[0] + ').toString()').join(" + ' ' + ")} + ')' }})`
   const adt = (name, fields) => fields.map(f => Array.isArray(f) ? adtValue(f[0], f[1]) : adtTag(f)).join('\n') + `\nconst ${name} = ({${fields.map(f => f[0])}})`
-  const adtTag = name => `const ${name} = ({__tag: '${name}'})`
-  const adtValue = (name, v) => `const ${name} = __val => ({__tag: '${name}', __val})`
+  const adtTag = name => `const ${name} = ({__tag: '${name}', toString() { return '${name}' }})`
+  const adtValue = (name, v) => `const ${name} = __val => ({__tag: '${name}', __val, toString() { return '${name}(' + ${v == 'string' ? 'JSON.stringify(__val)' : '__val.toString()'} + ')' }})`
   const flat = a => Array.isArray(a) && a.length == 1 && a[0][0] == '__do' ? a[0].slice(1).map(flat) : a
   const switch_ = (t, cs) => `(__target => ${cs.map(c => Array.isArray(c) ? caseValue(c) : caseTag(c)).join(' : ')} : (() => {throw new Error("switch unmatch")})() )(${js(t)})`
   const caseValue = c => `__target.__tag === '${c[2][0]}' ? (${c[2][1]} => ${js(c[3])})(__target.__val)`
@@ -42,9 +49,11 @@ const compile = root => {
     h == ':' && t[0] == 'switch' ? switch_(js(t[1]), flat(t.slice(2))) :
     h == '.' ? compile(t[0]) + '.' + t[1] :
     h == '!' ? '!' + js(t[0]) :
-    h == '//' ? `Math.floor(${js(t[0])} / ${js(t[1])})` :
+    h == '/' ? `(d => d === 0 ? (() => {throw new Error('zdiv')})() : ${js(t[0])} / d)(${js(t[1])})` :
+    h == '%' ? `(d => d === 0 ? (() => {throw new Error('zdiv')})() : ${js(t[0])} % d)(${js(t[1])})` :
+    h == '//' ? `(d => d === 0 ? (() => {throw new Error('zdiv')})() : Math.floor(${js(t[0])} / d))(${js(t[1])})` :
     '== != < <= > >='.split(' ').includes(h.toString()) ? `JSON.stringify(${js(t[0])}) ${h} JSON.stringify(${js(t[1])})` :
-    '+-*/%<>=!'.includes(h[0]) ? js(t[0]) + h + js(t[1]) :
+    '+-*/%<>=!|&'.includes(h[0]) ? js(t[0]) + h + js(t[1]) :
     `${h}(${t.map(js).join(',')})`
   const js = x => !Array.isArray(x) ? value(x) : 
     x.length === 1 ? js(x[0]) :
@@ -60,6 +69,7 @@ if (require.main === module) {
   const { convert } = require('./convert.js')
   const assert = (expect, fact, src) => put(expect === fact ? '.' : fail(`Expect: '${expect}' but got '${fact}'. src='${src}'`))
   const test = (expect, src) => assert(str(expect), str(eval(compile(convert(parse(src))))), src)
+  const error = (expect, src) => assert(str(expect), rescue(() => eval(compile(convert(parse(src))))), src)
 
   // primitives
   test(true, 'true')
@@ -101,6 +111,14 @@ if (require.main === module) {
   test(true, '1 >= 1')
   test(true, '1 == 1')
   test(false, '1 != 1')
+  test(false, 'true && false')
+  test(true, 'true && true')
+  test(true, 'true || false')
+
+  // error handling
+  error('zdiv', '1 / 0')
+  error('zdiv', '1 // 0')
+  error('zdiv', '1 % 0')
 
   // user defined type
   test('hi', 'struct s:\n  a string\ns("hi").a')
@@ -111,12 +129,16 @@ if (require.main === module) {
   test(true, 'struct s:\n  a string\n  b int\ns("hi" 1) <= s("hi" 1)')
   test(false, 'struct s:\n  a string\n  b int\ns("hi" 1) > s("hi" 1)')
   test(true, 'struct s:\n  a string\n  b int\ns("hi" 1) >= s("hi" 1)')
+  test('s("hi" 1)', 'struct s:\n  a string\n  b int\nstring(s("hi" 1))')
 
   // user defined algebraic data type
   test(1, 'adt ab:\n  a\n  b\nswitch a:\n  case a: 1\n  case b: 2')
   test('hi', 'adt ab:\n  a string\n  b int\nswitch a "hi":\n  case a s: s\n  case b n: string(n)')
   test('hi', 'adt ab:\n  a string\n  b int\nswitch a "hi":\n  case a s: s\n  case b n: string(n)')
   test('1', 'adt ab:\n  a string\n  b int\nswitch b 1:\n  case a s: s\n  case b n: string(n)')
+  test('a', 'adt ab:\n  a\n  b int\n  c string\nstring(a)')
+  test('b(1)', 'adt ab:\n  a\n  b int\n  c string\nstring(b(1))')
+  test('c("hi")', 'adt ab:\n  a\n  b int\n  c string\nstring(c("hi"))')
 
   puts('ok')
 }

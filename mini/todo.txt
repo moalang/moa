@@ -15,16 +15,16 @@ Exception?
 [ ] debug, info, warn, error :: a a
 
 - binary operators
-[ ] == !=
-[ ] < > <= >=
+[x] == !=
+[x] < > <= >=
 
 - bool
-[ ] ||, && :: bool bool bool
+[x] ||, && :: bool bool bool
 
 - num(a), int, float
-[ ] + - * % :: a a a
-[ ] < > <= >= :: a a bool
-[ ] / :: a a a @zdiv
+[x] + - * % :: a a a
+[x] < > <= >= :: a a bool
+[x] / :: a a a @zdiv
 
 - string
 [ ] ++ :: string string string
@@ -71,7 +71,7 @@ Exception?
 [ ] present :: bool
 
 - tuple(t...)
-[ ] 0, 1 ...
+[x] 0, 1 ...
 
 - time
 [ ] year, month, day, hour, minute, sec, wday, mday, yday
@@ -79,12 +79,8 @@ Exception?
 
 - regexp
 [ ] split :: string list(string)
-[ ] find :: string list(match)
-[ ] replace :: (match string) string
-
-- match
-[ ] string :: string
-[ ] pos :: int
+[ ] find :: string list(string)
+[ ] replace :: (string string) string
 
 - lambda
 
