@@ -32,24 +32,26 @@ const infer = root => {
     num: [tint, tfloat],
   }
   const tenv = {
-    int: () => tint,
-    'true': () => tbool,
-    'false': () => tbool,
+    int: tint,
+    'true': tbool,
+    'false': tbool,
     'string': () => [tvar(), tstring],
-    'int': () => [type('num'), tint],
-    'float': () => [type('num'), tfloat],
+    'int': [type('num'), tint],
+    'float': [type('num'), tfloat],
     'list': () => (t => [t, type('list', t)])(repeat(tvar())),
     'set': () => (t => [t, type('set', t)])(repeat(tvar())),
     'dict': () => (a => [a, type('dict', a[0], a[1])])(repeat([tvar(), tvar()])),
   }
-  '+ - * / % ** //'.split(' ').map(op => tenv[op] = () => (t => [t, t, t])(type('num')))
-  '&& ||'.split(' ').map(op => tenv[op] = () => [tbool, tbool, tbool])
+  '+ - * / % ** //'.split(' ').map(op => tenv[op] = (t => [t, t, t])(type('num')))
+  '&& ||'.split(' ').map(op => tenv[op] = [tbool, tbool, tbool])
   '== != < <= > >='.split(' ').map(op => tenv[op] = () => (t => [t, t, t])(tvar()))
   const tprops = {}
   const inferTop = (node, env) => {
     const inf = node => inferTop(node, env)
     const wrap = args => (a => ({a, env: Object.assign(Object.fromEntries(a.map(x => [x[0], () => x[1]])), env)}))(to_a(args).map(a => [a, tvar()]))
     const to_a = o => !Array.isArray(o) ? [o] : o[0] == ',' ? o.slice(1) : o
+    const to_s = a => Array.isArray(a) && a.length === 1 ? to_s(a[0]) : a
+    const to_v = f => typeof f === 'function' && f.length === 0 ? f() : f
     const unify = (l, r, f) => {
       l = prune(l)
       r = prune(r)
@@ -71,20 +73,19 @@ const infer = root => {
     const flat = a => Array.isArray(a) && a.length == 1 && a[0][0] == '__do' ? a[0].slice(1).map(flat) : a
     const struct = (name, fields) => (tprops[name] = fields, [...fields.map(f => type(f[1])), type(name)])
     const adt = (t, fields) => fields.map(f => Array.isArray(f) ? tenv[f[0]] = () => [...f.slice(1).map(x => type(x)), t] : tenv[f] = () => t)
-    const singlify = a => Array.isArray(a) && a.length === 1 ? singlify(a[0]) : a
-    const squash = x => Array.isArray(x) && x[0].repeatable ? singlify(squash(x.slice(1))) : x
+    const squash = x => Array.isArray(x) && x[0].repeatable ? to_s(squash(x.slice(1))) : x
     const def = (args, types) => (x => types.map(t => (y => y ? y[1] : type(t.toString()))(x.a.find(y => y[0].toString() == t.toString()))))(wrap(args))
     const fn = (a, exp) => (x => [...x.a.map(y => y[1]), inferTop(exp, x.env)])(wrap(a))
-    const derepeat = a => Array.isArray(a) && a[0].repeatable ? singlify(derepeat(a.slice(1))) : a
+    const derepeat = a => Array.isArray(a) && a[0].repeatable ? to_s(derepeat(a.slice(1))) : a
     const apply = ([head, ...argv]) => head == '__call' && argv.length === 1 ? squash(value(argv[0])) :
       head == 'tuple' ? type('tuple', ...argv.map(inf)) :
       head == '.' && argv[1].match(/^[0-9]+$/) ? inf(argv[0]).generics[argv[1]] :
       head == '__do' ? argv.map(inf).slice(-1)[0] :
-      head == ':' && argv[0] == 'struct' ? env[argv[1]] = () => struct(argv[1], flat(argv.slice(2))) :
+      head == ':' && argv[0] == 'struct' ? env[argv[1]] = struct(argv[1], flat(argv.slice(2))) :
       head == ':' && argv[0] == 'adt' ? (t => (env[t.name] = t, adt(t, flat(argv.slice(2)))))(type(argv[1])) :
       head == ':' && argv[0] == 'switch' ? switch_(inf(argv[1]), flat(argv.slice(2))) :
       head == ':' && argv[0] == 'def' ? (a => env[a[0].toString()] = def(a.slice(1), to_a(argv[2])))(to_a(argv[1])) :
-      head == ':' && argv[0] == 'fn' ? ((id, ft) => id in env ? unify(env[id], ft) : (env[id] = () => ft, ft))(to_a(argv[1])[0].toString(), fn(to_a(argv[1]).slice(1), argv[argv.length - 1])) :
+      head == ':' && argv[0] == 'fn' ? ((id, ft) => id in env ? unify(env[id], ft) : env[id] = ft)(to_a(argv[1])[0].toString(), fn(to_a(argv[1]).slice(1), argv[argv.length - 1])) :
       head == '=>' ? (x => [...x.a.map(y => y[1]), inferTop(argv[1], x.env)])(wrap(to_a(argv[0]))) :
       head == '.' ? Object.fromEntries(tprops[inf(argv[0]).name])[argv[1]] :
       head == '!' ? unify(inf(argv[0]), tbool) :
@@ -94,7 +95,7 @@ const infer = root => {
       v.startsWith('r"') ? tregexp :
       v.startsWith('"') ? tstring :
       v.startsWith('`') ? tstring :
-      v in env ? env[v]() :
+      v in env ? to_v(env[v]) :
       fail(`Unknown value '${v}' on env='${Object.keys(env)}'`)
     return node.type = Array.isArray(node) ? apply(node) : value(node)
   }
@@ -118,6 +119,7 @@ if (require.main === module) {
       assert(r, str(e.r), src)
     }
   }
+  //test('int', 'def f: int\nf()')
 
   // primitives
   test('bool', 'true')
