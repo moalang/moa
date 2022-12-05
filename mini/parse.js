@@ -53,13 +53,14 @@ const parse = source => {
   const statement = () => mark('__do', lines(indent(tokens[pos])))
   const unwrap = o => {
     const op2 = a => a.length <= 2 ? a :
-      '+-*/%|&<>!=.,'.includes(a[1][0]) && a[1] !== '=' && a[1] !== ':' ? op2([[a[1], a[0], a[2]], ...a.slice(3)]) :
+      '+-*/%|&<>!=.,:'.includes(a[1][0]) && a[1] !== '=' && a[1] !== ':' && a[1] !== '::' ? op2([[a[1], a[0], a[2]], ...a.slice(3)]) :
       [a[0], ...op2(a.slice(1))]
     const block = a => _block(a, a.findIndex(t => t === ':'))
     const _block = (a, n) => n === -1 ? a : [a[n], a[0], a.slice(1, n), a.slice(n+1)]
+    const declare = a => (pos => pos === -1 ? a : [a[pos], a.slice(0, pos), a.slice(pos+1)])(a.findIndex(t => t === '::'))
     const unnest = a => a.length === 1 ? a[0] : a
     const to_obj = o => typeof o === 'string' ? new String(o) : o
-    return Array.isArray(o) ? (o.length === 1 ? unwrap(o[0]) : unnest(block(op2(o))).map(unwrap)) : to_obj(o)
+    return Array.isArray(o) ? (o.length === 1 ? unwrap(o[0]) : unnest(block(declare(op2(o)))).map(unwrap)) : to_obj(o)
   }
   tokens.unshift('\n')
   return unwrap(statement())
@@ -112,6 +113,10 @@ if (require.main === module) {
   // block
   test('(: a () b)', 'a: b')
   test('(: a b c)', 'a b: c')
+
+  // type declaration
+  test('(:: a b)', 'a :: b')
+  test('(:: (a b) (c d))', 'a b :: c d')
 
   // top level
   test('(__do a b)', 'a\nb')

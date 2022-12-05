@@ -69,6 +69,7 @@ const infer = root => {
     const struct = (name, fields) => (tprops[name] = fields, [...fields.map(f => type(f[1])), type(name)])
     const adt = (t, fields) => fields.map(f => Array.isArray(f) ? tenv[f[0]] = () => [...f.slice(1).map(x => type(x)), t] : tenv[f] = () => t)
     const squash = x => Array.isArray(x) && x[0].repeatable ? squash(x.slice(1)) : x
+    const fn = (a, exp) => (x => [...x.a.map(y => y[1]), inferTop(exp, x.env)])(wrap(a))
     const apply = ([head, ...argv]) => head == '__call' && argv.length === 1 ? squash(value(argv[0])) :
       head == 'tuple' ? type('tuple', ...argv.map(inf)) :
       head == '.' && argv[1].match(/^[0-9]+$/) ? inf(argv[0]).generics[argv[1]] :
@@ -76,6 +77,7 @@ const infer = root => {
       head == ':' && argv[0] == 'struct' ? env[argv[1]] = () => struct(argv[1], flat(argv.slice(2))) :
       head == ':' && argv[0] == 'adt' ? (t => (env[t.name] = t, adt(t, flat(argv.slice(2)))))(type(argv[1])) :
       head == ':' && argv[0] == 'switch' ? switch_(inf(argv[1]), flat(argv.slice(2))) :
+      head == ':' && argv[0] == 'fn' ? fn(argv[1].slice(1), argv[argv.length - 1]) :
       head == '=>' ? (x => [...x.a.map(y => y[1]), inferTop(argv[1], x.env)])(wrap(to_a(argv[0]))) :
       head == '.' ? Object.fromEntries(tprops[inf(argv[0]).name])[argv[1]] :
       head == '!' ? unify(inf(argv[0]), tbool) :
@@ -152,6 +154,13 @@ if (require.main === module) {
   test('float', 'adt ab:\n  a\n  b\nswitch a:\n  case a: 1\n  case b: 2.0')
   test('string', 'adt ab:\n  a string\n  b int\nswitch a "hi":\n  case a s: s\n  case b n: string(n)')
 
+  // user defined function
+  test('(1 1)', 'fn id x: x')
+  test('(num num)', 'fn inc x: x + 1')
+
+  // single operator
+  test('bool', '!true')
+
   // binary operators and type class
   test('num', '1 + 2')
   test('float', '1.0 + 2.0')
@@ -160,9 +169,6 @@ if (require.main === module) {
   test('float', '1 + 2 + 3.0')
   test('float', '1.0 + 2.0 + 3')
   test('string', 'string(1)')
-
-  // single operator
-  test('bool', '!true')
 
   // test for exported function
   assert('num', convert(parse('1 + 2')).type, '1 + 2')
