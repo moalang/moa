@@ -1,18 +1,29 @@
 - Design for error handling
-[ ] throw a :: any
-[ ] catch a b :: a b
-- Design something like statements
-[ ] for
-[ ] while
-[ ] if / else if / else
-[x] Implement types
+[ ] idt ::= id ("::" type)
+[ ] type :: = id ("{" id type+ (";" id type+)* "}")? | "(" type+ ")"
+[ ] "throw" exp+
+[ ] "try" exp+ ":" (br "catch" type id: exp)+
+
+- Design something looks like statements
+[x] "for" int ":" ...  | "for" id int int? int? ":" ...
+[x] "while" exp ":" ...
+[x] "if" exp ":" ... (br "else if" exp ":" ...)* ("else:" ...)?
+[x] "continue" | "break" | "yield" exp | "yeild break"
+
 - Design how to infer type of property access
-[ ] f x = x.name
+[x] f x = x.inc (x.val + 1) # f a b{inc num a; val num} :: b a
+
+- Shortcut for string template
+[x] $"This is {name}"
+
+- Design name space and multiple files
+[ ] "define" id (":" br indent id type+ "::" type+)?
+[ ] "use" id+
+
 - Implement methods
 
-# Types and methods
 - log
-[ ] debug, info, warn, error :: a b* a
+[ ] debug, info, warn, error :: any+ any
 
 - string
 [ ] ++ :: string string string
@@ -76,11 +87,13 @@
 
 
 # Idea for the exception
-div a 0 = @zdiv
+div a 0 = throws "zero division error"
 div a b = a / b
 calc =
   a = 10
   b = 0
   c = div a b |zdiv 0
-main = net.http req =>
-  s = req.query "s" |key throw bad-request
+main = net.http req,res =>
+  s = try req.query("email"):
+    catch e: return res 200 [] `email is not found`
+  try do_something e => res 500 [] e.message
