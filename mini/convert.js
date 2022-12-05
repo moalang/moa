@@ -19,6 +19,7 @@ const puts = (...a) => { console.log(a.map(str).join(' ')); return a[0] }
 const infer = root => {
   let unique = 1
   const repeat = t => (t.repeatable = true, t)
+  const variable = t => (t.variable = true, t)
   const tvar = () => (tid => ({tid, instance: null, toString: () => tid.toString()}))(unique++)
   const tclass = name => ({name, instance: null, toString: () => name})
   const type = (name, ...generics) => ({name, generics, toString: () => `${name}${generics.length ? `(${generics.map((g, i) => g.instance ? g.instance.toString() : g.toString()).join(' ')})` : ''}`})
@@ -42,7 +43,7 @@ const infer = root => {
     'set': () => (t => [t, type('set', t)])(repeat(tvar())),
     'dict': () => (a => [a, type('dict', a[0], a[1])])(repeat([tvar(), tvar()])),
   }
-  '+ - * / % ** //'.split(' ').map(op => tenv[op] = (t => [t, t, t])(type('num')))
+  '+ - * / % ** // += -= /= *= /= %= **='.split(' ').map(op => tenv[op] = (t => [t, t, t])(type('num')))
   '&& ||'.split(' ').map(op => tenv[op] = [tbool, tbool, tbool])
   '== != < <= > >='.split(' ').map(op => tenv[op] = () => (t => [t, t, t])(tvar()))
   const tprops = {}
@@ -77,7 +78,9 @@ const infer = root => {
     const def = (args, types) => (x => types.map(t => (y => y ? y[1] : type(t.toString()))(x.a.find(y => y[0].toString() == t.toString()))))(wrap(args))
     const fn = (a, exp) => (x => [...x.a.map(y => y[1]), inferTop(exp, x.env)])(wrap(a))
     const derepeat = a => Array.isArray(a) && a[0].repeatable ? to_s(derepeat(a.slice(1))) : a
-    const apply = ([head, ...argv]) => head == '__call' && argv.length === 1 ? squash(value(argv[0])) :
+    const apply = ([head, ...argv]) => head == '__call' && argv.length === 1 ? to_s(squash(value(argv[0]))) :
+      head == 'let' ? env[argv[0]] = inf(to_s(argv.slice(1))) :
+      head == 'var' ? env[argv[0]] = variable(inf(to_s(argv.slice(1)))) :
       head == 'tuple' ? type('tuple', ...argv.map(inf)) :
       head == '.' && argv[1].match(/^[0-9]+$/) ? inf(argv[0]).generics[argv[1]] :
       head == '__do' ? argv.map(inf).slice(-1)[0] :
@@ -89,6 +92,7 @@ const infer = root => {
       head == '=>' ? (x => [...x.a.map(y => y[1]), inferTop(argv[1], x.env)])(wrap(to_a(argv[0]))) :
       head == '.' ? Object.fromEntries(tprops[inf(argv[0]).name])[argv[1]] :
       head == '!' ? unify(inf(argv[0]), tbool) :
+      head == '=' ? unify(env[argv[0]], inf(to_s(argv.slice(1)))) :
       derepeat(argv.reduce((ret, x) => unify(ret, inf(x)), inf(head)))
     const value = v => v.type = v.match(/^[0-9]+$/) ? tclass('num') :
       v.match(/^[0-9]+\.[0-9]+$/) ? tfloat :
@@ -119,7 +123,6 @@ if (require.main === module) {
       assert(r, str(e.r), src)
     }
   }
-  //test('int', 'def f: int\nf()')
 
   // primitives
   test('bool', 'true')
@@ -157,6 +160,16 @@ if (require.main === module) {
   test('int', 'int(float(1))')
   test('float', 'float(int(1))')
 
+  // user defined variables
+  test('num', 'let x 1')
+  test('num', 'var x 1')
+  test('num', 'var x 1\nx = 2')
+
+  // user defined function
+  test('(num)', 'fn f: 1')
+  test('(1 1)', 'fn f x: x')
+  test('(num num)', 'fn f x: x + 1')
+
   // user defined struct
   test('item', 'struct item:\n  name string\nitem("moa")')
   test('item', 'struct item:\n  name string\n  price int\nitem("moa" 1)')
@@ -171,17 +184,14 @@ if (require.main === module) {
   test('float', 'adt ab:\n  a\n  b\nswitch a:\n  case a: 1\n  case b: 2.0')
   test('string', 'adt ab:\n  a string\n  b int\nswitch a "hi":\n  case a s: s\n  case b n: string(n)')
 
-  // user defined function
-  test('(num)', 'fn f: 1')
-  test('(1 1)', 'fn f x: x')
-  test('(num num)', 'fn f x: x + 1')
-
   // declare type
   test('(int)', 'def f: int')
+  test('int', 'def f: int\nf()')
   test('(int)', 'def f: int\nfn f: 1')
   test('(int int)', 'def f: int int')
   test('(int int)', 'def f: int int\nfn f a: a')
-  test('(1)', 'def f a: a')
+  test('(1 1)', 'def f a: a a')
+  test('float', 'def f a: a a\nf(1) + f(1.0)')
   test('(1 2)', 'def f a b: a b')
   test('(2 1)', 'def f a b: b a')
 

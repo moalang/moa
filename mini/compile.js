@@ -13,6 +13,8 @@ const put = (...a) => { process.stdout.write(a.map(str).join(' ')); return a[0] 
 const puts = (...a) => { console.log(a.map(str).join(' ')); return a[0] }
 
 const compile = root => {
+  const to_a = o => Array.isArray(o) ? o : [o]
+  const to_s = o => Array.isArray(o) && o.length === 1 ? o[0] : o
   const map = {
     '__call,list': '[]',
     '__call,set': '[]',
@@ -26,6 +28,8 @@ const compile = root => {
   const switch_ = (t, cs) => `(__target => ${cs.map(c => Array.isArray(c) ? caseValue(c) : caseTag(c)).join(' : ')} : (() => {throw new Error("switch unmatch")})() )(${js(t)})`
   const caseValue = c => `__target.__tag === '${c[2][0]}' ? (${c[2][1]} => ${js(c[3])})(__target.__val)`
   const caseTag = c => `__target.__tag === '${c[2]}' ? ${js(c[3])}`
+  const to_return = a => Array.isArray(a) && a[0] == '__do' ? a.slice(1).map(js).slice(0, -1).join(';\n') + ';\nreturn ' + js(a.slice(1).slice(-1)[0]) : `return ${js(a)}`
+  const fn = (id, args, body) => `function ${id}(${args}) { ${to_return(body)} }`
   const string = (s,t) =>
       t.startsWith('tuple(') ? `'tuple(' + ${s}.map(x => x.toString()).join(' ') + ')'` :
       t.startsWith('list(') ? `'[' + ${s}.map(x => x.toString()).join(' ') + ']'` :
@@ -36,6 +40,8 @@ const compile = root => {
     x.startsWith('r"') ? `(new RegExp(${x.slice(1)}))` :
     x.toString()
   const apply = ([h,...t]) =>
+    h == 'let' ? `const ${t[0]} = ${js(...t.slice(1))}` :
+    h == 'var' ? `let ${t[0]} = ${js(...t.slice(1))}` :
     h == 'list' ? `[${t.map(js).join(',')}]` :
     h == 'string' ? string(js(t[0]), t[0].type) :
     h == 'set' ? `[${t.map(js).join(',')}]` :
@@ -46,6 +52,7 @@ const compile = root => {
     h == ':' && t[0] == 'struct' ? struct(t[1], flat(t.slice(2))) :
     h == ':' && t[0] == 'adt' ? adt(t[1], flat(t.slice(2))) :
     h == ':' && t[0] == 'switch' ? switch_(js(t[1]), flat(t.slice(2))) :
+    h == ':' && t[0] == 'fn' ? fn(to_a(t[1])[0], to_a(t[1]).slice(1), to_s(t.slice(2))) :
     h == '.' ? compile(t[0]) + '.' + t[1] :
     h == '!' ? '!' + js(t[0]) :
     h == '/' ? `(d => d === 0 ? (() => {throw new Error('zdiv')})() : ${js(t[0])} / d)(${js(t[1])})` :
@@ -130,10 +137,10 @@ if (require.main === module) {
   test(true, 'true && true')
   test(true, 'true || false')
 
-  // error handling
-  error('zdiv', '1 / 0')
-  error('zdiv', '1 // 0')
-  error('zdiv', '1 % 0')
+  // user defined function
+  test(1, 'fn f a: a\nf(1)')
+  test(2, 'fn f a:\n  let b a + 1\n  b\nf(1)')
+  test(2, 'fn f a:\n  var b a\n  a += 1\nf(1)')
 
   // user defined type
   test('hi', 'struct s:\n  a string\ns("hi").a')
@@ -154,6 +161,11 @@ if (require.main === module) {
   test('a', 'adt ab:\n  a\n  b int\n  c string\nstring(a)')
   test('b(1)', 'adt ab:\n  a\n  b int\n  c string\nstring(b(1))')
   test('c("hi")', 'adt ab:\n  a\n  b int\n  c string\nstring(c("hi"))')
+
+  // error handling
+  error('zdiv', '1 / 0')
+  error('zdiv', '1 // 0')
+  error('zdiv', '1 % 0')
 
   puts('ok')
 }
