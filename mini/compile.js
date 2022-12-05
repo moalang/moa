@@ -11,13 +11,6 @@ const str = o =>
   JSON.stringify(o)
 const put = (...a) => { process.stdout.write(a.map(str).join(' ')); return a[0] }
 const puts = (...a) => { console.log(a.map(str).join(' ')); return a[0] }
-const rescue = f => {
-  try {
-    f()
-  } catch (e) {
-    return e.message
-  }
-}
 
 const compile = root => {
   const map = {
@@ -75,7 +68,14 @@ if (require.main === module) {
   const { convert } = require('./convert.js')
   const assert = (expect, fact, src) => put(expect === fact ? '.' : fail(`Expect: '${expect}' but got '${fact}'. src='${src}'`))
   const test = (expect, src) => assert(str(expect), str(eval(compile(convert(parse(src))))), src)
-  const error = (expect, src) => assert(str(expect), rescue(() => eval(compile(convert(parse(src))))), src)
+  const error = (expect, src) => {
+    try {
+      eval(compile(convert(parse(src))))
+      puts('Expected error not happend')
+    } catch (e) {
+      assert(str(expect), e.message)
+    }
+  }
 
   // primitives
   test(true, 'true')

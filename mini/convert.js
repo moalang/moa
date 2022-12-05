@@ -5,7 +5,9 @@
  */
 const dump = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
-const str = o => Array.isArray(o) && o.length === 1 ? _str(o[0]) : _str(o)
+const failInfer = (m,l,r) => { const e = new Error(m); e.l = l; e.r = r; throw e }
+//const str = o => Array.isArray(o) && o.length === 1 ? _str(o[0]) : _str(o)
+const str = o => _str(o)
 const _str = o => typeof o === 'string' ? o :
   o instanceof String ? o.toString() :
   Array.isArray(o) ? `(${o.map(_str).join(' ')})${o.repeatable ? '*' : ''}` :
@@ -51,8 +53,9 @@ const infer = root => {
     const unify = (l, r, f) => {
       l = prune(l)
       r = prune(r)
-      const narrow = (ts, target) => ts.find(t => t.toString() === target.toString()) || fail(`Not compatible '${ts}' '${target}'`)
+      const narrow = (ts, target) => ts.find(t => t.toString() === target.toString()) || failInfer(`Not compatible '${ts}' '${target}'`, ts.map(t => t.toString()).join('|'), target)
       const ret = Array.isArray(l) && l[0].repeatable && unify(l[0], r, () => false) ? (Array.isArray(l[0]) ? [...l[0].slice(1), l] : (prune(l[0]), l)) :
+        Array.isArray(l) && Array.isArray(r) && l.length === r.length ? l.map((t, i) => unify(t, r[i])) :
         Array.isArray(l) ? (unify(l[0], r), l.length === 2 ? l[1] : l.slice(1)) :
         l.tid && r.tid ? r.instane = l :
         l.tid ? l.instance = r :
@@ -60,7 +63,7 @@ const infer = root => {
         l.toString() === r.toString() ? l :
         l.name in tclasses ? l.instance = narrow(tclasses[l.name], r) :
         r.name in tclasses ? r.instance = narrow(tclasses[r.name], l) :
-        f ? f() : fail(`Unmatch ${l} and ${r}`)
+        f ? f() : failInfer(`Unmatch ${l} and ${r}`, l, r)
       return ret
     }
     const switch_ = (t, cs) => switch__(t, cs.map(c => [x => Array.isArray(c[2]) ? inferTop(x, wrap(c[2].slice(1)).env) : inf(x), ...c.slice(1)]))
@@ -68,8 +71,11 @@ const infer = root => {
     const flat = a => Array.isArray(a) && a.length == 1 && a[0][0] == '__do' ? a[0].slice(1).map(flat) : a
     const struct = (name, fields) => (tprops[name] = fields, [...fields.map(f => type(f[1])), type(name)])
     const adt = (t, fields) => fields.map(f => Array.isArray(f) ? tenv[f[0]] = () => [...f.slice(1).map(x => type(x)), t] : tenv[f] = () => t)
-    const squash = x => Array.isArray(x) && x[0].repeatable ? squash(x.slice(1)) : x
+    const singlify = a => Array.isArray(a) && a.length === 1 ? singlify(a[0]) : a
+    const squash = x => Array.isArray(x) && x[0].repeatable ? singlify(squash(x.slice(1))) : x
+    const def = (args, types) => (x => types.map(t => (y => y ? y[1] : type(t.toString()))(x.a.find(y => y[0].toString() == t.toString()))))(wrap(args))
     const fn = (a, exp) => (x => [...x.a.map(y => y[1]), inferTop(exp, x.env)])(wrap(a))
+    const derepeat = a => Array.isArray(a) && a[0].repeatable ? singlify(derepeat(a.slice(1))) : a
     const apply = ([head, ...argv]) => head == '__call' && argv.length === 1 ? squash(value(argv[0])) :
       head == 'tuple' ? type('tuple', ...argv.map(inf)) :
       head == '.' && argv[1].match(/^[0-9]+$/) ? inf(argv[0]).generics[argv[1]] :
@@ -77,12 +83,12 @@ const infer = root => {
       head == ':' && argv[0] == 'struct' ? env[argv[1]] = () => struct(argv[1], flat(argv.slice(2))) :
       head == ':' && argv[0] == 'adt' ? (t => (env[t.name] = t, adt(t, flat(argv.slice(2)))))(type(argv[1])) :
       head == ':' && argv[0] == 'switch' ? switch_(inf(argv[1]), flat(argv.slice(2))) :
-      head == ':' && argv[0] == 'fn' ? fn(argv[1].slice(1), argv[argv.length - 1]) :
+      head == ':' && argv[0] == 'def' ? (a => env[a[0].toString()] = def(a.slice(1), to_a(argv[2])))(to_a(argv[1])) :
+      head == ':' && argv[0] == 'fn' ? ((id, ft) => id in env ? unify(env[id], ft) : (env[id] = () => ft, ft))(to_a(argv[1])[0].toString(), fn(to_a(argv[1]).slice(1), argv[argv.length - 1])) :
       head == '=>' ? (x => [...x.a.map(y => y[1]), inferTop(argv[1], x.env)])(wrap(to_a(argv[0]))) :
       head == '.' ? Object.fromEntries(tprops[inf(argv[0]).name])[argv[1]] :
       head == '!' ? unify(inf(argv[0]), tbool) :
       derepeat(argv.reduce((ret, x) => unify(ret, inf(x)), inf(head)))
-    const derepeat = a => Array.isArray(a) && a[0].repeatable ? derepeat(a.slice(1)) : a
     const value = v => v.type = v.match(/^[0-9]+$/) ? tclass('num') :
       v.match(/^[0-9]+\.[0-9]+$/) ? tfloat :
       v.startsWith('r"') ? tregexp :
@@ -103,6 +109,15 @@ if (require.main === module) {
   const { parse } = require('./parse.js')
   const assert = (expect, fact, src) => put(expect === fact ? '.' : fail(`Expect: '${expect}' but got '${fact}'. src='${src}'`))
   const test = (expect, src) => assert(expect, str(infer(parse(src))), src)
+  const error = (l, r, src) => {
+    try {
+      infer(parse(src))
+      puts('Expected error not happend')
+    } catch (e) {
+      assert(l, str(e.l), src)
+      assert(r, str(e.r), src)
+    }
+  }
 
   // primitives
   test('bool', 'true')
@@ -155,8 +170,18 @@ if (require.main === module) {
   test('string', 'adt ab:\n  a string\n  b int\nswitch a "hi":\n  case a s: s\n  case b n: string(n)')
 
   // user defined function
-  test('(1 1)', 'fn id x: x')
-  test('(num num)', 'fn inc x: x + 1')
+  test('(num)', 'fn f: 1')
+  test('(1 1)', 'fn f x: x')
+  test('(num num)', 'fn f x: x + 1')
+
+  // declare type
+  test('(int)', 'def f: int')
+  test('(int)', 'def f: int\nfn f: 1')
+  test('(int int)', 'def f: int int')
+  test('(int int)', 'def f: int int\nfn f a: a')
+  test('(1)', 'def f a: a')
+  test('(1 2)', 'def f a b: a b')
+  test('(2 1)', 'def f a b: b a')
 
   // single operator
   test('bool', '!true')
@@ -172,6 +197,10 @@ if (require.main === module) {
 
   // test for exported function
   assert('num', convert(parse('1 + 2')).type, '1 + 2')
+
+  // be failed
+  error('int|float', 'string', '1 + "s"')
+  error('int', '(int)', 'fn f: 1\n1+f')
 
   puts('ok')
 }

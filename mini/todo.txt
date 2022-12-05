@@ -4,6 +4,10 @@
 [ ] "throw" exp+
 [ ] "try" exp+ ":" (br "catch" type id: exp)+
 
+- Design for no argument function
+[x] "fn f: 1" # "(int)"
+[x] "let v 1" # "int"
+
 - Design something looks like statements
 [x] "for" int ":" ...  | "for" id int int? int? ":" ...
 [x] "while" exp ":" ...
