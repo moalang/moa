@@ -38,6 +38,7 @@ const compile = root => {
       `(${s}).toString()`
   const value = x => x in map ? map[x] :
     x.startsWith('r"') ? `(new RegExp(${x.slice(1)}))` :
+    x.startsWith('$"') ? "`" + x.slice(2, -1).replace(/{/g, '${') + "`" :
     x.toString()
   const apply = ([h,...t]) =>
     h == 'let' ? `const ${t[0]} = ${js(...t.slice(1))}` :
@@ -93,6 +94,7 @@ if (require.main === module) {
   test('hi', '"hi"')
   test('hi', '`hi`')
   test(/hi/, 'r"hi"')
+  test("hi 2", 'let n 1\nlet s "hi"\n$"{s} {n + 1}"')
 
   // containers
   test([], '[]')

@@ -99,6 +99,7 @@ const infer = root => {
     const value = v => v.type = v.match(/^[0-9]+$/) ? tclass('num') :
       v.match(/^[0-9]+\.[0-9]+$/) ? tfloat :
       v.startsWith('r"') ? tregexp :
+      v.startsWith('$"') ? tstring :
       v.startsWith('"') ? tstring :
       v.startsWith('`') ? tstring :
       get(v)
@@ -137,6 +138,7 @@ if (require.main === module) {
   test('string', '"hi"')
   test('string', '`hi`')
   test('regexp', 'r"hi"')
+  test('string', '$"hi"')
   test('(1 1)', 'a => a')
   test('(1 2 1)', 'a,b => a')
   test('(1 2 2)', 'a,b => b')

@@ -22,7 +22,7 @@ const puts = (...a) => { console.log(a.map(str).join(' ')); return a[0] }
 const dump = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
 const parse = source => {
-  const tokens = source.split(/((?:!=)|[()\[\]!]|(?:[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+|r?"[^"]*"|`[^`]*`|[A-Za-z0-9_]+)/).filter(t => t.length > 0)
+  const tokens = source.split(/((?:!=)|[()\[\]!]|(?:[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+|[r$]?"[^"]*"|`[^`]*`|[A-Za-z0-9_]+)/).filter(t => t.length > 0)
   let pos = 0
   const many = (a, f) => {
     while (pos < tokens.length) {
@@ -82,6 +82,7 @@ if (require.main === module) {
   test('id', 'id')
   test('"hi"', '"hi"')
   test('r"hi"', 'r"hi"')
+  test('$"hi"', '$"hi"')
   test('(__call list)', '[]')
   test('(list 1)', '[1]')
   test('(=> a a)', 'a => a')
