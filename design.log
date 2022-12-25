@@ -1,5 +1,27 @@
+- Design for error handling
+[x] idt ::= id ("::" type)
+[x] type :: = id ("{" id type+ (";" id type+)* "}")? | "(" type+ ")"
+[x] "throw" exp+
+[x] "try" exp+ ":" (br "catch" type id: exp)+
+
+- Design for no argument function
+[x] "fn f: 1" # "(int)"
+[x] "let v 1" # "int"
+
+- Design something looks like statements
+[x] "for" int ":" ...  | "for" id int int? int? ":" ...
+[x] "while" exp ":" ...
+[x] "if" exp ":" ... (br "else if" exp ":" ...)* ("else:" ...)?
+[x] "continue" | "break" | "yield" exp | "yeild break"
+
+- Design how to infer type of property access
+[x] f x = x.inc (x.val + 1) # f a b{inc num a; val num} :: b a
+
+- Shortcut for string template
+[x] $"This is {name}"
+
 - Design name space and multiple files
-[ ] "define" id (":" br indent id type+ "::" type+)?
+[x] "def" id (":" br indent id type+ "::" type+)?
 [ ] "use" id+
 
 - Implement methods
@@ -61,21 +83,3 @@
 [ ] replace :: (string string) string
 
 - lambda
-
-# Commercial features
-[ ] use mrpc define
-
-
-
-
-# Idea for the exception
-div a 0 = throws "zero division error"
-div a b = a / b
-calc =
-  a = 10
-  b = 0
-  c = div a b |zdiv 0
-main = net.http req,res =>
-  s = try req.query("email"):
-    catch e: return res 200 [] `email is not found`
-  try do_something e => res 500 [] e.message
