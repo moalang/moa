@@ -1,6 +1,7 @@
 /*
  * This program converts some nodes in an internal expression based on type inference.
  * [x] Basic type inference
+ * [ ] Error handling
  * [ ] Convert a method call to a function call
  */
 const dump = o => { console.dir(o, {depth: null}); return o }
