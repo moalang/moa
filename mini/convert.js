@@ -11,7 +11,7 @@ const str = o => typeof o === 'string' ? o :
   o instanceof String ? o.toString() :
   typeof o === 'object' && o.variable ? (s => (o.variable=true, `var(${s})`))((o.variable=false, str(o))) :
   typeof o === 'object' && o.instance ? str(o.instance) :
-  typeof o === 'object' && (o.tid || o.type || o.name) ? o.toString() + (o.repeatable ? '*' : '') :
+  typeof o === 'object' && (o.tid || o.type || o.name) ? o.toString() + (o.repeatable ? '*' : '') + (o.errors ? o.errors.map(e => `|${str(e)}`).join('') : '') :
   JSON.stringify(o)
 const put = (...a) => { process.stdout.write(a.map(str).join(' ')); return a[0] }
 const puts = (...a) => { console.log(a.map(str).join(' ')); return a[0] }
@@ -20,9 +20,11 @@ const infer = root => {
   const assertVariable = t => t.variable ? t : failInfer(`'${t}' is not variable`, `var(${t.toString()})`, t)
   const variable = t => (t.variable = true, t)
   const repeat = t => (t.repeatable = true, t)
-  const tvar = () => (tid => ({tid, instance: null, toString: () => tid.toString()}))(unique++)
-  const tclass = name => ({name, instance: null, toString: () => name})
-  const type = (name, ...generics) => ({name, generics, toString: () => `${name}${generics.length ? `(${generics.map((g, i) => g.instance ? g.instance.toString() : g.toString()).join(' ')})` : ''}`})
+  const errable = (t, error) => ((t.errors = t.errors || []).push(error), t)
+  const referable = (t, s) => (t.toString = () => t.instance ? t.instance.toString() : s, t)
+  const tvar = () => (tid => referable({tid, instance: null},  tid.toString()))(unique++)
+  const tclass = name => referable({name}, name)
+  const type = (name, ...generics) => ({name, generics, errors: [], toString: () => `${name}${generics.length ? `(${generics.map((g, i) => g.instance ? g.instance.toString() : g.toString()).join(' ')})` : ''}`})
   const prune = t => t.instance ? t.instance = prune(t.instance) : t
   const tbool = type('bool')
   const tint = type('int')
@@ -42,6 +44,7 @@ const infer = root => {
     'list': () => (t => [t, type('list', t)])(repeat(tvar())),
     'set': () => (t => [t, type('set', t)])(repeat(tvar())),
     'dict': () => (a => [a, type('dict', a[0], a[1])])(repeat([tvar(), tvar()])),
+    'throw': () => (t => [t, errable(tvar(), t)])(tvar())
   }
   const tput = (k, v) => tenv[k] = v
   '+ - * / % ** // += -= /= *= /= %= **='.split(' ').map(op => tput(op, (t => [t, t, t])(type('num'))))
@@ -68,8 +71,11 @@ const infer = root => {
         l.name in tclasses && !Array.isArray(r) ? l.instance = narrow(tclasses[l.name], r) :
         r.name in tclasses && !Array.isArray(l) ? r.instance = narrow(tclasses[r.name], l) :
         f ? f() : failInfer(`Unmatch ${l} and ${r}`, l, r)
+      ret.errors = merge([...errors(ret), ...errors(l), ...errors(r)])
       return ret
     }
+    const errors = t => t.errors || []
+    const merge = a => (s => a.filter(v => (k => s.has(k) ? false : s.add(k))(v.toString())))(new Set())
     const switch_ = (t, cs) => switch__(t, cs.map(c => [x => Array.isArray(c[2]) ? inferTop(x, wrap(c[2].slice(1)).env) : inf(x), ...c.slice(1)]))
     const switch__ = (t, cs) => (cs.map(c => unify(t, c[0](c[2]))), cs.reduce((r,c) => unify(r, c[0](c.slice(3))), tvar()))
     const flat = a => Array.isArray(a) && a.length == 1 && a[0][0] == '__do' ? a[0].slice(1).map(flat) : a
@@ -79,17 +85,19 @@ const infer = root => {
     const def = (args, types) => (x => types.map(t => (y => y ? y[1] : type(t.toString()))(x.a.find(y => y[0].toString() == t.toString()))))(wrap(args))
     const fn = (a, exp) => (x => [...x.a.map(y => y[1]), inferTop(exp, x.env)])(wrap(a))
     const derepeat = a => Array.isArray(a) && a[0].repeatable ? to_s(derepeat(a.slice(1))) : a
-    const apply = ([head, ...argv]) => head == '__call' && argv.length === 1 ? to_s(squash(value(argv[0]))) :
-      head == 'let' ? put(argv[0], inf(to_s(argv.slice(1)))) :
-      head == 'var' ? put(argv[0], variable(inf(to_s(argv.slice(1))))) :
-      head == 'tuple' ? type('tuple', ...argv.map(inf)) :
-      head == '.' && argv[1].match(/^[0-9]+$/) ? inf(argv[0]).generics[argv[1]] :
-      head == '__do' ? argv.map(inf).slice(-1)[0] :
+    const _do = ts => (t => (t.errors = merge(ts.flatMap(errors)), t))(ts.slice(-1)[0])
+    const apply = ([head, ...argv]) =>
       head == ':' && argv[0] == 'struct' ? put(argv[1], struct(argv[1], flat(argv.slice(2)))) :
       head == ':' && argv[0] == 'adt' ? (t => (put(t.name, t), adt(t, flat(argv.slice(2)))))(type(argv[1])) :
       head == ':' && argv[0] == 'switch' ? switch_(inf(argv[1]), flat(argv.slice(2))) :
       head == ':' && argv[0] == 'def' ? (a => put(a[0], def(a.slice(1), to_a(argv[2]))))(to_a(argv[1])) :
       head == ':' && argv[0] == 'fn' ? ((id, ft) => id in env ? unify(get(id), ft) : put(id, ft))(to_a(argv[1])[0].toString(), fn(to_a(argv[1]).slice(1), argv[argv.length - 1])) :
+      head == '__call' && argv.length === 1 ? to_s(squash(value(argv[0]))) :
+      head == 'let' ? put(argv[0], inf(to_s(argv.slice(1)))) :
+      head == 'var' ? put(argv[0], variable(inf(to_s(argv.slice(1))))) :
+      head == 'tuple' ? type('tuple', ...argv.map(inf)) :
+      head == '.' && argv[1].match(/^[0-9]+$/) ? inf(argv[0]).generics[argv[1]] :
+      head == '__do' ? _do(argv.map(inf)) :
       head == '=>' ? (x => [...x.a.map(y => y[1]), inferTop(argv[1], x.env)])(wrap(to_a(argv[0]))) :
       head == '.' ? Object.fromEntries(tprops[inf(argv[0]).name])[argv[1]] :
       head == '!' ? unify(inf(argv[0]), tbool) :
@@ -216,6 +224,11 @@ if (require.main === module) {
 
   // test for exported function
   assert('num', convert(parse('1 + 2')).type, '1 + 2')
+
+  // error handling
+  test('2|string', 'throw "s"')
+  test('num|string', '(throw "s") + (throw "m")')
+  //test('(1 1|string)', 'fn f a:\n  throw "x"\n  a')
 
   // be failed
   error('int|float', 'string', '1 + "s"')
