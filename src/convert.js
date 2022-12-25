@@ -12,7 +12,8 @@ const str = o => typeof o === 'string' ? o :
   o instanceof String ? o.toString() :
   typeof o === 'object' && o.variable ? (s => (o.variable=true, `var(${s})`))((o.variable=false, str(o))) :
   typeof o === 'object' && o.instance ? str(o.instance) :
-  typeof o === 'object' && (o.tid || o.type || o.name) ? o.toString() + (o.repeatable ? '*' : '') + (o.errors ? o.errors.map(e => `|${str(e)}`).join('') : '') :
+  typeof o === 'object' && o.name === 'error' ? o.generics[0].toString() + '|' + o.generics[1].map(str).join('|') :
+  typeof o === 'object' && (o.tid || o.type || o.name) ? o.toString() + (o.repeatable ? '*' : '') :
   JSON.stringify(o)
 const put = (...a) => { process.stdout.write(a.map(str).join(' ')); return a[0] }
 const puts = (...a) => { console.log(a.map(str).join(' ')); return a[0] }
@@ -21,17 +22,18 @@ const infer = root => {
   const assertVariable = t => t.variable ? t : failInfer(`'${t}' is not variable`, `var(${t.toString()})`, t)
   const variable = t => (t.variable = true, t)
   const repeat = t => (t.repeatable = true, t)
-  const errable = (t, error) => ((t.errors = t.errors || []).push(error), t)
   const referable = (t, s) => (t.toString = () => t.instance ? t.instance.toString() : s, t)
   const tvar = () => (tid => referable({tid, instance: null},  tid.toString()))(unique++)
   const tclass = name => referable({name}, name)
-  const type = (name, ...generics) => ({name, generics, errors: [], toString: () => `${name}${generics.length ? `(${generics.map((g, i) => g.instance ? g.instance.toString() : g.toString()).join(' ')})` : ''}`})
+  const type = (name, ...generics) => ({name, generics, toString: () => `${name}${generics.length ? `(${generics.map((g, i) => g.instance ? g.instance.toString() : g.toString()).join(' ')})` : ''}`})
   const prune = t => t.instance ? t.instance = prune(t.instance) : t
+  const eprune = t => (t => t.name === 'error' ? t.generics : [t, []])(prune(t))
   const tbool = type('bool')
   const tint = type('int')
   const tfloat = type('float')
   const tstring = type('string')
   const tregexp = type('regexp')
+  const terror = (t, ta) => ta.length === 0 ? t : type('error', t, ta)
   const tclasses = {
     num: [tint, tfloat],
   }
@@ -45,7 +47,7 @@ const infer = root => {
     'list': () => (t => [t, type('list', t)])(repeat(tvar())),
     'set': () => (t => [t, type('set', t)])(repeat(tvar())),
     'dict': () => (a => [a, type('dict', a[0], a[1])])(repeat([tvar(), tvar()])),
-    'throw': () => (t => [t, errable(tvar(), t)])(tvar())
+    'throw': () => (t => [t, terror(tvar(), [t])])(tvar())
   }
   const tput = (k, v) => tenv[k] = v
   '+ - * / % ** // += -= /= *= /= %= **='.split(' ').map(op => tput(op, (t => [t, t, t])(type('num'))))
@@ -58,9 +60,9 @@ const infer = root => {
     const to_a = o => !Array.isArray(o) ? [o] : o[0] == ',' ? o.slice(1) : o
     const to_s = a => Array.isArray(a) && a.length === 1 ? to_s(a[0]) : a
     const to_v = f => typeof f === 'function' && f.length === 0 ? f() : f
-    const unify = (l, r, f) => {
-      l = prune(l)
-      r = prune(r)
+    const unify = (lv, rv, f) => {
+      const [l, le] = eprune(lv)
+      const [r, re] = eprune(rv)
       const narrow = (ts, target) => ts.find(t => t.toString() === target.toString()) || failInfer(`Not compatible '${ts}' '${target}'`, ts.map(t => t.toString()).join('|'), target)
       const ret = Array.isArray(l) && l[0].repeatable && unify(l[0], r, () => false) ? (Array.isArray(l[0]) ? [...l[0].slice(1), l] : (prune(l[0]), l)) :
         Array.isArray(l) && Array.isArray(r) && l.length === r.length ? l.map((t, i) => unify(t, r[i])) :
@@ -72,10 +74,11 @@ const infer = root => {
         l.name in tclasses && !Array.isArray(r) ? l.instance = narrow(tclasses[l.name], r) :
         r.name in tclasses && !Array.isArray(l) ? r.instance = narrow(tclasses[r.name], l) :
         f ? f() : failInfer(`Unmatch ${l} and ${r}`, l, r)
-      ret.errors = merge([...errors(ret), ...errors(l), ...errors(r)])
-      return ret
+      return le.length === 0 && re.length === 0 ? ret :
+        ret.name === 'error' ? ret.generics[1] = merge([...le, ...re, ...ret.generics[1]]) :
+        terror(ret, merge([...le, ...re]))
     }
-    const errors = t => t.errors || []
+    const errors = t => t.name === 'error' ? t.generics[1] : []
     const merge = a => (s => a.filter(v => (k => s.has(k) ? false : s.add(k))(v.toString())))(new Set())
     const switch_ = (t, cs) => switch__(t, cs.map(c => [x => Array.isArray(c[2]) ? inferTop(x, wrap(c[2].slice(1)).env) : inf(x), ...c.slice(1)]))
     const switch__ = (t, cs) => (cs.map(c => unify(t, c[0](c[2]))), cs.reduce((r,c) => unify(r, c[0](c.slice(3))), tvar()))
@@ -86,7 +89,7 @@ const infer = root => {
     const def = (args, types) => (x => types.map(t => (y => y ? y[1] : type(t.toString()))(x.a.find(y => y[0].toString() == t.toString()))))(wrap(args))
     const fn = (a, exp) => (x => [...x.a.map(y => y[1]), inferTop(exp, x.env)])(wrap(a))
     const derepeat = a => Array.isArray(a) && a[0].repeatable ? to_s(derepeat(a.slice(1))) : a
-    const _do = ts => (t => (t.errors = merge(ts.flatMap(errors)), t))(ts.slice(-1)[0])
+    const _do = ts => terror(ts.slice(-1)[0], merge(ts.flatMap(errors)))
     const apply = ([head, ...argv]) =>
       head == ':' && argv[0] == 'struct' ? put(argv[1], struct(argv[1], flat(argv.slice(2)))) :
       head == ':' && argv[0] == 'adt' ? (t => (put(t.name, t), adt(t, flat(argv.slice(2)))))(type(argv[1])) :
@@ -229,7 +232,8 @@ if (require.main === module) {
   // error handling
   test('2|string', 'throw "s"')
   test('num|string', '(throw "s") + (throw "m")')
-  //test('(1 1|string)', 'fn f a:\n  throw "x"\n  a')
+  test('(string|string)', 'fn f:\n  throw "x"\n  "hi"')
+  test('(1 1|string)', 'fn f a:\n  throw "x"\n  a')
 
   // be failed
   error('int|float', 'string', '1 + "s"')
