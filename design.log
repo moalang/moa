@@ -1,8 +1,44 @@
 - Design for error handling
 [x] idt ::= id ("::" type)
 [x] type :: = id ("{" id type+ (";" id type+)* "}")? | "(" type+ ")"
-[x] "throw" exp+
-[x] "try" exp+ ":" (br "catch" type id: exp)+
+[ ] "throw" exp+
+[ ] "try" exp+ ":" (br "catch" type id: exp)+
+- f() |zdiv "zero"
+- f() |zdiv e => f(e)
+- f() |zdiv e => throw "some error" e
+
+type of errors
+- no parameter errors                                      # throw
+- with message                                             # throw "unreachable"
+- invalid input                                            # throw "invalid input"
+- os error (EAGAIN, EINTR, ENOENT, ENOTDIR, ETIMEOUT, ...) # throw os(...)
+
+nothing    -> error(_)
+string     -> error(string)
+uniqueness -> error(symbol?)
+parameters -> error(type)
+struct errror t:
+  cause t
+  message string # type name or message of throw
+  backtrace string
+887 : no specific type
+383 : unique
+127 : string
+115 : numbers
+
+throw                     # error(void)
+throw "..."               # error(string)
+throw type(parameters...) # error(type)
+catch "...":              # catch a specific message
+catch type:               # catch a specific type
+catch type variable:      # catch a specific type with an error instance
+catch _ e:                # catch all with an errorr instance
+try exp...:
+  catch "specific string" s: ...
+  catch string s: ...
+  catch type: ...
+  catch type e: ...
+  catch _ e: ...
 
 - Design for no argument function
 [x] "fn f: 1" # "(int)"

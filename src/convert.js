@@ -231,9 +231,10 @@ if (require.main === module) {
 
   // error handling
   test('2|string', 'throw "s"')
-  test('num|string', '(throw "s") + (throw "m")')
-  test('(string|string)', 'fn f:\n  throw "x"\n  "hi"')
-  test('(1 1|string)', 'fn f a:\n  throw "x"\n  a')
+  test('num|string', '(throw "s") + (throw "e")')
+  test('(string|string)', 'fn f:\n  throw "e"\n  "hi"')
+  test('(1 1|string)', 'fn f x:\n  throw "e"\n  x')
+  test('(num num)', 'fn f x: x\nfn g v:\n  throw "e"\n  v\nfn h:\n  let v g 1\n  f v\nf')
 
   // be failed
   error('int|float', 'string', '1 + "s"')
