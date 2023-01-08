@@ -27,7 +27,7 @@ const infer = root => {
   const tclass = name => referable({name}, name)
   const type = (name, ...generics) => ({name, generics, toString: () => `${name}${generics.length ? `(${generics.map((g, i) => g.instance ? g.instance.toString() : g.toString()).join(' ')})` : ''}`})
   const prune = t => t.instance ? t.instance = prune(t.instance) : t
-  const eprune = t => (t => t.name === 'expected' ? t.generics : [t, []])(prune(t))
+  const eprune = t => (t => t.name === 'expected' ? t.generics[0] : t)(prune(t))
   const tbool = type('bool')
   const tint = type('int')
   const tfloat = type('float')
@@ -61,23 +61,18 @@ const infer = root => {
     const to_s = a => Array.isArray(a) && a.length === 1 ? to_s(a[0]) : a
     const to_v = f => typeof f === 'function' && f.length === 0 ? f() : f
     const unify = (lv, rv, f) => {
-      const [l, le] = eprune(lv)
-      const [r, re] = eprune(rv)
+      const l = eprune(lv)
+      const r = eprune(rv)
       const narrow = (ts, target) => ts.find(t => t.toString() === target.toString()) || failInfer(`Not compatible '${ts}' '${target}'`, ts.map(t => t.toString()).join('|'), target)
-      const base =
-        l.tid && r.tid ? r.instane = l :
-        l.tid ? l.instance = r :
-        r.tid ? r.instance = l :
+      const ret =
+        l.tid && r.tid ? r.instane = lv :
+        l.tid ? l.instance = rv :
+        r.tid ? r.instance = lv :
         Array.isArray(l) && Array.isArray(r) && l.length === r.length ? l.map((t, i) => unify(t, r[i])) :
         !Array.isArray(l) && !Array.isArray(r) && l.toString() === r.toString() ? l :
         l.name in tclasses && !Array.isArray(r) ? l.instance = narrow(tclasses[l.name], r) :
         r.name in tclasses && !Array.isArray(l) ? r.instance = narrow(tclasses[r.name], l) :
         f ? f() : failInfer(`Unmatch ${l} and ${r}`, l, r)
-      const me = base.name === 'expected' ? base.generics.slice(1) : []
-      const errors = merge([...le, ...re, ...me])
-      const ret = texpected(base, errors)
-      if (lv !== ret) { lv.instance = ret }
-      if (rv !== ret) { rv.instance = ret }
       return ret
     }
     const errors = t => t.name === 'expected' ? t.generics[1] : []
@@ -91,7 +86,7 @@ const infer = root => {
     const def = (args, types) => (x => types.map(t => (y => y ? y[1] : type(t.toString()))(x.a.find(y => y[0].toString() == t.toString()))))(wrap(args))
     const fn = (a, exp) => (x => [...x.a.map(y => y[1]), inferTop(exp, x.env)])(wrap(a))
     const _do = ts => texpected(ts.slice(-1)[0], merge(ts.flatMap(errors)))
-    const call = (a, b) => to_s(_call(a, b, m => failInfer(m, a, b)))
+    const call = (a, b) => texpected(to_s(_call(a, b, m => failInfer(m, a, b))), merge(b.flatMap(errors)))
     const _call = (a, b, f) => b.length === 0 ? a :
       a.length === 0 ? f('Wrong number of arguments') :
       a[0].repeatable && Array.isArray(a[0]) ? squash(unify(a[0][0], b[0], () => false) ? _call([...a[0].slice(1), ...a], b.slice(1)) : _call(a.slice(1), b)) :
@@ -249,7 +244,7 @@ if (require.main === module) {
   test('num|string', '(throw "s") + (throw "e")')
   test('(string|string)', 'fn f:\n  throw "e"\n  "hi"')
   test('(1 1|string)', 'fn f x:\n  throw "e"\n  x')
-  //test('(num num)', 'fn f x: x\nfn g v:\n  throw "e"\n  v\nfn h:\n  let v g 1\n  f v\nf')
+  test('(1 1)', 'fn f x: x\nfn g v:\n  throw "e"\n  v\nfn h:\n  let v g 1\n  f v\nf')
   //test('string', 'try (throw 1) e => e.message')
 
   // be failed
