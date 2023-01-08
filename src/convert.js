@@ -12,7 +12,7 @@ const str = o => typeof o === 'string' ? o :
   o instanceof String ? o.toString() :
   typeof o === 'object' && o.variable ? (s => (o.variable=true, `var(${s})`))((o.variable=false, str(o))) :
   typeof o === 'object' && o.instance ? str(o.instance) :
-  typeof o === 'object' && o.name === 'error' ? o.generics[0].toString() + '|' + o.generics[1].map(str).join('|') :
+  typeof o === 'object' && o.name === 'expected' ? o.generics[0].toString() + '|' + o.generics[1].map(str).join('|') :
   typeof o === 'object' && (o.tid || o.type || o.name) ? o.toString() + (o.repeatable ? '*' : '') :
   JSON.stringify(o)
 const put = (...a) => { process.stdout.write(a.map(str).join(' ')); return a[0] }
@@ -27,13 +27,13 @@ const infer = root => {
   const tclass = name => referable({name}, name)
   const type = (name, ...generics) => ({name, generics, toString: () => `${name}${generics.length ? `(${generics.map((g, i) => g.instance ? g.instance.toString() : g.toString()).join(' ')})` : ''}`})
   const prune = t => t.instance ? t.instance = prune(t.instance) : t
-  const eprune = t => (t => t.name === 'error' ? t.generics : [t, []])(prune(t))
+  const eprune = t => (t => t.name === 'expected' ? t.generics : [t, []])(prune(t))
   const tbool = type('bool')
   const tint = type('int')
   const tfloat = type('float')
   const tstring = type('string')
   const tregexp = type('regexp')
-  const terror = (t, ta) => ta.length === 0 ? t : type('error', t, ta)
+  const texpected = (t, ta) => ta.length === 0 ? t : type('expected', t, ta)
   const tclasses = {
     num: [tint, tfloat],
   }
@@ -47,7 +47,7 @@ const infer = root => {
     'list': () => (t => [t, type('list', t)])(repeat(tvar())),
     'set': () => (t => [t, type('set', t)])(repeat(tvar())),
     'dict': () => (a => [a, type('dict', a[0], a[1])])(repeat([tvar(), tvar()])),
-    'throw': () => (t => [t, terror(tvar(), [t])])(tvar())
+    'throw': () => (t => [t, texpected(tvar(), [t])])(tvar())
   }
   const tput = (k, v) => tenv[k] = v
   '+ - * / % ** // += -= /= *= /= %= **='.split(' ').map(op => tput(op, (t => [t, t, t])(type('num'))))
@@ -75,10 +75,10 @@ const infer = root => {
         r.name in tclasses && !Array.isArray(l) ? r.instance = narrow(tclasses[r.name], l) :
         f ? f() : failInfer(`Unmatch ${l} and ${r}`, l, r)
       return le.length === 0 && re.length === 0 ? ret :
-        ret.name === 'error' ? ret.generics[1] = merge([...le, ...re, ...ret.generics[1]]) :
-        terror(ret, merge([...le, ...re]))
+        ret.name === 'expected' ? ret.generics[1] = merge([...le, ...re, ...ret.generics[1]]) :
+        texpected(ret, merge([...le, ...re]))
     }
-    const errors = t => t.name === 'error' ? t.generics[1] : []
+    const errors = t => t.name === 'expected' ? t.generics[1] : []
     const merge = a => (s => a.filter(v => (k => s.has(k) ? false : s.add(k))(v.toString())))(new Set())
     const switch_ = (t, cs) => switch__(t, cs.map(c => [x => Array.isArray(c[2]) ? inferTop(x, wrap(c[2].slice(1)).env) : inf(x), ...c.slice(1)]))
     const switch__ = (t, cs) => (cs.map(c => unify(t, c[0](c[2]))), cs.reduce((r,c) => unify(r, c[0](c.slice(3))), tvar()))
@@ -89,7 +89,7 @@ const infer = root => {
     const def = (args, types) => (x => types.map(t => (y => y ? y[1] : type(t.toString()))(x.a.find(y => y[0].toString() == t.toString()))))(wrap(args))
     const fn = (a, exp) => (x => [...x.a.map(y => y[1]), inferTop(exp, x.env)])(wrap(a))
     const derepeat = a => Array.isArray(a) && a[0].repeatable ? to_s(derepeat(a.slice(1))) : a
-    const _do = ts => terror(ts.slice(-1)[0], merge(ts.flatMap(errors)))
+    const _do = ts => texpected(ts.slice(-1)[0], merge(ts.flatMap(errors)))
     const apply = ([head, ...argv]) =>
       head == ':' && argv[0] == 'struct' ? put(argv[1], struct(argv[1], flat(argv.slice(2)))) :
       head == ':' && argv[0] == 'adt' ? (t => (put(t.name, t), adt(t, flat(argv.slice(2)))))(type(argv[1])) :
@@ -235,6 +235,7 @@ if (require.main === module) {
   test('(string|string)', 'fn f:\n  throw "e"\n  "hi"')
   test('(1 1|string)', 'fn f x:\n  throw "e"\n  x')
   test('(num num)', 'fn f x: x\nfn g v:\n  throw "e"\n  v\nfn h:\n  let v g 1\n  f v\nf')
+  //test('string', 'try (throw 1) e => e.message')
 
   // be failed
   error('int|float', 'string', '1 + "s"')
