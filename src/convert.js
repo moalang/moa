@@ -64,7 +64,7 @@ const infer = root => {
       const [l, le] = eprune(lv)
       const [r, re] = eprune(rv)
       const narrow = (ts, target) => ts.find(t => t.toString() === target.toString()) || failInfer(`Not compatible '${ts}' '${target}'`, ts.map(t => t.toString()).join('|'), target)
-      const ret =
+      const base =
         l.tid && r.tid ? r.instane = l :
         l.tid ? l.instance = r :
         r.tid ? r.instance = l :
@@ -73,9 +73,12 @@ const infer = root => {
         l.name in tclasses && !Array.isArray(r) ? l.instance = narrow(tclasses[l.name], r) :
         r.name in tclasses && !Array.isArray(l) ? r.instance = narrow(tclasses[r.name], l) :
         f ? f() : failInfer(`Unmatch ${l} and ${r}`, l, r)
-      const me = ret.name === 'expected' ? ret.generics.slice(1) : []
+      const me = base.name === 'expected' ? base.generics.slice(1) : []
       const errors = merge([...le, ...re, ...me])
-      return texpected(ret, errors)
+      const ret = texpected(base, errors)
+      if (lv !== ret) { lv.instance = ret }
+      if (rv !== ret) { rv.instance = ret }
+      return ret
     }
     const errors = t => t.name === 'expected' ? t.generics[1] : []
     const merge = a => (s => a.filter(v => (k => s.has(k) ? false : s.add(k))(v.toString())))(new Set())
@@ -153,7 +156,6 @@ if (require.main === module) {
     }
     fail(`Expect: '${l}' is not '${r}' but got '${ret}'. src=${src}`)
   }
-  //test('num|string', '(throw "s") + (throw "e")')
 
   // primitives
   test('bool', 'true')
@@ -244,7 +246,7 @@ if (require.main === module) {
 
   // error handling
   test('2|string', 'throw "s"')
-  //test('num|string', '(throw "s") + (throw "e")')
+  test('num|string', '(throw "s") + (throw "e")')
   test('(string|string)', 'fn f:\n  throw "e"\n  "hi"')
   test('(1 1|string)', 'fn f x:\n  throw "e"\n  x')
   //test('(num num)', 'fn f x: x\nfn g v:\n  throw "e"\n  v\nfn h:\n  let v g 1\n  f v\nf')
