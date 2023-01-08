@@ -33,7 +33,7 @@ const infer = root => {
   const tfloat = type('float')
   const tstring = type('string')
   const tregexp = type('regexp')
-  const texpected = (t, ta) => ta.length === 0 ? t : type('expected', t, ta)
+  const texpected = (t, ta) => ta.length === 0 ? t : t.name === 'expected' ? (t.generics = [t.generics[0], ta], t) : type('expected', t, ta)
   const tclasses = {
     num: [tint, tfloat],
   }
@@ -64,19 +64,18 @@ const infer = root => {
       const [l, le] = eprune(lv)
       const [r, re] = eprune(rv)
       const narrow = (ts, target) => ts.find(t => t.toString() === target.toString()) || failInfer(`Not compatible '${ts}' '${target}'`, ts.map(t => t.toString()).join('|'), target)
-      const ret = Array.isArray(l) && l[0].repeatable && unify(l[0], r, () => false) ? (Array.isArray(l[0]) ? [...l[0].slice(1), l] : (prune(l[0]), l)) :
-        Array.isArray(l) && Array.isArray(r) && l.length === r.length ? l.map((t, i) => unify(t, r[i])) :
-        //Array.isArray(l) ? (unify(l[0], r), l.length === 2 ? l[1] : l.slice(1)) :
+      const ret =
         l.tid && r.tid ? r.instane = l :
         l.tid ? l.instance = r :
         r.tid ? r.instance = l :
+        Array.isArray(l) && Array.isArray(r) && l.length === r.length ? l.map((t, i) => unify(t, r[i])) :
         !Array.isArray(l) && !Array.isArray(r) && l.toString() === r.toString() ? l :
         l.name in tclasses && !Array.isArray(r) ? l.instance = narrow(tclasses[l.name], r) :
         r.name in tclasses && !Array.isArray(l) ? r.instance = narrow(tclasses[r.name], l) :
         f ? f() : failInfer(`Unmatch ${l} and ${r}`, l, r)
-      return le.length === 0 && re.length === 0 ? ret :
-        ret.name === 'expected' ? ret.generics[1] = merge([...le, ...re, ...ret.generics[1]]) :
-        texpected(ret, merge([...le, ...re]))
+      const me = ret.name === 'expected' ? ret.generics.slice(1) : []
+      const errors = merge([...le, ...re, ...me])
+      return texpected(ret, errors)
     }
     const errors = t => t.name === 'expected' ? t.generics[1] : []
     const merge = a => (s => a.filter(v => (k => s.has(k) ? false : s.add(k))(v.toString())))(new Set())
@@ -88,11 +87,10 @@ const infer = root => {
     const squash = x => Array.isArray(x) && x[0].repeatable ? to_s(squash(x.slice(1))) : x
     const def = (args, types) => (x => types.map(t => (y => y ? y[1] : type(t.toString()))(x.a.find(y => y[0].toString() == t.toString()))))(wrap(args))
     const fn = (a, exp) => (x => [...x.a.map(y => y[1]), inferTop(exp, x.env)])(wrap(a))
-    const derepeat = a => Array.isArray(a) && a[0].repeatable ? to_s(derepeat(a.slice(1))) : a
     const _do = ts => texpected(ts.slice(-1)[0], merge(ts.flatMap(errors)))
     const call = (a, b) => to_s(_call(a, b, m => failInfer(m, a, b)))
     const _call = (a, b, f) => b.length === 0 ? a :
-      a.length === 0 ? f("Wrong number of arguments") :
+      a.length === 0 ? f('Wrong number of arguments') :
       a[0].repeatable && Array.isArray(a[0]) ? squash(unify(a[0][0], b[0], () => false) ? _call([...a[0].slice(1), ...a], b.slice(1)) : _call(a.slice(1), b)) :
       a[0].repeatable ? squash(unify(a[0], b[0], () => false) ? _call(a, b.slice(1)) : _call(a.slice(1), b)) :
       (unify(a[0], b[0]), _call(a.slice(1), b.slice(1)))
@@ -114,7 +112,6 @@ const infer = root => {
       head == '!' ? unify(inf(argv[0]), tbool) :
       head == '=' ? unify(get(argv[0]), inf(to_s(argv.slice(1)))) :
       '+= -= *= /= %= **='.split(' ').includes(head.toString()) ? unify(assertVariable(get(argv[0])), inf(to_s(argv.slice(1))))  :
-      //derepeat(argv.reduce((ret, x) => unify(ret, inf(x)), inf(head)))
       call(inf(head), argv.map(inf))
     const value = v => v.type = v.match(/^[0-9]+$/) ? tclass('num') :
       v.match(/^[0-9]+\.[0-9]+$/) ? tfloat :
