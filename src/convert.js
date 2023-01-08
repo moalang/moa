@@ -33,6 +33,7 @@ const infer = root => {
   const tfloat = type('float')
   const tstring = type('string')
   const tregexp = type('regexp')
+  const terror = t => type('error', t)
   const texpected = (t, ta) => ta.length === 0 ? t : t.name === 'expected' ? (t.generics = [t.generics[0], ta], t) : type('expected', t, ta)
   const tclasses = {
     num: [tint, tfloat],
@@ -47,7 +48,8 @@ const infer = root => {
     'list': () => (t => [t, type('list', t)])(repeat(tvar())),
     'set': () => (t => [t, type('set', t)])(repeat(tvar())),
     'dict': () => (a => [a, type('dict', a[0], a[1])])(repeat([tvar(), tvar()])),
-    'throw': () => (t => [t, texpected(tvar(), [t])])(tvar())
+    'throw': () => (t => [t, texpected(tvar(), [t])])(tvar()),
+    'try': () => ((t,e) => [texpected(t, e), [terror(e), t], t])(tvar(), tvar()),
   }
   const tput = (k, v) => tenv[k] = v
   '+ - * / % ** // += -= /= *= /= %= **='.split(' ').map(op => tput(op, (t => [t, t, t])(type('num'))))
@@ -86,6 +88,7 @@ const infer = root => {
     const def = (args, types) => (x => types.map(t => (y => y ? y[1] : type(t.toString()))(x.a.find(y => y[0].toString() == t.toString()))))(wrap(args))
     const fn = (a, exp) => (x => [...x.a.map(y => y[1]), inferTop(exp, x.env)])(wrap(a))
     const _do = ts => texpected(ts.slice(-1)[0], merge(ts.flatMap(errors)))
+    const _try = (a, b) => to_s(_call(a, b, m => failInfer(m, a, b)))
     const call = (a, b) => texpected(to_s(_call(a, b, m => failInfer(m, a, b))), merge(b.flatMap(errors)))
     const _call = (a, b, f) => b.length === 0 ? a :
       a.length === 0 ? f('Wrong number of arguments') :
@@ -110,6 +113,7 @@ const infer = root => {
       head == '!' ? unify(inf(argv[0]), tbool) :
       head == '=' ? unify(get(argv[0]), inf(to_s(argv.slice(1)))) :
       '+= -= *= /= %= **='.split(' ').includes(head.toString()) ? unify(assertVariable(get(argv[0])), inf(to_s(argv.slice(1))))  :
+      head == 'try' ? _try(inf(head), argv.map(inf)) :
       call(inf(head), argv.map(inf))
     const value = v => v.type = v.match(/^[0-9]+$/) ? tclass('num') :
       v.match(/^[0-9]+\.[0-9]+$/) ? tfloat :
@@ -151,6 +155,7 @@ if (require.main === module) {
     }
     fail(`Expect: '${l}' is not '${r}' but got '${ret}'. src=${src}`)
   }
+  test('string', 'try (throw 1) e => "s"')
 
   // primitives
   test('bool', 'true')
@@ -245,7 +250,7 @@ if (require.main === module) {
   test('(string|string)', 'fn f:\n  throw "e"\n  "hi"')
   test('(1 1|string)', 'fn f x:\n  throw "e"\n  x')
   test('(1 1)', 'fn f x: x\nfn g v:\n  throw "e"\n  v\nfn h:\n  let v g 1\n  f v\nf')
-  //test('string', 'try (throw 1) e => e.message')
+  test('string', 'try (throw 1) e => "s"')
 
   // be failed
   error('int|float', 'string', '1 + "s"')
