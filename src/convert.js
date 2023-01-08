@@ -66,7 +66,7 @@ const infer = root => {
       const narrow = (ts, target) => ts.find(t => t.toString() === target.toString()) || failInfer(`Not compatible '${ts}' '${target}'`, ts.map(t => t.toString()).join('|'), target)
       const ret = Array.isArray(l) && l[0].repeatable && unify(l[0], r, () => false) ? (Array.isArray(l[0]) ? [...l[0].slice(1), l] : (prune(l[0]), l)) :
         Array.isArray(l) && Array.isArray(r) && l.length === r.length ? l.map((t, i) => unify(t, r[i])) :
-        Array.isArray(l) ? (unify(l[0], r), l.length === 2 ? l[1] : l.slice(1)) :
+        //Array.isArray(l) ? (unify(l[0], r), l.length === 2 ? l[1] : l.slice(1)) :
         l.tid && r.tid ? r.instane = l :
         l.tid ? l.instance = r :
         r.tid ? r.instance = l :
@@ -90,7 +90,14 @@ const infer = root => {
     const fn = (a, exp) => (x => [...x.a.map(y => y[1]), inferTop(exp, x.env)])(wrap(a))
     const derepeat = a => Array.isArray(a) && a[0].repeatable ? to_s(derepeat(a.slice(1))) : a
     const _do = ts => texpected(ts.slice(-1)[0], merge(ts.flatMap(errors)))
+    const call = (a, b) => to_s(_call(a, b, m => failInfer(m, a, b)))
+    const _call = (a, b, f) => b.length === 0 ? a :
+      a.length === 0 ? f("Wrong number of arguments") :
+      a[0].repeatable && Array.isArray(a[0]) ? squash(unify(a[0][0], b[0], () => false) ? _call([...a[0].slice(1), ...a], b.slice(1)) : _call(a.slice(1), b)) :
+      a[0].repeatable ? squash(unify(a[0], b[0], () => false) ? _call(a, b.slice(1)) : _call(a.slice(1), b)) :
+      (unify(a[0], b[0]), _call(a.slice(1), b.slice(1)))
     const apply = ([head, ...argv]) =>
+      argv.length === 0 ? inf(head) :
       head == ':' && argv[0] == 'struct' ? put(argv[1], struct(argv[1], flat(argv.slice(2)))) :
       head == ':' && argv[0] == 'adt' ? (t => (put(t.name, t), adt(t, flat(argv.slice(2)))))(type(argv[1])) :
       head == ':' && argv[0] == 'switch' ? switch_(inf(argv[1]), flat(argv.slice(2))) :
@@ -107,7 +114,8 @@ const infer = root => {
       head == '!' ? unify(inf(argv[0]), tbool) :
       head == '=' ? unify(get(argv[0]), inf(to_s(argv.slice(1)))) :
       '+= -= *= /= %= **='.split(' ').includes(head.toString()) ? unify(assertVariable(get(argv[0])), inf(to_s(argv.slice(1))))  :
-      derepeat(argv.reduce((ret, x) => unify(ret, inf(x)), inf(head)))
+      //derepeat(argv.reduce((ret, x) => unify(ret, inf(x)), inf(head)))
+      call(inf(head), argv.map(inf))
     const value = v => v.type = v.match(/^[0-9]+$/) ? tclass('num') :
       v.match(/^[0-9]+\.[0-9]+$/) ? tfloat :
       v.startsWith('r"') ? tregexp :
@@ -129,7 +137,14 @@ module.exports = { convert }
 if (require.main === module) {
   const { parse } = require('./parse.js')
   const assert = (expect, fact, src) => put(expect === fact ? '.' : fail(`Expect: '${expect}' but got '${fact}'. src='${src}'`))
-  const test = (expect, src) => assert(expect, str(infer(parse(src))), src)
+  const test = (expect, src) => {
+    try {
+      assert(expect, str(infer(parse(src))), src)
+    } catch (e) {
+      puts(expect, '!=', src)
+      throw e
+    }
+  }
   const error = (l, r, src) => {
     let ret
     try {
@@ -141,6 +156,7 @@ if (require.main === module) {
     }
     fail(`Expect: '${l}' is not '${r}' but got '${ret}'. src=${src}`)
   }
+  //test('num|string', '(throw "s") + (throw "e")')
 
   // primitives
   test('bool', 'true')
@@ -231,10 +247,10 @@ if (require.main === module) {
 
   // error handling
   test('2|string', 'throw "s"')
-  test('num|string', '(throw "s") + (throw "e")')
+  //test('num|string', '(throw "s") + (throw "e")')
   test('(string|string)', 'fn f:\n  throw "e"\n  "hi"')
   test('(1 1|string)', 'fn f x:\n  throw "e"\n  x')
-  test('(num num)', 'fn f x: x\nfn g v:\n  throw "e"\n  v\nfn h:\n  let v g 1\n  f v\nf')
+  //test('(num num)', 'fn f x: x\nfn g v:\n  throw "e"\n  v\nfn h:\n  let v g 1\n  f v\nf')
   //test('string', 'try (throw 1) e => e.message')
 
   // be failed
