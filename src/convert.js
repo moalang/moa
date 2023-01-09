@@ -2,8 +2,7 @@
  * This program converts some nodes in an internal expression based on type inference.
  * [x] Basic type inference
  * [x] Error handling
- * [ ] Convert a method call to a function call
- * [ ] Type inference to properties of object which come from arguments
+ * [ ] Type inference to property access
  */
 const dump = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
@@ -56,7 +55,18 @@ const infer = root => {
   '+ - * / % ** // += -= /= *= /= %= **='.split(' ').map(op => tput(op, (t => [t, t, t])(type('num'))))
   '&& ||'.split(' ').map(op => tput(op, [tbool, tbool, tbool]))
   '== != < <= > >='.split(' ').map(op => tput(op, () => (t => [t, t, t])(tvar())))
-  const tprops = {}
+  const tprops = {
+    list: t => ({
+      size: tint,
+    }),
+    string: t => ({
+      size: tint,
+    })
+  }
+  const property = (t, id) => (f =>
+    !f ? failInfer(`${t.name} is not a type`, t, id) :
+    f(t)[id] || failInfer(`${id} is not a field of ${t.name}`, t, id)
+    )(tprops[t.name])
   const inferTop = (node, env) => {
     const inf = node => inferTop(node, env)
     const wrap = args => (a => ({a, env: Object.assign(Object.fromEntries(a.map(x => [x[0], () => x[1]])), env)}))(to_a(args).map(a => [a, tvar()]))
@@ -83,7 +93,7 @@ const infer = root => {
     const switch_ = (t, cs) => switch__(t, cs.map(c => [x => Array.isArray(c[2]) ? inferTop(x, wrap(c[2].slice(1)).env) : inf(x), ...c.slice(1)]))
     const switch__ = (t, cs) => (cs.map(c => unify(t, c[0](c[2]))), cs.reduce((r,c) => unify(r, c[0](c.slice(3))), tvar()))
     const flat = a => Array.isArray(a) && a.length == 1 && a[0][0] == '__do' ? a[0].slice(1).map(flat) : a
-    const struct = (name, fields) => (tprops[name] = fields, [...fields.map(f => type(f[1])), type(name)])
+    const struct = (name, fields) => (tprops[name] = () => Object.fromEntries(fields), [...fields.map(f => type(f[1])), type(name)])
     const adt = (t, fields) => fields.map(f => Array.isArray(f) ? tput(f[0], () => [...f.slice(1).map(x => type(x)), t]) : tenv[f] = t)
     const squash = x => Array.isArray(x) && x[0].repeatable ? to_s(squash(x.slice(1))) : x
     const def = (args, types) => (x => types.map(t => (y => y ? y[1] : type(t.toString()))(x.a.find(y => y[0].toString() == t.toString()))))(wrap(args))
@@ -110,7 +120,7 @@ const infer = root => {
       head == '.' && argv[1].match(/^[0-9]+$/) ? inf(argv[0]).generics[argv[1]] :
       head == '__do' ? _do(argv.map(inf)) :
       head == '=>' ? (x => [...x.a.map(y => y[1]), inferTop(argv[1], x.env)])(wrap(to_a(argv[0]))) :
-      head == '.' ? Object.fromEntries(tprops[inf(argv[0]).name])[argv[1]] :
+      head == '.' ? property(inf(argv[0]), argv[1]) :
       head == '!' ? unify(inf(argv[0]), tbool) :
       head == '=' ? unify(get(argv[0]), inf(to_s(argv.slice(1)))) :
       '+= -= *= /= %= **='.split(' ').includes(head.toString()) ? unify(assertVariable(get(argv[0])), inf(to_s(argv.slice(1))))  :
@@ -188,6 +198,9 @@ if (require.main === module) {
 
   // property
   test('num', 'tuple(1).0')
+  test('string', 'tuple(1 "s").1')
+  test('int', '[].size')
+  test('int', '"s".size')
 
   // type cast
   test('int', 'int(1)')

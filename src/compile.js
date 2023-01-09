@@ -15,11 +15,16 @@ const puts = (...a) => { console.log(a.map(str).join(' ')); return a[0] }
 const compile = root => {
   const to_a = o => Array.isArray(o) ? o : [o]
   const to_s = o => Array.isArray(o) && o.length === 1 ? o[0] : o
-  const map = {
+  const constructors = {
     '__call,list': '[]',
     '__call,set': '[]',
     '__call,dict': '({})',
   }
+  const property = (t, id) => _property(compile(t), id, `${t.type.split('(')[0]}.${id}`)
+  const _property = (o, id, s) =>
+    s === 'list.size' ? `${o}.length` :
+    s === 'string.size' ? `${o}.length` :
+    `${o}.${id}`
   const struct = (name, fields) => `const ${name} = (${fields.map(f => f[0])}) => ({${fields.map(f => f[0])}, toString() { return '${name}(' + ${fields.map(f => f[1] == 'string' ? 'JSON.stringify(' + f[0] + ')' : '(' + f[0] + ').toString()').join(" + ' ' + ")} + ')' }})`
   const adt = (name, fields) => fields.map(f => Array.isArray(f) ? adtValue(f[0], f[1]) : adtTag(f)).join('\n') + `\nconst ${name} = ({${fields.map(f => f[0])}})`
   const adtTag = name => `const ${name} = ({__tag: '${name}', toString() { return '${name}' }})`
@@ -36,7 +41,7 @@ const compile = root => {
       t.startsWith('set(') ? `'set(' + ${s}.map(x => x.toString()).join(' ') + ')'` :
       t.startsWith('dict(') ? `'dict(' + Object.entries(${s}).map(x => x.map(y => y.toString()).join(' ')).join(' ') + ')'` :
       `(${s}).toString()`
-  const value = x => x in map ? map[x] :
+  const value = x => x in constructors ? constructors[x] :
     x.startsWith('r"') ? `(new RegExp(${x.slice(1)}))` :
     x.startsWith('$"') ? "`" + x.slice(2, -1).replace(/{/g, '${') + "`" :
     x.toString()
@@ -49,12 +54,12 @@ const compile = root => {
     h == 'tuple' ? `[${t.map(js).join(',')}]` :
     h == 'dict' ? '({' + [...Array(t.length / 2).keys()].map(i => `[${t[i*2]}]: ${compile(t[i*2+1])}`).join(', ') + '})' :
     h == '.' && t[1].match(/^[0-9]+$/) ? `${compile(t[0])}[${t[1]}]` : // tuple(...).1
+    h == '.' ? property(t[0], t[1]) :
     h == '__do' ? t.map(js).join(';\n') :
     h == ':' && t[0] == 'struct' ? struct(t[1], flat(t.slice(2))) :
     h == ':' && t[0] == 'adt' ? adt(t[1], flat(t.slice(2))) :
     h == ':' && t[0] == 'switch' ? switch_(js(t[1]), flat(t.slice(2))) :
     h == ':' && t[0] == 'fn' ? fn(to_a(t[1])[0], to_a(t[1]).slice(1), to_s(t.slice(2))) :
-    h == '.' ? compile(t[0]) + '.' + t[1] :
     h == '!' ? '!' + js(t[0]) :
     h == '/' ? `(d => d === 0 ? (() => {throw new Error('zdiv')})() : ${js(t[0])} / d)(${js(t[1])})` :
     h == '%' ? `(d => d === 0 ? (() => {throw new Error('zdiv')})() : ${js(t[0])} % d)(${js(t[1])})` :
@@ -64,7 +69,7 @@ const compile = root => {
     `${h}(${t.map(js).join(',')})`
   const js = x => !Array.isArray(x) ? value(x) : 
     x.length === 1 ? js(x[0]) :
-    x in map ? map[x] :
+    x in constructors ? constructors[x] :
     apply(x)
   return js(root)
 }
@@ -95,6 +100,12 @@ if (require.main === module) {
   test('hi', '`hi`')
   test(/hi/, 'r"hi"')
   test("hi 2", 'let n 1\nlet s "hi"\n$"{s} {n + 1}"')
+
+  // properties
+  test(0, '"".size')
+  test(2, '"hi".size')
+  test(0, '[].size')
+  test(2, '[1 2].size')
 
   // containers
   test([], '[]')

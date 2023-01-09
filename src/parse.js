@@ -88,6 +88,9 @@ if (require.main === module) {
   test('(=> a a)', 'a => a')
   test('(=> (, a b) a)', 'a,b => a')
 
+  // property access
+  test('(. (__call list) length)', '[].length')
+ 
   // single operator
   test('(! true)', '!true')
 
