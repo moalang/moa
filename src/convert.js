@@ -7,12 +7,14 @@
 const dump = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
 const failInfer = (m,l,r) => { const e = new Error(m); e.l = l; e.r = r; throw e }
+const prune = t => t.instance ? t.instance = prune(t.instance) : t
 const str = o => typeof o === 'string' ? o :
   Array.isArray(o) ? `(${o.map(str).join(' ')})${o.repeatable ? '*' : ''}` :
   o instanceof String ? o.toString() :
   typeof o === 'object' && o.variable ? (s => (o.variable=true, `var(${s})`))((o.variable=false, str(o))) :
   typeof o === 'object' && o.instance ? str(o.instance) :
   typeof o === 'object' && o.name === 'expected' ? o.generics[0].toString() + '|' + o.generics[1].map(str).join('|') :
+  typeof o === 'object' && o.name === 'struct' ? '(' + Object.keys(o.fields).sort().map(k => `${k}:${prune(o.fields[k])}`).join(' ') + ')' :
   typeof o === 'object' && (o.tid || o.type || o.name) ? o.toString() + (o.repeatable ? '*' : '') :
   JSON.stringify(o)
 const put = (...a) => { process.stdout.write(a.map(str).join(' ')); return a[0] }
@@ -26,7 +28,6 @@ const infer = root => {
   const tvar = () => (tid => referable({tid, instance: null},  tid.toString()))(unique++)
   const tclass = name => referable({name}, name)
   const type = (name, ...generics) => ({name, generics, toString: () => `${name}${generics.length ? `(${generics.map((g, i) => g.instance ? g.instance.toString() : g.toString()).join(' ')})` : ''}`})
-  const prune = t => t.instance ? t.instance = prune(t.instance) : t
   const eprune = t => (t => t.name === 'expected' ? t.generics[0] : t)(prune(t))
   const tbool = type('bool')
   const tint = type('int')
@@ -38,6 +39,7 @@ const infer = root => {
   const tclasses = {
     num: [tint, tfloat],
   }
+  const tstruct = id => (t => (t.fields = {[id]: t.generics[0]}, t))(type('struct', tvar()))
   const tenv = {
     int: tint,
     'true': tbool,
@@ -63,10 +65,10 @@ const infer = root => {
       size: tint,
     })
   }
-  const property = (t, id) => (f =>
+  const property = (t, id) => t.tid && !t.instance ? (t.instance=tstruct(id)).generics[0] : _property(t, id, tprops[t.name])
+  const _property = (t, id, f) => 
     !f ? failInfer(`${t.name} is not a type`, t, id) :
     f(t)[id] || failInfer(`${id} is not a field of ${t.name}`, t, id)
-    )(tprops[t.name])
   const inferTop = (node, env) => {
     const inf = node => inferTop(node, env)
     const wrap = args => (a => ({a, env: Object.assign(Object.fromEntries(a.map(x => [x[0], () => x[1]])), env)}))(to_a(args).map(a => [a, tvar()]))
@@ -167,6 +169,7 @@ if (require.main === module) {
     }
     fail(`Expect: '${l}' is not '${r}' but got '${ret}'. src=${src}`)
   }
+  test('((size:float) float)', 'fn f x:\n  x.size + 1.0')
 
   // primitives
   test('bool', 'true')
@@ -201,6 +204,10 @@ if (require.main === module) {
   test('string', 'tuple(1 "s").1')
   test('int', '[].size')
   test('int', '"s".size')
+  test('((x:1) 1)', 'p => p.x')
+  test('((size:1) 1)', 'fn f x: x.size')
+  test('((size:num) num)', 'fn f x:\n  x.size + 1')
+  test('((size:float) float)', 'fn f x:\n  x.size + 1.0')
 
   // type cast
   test('int', 'int(1)')
