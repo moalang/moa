@@ -1,7 +1,7 @@
 /*
  * This program converts some nodes in an internal expression based on type inference.
  * [x] Basic type inference
- * [ ] Error handling
+ * [x] Error handling
  * [ ] Convert a method call to a function call
  */
 const dump = o => { console.dir(o, {depth: null}); return o }
@@ -250,12 +250,14 @@ if (require.main === module) {
   test('(string|string)', 'fn f:\n  throw "e"\n  "hi"')
   test('(1 1|string)', 'fn f x:\n  throw "e"\n  x')
   test('(1 1)', 'fn f x: x\nfn g v:\n  throw "e"\n  v\nfn h:\n  let v g 1\n  f v\nf')
+  test('string', 'try "s" e => "s"')
   test('string', 'try (throw 1) e => "s"')
 
   // be failed
   error('int|float', 'string', '1 + "s"')
   error('num', '(num)', 'fn f: 1\n1+f')
   error('var(num)', 'num', 'let x 1\nx+=1')
+  error('int|float', 'string', 'try 1 e => "s"')
 
   puts('ok')
 }
