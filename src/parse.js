@@ -52,12 +52,12 @@ const parse = source => {
   const lines = n => many([], t => indent(t) === n ? (++pos, line()) : false)
   const statement = () => mark('__do', lines(indent(tokens[pos])))
   const unwrap = o => {
-    const isOp2 = s => '+-*/%|&<>!=.,:'.includes(s[0]) && s != ':'
-    const op2 = a => a.length <= 2 ? a :
+    const isOp2 = s => typeof s === 'string' && '+-*/%|&<>!=.,:'.includes(s[0]) && s != ':'
+    const op2 = a => (!Array.isArray(a) || a.length <= 2) ? a :
       isOp2(a[1]) ? op2([prioritize(a[1], a[0], a[2]), ...a.slice(3)]) :
       [a[0], ...op2(a.slice(1))]
     const prioritize = (op, l, r) => Array.isArray(l) && isOp2(l[0]) && priority(op) < priority(l[0]) ? [l[0], l[1], [op, l[2], r]] : [op, l, r]
-    const priority = op => '* / % + - = += -= *= /= %= **='.split(' ').findIndex(t => t == op)
+    const priority = op => '* / % + - = += -= *= /= %= **= =>'.split(' ').findIndex(t => t == op)
     const block = a => _block(a, a.findIndex(t => t === ':'))
     const _block = (a, n) => n === -1 ? a : [a[n], a[0], a.slice(1, n), a.slice(n+1)]
     const declare = a => (pos => pos === -1 ? a : [a[pos], a.slice(0, pos), a.slice(pos+1)])(a.findIndex(t => t === '::'))
@@ -75,6 +75,7 @@ if (require.main === module) {
   const stringify = a => Array.isArray(a) ? `(${a.map(stringify).join(' ')})` : str(a)
   const assert = (expect, fact, src) => expect === fact ? put('.') : fail(`Expected '${expect}' but got '${fact}' in '${src}'`)
   const test = (expect, src) => assert(expect, stringify(parse(src)), src)
+  test('(=> p (+ (. p x) (. p y)))', 'p => p.x + p.y')
 
   // primitives
   test('1', '1')
@@ -87,9 +88,11 @@ if (require.main === module) {
   test('(list 1)', '[1]')
   test('(=> a a)', 'a => a')
   test('(=> (, a b) a)', 'a,b => a')
+  test('(=> p (+ 1 2))', 'p => 1 + 2')
 
   // property access
   test('(. (__call list) length)', '[].length')
+  test('(=> p (+ (. p x) (. p y)))', 'p => p.x + p.y')
  
   // single operator
   test('(! true)', '!true')

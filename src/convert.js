@@ -2,13 +2,15 @@
  * This program converts some nodes in an internal expression based on type inference.
  * [x] Basic type inference
  * [x] Error handling
- * [ ] Type inference to property access
+ * [x] Type inference to property access
  */
 const dump = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
 const failInfer = (m,l,r) => { const e = new Error(m); e.l = l; e.r = r; throw e }
 const prune = t => t.instance ? t.instance = prune(t.instance) : t
-const str = o => typeof o === 'string' ? o :
+const str = o =>
+  o === undefined ? 'undefined' :
+  typeof o === 'string' ? o :
   Array.isArray(o) ? `(${o.map(str).join(' ')})${o.repeatable ? '*' : ''}` :
   o instanceof String ? o.toString() :
   typeof o === 'object' && o.variable ? (s => (o.variable=true, `var(${s})`))((o.variable=false, str(o))) :
@@ -39,7 +41,7 @@ const infer = root => {
   const tclasses = {
     num: [tint, tfloat],
   }
-  const tstruct = id => (t => (t.fields = {[id]: t.generics[0]}, t))(type('struct', tvar()))
+  const tstruct = id => ((t, tv) => (t.fields = {[id]: tv}, t))(type('struct'), tvar())
   const tenv = {
     int: tint,
     'true': tbool,
@@ -65,7 +67,9 @@ const infer = root => {
       size: tint,
     })
   }
-  const property = (t, id) => t.tid && !t.instance ? (t.instance=tstruct(id)).generics[0] : _property(t, id, tprops[t.name])
+  const property = (t, id) => t.tid && !t.instance ? (t.instance=tstruct(id)).fields[id] :
+    t.name === 'struct' ? t.fields[id] = t.fields[id] || tvar() :
+    _property(t, id, tprops[t.name])
   const _property = (t, id, f) => 
     !f ? failInfer(`${t.name} is not a type`, t, id) :
     f(t)[id] || failInfer(`${id} is not a field of ${t.name}`, t, id)
@@ -75,6 +79,7 @@ const infer = root => {
     const to_a = o => !Array.isArray(o) ? [o] : o[0] == ',' ? o.slice(1) : o
     const to_s = a => Array.isArray(a) && a.length === 1 ? to_s(a[0]) : a
     const to_v = f => typeof f === 'function' && f.length === 0 ? f() : f
+    const is_include = (t, s) => Object.keys(s).map(k => unify(s[k], t[k]))
     const unify = (lv, rv, f) => {
       const l = eprune(lv)
       const r = eprune(rv)
@@ -83,6 +88,9 @@ const infer = root => {
         l.tid && r.tid ? r.instane = lv :
         l.tid ? l.instance = rv :
         r.tid ? r.instance = lv :
+        l.name === 'struct' && r.name === 'struct' ? l.instance = (Object.assign(r.fields, l.fields), r) :
+        l.name === 'struct' && r.name in tprops && is_include(tprops[r.name](r), l.fields) ? l.instance = r :
+        r.name === 'struct' && l.name in tprops && is_include(tprops[l.name](l), r.fields) ? r.instance = l :
         Array.isArray(l) && Array.isArray(r) && l.length === r.length ? l.map((t, i) => unify(t, r[i])) :
         !Array.isArray(l) && !Array.isArray(r) && l.toString() === r.toString() ? l :
         l.name in tclasses && !Array.isArray(r) ? l.instance = narrow(tclasses[l.name], r) :
@@ -135,7 +143,7 @@ const infer = root => {
       v.startsWith('"') ? tstring :
       v.startsWith('`') ? tstring :
       get(v)
-    const get = k => k in env ? to_v(env[k]) : fail(`Notfound '${k}' in env='${Object.keys(env)}'`)
+    const get = k => k in env ? env[k] = prune(to_v(env[k])) : fail(`Notfound '${k}' in env='${Object.keys(env)}'`)
     const put = (k, v) => env[k] = v
     return node.type = Array.isArray(node) ? apply(node) : value(node)
   }
@@ -169,7 +177,6 @@ if (require.main === module) {
     }
     fail(`Expect: '${l}' is not '${r}' but got '${ret}'. src=${src}`)
   }
-  test('((size:float) float)', 'fn f x:\n  x.size + 1.0')
 
   // primitives
   test('bool', 'true')
@@ -208,6 +215,11 @@ if (require.main === module) {
   test('((size:1) 1)', 'fn f x: x.size')
   test('((size:num) num)', 'fn f x:\n  x.size + 1')
   test('((size:float) float)', 'fn f x:\n  x.size + 1.0')
+  test('((x:num y:num) num)', 'p => p.x + p.y')
+  test('((x:float y:float) float)', 'p => p.x + p.y + 1.0')
+  test('int', 'fn f x: x.size\nf "a"')
+  test('int', 'fn f x: x.size\nf []')
+  test('string', 'struct p: name string\nfn f x: x.name\nf p("s")')
 
   // type cast
   test('int', 'int(1)')
