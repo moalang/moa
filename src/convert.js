@@ -100,8 +100,8 @@ const infer = root => {
     }
     const errors = t => t.name === 'expected' ? t.generics[1] : []
     const merge = a => (s => a.filter(v => (k => s.has(k) ? false : s.add(k))(v.toString())))(new Set())
-    const switch_ = (t, cs) => switch__(t, cs.map(c => [x => Array.isArray(c[2]) ? inferTop(x, wrap(c[2].slice(1)).env) : inf(x), ...c.slice(1)]))
-    const switch__ = (t, cs) => (cs.map(c => unify(t, c[0](c[2]))), cs.reduce((r,c) => unify(r, c[0](c.slice(3))), tvar()))
+    const match = (t, cs) => match_(t, cs.map(c => [x => Array.isArray(c[2]) ? inferTop(x, wrap(c[2].slice(1)).env) : inf(x), ...c.slice(1)]))
+    const match_ = (t, cs) => (cs.map(c => unify(t, c[0](c[2]))), cs.reduce((r,c) => unify(r, c[0](c.slice(3))), tvar()))
     const flat = a => Array.isArray(a) && a.length == 1 && a[0][0] == '__do' ? a[0].slice(1).map(flat) : a
     const struct = (name, fields) => (tprops[name] = () => Object.fromEntries(fields), [...fields.map(f => type(f[1])), type(name)])
     const adt = (t, fields) => fields.map(f => Array.isArray(f) ? tput(f[0], () => [...f.slice(1).map(x => type(x)), t]) : tenv[f] = t)
@@ -120,7 +120,7 @@ const infer = root => {
       argv.length === 0 ? inf(head) :
       head == ':' && argv[0] == 'struct' ? put(argv[1], struct(argv[1], flat(argv.slice(2)))) :
       head == ':' && argv[0] == 'adt' ? (t => (put(t.name, t), adt(t, flat(argv.slice(2)))))(type(argv[1])) :
-      head == ':' && argv[0] == 'switch' ? switch_(inf(argv[1]), flat(argv.slice(2))) :
+      head == ':' && argv[0] == 'match' ? match(inf(argv[1]), flat(argv.slice(2))) :
       head == ':' && argv[0] == 'def' ? (a => put(a[0], def(a.slice(1), to_a(argv[2]))))(to_a(argv[1])) :
       head == ':' && argv[0] == 'fn' ? ((id, ft) => id in env ? unify(get(id), ft) : put(id, ft))(to_a(argv[1])[0].toString(), fn(to_a(argv[1]).slice(1), argv[argv.length - 1])) :
       head == '__call' && argv.length === 1 ? to_s(squash(value(argv[0]))) :
@@ -248,8 +248,8 @@ if (require.main === module) {
   test('ab', 'adt ab:\n  a\n  b\nb')
   test('ab', 'adt ab:\n  a string\n  b int\na "a"')
   test('ab', 'adt ab:\n  a string\n  b int\nb 1')
-  test('float', 'adt ab:\n  a\n  b\nswitch a:\n  case a: 1\n  case b: 2.0')
-  test('string', 'adt ab:\n  a string\n  b int\nswitch a "hi":\n  case a s: s\n  case b n: string(n)')
+  test('float', 'adt ab:\n  a\n  b\nmatch a:\n  case a: 1\n  case b: 2.0')
+  test('string', 'adt ab:\n  a string\n  b int\nmatch a "hi":\n  case a s: s\n  case b n: string(n)')
 
   // declare type
   test('(int)', 'def f: int')

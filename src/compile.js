@@ -30,7 +30,7 @@ const compile = root => {
   const adtTag = name => `const ${name} = ({__tag: '${name}', toString() { return '${name}' }})`
   const adtValue = (name, v) => `const ${name} = __val => ({__tag: '${name}', __val, toString() { return '${name}(' + ${v == 'string' ? 'JSON.stringify(__val)' : '__val.toString()'} + ')' }})`
   const flat = a => Array.isArray(a) && a.length == 1 && a[0][0] == '__do' ? a[0].slice(1).map(flat) : a
-  const switch_ = (t, cs) => `(__target => ${cs.map(c => Array.isArray(c) ? caseValue(c) : caseTag(c)).join(' : ')} : (() => {throw new Error("switch unmatch")})() )(${js(t)})`
+  const match = (t, cs) => `(__target => ${cs.map(c => Array.isArray(c) ? caseValue(c) : caseTag(c)).join(' : ')} : (() => {throw new Error("match unmatch")})() )(${js(t)})`
   const caseValue = c => `__target.__tag === '${c[2][0]}' ? (${c[2][1]} => ${js(c[3])})(__target.__val)`
   const caseTag = c => `__target.__tag === '${c[2]}' ? ${js(c[3])}`
   const to_return = a => Array.isArray(a) && a[0] == '__do' ? a.slice(1).map(js).slice(0, -1).join(';\n') + ';\nreturn ' + js(a.slice(1).slice(-1)[0]) : `return ${js(a)}`
@@ -58,7 +58,7 @@ const compile = root => {
     h == '__do' ? t.map(js).join(';\n') :
     h == ':' && t[0] == 'struct' ? struct(t[1], flat(t.slice(2))) :
     h == ':' && t[0] == 'adt' ? adt(t[1], flat(t.slice(2))) :
-    h == ':' && t[0] == 'switch' ? switch_(js(t[1]), flat(t.slice(2))) :
+    h == ':' && t[0] == 'match' ? match(js(t[1]), flat(t.slice(2))) :
     h == ':' && t[0] == 'fn' ? fn(to_a(t[1])[0], to_a(t[1]).slice(1), to_s(t.slice(2))) :
     h == '!' ? '!' + js(t[0]) :
     h == '/' ? `(d => d === 0 ? (() => {throw new Error('zdiv')})() : ${js(t[0])} / d)(${js(t[1])})` :
@@ -167,10 +167,10 @@ if (require.main === module) {
   test('s("hi" 1)', 'struct s:\n  a string\n  b int\nstring(s("hi" 1))')
 
   // user defined algebraic data type
-  test(1, 'adt ab:\n  a\n  b\nswitch a:\n  case a: 1\n  case b: 2')
-  test('hi', 'adt ab:\n  a string\n  b int\nswitch a "hi":\n  case a s: s\n  case b n: string(n)')
-  test('hi', 'adt ab:\n  a string\n  b int\nswitch a "hi":\n  case a s: s\n  case b n: string(n)')
-  test('1', 'adt ab:\n  a string\n  b int\nswitch b 1:\n  case a s: s\n  case b n: string(n)')
+  test(1, 'adt ab:\n  a\n  b\nmatch a:\n  case a: 1\n  case b: 2')
+  test('hi', 'adt ab:\n  a string\n  b int\nmatch a "hi":\n  case a s: s\n  case b n: string(n)')
+  test('hi', 'adt ab:\n  a string\n  b int\nmatch a "hi":\n  case a s: s\n  case b n: string(n)')
+  test('1', 'adt ab:\n  a string\n  b int\nmatch b 1:\n  case a s: s\n  case b n: string(n)')
   test('a', 'adt ab:\n  a\n  b int\n  c string\nstring(a)')
   test('b(1)', 'adt ab:\n  a\n  b int\n  c string\nstring(b(1))')
   test('c("hi")', 'adt ab:\n  a\n  b int\n  c string\nstring(c("hi"))')
