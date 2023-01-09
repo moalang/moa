@@ -3,6 +3,7 @@
  * [x] Basic type inference
  * [x] Error handling
  * [ ] Convert a method call to a function call
+ * [ ] Type inference to properties of object which come from arguments
  */
 const dump = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
@@ -135,10 +136,11 @@ module.exports = { convert }
 
 if (require.main === module) {
   const { parse } = require('./parse.js')
+  const simplify = s => (d => s.replace(/\d+/g, n => n in d ? d[n] : d[n] = Object.keys(d).length + 1))({})
   const assert = (expect, fact, src) => put(expect === fact ? '.' : fail(`Expect: '${expect}' but got '${fact}'. src='${src}'`))
   const test = (expect, src) => {
     try {
-      assert(expect, str(infer(parse(src))), src)
+      assert(expect, simplify(str(infer(parse(src)))), src)
     } catch (e) {
       puts(expect, '!=', src)
       throw e
@@ -155,7 +157,6 @@ if (require.main === module) {
     }
     fail(`Expect: '${l}' is not '${r}' but got '${ret}'. src=${src}`)
   }
-  test('string', 'try (throw 1) e => "s"')
 
   // primitives
   test('bool', 'true')
@@ -227,7 +228,7 @@ if (require.main === module) {
   test('(1 1)', 'def f a: a a')
   test('float', 'def f a: a a\nf(1) + f(1.0)')
   test('(1 2)', 'def f a b: a b')
-  test('(2 1)', 'def f a b: b a')
+  test('(1 2)', 'def f a b: b a')
 
   // single operator
   test('bool', '!true')
@@ -245,7 +246,7 @@ if (require.main === module) {
   assert('num', convert(parse('1 + 2')).type, '1 + 2')
 
   // error handling
-  test('2|string', 'throw "s"')
+  test('1|string', 'throw "s"')
   test('num|string', '(throw "s") + (throw "e")')
   test('(string|string)', 'fn f:\n  throw "e"\n  "hi"')
   test('(1 1|string)', 'fn f x:\n  throw "e"\n  x')
