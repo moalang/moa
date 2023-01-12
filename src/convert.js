@@ -290,6 +290,8 @@ if (require.main === module) {
   error('num', '(num)', 'fn f: 1\n1+f')
   error('var(num)', 'num', 'let x 1\nx+=1')
   error('int|float', 'string', 'try 1 e => "s"')
+  error('int', 'float', 'int(1) + 1.1')
+  error('float', 'int', '1.1 + int(1)')
 
   puts('ok')
 }
