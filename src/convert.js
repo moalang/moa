@@ -28,7 +28,6 @@ const infer = root => {
   const repeat = t => (t.repeatable = true, t)
   const referable = (t, s) => (t.toString = () => t.instance ? t.instance.toString() : s, t)
   const tvar = () => (tid => referable({tid, instance: null},  tid.toString()))(unique++)
-  const tclass = name => referable({name}, name)
   const type = (name, ...generics) => ({name, generics, toString: () => `${name}${generics.length ? `(${generics.map((g, i) => g.instance ? g.instance.toString() : g.toString()).join(' ')})` : ''}`})
   const eprune = t => (t => t.name === 'expected' ? t.generics[0] : t)(prune(t))
   const tbool = type('bool')
@@ -38,17 +37,15 @@ const infer = root => {
   const tregexp = type('regexp')
   const terror = t => type('error', t)
   const texpected = (t, ta) => ta.length === 0 ? t : t.name === 'expected' ? (t.generics = [t.generics[0], ta], t) : type('expected', t, ta)
-  const tclasses = {
-    num: [tint, tfloat],
-  }
+  const tnum = referable({name: 'num', traits: [tint, tfloat]}, 'num')
   const tstruct = id => ((t, tv) => (t.fields = {[id]: tv}, t))(type('struct'), tvar())
   const tenv = {
     int: tint,
     'true': tbool,
     'false': tbool,
     'string': () => [tvar(), tstring],
-    'int': [type('num'), tint],
-    'float': [type('num'), tfloat],
+    'int': [tnum, tint],
+    'float': [tnum, tfloat],
     'list': () => (t => [t, type('list', t)])(repeat(tvar())),
     'set': () => (t => [t, type('set', t)])(repeat(tvar())),
     'dict': () => (a => [a, type('dict', a[0], a[1])])(repeat([tvar(), tvar()])),
@@ -56,7 +53,7 @@ const infer = root => {
     'try': () => ((t,e) => [texpected(t, e), [terror(e), t], t])(tvar(), tvar()),
   }
   const tput = (k, v) => tenv[k] = v
-  '+ - * / % ** // += -= /= *= /= %= **='.split(' ').map(op => tput(op, (t => [t, t, t])(type('num'))))
+  '+ - * / % ** // += -= /= *= /= %= **='.split(' ').map(op => tput(op, (t => [t, t, t])(tnum)))
   '&& ||'.split(' ').map(op => tput(op, [tbool, tbool, tbool]))
   '== != < <= > >='.split(' ').map(op => tput(op, () => (t => [t, t, t])(tvar())))
   const tprops = {
@@ -93,9 +90,11 @@ const infer = root => {
         r.name === 'struct' && l.name in tprops && is_include(tprops[l.name](l), r.fields) ? r.instance = l :
         Array.isArray(l) && Array.isArray(r) && l.length === r.length ? l.map((t, i) => unify(t, r[i])) :
         !Array.isArray(l) && !Array.isArray(r) && l.toString() === r.toString() ? l :
-        l.name in tclasses && !Array.isArray(r) ? l.instance = narrow(tclasses[l.name], r) :
-        r.name in tclasses && !Array.isArray(l) ? r.instance = narrow(tclasses[r.name], l) :
-        f ? f() : failInfer(`Unmatch ${l} and ${r}`, l, r)
+        //l.name in tclasses && !Array.isArray(r) ? l.instance = narrow(tclasses[l.name], r) :
+        //r.name in tclasses && !Array.isArray(l) ? r.instance = narrow(tclasses[r.name], l) :
+        l.traits && !Array.isArray(r) ? l.instance = narrow(l.traits, r) :
+        r.traits && !Array.isArray(l) ? r.instance = narrow(r.traits, l) :
+        f ? f() : failInfer(`Unmatch ${l} and ${r}}`, l, r)
       return ret
     }
     const errors = t => t.name === 'expected' ? t.generics[1] : []
@@ -136,7 +135,7 @@ const infer = root => {
       '+= -= *= /= %= **='.split(' ').includes(head.toString()) ? unify(assertVariable(get(argv[0])), inf(to_s(argv.slice(1))))  :
       head == 'try' ? _try(inf(head), argv.map(inf)) :
       call(inf(head), argv.map(inf))
-    const value = v => v.type = v.match(/^[0-9]+$/) ? tclass('num') :
+    const value = v => v.type = v.match(/^[0-9]+$/) ? tnum :
       v.match(/^[0-9]+\.[0-9]+$/) ? tfloat :
       v.startsWith('r"') ? tregexp :
       v.startsWith('$"') ? tstring :
