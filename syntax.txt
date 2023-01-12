@@ -1,9 +1,10 @@
 top: line*
 line: keyword? exp+ ("\n" | (":\n" ("  " line)+))
 exp: unit (op2 exp)*
-unit: op1? bottom (prop | call | at)*
+unit: op1? bottom (prop | call | init | at)*
 prop: "." id
 call: "(" exp+ ")"
+init: "{" (id ":" exp)+ "}"
 at: "[" exp "]"
 bottom:
 | "(" exp ")"                  # priority  : 1 * (2 + 3)
@@ -18,8 +19,45 @@ bottom:
 id: [A-Za-z_][A-Za-z0-9_]*
 op1: "!"
 op2: [+-/%*=<>|&^;]+
-keyword: qw(let var fn ft struct if return switch case fail adt test)
+keyword: qw(let var fn ft struct if return match case fail adt test)
 
+
+# Idea for match/case
+"match" exp id?:
+  ("case" exp ("if" exp)? ":" line+ br)+
+
+enum tree a:
+  empty
+  node:
+    value a
+    left tree(a)
+    right tree(a)
+
+type validate: tree(_) bool
+fn validate target_tree:
+  match target_tree t:
+    case empty: true
+    case node{left:node} if t.value < t.left.value: false
+    case node{right:node} if t.value > t.right.value: false
+    case node: validate(t.left) && validate(t.right)
+
+enum ast:
+  integer int
+  op2:
+    op string
+    lhs ast
+    rhs ast
+
+type calc: ast ast int
+fn calc target_ast:
+  match target_ast a:
+    case integer: a
+    case op2{op:"/" rhs:0}: throw "zdiv"
+    case op2{op:"+"}: calc(a.lhs) + calc(a.rhs)
+    case op2{op:"-"}: calc(a.lhs) - calc(a.rhs)
+    case op2{op:"*"}: calc(a.lhs) * calc(a.rhs)
+    case op2{op:"/"}: calc(a.lhs) / calc(a.rhs)
+    case op2: throw "Unknown operation ${a.op}"
 
 # Ideas for bottom
 | "(" id* (id ":" exp)* ")"    # struct    : (), (one=one), (one two three=3)
