@@ -19,6 +19,13 @@ def validate bt:
 - Design for error handling
 [ ] "throw" exp?
 [ ] "try" exp exp+
+try f() e => 1
+in try f g:
+  fn f: validate(node(1 empty empty))
+  fn g (zdiv): true
+  fn g (e:bad): e.errno == 0
+  fn g e: false
+
 - f(a b) | "zdiv" _ => -1
 - f(a b) | "zdiv" e => f(e)
 - f(a b) | "zdiv" e => throw "some error" e
