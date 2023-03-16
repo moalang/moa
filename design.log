@@ -11,40 +11,25 @@ enum tree a:
 def validate bt:
   match bt:
     case empty: true
+    case node{left:node right:node} if !(bt.left.value < bt.value < bt.right.value): false
     case node{left:node} if bt.value < bt.left.value: false
     case node{right:node} if bt.value > bt.right.value: false
     case node: validate(bt.left) && validate(bt.right)
 
 
 - Design for error handling
-[ ] "throw" exp?
-[ ] "try" exp exp+
+[x] "throw" exp?
+[x] "try" exp (id "=>" exp)
 try f() e => 1
-in try f g:
-  fn f: validate(node(1 empty empty))
-  fn g (zdiv): true
-  fn g (e:bad): e.errno == 0
-  fn g e: false
-
-- f(a b) | "zdiv" _ => -1
-- f(a b) | "zdiv" e => f(e)
-- f(a b) | "zdiv" e => throw "some error" e
-- f(a b) | e => throw "some error" e
-- f(a b){ "zdiv" -1, "zdiv" e => f(e), "zdiv" e => throw some error e }
-- try f(a b) as e:
-  catch zdiv: "zero"
-  catch bad: e.value.errno.string
-  catch: e.message
-- try f(a b) as e:
-  catch zdiv: "zero"
-  catch bad: e.value.errno.string
-  catch: e.message
+try f() e => match e:
+  case zdiv: true
+  case {errno}: e.errno == 0
+  caes: e.message != "dummy"
 
 type of errors
-- no parameter errors                                      # throw
-- with message                                             # throw "unreachable"
-- invalid input                                            # throw "invalid input"
-- os error (EAGAIN, EINTR, ENOENT, ENOTDIR, ETIMEOUT, ...) # throw os(...)
+- no parameter errors # throw
+- with message        # throw "unreachable"
+- with parameters     # throw {id:123 obj:f()}
 
 # raise exception
 type throw a b: a b

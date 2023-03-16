@@ -30,6 +30,7 @@ const infer = root => {
   const tvar = () => (tid => referable({tid, instance: null},  tid.toString()))(unique++)
   const type = (name, ...generics) => ({name, generics, toString: () => `${name}${generics.length ? `(${generics.map((g, i) => g.instance ? g.instance.toString() : g.toString()).join(' ')})` : ''}`})
   const eprune = t => (t => t.name === 'expected' ? t.generics[0] : t)(prune(t))
+  const tvoid = type('void')
   const tbool = type('bool')
   const tint = type('int')
   const tfloat = type('float')
@@ -62,6 +63,9 @@ const infer = root => {
     }),
     string: t => ({
       size: tint,
+    }),
+    error: t => ({
+      message: tstring,
     })
   }
   const property = (t, id) => t.tid && !t.instance ? (t.instance=tstruct(id)).fields[id] :
@@ -120,6 +124,7 @@ const infer = root => {
       head == ':' && argv[0] == 'struct' ? put(argv[1], struct(argv[1], flat(argv.slice(2)))) :
       head == ':' && argv[0] == 'adt' ? (t => (put(t.name, t), adt(t, flat(argv.slice(2)))))(type(argv[1])) :
       head == ':' && argv[0] == 'match' ? match(inf(argv[1]), flat(argv.slice(2))) :
+      head == ':' && argv[0] == 'if' ? (inf(argv[1]), inf(argv[2]), tvoid) :
       head == ':' && argv[0] == 'def' ? (a => put(a[0], def(a.slice(1), to_a(argv[2]))))(to_a(argv[1])) :
       head == ':' && argv[0] == 'fn' ? ((id, ft) => id in env ? unify(get(id), ft) : put(id, ft))(to_a(argv[1])[0].toString(), fn(to_a(argv[1]).slice(1), argv[argv.length - 1])) :
       head == '__call' && argv.length === 1 ? to_s(squash(value(argv[0]))) :
@@ -235,6 +240,7 @@ if (require.main === module) {
   test('(num)', 'fn f: 1')
   test('(1 1)', 'fn f x: x')
   test('(num num)', 'fn f x: x + 1')
+  test('(num)', 'fn f:\n  if true: throw "error"\n  1')
 
   // user defined struct
   test('item', 'struct item:\n  name string\nitem("moa")')
@@ -283,7 +289,8 @@ if (require.main === module) {
   test('(1 1|string)', 'fn f x:\n  throw "e"\n  x')
   test('(1 1)', 'fn f x: x\nfn g v:\n  throw "e"\n  v\nfn h:\n  let v g 1\n  f v\nf')
   test('string', 'try "s" e => "s"')
-  test('string', 'try (throw 1) e => "s"')
+  test('string', 'try (throw "") e => e.message')
+  test('string', 'fn f:\n  if true:\n    throw "hi"\n  "hi"\nfn g e: e.message\ntry f() g')
 
   // be failed
   error('int|float', 'string', '1 + "s"')

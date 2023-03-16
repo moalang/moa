@@ -46,6 +46,8 @@ const compile = root => {
     x.startsWith('$"') ? "`" + x.slice(2, -1).replace(/{/g, '${') + "`" :
     x.toString()
   const apply = ([h,...t]) =>
+    h == '__do' ? t.map(js).join(';\n') :
+    h == '__call' ? t[0].toString() + '()' :
     h == 'let' ? `const ${t[0]} = ${js(...t.slice(1))}` :
     h == 'var' ? `let ${t[0]} = ${js(...t.slice(1))}` :
     h == 'list' ? `[${t.map(js).join(',')}]` :
@@ -53,17 +55,19 @@ const compile = root => {
     h == 'set' ? `[${t.map(js).join(',')}]` :
     h == 'tuple' ? `[${t.map(js).join(',')}]` :
     h == 'dict' ? '({' + [...Array(t.length / 2).keys()].map(i => `[${t[i*2]}]: ${compile(t[i*2+1])}`).join(', ') + '})' :
+    h == 'throw' ? `(() => {throw Error(${string(js(t[0]), t[0].type)})})()` :
+    h == 'try' ? `(() => { try { return ${js(t[0])} } catch(__error) { return (${js(t[1])})(__error) } })()` :
     h == '.' && t[1].match(/^[0-9]+$/) ? `${compile(t[0])}[${t[1]}]` : // tuple(...).1
     h == '.' ? property(t[0], t[1]) :
-    h == '__do' ? t.map(js).join(';\n') :
     h == ':' && t[0] == 'struct' ? struct(t[1], flat(t.slice(2))) :
     h == ':' && t[0] == 'adt' ? adt(t[1], flat(t.slice(2))) :
     h == ':' && t[0] == 'match' ? match(js(t[1]), flat(t.slice(2))) :
     h == ':' && t[0] == 'fn' ? fn(to_a(t[1])[0], to_a(t[1]).slice(1), to_s(t.slice(2))) :
+    h == ':' && t[0] == 'if' ? `if (${js(t[1])}) { ${js(t[2])} }` :
     h == '!' ? '!' + js(t[0]) :
-    h == '/' ? `(d => d === 0 ? (() => {throw new Error('zdiv')})() : ${js(t[0])} / d)(${js(t[1])})` :
-    h == '%' ? `(d => d === 0 ? (() => {throw new Error('zdiv')})() : ${js(t[0])} % d)(${js(t[1])})` :
-    h == '//' ? `(d => d === 0 ? (() => {throw new Error('zdiv')})() : Math.floor(${js(t[0])} / d))(${js(t[1])})` :
+    h == '/' ? `(d => d === 0 ? (() => {throw Error('zdiv')})() : ${js(t[0])} / d)(${js(t[1])})` :
+    h == '%' ? `(d => d === 0 ? (() => {throw Error('zdiv')})() : ${js(t[0])} % d)(${js(t[1])})` :
+    h == '//' ? `(d => d === 0 ? (() => {throw Error('zdiv')})() : Math.floor(${js(t[0])} / d))(${js(t[1])})` :
     '== != < <= > >='.split(' ').includes(h.toString()) ? `JSON.stringify(${js(t[0])}) ${h} JSON.stringify(${js(t[1])})` :
     '+-*/%<>=!|&'.includes(h[0]) ? js(t[0]) + h + js(t[1]) :
     `${h}(${t.map(js).join(',')})`
@@ -79,12 +83,13 @@ module.exports = { compile }
 if (require.main === module) {
   const { parse } = require('./parse.js')
   const { convert } = require('./convert.js')
-  const assert = (expect, fact, src) => put(expect === fact ? '.' : fail(`Expect: '${expect}' but got '${fact}'. src='${src}'`))
+  const assert = (expect, fact, src) => put(expect === fact ? '.' : fail(`Expect: '${expect}' but got '${fact}'. src='${src}' js='${compile(convert(parse(src)))}'`))
   const test = (expect, src) => assert(str(expect), str(eval(compile(convert(parse(src))))), src)
   const error = (expect, src) => {
+    const js = compile(convert(parse(src)))
     try {
-      eval(compile(convert(parse(src))))
-      puts('Expected error not happend')
+      eval(js)
+      puts(`Expected error not happend in ${js}`)
     } catch (e) {
       assert(str(expect), e.message)
     }
@@ -179,6 +184,11 @@ if (require.main === module) {
   error('zdiv', '1 / 0')
   error('zdiv', '1 // 0')
   error('zdiv', '1 % 0')
+  error('hi', 'throw "hi"')
+  test('hi', 'try (throw "hi") e => e.message')
+  test('a', 'fn f:\n  if true: throw "a"\n  "b"\nfn g e: e.message\ntry f() g')
+  test('c', 'fn f:\n  if true: throw "a"\n  "b"\nfn g e: "c"\ntry f() g')
+  test('b', 'fn f:\n  if false: throw "a"\n  "b"\nfn g e: "c"\ntry f() g')
 
   puts('ok')
 }
