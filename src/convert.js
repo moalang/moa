@@ -3,6 +3,8 @@
  * [x] Basic type inference
  * [x] Error handling
  * [x] Type inference to property access
+ * [x] Syntax for 'if', 'else if' and 'else'
+ * [ ] Syntax for match with algebraic data type pattern matching
  */
 const dump = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
@@ -109,7 +111,7 @@ const infer = root => {
     const struct = (name, fields) => (tprops[name] = () => Object.fromEntries(fields), [...fields.map(f => type(f[1])), type(name)])
     const adt = (t, fields) => fields.map(f => Array.isArray(f) ? tput(f[0], () => [...f.slice(1).map(x => type(x)), t]) : tenv[f] = t)
     const squash = x => Array.isArray(x) && x[0].repeatable ? to_s(squash(x.slice(1))) : x
-    const def = (args, types) => (x => types.map(t => (y => y ? y[1] : type(t.toString()))(x.a.find(y => y[0].toString() == t.toString()))))(wrap(args))
+    const ft = (args, types) => (x => types.map(t => (y => y ? y[1] : type(t.toString()))(x.a.find(y => y[0].toString() == t.toString()))))(wrap(args))
     const fn = (a, exp) => (x => [...x.a.map(y => y[1]), inferTop(exp, x.env)])(wrap(a))
     const _do = ts => texpected(ts.slice(-1)[0], merge(ts.flatMap(errors)))
     const _try = (a, b) => to_s(_call(a, b, m => failInfer(m, a, b)))
@@ -122,11 +124,12 @@ const infer = root => {
     const apply = ([head, ...argv]) =>
       argv.length === 0 ? inf(head) :
       head == ':' && argv[0] == 'struct' ? put(argv[1], struct(argv[1], flat(argv.slice(2)))) :
-      head == ':' && argv[0] == 'adt' ? (t => (put(t.name, t), adt(t, flat(argv.slice(2)))))(type(argv[1])) :
+      head == ':' && argv[0] == 'enum' ? (t => (put(t.name, t), adt(t, flat(argv.slice(2)))))(type(argv[1])) :
       head == ':' && argv[0] == 'match' ? match(inf(argv[1]), flat(argv.slice(2))) :
       head == ':' && argv[0] == 'if' ? (inf(argv[1]), inf(argv[2]), tvoid) :
-      head == ':' && argv[0] == 'def' ? (a => put(a[0], def(a.slice(1), to_a(argv[2]))))(to_a(argv[1])) :
-      head == ':' && argv[0] == 'fn' ? ((id, ft) => id in env ? unify(get(id), ft) : put(id, ft))(to_a(argv[1])[0].toString(), fn(to_a(argv[1]).slice(1), argv[argv.length - 1])) :
+      head == ':' && argv[0] == 'else' ? ((argv[1] == 'if' ? (inf(argv[2]), inf(argv[3])) : inf(argv[2])), tvoid) :
+      head == ':' && argv[0] == 'ft' ? (a => put(a[0], ft(a.slice(1), to_a(argv[2]))))(to_a(argv[1])) :
+      head == ':' && argv[0] == 'fn' ? ((id, type) => id in env ? unify(get(id), type) : put(id, type))(to_a(argv[1])[0].toString(), fn(to_a(argv[1]).slice(1), argv[argv.length - 1])) :
       head == '__call' && argv.length === 1 ? to_s(squash(value(argv[0]))) :
       head == 'let' ? put(argv[0], inf(to_s(argv.slice(1)))) :
       head == 'var' ? put(argv[0], variable(inf(to_s(argv.slice(1))))) :
@@ -231,6 +234,12 @@ if (require.main === module) {
   test('int', 'int(float(1))')
   test('float', 'float(int(1))')
 
+  // if-else
+  test('void', 'if false: 1')
+  test('void', 'if false: 1\nelse: 2')
+  test('void', 'if false: 1\nelse if true: 2')
+  test('void', 'if false: 1\nelse if true: 2\nelse: 3')
+
   // user defined variables
   test('num', 'let x 1')
   test('var(num)', 'var x 1')
@@ -249,23 +258,23 @@ if (require.main === module) {
   test('int', 'struct item:\n  name string\n  price int\nitem("moa" 1).price')
 
   // user defined algeblaic data type
-  test('ab', 'adt ab:\n  a\n  b\na')
-  test('ab', 'adt ab:\n  a\n  b\nb')
-  test('ab', 'adt ab:\n  a string\n  b int\na "a"')
-  test('ab', 'adt ab:\n  a string\n  b int\nb 1')
-  test('float', 'adt ab:\n  a\n  b\nmatch a:\n  case a: 1\n  case b: 2.0')
-  test('string', 'adt ab:\n  a string\n  b int\nmatch a "hi":\n  case a s: s\n  case b n: string(n)')
+  test('ab', 'enum ab:\n  a\n  b\na')
+  test('ab', 'enum ab:\n  a\n  b\nb')
+  test('ab', 'enum ab:\n  a string\n  b int\na "a"')
+  test('ab', 'enum ab:\n  a string\n  b int\nb 1')
+  test('float', 'enum ab:\n  a\n  b\nmatch a:\n  case a: 1\n  case b: 2.0')
+  test('string', 'enum ab:\n  a string\n  b int\nmatch a "hi":\n  case a s: s\n  case b n: string(n)')
 
   // declare type
-  test('(int)', 'def f: int')
-  test('int', 'def f: int\nf()')
-  test('(int)', 'def f: int\nfn f: 1')
-  test('(int int)', 'def f: int int')
-  test('(int int)', 'def f: int int\nfn f a: a')
-  test('(1 1)', 'def f a: a a')
-  test('float', 'def f a: a a\nf(1) + f(1.0)')
-  test('(1 2)', 'def f a b: a b')
-  test('(1 2)', 'def f a b: b a')
+  test('(int)', 'ft f: int')
+  test('int', 'ft f: int\nf()')
+  test('(int)', 'ft f: int\nfn f: 1')
+  test('(int int)', 'ft f: int int')
+  test('(int int)', 'ft f: int int\nfn f a: a')
+  test('(1 1)', 'ft f a: a a')
+  test('float', 'ft f a: a a\nf(1) + f(1.0)')
+  test('(1 2)', 'ft f a b: a b')
+  test('(1 2)', 'ft f a b: b a')
 
   // single operator
   test('bool', '!true')

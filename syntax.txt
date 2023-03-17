@@ -19,7 +19,7 @@ bottom:
 id: [A-Za-z_][A-Za-z0-9_]*
 op1: "!"
 op2: [+-/%*=<>|&^;]+
-keyword: qw(let var fn ft struct if return match case fail adt test)
+keyword: qw(let var fn ft struct if else return match case throw enum test)
 
 
 # Idea for match/case

@@ -2,6 +2,8 @@
  * This program generate JavaScript from an internal expression.
  * [x] Primitives
  * [x] Containers
+ * [ ] Syntax for 'if', 'else if' and 'else'
+ * [ ] Syntax for match with algebraic data type pattern matching
  */
 const dump = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
@@ -60,7 +62,7 @@ const compile = root => {
     h == '.' && t[1].match(/^[0-9]+$/) ? `${compile(t[0])}[${t[1]}]` : // tuple(...).1
     h == '.' ? property(t[0], t[1]) :
     h == ':' && t[0] == 'struct' ? struct(t[1], flat(t.slice(2))) :
-    h == ':' && t[0] == 'adt' ? adt(t[1], flat(t.slice(2))) :
+    h == ':' && t[0] == 'enum' ? adt(t[1], flat(t.slice(2))) :
     h == ':' && t[0] == 'match' ? match(js(t[1]), flat(t.slice(2))) :
     h == ':' && t[0] == 'fn' ? fn(to_a(t[1])[0], to_a(t[1]).slice(1), to_s(t.slice(2))) :
     h == ':' && t[0] == 'if' ? `if (${js(t[1])}) { ${js(t[2])} }` :
@@ -155,6 +157,12 @@ if (require.main === module) {
   test(true, 'true && true')
   test(true, 'true || false')
 
+  // if-else
+  test(undefined, 'if false: 1')
+  test(undefined, 'if false: 1\nelse: 2')
+  test(undefined, 'if false: 1\nelse if true: 2')
+  test(undefined, 'if false: 1\nelse if true: 2\nelse: 3')
+
   // user defined function
   test(1, 'fn f a: a\nf(1)')
   test(2, 'fn f a:\n  let b a + 1\n  b\nf(1)')
@@ -172,13 +180,13 @@ if (require.main === module) {
   test('s("hi" 1)', 'struct s:\n  a string\n  b int\nstring(s("hi" 1))')
 
   // user defined algebraic data type
-  test(1, 'adt ab:\n  a\n  b\nmatch a:\n  case a: 1\n  case b: 2')
-  test('hi', 'adt ab:\n  a string\n  b int\nmatch a "hi":\n  case a s: s\n  case b n: string(n)')
-  test('hi', 'adt ab:\n  a string\n  b int\nmatch a "hi":\n  case a s: s\n  case b n: string(n)')
-  test('1', 'adt ab:\n  a string\n  b int\nmatch b 1:\n  case a s: s\n  case b n: string(n)')
-  test('a', 'adt ab:\n  a\n  b int\n  c string\nstring(a)')
-  test('b(1)', 'adt ab:\n  a\n  b int\n  c string\nstring(b(1))')
-  test('c("hi")', 'adt ab:\n  a\n  b int\n  c string\nstring(c("hi"))')
+  test(1, 'enum ab:\n  a\n  b\nmatch a:\n  case a: 1\n  case b: 2')
+  test('hi', 'enum ab:\n  a string\n  b int\nmatch a "hi":\n  case a s: s\n  case b n: string(n)')
+  test('hi', 'enum ab:\n  a string\n  b int\nmatch a "hi":\n  case a s: s\n  case b n: string(n)')
+  test('1', 'enum ab:\n  a string\n  b int\nmatch b 1:\n  case a s: s\n  case b n: string(n)')
+  test('a', 'enum ab:\n  a\n  b int\n  c string\nstring(a)')
+  test('b(1)', 'enum ab:\n  a\n  b int\n  c string\nstring(b(1))')
+  test('c("hi")', 'enum ab:\n  a\n  b int\n  c string\nstring(c("hi"))')
 
   // error handling
   error('zdiv', '1 / 0')

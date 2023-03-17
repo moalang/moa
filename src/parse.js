@@ -51,7 +51,7 @@ const parse = source => {
   const line = () => block(many([], t => !t.match(/[\r\n]/) && unit()))
   const lines = n => many([], t => indent(t) === n ? (++pos, line()) : false)
   const statement = () => mark('__do', lines(indent(tokens[pos])))
-  const unwrap = o => {
+  const reorder = o => {
     const isOp2 = s => typeof s === 'string' && '+-*/%|&<>!=.,:'.includes(s[0]) && s != ':'
     const op2 = a => (!Array.isArray(a) || a.length <= 2) ? a :
       isOp2(a[1]) ? op2([prioritize(a[1], a[0], a[2]), ...a.slice(3)]) :
@@ -63,10 +63,27 @@ const parse = source => {
     const declare = a => (pos => pos === -1 ? a : [a[pos], a.slice(0, pos), a.slice(pos+1)])(a.findIndex(t => t === '::'))
     const unnest = a => a.length === 1 ? a[0] : a
     const to_obj = o => typeof o === 'string' ? new String(o) : o
-    return Array.isArray(o) ? (o.length === 1 ? unwrap(o[0]) : unnest(block(declare(op2(o)))).map(unwrap)) : to_obj(o)
+    return Array.isArray(o) ? (o.length === 1 ? reorder(o[0]) : unnest(block(declare(op2(o)))).map(reorder)) : to_obj(o)
+  }
+  const if_else = o => Array.isArray(o) ? (o[0] == '__do' ? _if_else(o) : o.map(if_else)) : o
+  const _if_else = lines => {
+    const ret = []
+    for (const line of lines) {
+      if (line[1] == 'else') {
+        if (line[2][0] == 'if') {
+          ret[ret.length - 1] = ret[ret.length - 1].concat(line[2].slice(1))
+          ret[ret.length - 1] = ret[ret.length - 1].concat(line[3])
+        } else {
+          ret[ret.length - 1] = ret[ret.length - 1].concat(line[3])
+        }
+      } else {
+        ret.push(line)
+      }
+    }
+    return lines.length >= 3 && ret.length === 2 ? ret[1] : ret
   }
   tokens.unshift('\n')
-  return unwrap(statement())
+  return if_else(reorder(statement()))
 }
 
 module.exports = { parse }
@@ -131,6 +148,10 @@ if (require.main === module) {
   // block
   test('(: a () b)', 'a: b')
   test('(: a b c)', 'a b: c')
+
+  // if-else
+  test('(: if (a b) c)', 'if a b: c')
+  test('(: if (a b) c d)', 'if a b: c\nelse: d')
 
   // top level
   test('(__do a b)', 'a\nb')
