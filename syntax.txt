@@ -4,23 +4,23 @@ line: keyword? exp+ ("\n" | (":\n" ("  " line)+))
 exp: unit (op2 exp)*
 unit: op1? bottom (prop | call | init | at)*
 prop: "." id
-call: "(" exp+ ")"
-init: "{" (id ":" exp)+ "}"
+call: "(" exp* ")"
+init: "{" (id ":" exp)* | exp* "}"
 at: "[" exp "]"
 bottom:
-| "(" exp (";" exp)* ")"        # priority  : 1 * (2 + 3), (a+=1; b)
-| "[" exp* "]"                  # list      : [], [1 2]
-| "[" (":" | id ":" unit) "]"   # dictionary: [:], [a:1 ("b"):(2+3)]
-| "{" (id ":" unit)* "}"        # object    : {}, {a b:1}
-| '"' [^"]* '"'                 # string    : "hi"
-| '`' ("$" unit | [^"])* '`'    # template  : `hi $user.name`
-| id ("," id)* "=>" exp         # lambda    : a,b => a + b
-| [0-9]+ ("." [0-9]+)?          # number    : 1, 0.5
-| id                            # id        : name
+| "(" exp (";" exp)* ")"         # priority   : 1 * (2 + 3), (a+=1; b)
+| "[" exp* "]"                   # list       : [], [1 2]
+| "[" (":" | id ":" unit) "]"    # dictionary : [:], [a:1 ("b"):(2+3)]
+| "{" (id ":" unit)* "}"         # object     : {}, {a b:1}
+| '"' [^"]* '"'                  # string     : "hi"
+| '`' ("$" unit | [^"])* '`'     # template   : `hi $user.name`
+| ("()" | id ("," id)*) "=>" exp # lambda     : a,b => a + b
+| [0-9]+ (("." [0-9]+) | "u8")?  # number     : 1, 0.5, 4u8
+| id                             # id         : name
 id: [A-Za-z_][A-Za-z0-9_]*
 op1: [!-]
 op2: [+-/%*=<>|&^]+
-keyword: qw(let var fn ft class enum if else match case raise catch with return for while continue break test)
+keyword: qw(let var fn ft class enum if else match case raise try catch return for while continue break test)
 
 # Basic types
 - Value
@@ -32,11 +32,11 @@ keyword: qw(let var fn ft class enum if else match case raise catch with return 
   - lambda      # a,b => a + b # (int int int)
 - Reference
   - opt         # some(1).then(x,x+1).else(-1), none # opt(int)
-  - object      # {}, {a b:1 c:{d:2}}                # {a:bool b:int}
+  - object      # {}, {a b:1 c:{d:2}}                # {a:bool b:int c:{d:int}}
 - Container
-  - list        # [1 2], list(int){ 1 2 } # list(int)
-  - set         # [1 2].uniq              # set(int)
-  - dictionary  # [a:1 (b):(1+2)]         # dict(string int)
+  - list        # [1 2]           # list(int){ 1 2 }
+  - set         # [1 2].uniq      # set(int){ 1 2 }
+  - dictionary  # [a:1 (b):(1+2)] # dict(string int){ a:1 (b):(1+2) }
 - Definition
   - variable    # var a 1
   - constant    # let a 1
@@ -46,7 +46,7 @@ keyword: qw(let var fn ft class enum if else match case raise catch with return 
 - Statement
   - if          # if a: b; else if c: d; else: e
   - return      # return 1
-  - exception   # catch (raise a): with a: b; with _: c
+  - exception   # try (raise a): catch a: b; catch _: c
   - for         # for a 9: b, for a 1 9: b, for a 1 9 2: b
   - while       # while a: b
   - continue    # continue
@@ -86,14 +86,14 @@ $ undefined
 ; undefined
 
 
-# Pending
-[ ] unify definition syntaxes
+# Memo
+- unify definition syntaxes
   - variable    # var a 1
   - constant    # let a 1
   - function    # fn a: 1, fn a b: b
   - class       # class a: b c
   - enum        # enum a: b; c d
-[ ] invent better lambda syntax
+- invent better lambda syntax
     a,b => a + b
     a,b,a+b
     a,b:a + b
@@ -115,12 +115,12 @@ $ undefined
 
 # Done
 [x] define optional arguments
-    | ft f1 a {b:int c:int d:opt(int)} int
-    | fn f1 a {b c:2 d:none}: a + b + c + d.else(-3)
+    | ft f1 a opt({b:int c:opt(int)}) int
+    | fn f1 a {b c}: a + b + c.else(-1)
     | fn main:
-        f1 1    # 9
+        f1 1    # 0
         f1 1 {} # 0
-        f1 1 {b:2 c:3 d:4} # 10
+        f1 1 {b:2 c:3} # 6
 [x] match/case syntax
   "match" exp id?:
     ("case" exp ("if" exp)? ":" line+ br)+
@@ -135,12 +135,12 @@ $ undefined
   ft validate: tree(_) bool
   fn validate t:
     match t:
-      case node{left:node} if t.value < t.left.value: false
-      case node{right:node} if t.value > t.right.value: false
+      case {left:node} if t.value < t.left.value: false
+      case {right:node} if t.value > t.right.value: false
       case _: true
 
   enum ast:
-    integer int
+    value int
     op2:
       op string
       lhs ast
@@ -149,10 +149,10 @@ $ undefined
   ft calc: ast ast int
   fn calc a:
     match a:
-      case integer: a
-      case op2{op:"/" rhs:0}: raise "zdiv"
-      case op2{op:"+"}: calc(a.lhs) + calc(a.rhs)
-      case op2{op:"-"}: calc(a.lhs) - calc(a.rhs)
-      case op2{op:"*"}: calc(a.lhs) * calc(a.rhs)
-      case op2{op:"/"}: calc(a.lhs) / calc(a.rhs)
-      case op2: raise `Unknown operation $(a.op)`
+      case value: a
+      case {op:"/" rhs:0}: raise "zdiv"
+      case {op:"+"}: calc(a.lhs) + calc(a.rhs)
+      case {op:"-"}: calc(a.lhs) - calc(a.rhs)
+      case {op:"*"}: calc(a.lhs) * calc(a.rhs)
+      case {op:"/"}: calc(a.lhs) / calc(a.rhs)
+      case _: raise `Unknown operation $(a.op)`
