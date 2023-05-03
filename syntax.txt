@@ -1,3 +1,12 @@
+# TODO
+[ ] invent good lambda syntax
+    | id ("," id)* "=>" exp
+    | id ("," id)* ":" exp
+    | "\" id+ "=>" exp
+    (id ("," id)*)? ":" exp # ideally this but conflicted by using ":" -- a.map(x: x + 1) or a.map x: x + 1
+[ ] unify definition syntaxes
+
+# Syntax
 top: line*
 line: keyword? exp+ ("\n" | (":\n" ("  " line)+))
 exp: unit (op2 exp)*
@@ -7,91 +16,72 @@ call: "(" exp+ ")"
 init: "{" (id ":" exp)+ "}"
 at: "[" exp "]"
 bottom:
-| "(" exp ")"                  # priority  : 1 * (2 + 3)
-| "[" exp* "]"                 # array     : [], [1 2]
-| "{" (exp exp)* "}"           # dictionary: {}, {a "a" (1 + 2) "b"}
-| '"' [^"]* '"'                # string    : "hi"
-| '`' ("$" unit | [^"])* '`'   # template  : `hi $user.name`
-| '"' [^"]* '"'                # regexp    : r"hi"
-| id ("," id)* "=>" exp        # lambda    : a,b => a + b
-| [0-9]+ ("." [0-9]+)?         # number    : 1, 0.5
-| id                           # id        : name
+| "(" exp ")"                   # priority  : 1 * (2 + 3)
+| "[" exp* "]"                  # list      : [], [1 2]
+| "[" (":" | id ":" unit) "]"   # dictionary: [:], [a:1 ("b"):(2+3)]
+| "{" (id ":" unit)* "}"        # object    : {}, {a b:1}
+| '"' [^"]* '"'                 # string    : "hi"
+| '`' ("$" unit | [^"])* '`'    # template  : `hi $user.name`
+| id ("," id)* "=>" exp         # lambda    : a,b => a + b
+| [0-9]+ ("." [0-9]+)?          # number    : 1, 0.5
+| id                            # id        : name
 id: [A-Za-z_][A-Za-z0-9_]*
-op1: "!"
-op2: [+-/%*=<>|&^;]+
-keyword: qw(let var fn ft struct if else return match case throw enum test)
+op1: [!-]
+op2: [+-/%*=<>|&^]+
+keyword: qw(let var fn ft class tag if else match case return raise catch with test)
 
-
-# Idea for match/case
-"match" exp id?:
-  ("case" exp ("if" exp)? ":" line+ br)+
-
-enum tree a:
-  empty
-  node:
-    value a
-    left tree(a)
-    right tree(a)
-
-type validate: tree(_) bool
-fn validate target_tree:
-  match target_tree t:
-    case empty: true
-    case node{left:node} if t.value < t.left.value: false
-    case node{right:node} if t.value > t.right.value: false
-    case node: validate(t.left) && validate(t.right)
-
-enum ast:
-  integer int
-  op2:
-    op string
-    lhs ast
-    rhs ast
-
-type calc: ast ast int
-fn calc target_ast:
-  match target_ast a:
-    case integer: a
-    case op2{op:"/" rhs:0}: throw "zdiv"
-    case op2{op:"+"}: calc(a.lhs) + calc(a.rhs)
-    case op2{op:"-"}: calc(a.lhs) - calc(a.rhs)
-    case op2{op:"*"}: calc(a.lhs) * calc(a.rhs)
-    case op2{op:"/"}: calc(a.lhs) / calc(a.rhs)
-    case op2: throw "Unknown operation ${a.op}"
-
-# Ideas for bottom
-| "(" id* (id ":" exp)* ")"    # struct    : (), (one=one), (one two three=3)
-| id ("," id)* "=>" exp        # lambda    : a,b => a + b
-| id ("," id)* ":" exp         # lambda    : f(x: x), (a,b: a + b)
-| "\" id+ "=>" exp             # lambda    : \a b => a + b
-
-
-# Ideas for function
-ft f1: int (b=string c=int?)
-fn f1 a (b="default" c?): ...
-ft f2: int? (b=string c=int?)?
-fn f2 a? (b="default" c?)?: ...
-fn main:
-  f1 1 b="something"
-  f1 1 b="something" c=2
-  f2
-  f2 1
-  f2 (b="something")
-  f2 (b="something" c=3)
-
+# Basic types
+- Value
+  - bool        # true, false
+  - int         # 1, -1
+  - float       # 1.0, -1.0
+  - string      # "hi", `hi $(name)`
+  - lambda      # a, b, a + b # (int int int)
+- Reference
+  - opt         # some(1).then(x,x+1).else(-1), none
+  - object      # {}, {a b:1 c:{d:2}} # (a:bool b:int)
+- Container
+  - bytes       # bytes(1024)     # bytes
+  - list        # [1 2 3]         # list(int)
+  - set         # [1 2 3].uniq    # set(int)
+  - dictionary  # [a:1 (b):(1+2)] # dict(string int)
+- Definition
+  - variable    # var a 1
+  - constant    # let a 1
+  - function    # fn a: b, fn a b: b
+  - class       # class a: b c
+  - enum        # enum a: b; c d
+- Statement
+  - if          # if a: b; else if c: d; else: e
+  - return      # return 1
+  - exception   # catch (raise a): with a: b; with _: c
+  - for         # for a 9: b, for a 1 9: b, for a 1 9 2: b
+  - while       # while a: b
+  - continue    # continue
+  - break       # break
+  - yield       # yield a
+- Misc
+  - module      # module a: inc int int; use a inc
+  - comment     # # this is comment
+  - test        # test: ....
+  - log         # log.debug "message"
+  - time        # time.now.year
+  - random      # random.float, random.int(1 6)
+  - json        # json.encode(a), json.decode(a), json.map(a b)
 
 # Symbols
 _          part of id
-.          delimitor to access field or method of object
+.          access field or method of object
 " `        string
 #          comment
-+ - * / %  calculation
+! -        singular operator
++ - * / %  binary operators
 ( )        priority
-[ ]        list
-{ }        dictionary
+[ ]        list or dictionary
+{ }        object
 < > =      comparing
-,          delimitor for arguments in lambda expression
-:          delimitor between reserved words and the following block which defined indent
+,          delimiter to arguments in anonymous function
+:          delimiter between reserved words and a following block
 \ undefined
 ^ undefined
 ? undefined
@@ -100,6 +90,49 @@ _          part of id
 | undefined
 ~ undefined
 ' undefined
-! undefined
 $ undefined
 ; undefined
+
+# Done
+[x] define optional arguments
+    | ft f1 a {b:int c:int d:opt(int)} int
+    | fn f1 a {b c:2 d:none}: a + b + c + d.else(-3)
+    | fn main:
+        f1 1    # 9
+        f1 1 {} # 0
+        f1 1 {b:2 c:3 d:4} # 10
+[x] match/case syntax
+  "match" exp id?:
+    ("case" exp ("if" exp)? ":" line+ br)+
+
+  enum tree a:
+    empty
+    node:
+      value a
+      left tree(a)
+      right tree(a)
+
+  ft validate: tree(_) bool
+  fn validate t:
+    match t:
+      case node{left:node} if t.value < t.left.value: false
+      case node{right:node} if t.value > t.right.value: false
+      case _: true
+
+  enum ast:
+    integer int
+    op2:
+      op string
+      lhs ast
+      rhs ast
+
+  ft calc: ast ast int
+  fn calc a:
+    match a:
+      case integer: a
+      case op2{op:"/" rhs:0}: raise "zdiv"
+      case op2{op:"+"}: calc(a.lhs) + calc(a.rhs)
+      case op2{op:"-"}: calc(a.lhs) - calc(a.rhs)
+      case op2{op:"*"}: calc(a.lhs) * calc(a.rhs)
+      case op2{op:"/"}: calc(a.lhs) / calc(a.rhs)
+      case op2: raise `Unknown operation $(a.op)`
