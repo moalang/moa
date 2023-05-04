@@ -21,6 +21,7 @@ const put = (...a) => { process.stdout.write(a.map(str).join(' ')); return a[0] 
 const puts = (...a) => { console.log(a.map(str).join(' ')); return a[0] }
 const dump = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
+const range = n => [...Array(n)].map((_,i) => i)
 const parse = source => {
   const tokens = source.split(/((?:!=)|[()\[\]!]|(?:[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+|[r$]?"[^"]*"|`[^`]*`|[A-Za-z0-9_]+)/).filter(t => t.length > 0)
   let pos = 0
@@ -35,14 +36,20 @@ const parse = source => {
     }
     return a
   }
+  const binaryOps = '. , * ** / // % + - = += -= *= /= %= **= => < <= > >= && || == !='.split(' ')
   const consume = () => ((tokens[pos].match(/^[ \t]+$/) && ++pos), tokens[pos++])
   const until = (a, end) => many(a, t => t === end ? ++pos : unit())
   const call = o => tokens[pos] === '(' && !' \t'.includes(tokens[pos - 1]) ? ++pos && _call(o, until([], ')')) : o
   const _call = (o, a) => a.length === 0 ? ['__call', o] : [o].concat(a)
   const indent = s => s === undefined ? 0 : s.match(/[\r\n]/) ? s.split(/[\r\n]/).slice(-1)[0].length : -1
+  const pairs = a => range(a.length / 3).flatMap(i => [a[i*3], a[(i*3)+2]])
+  const container = a => a.length === 0 ? ['__call', 'list'] :
+    a.length === 1 && a[0] === ':' ? ['__call', 'dict'] :
+    a.length >= 3 && a[1] === ':' ? puts(['dict', ...pairs(a)]) :
+    ['list', ...a]
   const bottom = t =>
     tokens[pos] === '.' ? (consume(), ['.', t, consume()]) :
-    t === '[' ? (a => a.length === 1 ? ['__call', 'list'] : a)(until(['list'], ']')) :
+    t === '[' ? container(until([], ']')) :
     t === '(' ? until([], ')') :
     t
   const unit = () => call(bottom(consume()))
@@ -52,12 +59,12 @@ const parse = source => {
   const lines = n => many([], t => indent(t) === n ? (++pos, line()) : false)
   const statement = () => mark('__do', lines(indent(tokens[pos])))
   const reorder = o => {
-    const isOp2 = s => typeof s === 'string' && '+-*/%|&<>!=.,:'.includes(s[0]) && s != ':'
+    const isOp2 = s => typeof s === 'string' && binaryOps.includes(s)
     const op2 = a => (!Array.isArray(a) || a.length <= 2) ? a :
       isOp2(a[1]) ? op2([prioritize(a[1], a[0], a[2]), ...a.slice(3)]) :
       [a[0], ...op2(a.slice(1))]
     const prioritize = (op, l, r) => Array.isArray(l) && isOp2(l[0]) && priority(op) < priority(l[0]) ? [l[0], l[1], [op, l[2], r]] : [op, l, r]
-    const priority = op => '* / % + - = += -= *= /= %= **= =>'.split(' ').findIndex(t => t == op)
+    const priority = op => binaryOps.findIndex(t => t == op)
     const block = a => _block(a, a.findIndex(t => t === ':'))
     const _block = (a, n) => n === -1 ? a : [a[n], a[0], a.slice(1, n), a.slice(n+1)]
     const declare = a => (pos => pos === -1 ? a : [a[pos], a.slice(0, pos), a.slice(pos+1)])(a.findIndex(t => t === '::'))
@@ -102,7 +109,9 @@ if (require.main === module) {
   test('r"hi"', 'r"hi"')
   test('$"hi"', '$"hi"')
   test('(__call list)', '[]')
-  test('(list 1)', '[1]')
+  test('(list 1 2)', '[1 2]')
+  test('(__call dict)', '[:]')
+  //test('(dict a 1 b 2)', '[a:1 b:(2)]')
   test('(=> a a)', 'a => a')
   test('(=> (, a b) a)', 'a,b => a')
   test('(=> p (+ 1 2))', 'p => 1 + 2')
@@ -110,7 +119,7 @@ if (require.main === module) {
   // property access
   test('(. (__call list) length)', '[].length')
   test('(=> p (+ (. p x) (. p y)))', 'p => p.x + p.y')
- 
+
   // single operator
   test('(! true)', '!true')
 
