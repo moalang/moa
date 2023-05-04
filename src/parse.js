@@ -38,19 +38,19 @@ const parse = source => {
   }
   const binaryOps = '. , * ** / // % + - = += -= *= /= %= **= => < <= > >= && || == !='.split(' ')
   const consume = () => ((tokens[pos].match(/^[ \t]+$/) && ++pos), tokens[pos++])
-  const until = (a, end) => many(a, t => t === end ? ++pos : unit())
-  const call = o => tokens[pos] === '(' && !' \t'.includes(tokens[pos - 1]) ? ++pos && _call(o, until([], ')')) : o
+  const until = end => many([], t => t === end ? ++pos : unit())
+  const call = o => tokens[pos] === '(' && !' \t'.includes(tokens[pos - 1]) ? ++pos && _call(o, until(')')) : o
   const _call = (o, a) => a.length === 0 ? ['__call', o] : [o].concat(a)
   const indent = s => s === undefined ? 0 : s.match(/[\r\n]/) ? s.split(/[\r\n]/).slice(-1)[0].length : -1
-  const pairs = a => range(a.length / 3).flatMap(i => [a[i*3], a[(i*3)+2]])
+  const pairs = a => range(puts(a).length / 3).flatMap(i => [a[i*3], a[(i*3)+2]])
   const container = a => a.length === 0 ? ['__call', 'list'] :
     a.length === 1 && a[0] === ':' ? ['__call', 'dict'] :
     a.length >= 3 && a[1] === ':' ? puts(['dict', ...pairs(a)]) :
     ['list', ...a]
   const bottom = t =>
     tokens[pos] === '.' ? (consume(), ['.', t, consume()]) :
-    t === '[' ? container(until([], ']')) :
-    t === '(' ? until([], ')') :
+    t === '[' ? container(until(']')) :
+    t === '(' ? until(')') :
     t
   const unit = () => call(bottom(consume()))
   const mark = (m, a) => a.length >= 2 ? [m, ...a] : a
@@ -111,7 +111,7 @@ if (require.main === module) {
   test('(__call list)', '[]')
   test('(list 1 2)', '[1 2]')
   test('(__call dict)', '[:]')
-  //test('(dict a 1 b 2)', '[a:1 b:(2)]')
+  //test('(dict a 1 b (+ 2 3))', '[a:1 b:(2+3)]')
   test('(=> a a)', 'a => a')
   test('(=> (, a b) a)', 'a,b => a')
   test('(=> p (+ 1 2))', 'p => 1 + 2')
