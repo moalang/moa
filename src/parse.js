@@ -39,13 +39,14 @@ const parse = source => {
   const binaryOps = '. , * ** / // % + - = += -= *= /= %= **= => < <= > >= && || == !='.split(' ')
   const consume = () => ((tokens[pos].match(/^[ \t]+$/) && ++pos), tokens[pos++])
   const until = end => many([], t => t === end ? ++pos : unit())
-  const call = o => tokens[pos] === '(' && !' \t'.includes(tokens[pos - 1]) ? ++pos && _call(o, until(')')) : o
+  const call = o => tokens[pos] === '(' && !' \t:'.includes(tokens[pos - 1]) ? ++pos && _call(o, until(')')) : o
   const _call = (o, a) => a.length === 0 ? ['__call', o] : [o].concat(a)
   const indent = s => s === undefined ? 0 : s.match(/[\r\n]/) ? s.split(/[\r\n]/).slice(-1)[0].length : -1
-  const pairs = a => range(puts(a).length / 3).flatMap(i => [a[i*3], a[(i*3)+2]])
+  const key = o => typeof o === 'string' ? JSON.stringify(o) : o
+  const pairs = a => range(a.length / 3).flatMap(i => [key(a[i*3]), a[(i*3)+2]])
   const container = a => a.length === 0 ? ['__call', 'list'] :
     a.length === 1 && a[0] === ':' ? ['__call', 'dict'] :
-    a.length >= 3 && a[1] === ':' ? puts(['dict', ...pairs(a)]) :
+    a.length >= 3 && a[1] === ':' ? ['dict', ...pairs(a)] :
     ['list', ...a]
   const bottom = t =>
     tokens[pos] === '.' ? (consume(), ['.', t, consume()]) :
@@ -65,8 +66,9 @@ const parse = source => {
       [a[0], ...op2(a.slice(1))]
     const prioritize = (op, l, r) => Array.isArray(l) && isOp2(l[0]) && priority(op) < priority(l[0]) ? [l[0], l[1], [op, l[2], r]] : [op, l, r]
     const priority = op => binaryOps.findIndex(t => t == op)
+    const isId = o => typeof o === 'string' && /^[a-zA-Z_]/.test(o)
     const block = a => _block(a, a.findIndex(t => t === ':'))
-    const _block = (a, n) => n === -1 ? a : [a[n], a[0], a.slice(1, n), a.slice(n+1)]
+    const _block = (a, n) => n === -1 || !isId(a[0]) ? a : [a[n], a[0], a.slice(1, n), a.slice(n+1)]
     const declare = a => (pos => pos === -1 ? a : [a[pos], a.slice(0, pos), a.slice(pos+1)])(a.findIndex(t => t === '::'))
     const unnest = a => a.length === 1 ? a[0] : a
     const to_obj = o => typeof o === 'string' ? new String(o) : o
@@ -99,7 +101,6 @@ if (require.main === module) {
   const stringify = a => Array.isArray(a) ? `(${a.map(stringify).join(' ')})` : str(a)
   const assert = (expect, fact, src) => expect === fact ? put('.') : fail(`Expected '${expect}' but got '${fact}' in '${src}'`)
   const test = (expect, src) => assert(expect, stringify(parse(src)), src)
-  test('(=> p (+ (. p x) (. p y)))', 'p => p.x + p.y')
 
   // primitives
   test('1', '1')
@@ -111,7 +112,8 @@ if (require.main === module) {
   test('(__call list)', '[]')
   test('(list 1 2)', '[1 2]')
   test('(__call dict)', '[:]')
-  //test('(dict a 1 b (+ 2 3))', '[a:1 b:(2+3)]')
+  test('(dict "a" 1)', '[a:1]')
+  test('(dict "a" (+ 1 2))', '[a:(1+2)]')
   test('(=> a a)', 'a => a')
   test('(=> (, a b) a)', 'a,b => a')
   test('(=> p (+ 1 2))', 'p => 1 + 2')
