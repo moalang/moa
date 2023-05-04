@@ -23,7 +23,7 @@ const dump = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
 const range = n => [...Array(n)].map((_,i) => i)
 const parse = source => {
-  const tokens = source.split(/((?:!=)|[()\[\]!]|(?:[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+|[r$]?"[^"]*"|`[^`]*`|[A-Za-z0-9_]+)/).filter(t => t.length > 0)
+  const tokens = source.split(/((?:!=)|[()\[\]{}!]|(?:[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+|[r$]?"[^"]*"|`[^`]*`|[A-Za-z0-9_]+)/).filter(t => t.length > 0)
   let pos = 0
   const many = (a, f) => {
     while (pos < tokens.length) {
@@ -48,9 +48,19 @@ const parse = source => {
     a.length === 1 && a[0] === ':' ? ['__call', 'dict'] :
     a.length >= 3 && a[1] === ':' ? ['dict', ...pairs(a)] :
     ['list', ...a]
+  const object = a => {
+    if (a.length == 0) {
+      return ['__call', 'obj']
+    }
+    const pos = Math.max(0, a.findIndex(s => s === ':') - 1)
+    const ids = pos >= 0 ? a.slice(0, pos).flatMap(x => [x, x]) : []
+    const kvs = range((a.length - pos) / 3).flatMap(i => [a[pos+i*3], a[pos+i*3+2]])
+    return ['obj', ...ids, ...kvs]
+  }
   const bottom = t =>
     tokens[pos] === '.' ? (consume(), ['.', t, consume()]) :
     t === '[' ? container(until(']')) :
+    t === '{' ? object(until('}')) :
     t === '(' ? until(')') :
     t
   const unit = () => call(bottom(consume()))
@@ -116,6 +126,9 @@ if (require.main === module) {
   test('(dict "a" (+ 1 2))', '[a:(1+2)]')
   test('(dict (+ 1 2) (+ 3 4))', '[(1+2):(3+4)]')
   test('(dict "a" 1 "b" (+ 1 2) c (+ 3 4))', '[a:1 b:(1+2) (c):(3+4)]')
+  test('(__call obj)', '{}')
+  test('(obj a 1)', '{a:1}')
+  test('(obj a a b b c (+ 1 2) d 3)', '{a b c:(1+2) d:3}')
   test('(=> a a)', 'a => a')
   test('(=> (, a b) a)', 'a,b => a')
   test('(=> p (+ 1 2))', 'p => 1 + 2')
