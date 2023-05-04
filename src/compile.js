@@ -2,8 +2,9 @@
  * This program generate JavaScript from an internal expression.
  * [x] Primitives
  * [x] Containers
- * [ ] Syntax for 'if', 'else if' and 'else'
- * [ ] Syntax for match with algebraic data type pattern matching
+ * [x] Syntax for 'if', 'else if' and 'else'
+ * [x] Syntax for match with algebraic data type pattern matching
+ * [x] Support object syntax
  */
 const dump = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
@@ -21,6 +22,7 @@ const compile = root => {
     '__call,list': '[]',
     '__call,set': '[]',
     '__call,dict': '({})',
+    '__call,obj': '({})',
   }
   const property = (t, id) => _property(compile(t), id, `${t.type.split('(')[0]}.${id}`)
   const _property = (o, id, s) =>
@@ -57,6 +59,7 @@ const compile = root => {
     h == 'set' ? `[${t.map(js).join(',')}]` :
     h == 'tuple' ? `[${t.map(js).join(',')}]` :
     h == 'dict' ? '({' + [...Array(t.length / 2).keys()].map(i => `[${t[i*2]}]: ${compile(t[i*2+1])}`).join(', ') + '})' :
+    h == 'obj' ? '({' + [...Array(t.length / 2).keys()].map(i => `${t[i*2]}: ${compile(t[i*2+1])}`).join(', ') + '})' :
     h == 'throw' ? `(() => {throw Error(${string(js(t[0]), t[0].type)})})()` :
     h == 'try' ? `(() => { try { return ${js(t[0])} } catch(__error) { return (${js(t[1])})(__error) } })()` :
     h == '.' && t[1].match(/^[0-9]+$/) ? `${compile(t[0])}[${t[1]}]` : // tuple(...).1
@@ -107,6 +110,8 @@ if (require.main === module) {
   test('hi', '`hi`')
   test(/hi/, 'r"hi"')
   test("hi 2", 'let n 1\nlet s "hi"\n$"{s} {n + 1}"')
+  test({}, '{}')
+  test({a:1, b:"c"}, '{a:1 b:"c"}')
 
   // properties
   test(0, '"".size')
@@ -123,6 +128,8 @@ if (require.main === module) {
   test({}, 'dict()')
   test({s:1}, 'dict("s" 1)')
   test({1:2}, 'dict(1 2)')
+  test({s:1}, '[s:1]')
+  test({1:2}, '[1:2]')
   test([1,2], 'tuple(1 2)')
   test(1, 'tuple(1 2.0).0')
   test(2.0, 'tuple(1 2.0).1')

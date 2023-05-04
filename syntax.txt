@@ -1,7 +1,3 @@
-# TODO
-- [ ] Support object syntax
-- [ ] Update new dictionary syntax
-
 # Syntax
 top: line*
 line: keyword? exp+ ("\n" | (":\n" ("  " line)+))

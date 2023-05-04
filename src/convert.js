@@ -4,7 +4,9 @@
  * [x] Error handling
  * [x] Type inference to property access
  * [x] Syntax for 'if', 'else if' and 'else'
- * [ ] Syntax for match with algebraic data type pattern matching
+ * [x] Syntax for match with algebraic data type pattern matching
+ * [x] Support object syntax
+ * [x] Update new dictionary syntax
  */
 const dump = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
@@ -130,9 +132,11 @@ const infer = root => {
       head == ':' && argv[0] == 'else' ? ((argv[1] == 'if' ? (inf(argv[2]), inf(argv[3])) : inf(argv[2])), tvoid) :
       head == ':' && argv[0] == 'ft' ? (a => put(a[0], ft(a.slice(1), to_a(argv[2]))))(to_a(argv[1])) :
       head == ':' && argv[0] == 'fn' ? ((id, type) => id in env ? unify(get(id), type) : put(id, type))(to_a(argv[1])[0].toString(), fn(to_a(argv[1]).slice(1), argv[argv.length - 1])) :
+      head == '__call' && argv.length === 1 && argv[0] == 'obj' ? '{}' :
       head == '__call' && argv.length === 1 ? to_s(squash(value(argv[0]))) :
       head == 'let' ? put(argv[0], inf(to_s(argv.slice(1)))) :
       head == 'var' ? put(argv[0], variable(inf(to_s(argv.slice(1))))) :
+      head == 'obj' ? '{' + [...Array(argv.length / 2).keys()].map(i => argv[i*2] + ':' + inf(argv[i*2+1])).join(' ') + '}' :
       head == 'tuple' ? type('tuple', ...argv.map(inf)) :
       head == '.' && argv[1].match(/^[0-9]+$/) ? inf(argv[0]).generics[argv[1]] :
       head == '__do' ? _do(argv.map(inf)) :
@@ -184,7 +188,6 @@ if (require.main === module) {
     }
     fail(`Expect: '${l}' is not '${r}' but got '${ret}'. src=${src}`)
   }
-
   // primitives
   test('bool', 'true')
   test('bool', 'false')
@@ -197,6 +200,9 @@ if (require.main === module) {
   test('(1 1)', 'a => a')
   test('(1 2 1)', 'a,b => a')
   test('(1 2 2)', 'a,b => b')
+  test('{}', '{}')
+  test('{a:num}', '{a:1}')
+  test('{a:num b:string}', '{a:(2+3) b:""}')
 
   // containers
   test('list(1)', '[]')
@@ -209,6 +215,8 @@ if (require.main === module) {
   test('set(num)', 'set(1)')
   test('dict(1 2)', 'dict()')
   test('dict(string num)', 'dict("a" 1)')
+  test('dict(1 2)', '[:]')
+  test('dict(string num)', '[a:1]')
   test('tuple(num)', 'tuple(1)')
   test('tuple(num float)', 'tuple(1 0.0)')
   test('tuple(num float string)', 'tuple(1 0.0 "a")')

@@ -21,7 +21,6 @@ const put = (...a) => { process.stdout.write(a.map(str).join(' ')); return a[0] 
 const puts = (...a) => { console.log(a.map(str).join(' ')); return a[0] }
 const dump = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
-const range = n => [...Array(n)].map((_,i) => i)
 const parse = source => {
   let pos = 0
   const tokens = source.split(/((?:!=)|[()\[\]{}!]|(?:[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+|[r$]?"[^"]*"|`[^`]*`|[A-Za-z0-9_]+)/).filter(t => t.length > 0)
@@ -44,7 +43,7 @@ const parse = source => {
     const _call = (o, a) => a.length === 0 ? ['__call', o] : [o].concat(a)
     const indent = s => s === undefined ? 0 : s.match(/[\r\n]/) ? s.split(/[\r\n]/).slice(-1)[0].length : -1
     const key = o => typeof o === 'string' ? JSON.stringify(o) : o
-    const pairs = a => range(a.length / 3).flatMap(i => [key(a[i*3]), a[(i*3)+2]])
+    const pairs = a => [...Array(a.length / 3).keys()].flatMap(i => [key(a[i*3]), a[(i*3)+2]])
     const container = a => a.length === 0 ? ['__call', 'list'] :
       a.length === 1 && a[0] === ':' ? ['__call', 'dict'] :
       a.length >= 3 && a[1] === ':' ? ['dict', ...pairs(a)] :
@@ -55,7 +54,7 @@ const parse = source => {
       }
       const pos = Math.max(0, a.findIndex(s => s === ':') - 1)
       const ids = pos >= 0 ? a.slice(0, pos).flatMap(x => [x, x]) : []
-      const kvs = range((a.length - pos) / 3).flatMap(i => [a[pos+i*3], a[pos+i*3+2]])
+      const kvs = [...Array((a.length - pos) / 3).keys()].flatMap(i => [a[pos+i*3], a[pos+i*3+2]])
       return ['obj', ...ids, ...kvs]
     }
     const bottom = t =>
