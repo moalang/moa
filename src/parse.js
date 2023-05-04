@@ -23,52 +23,54 @@ const dump = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
 const range = n => [...Array(n)].map((_,i) => i)
 const parse = source => {
-  const tokens = source.split(/((?:!=)|[()\[\]{}!]|(?:[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+|[r$]?"[^"]*"|`[^`]*`|[A-Za-z0-9_]+)/).filter(t => t.length > 0)
   let pos = 0
-  const many = (a, f) => {
-    while (pos < tokens.length) {
-      const ret = f(tokens[pos])
-      if (typeof ret === 'string' || Array.isArray(ret) || ret === true) {
-        a.push(ret)
-      } else {
-        break
-      }
-    }
-    return a
-  }
+  const tokens = source.split(/((?:!=)|[()\[\]{}!]|(?:[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+|[r$]?"[^"]*"|`[^`]*`|[A-Za-z0-9_]+)/).filter(t => t.length > 0)
   const binaryOps = '. , * ** / // % + - = += -= *= /= %= **= => < <= > >= && || == !='.split(' ')
-  const consume = () => ((tokens[pos].match(/^[ \t]+$/) && ++pos), tokens[pos++])
-  const until = end => many([], t => t === end ? ++pos : unit())
-  const call = o => tokens[pos] === '(' && !' \t:'.includes(tokens[pos - 1]) ? ++pos && _call(o, until(')')) : o
-  const _call = (o, a) => a.length === 0 ? ['__call', o] : [o].concat(a)
-  const indent = s => s === undefined ? 0 : s.match(/[\r\n]/) ? s.split(/[\r\n]/).slice(-1)[0].length : -1
-  const key = o => typeof o === 'string' ? JSON.stringify(o) : o
-  const pairs = a => range(a.length / 3).flatMap(i => [key(a[i*3]), a[(i*3)+2]])
-  const container = a => a.length === 0 ? ['__call', 'list'] :
-    a.length === 1 && a[0] === ':' ? ['__call', 'dict'] :
-    a.length >= 3 && a[1] === ':' ? ['dict', ...pairs(a)] :
-    ['list', ...a]
-  const object = a => {
-    if (a.length == 0) {
-      return ['__call', 'obj']
+  const statement = () => {
+    const many = (a, f) => {
+      while (pos < tokens.length) {
+        const ret = f(tokens[pos])
+        if (typeof ret === 'string' || Array.isArray(ret) || ret === true) {
+          a.push(ret)
+        } else {
+          break
+        }
+      }
+      return a
     }
-    const pos = Math.max(0, a.findIndex(s => s === ':') - 1)
-    const ids = pos >= 0 ? a.slice(0, pos).flatMap(x => [x, x]) : []
-    const kvs = range((a.length - pos) / 3).flatMap(i => [a[pos+i*3], a[pos+i*3+2]])
-    return ['obj', ...ids, ...kvs]
+    const consume = () => ((tokens[pos].match(/^[ \t]+$/) && ++pos), tokens[pos++])
+    const until = end => many([], t => t === end ? ++pos : unit())
+    const call = o => tokens[pos] === '(' && !' \t:'.includes(tokens[pos - 1]) ? ++pos && _call(o, until(')')) : o
+    const _call = (o, a) => a.length === 0 ? ['__call', o] : [o].concat(a)
+    const indent = s => s === undefined ? 0 : s.match(/[\r\n]/) ? s.split(/[\r\n]/).slice(-1)[0].length : -1
+    const key = o => typeof o === 'string' ? JSON.stringify(o) : o
+    const pairs = a => range(a.length / 3).flatMap(i => [key(a[i*3]), a[(i*3)+2]])
+    const container = a => a.length === 0 ? ['__call', 'list'] :
+      a.length === 1 && a[0] === ':' ? ['__call', 'dict'] :
+      a.length >= 3 && a[1] === ':' ? ['dict', ...pairs(a)] :
+      ['list', ...a]
+    const object = a => {
+      if (a.length == 0) {
+        return ['__call', 'obj']
+      }
+      const pos = Math.max(0, a.findIndex(s => s === ':') - 1)
+      const ids = pos >= 0 ? a.slice(0, pos).flatMap(x => [x, x]) : []
+      const kvs = range((a.length - pos) / 3).flatMap(i => [a[pos+i*3], a[pos+i*3+2]])
+      return ['obj', ...ids, ...kvs]
+    }
+    const bottom = t =>
+      tokens[pos] === '.' ? (consume(), ['.', t, consume()]) :
+      t === '[' ? container(until(']')) :
+      t === '{' ? object(until('}')) :
+      t === '(' ? until(')') :
+      t
+    const unit = () => call(bottom(consume()))
+    const mark = (m, a) => a.length >= 2 ? [m, ...a] : a
+    const block = a => a.slice(-1)[0] === ':' && tokens[pos].match(/[\r\n]/) ? [...a, statement()] : a
+    const line = () => block(many([], t => !t.match(/[\r\n]/) && unit()))
+    const lines = n => many([], t => indent(t) === n ? (++pos, line()) : false)
+    return mark('__do', lines(indent(tokens[pos])))
   }
-  const bottom = t =>
-    tokens[pos] === '.' ? (consume(), ['.', t, consume()]) :
-    t === '[' ? container(until(']')) :
-    t === '{' ? object(until('}')) :
-    t === '(' ? until(')') :
-    t
-  const unit = () => call(bottom(consume()))
-  const mark = (m, a) => a.length >= 2 ? [m, ...a] : a
-  const block = a => a.slice(-1)[0] === ':' && tokens[pos].match(/[\r\n]/) ? [...a, statement()] : a
-  const line = () => block(many([], t => !t.match(/[\r\n]/) && unit()))
-  const lines = n => many([], t => indent(t) === n ? (++pos, line()) : false)
-  const statement = () => mark('__do', lines(indent(tokens[pos])))
   const reorder = o => {
     const isOp2 = s => typeof s === 'string' && binaryOps.includes(s)
     const op2 = a => (!Array.isArray(a) || a.length <= 2) ? a :
