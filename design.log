@@ -1,6 +1,128 @@
+# TODO
+- [ ] Design to handle exceptions and optional
+  - transpatrency : let x f(a.b())
+  - block handling: let x try a: catch b{z}: c(z); catch d(y): e(y); catch _: f; g
+  idea 1
+  - alternative   : let x a ||| b
+  - change flow   : let x a ||| b; continue
+  - line handling : let x a |||b{z} c(z) |||d(y) e(y) ||| f; g
+  idea 2
+  - alternative   : let x try a _ => b
+  - change flow   : let x try a: catch _: b; continue
+  - line handling : let x try a: catch b{z}: c(z); catch d(y): e(y); catch _: f; g
+  idea 3
+  - alternative   : let x a @ b
+  - change flow   : let x a @ b; continue
+  - line handling : let x a @ b{z} ? c(z) : d(y) ? e(y) : f; g
+  idea 4
+  - `a @ b` could warn about `a` can throw tow or more types of exception
+  - alternative   : let x a @ b
+  - change flow   : let x a @ b; continue
+  - line handling : let x a @b{z} c(z) @d(y) e(y) @ f; g
+  idea 5
+  - `a @ b` is same as `a @error b`. `throw` is same as `throw error`
+  - `throw "failure"` is same as `throw error("failure")`
+  - alternative   : let x a @ b
+  - change flow   : let x a @ b; continue
+  - sendmail(from to subject body) @ timeout: e{second (second > 30)} => throw slowTimeout(e.second)
+  - line handling : let x a @ b{z}:c(z) d(y):e(y) f; g
+- [ ] Short hand
+  - let x if a == b: c else if d == e: f else: g
+  - let x
+    | a == b: c
+    | d == e: f
+    | g
+  - let x a == b ? c : d == e ? f : g
+  - let x match a: b ? c : d ? e : f
+  match a:
+    b ? c
+    d ? e
+    f ? g
+  match a == b ? c : d:
+    e ? f
+    g ? h
+    i ? j
+
+# Embedded objects
+
+- bool
+[ ] flip :: bool
+
+- int
+[ ] / :: int int float
+[ ] + - * ** // % :: int int int
+[ ] abs :: int
+[ ] neg :: int
+[ ] char :: string
+
+- float
+[ ] + - * ** / // % :: float float float
+[ ] abs :: float
+[ ] neg :: float
+[ ] floor :: int
+[ ] ceil :: int
+
+- string
+[ ] ++ :: string string string
+[ ] size :: int
+[ ] pos :: int
+[ ] at :: int string @error
+[ ] slice :: int int string
+[ ] split :: string int? list(string)
+[ ] index :: string int @error
+[ ] replace :: string string int? string
+[ ] reverse :: string
+[ ] ord :: int
+[ ] match :: string list(string)
+[ ] rsplit :: string list(string)
+[ ] rreplace :: string (list(string) string) int? string
+[ ] bool :: bool
+
+- list(a)
+[ ] ++ a :: list(a) list(a) list(a)
+[ ] size :: int
+[ ] at :: int a @error
+[ ] map b :: (a b) list(b)
+[ ] filter :: (a bool) list(a)
+[ ] slice :: int int list(a)
+[ ] sort b :: (a b)? list(a)
+[ ] reverse :: list(a)
+[ ] zip b :: list(b) list(tuple(a b))
+[ ] find :: (a bool) a @error
+[ ] bool :: bool
+
+- dict(k v)
+[ ] size :: int
+[ ] at :: k v @error
+[ ] keys :: list(k)
+[ ] values :: list(v)
+[ ] filter :: (k v bool) dict(k v)
+[ ] list :: list(tuple(k v))
+[ ] find :: (k v bool) tuple(k v) @error
+[ ] bool :: bool
+
+- set(a)
+[ ] size :: int
+[ ] - :: set(a) set(a)
+[ ] | :: set(a) set(a)
+[ ] & :: set(a) set(a)
+[ ] includes :: a bool
+[ ] bool :: bool
+
+- log
+[ ] debug, info, warn, error :: any+ any
+
+- time
+[ ] year, month, day, hour, minute, sec, wday, mday, yday
+[ ] time.now
+
+
+----------------------------------------------------------------------------------------------------------------
+
+
 [x] do not pick :symbol up from Ruby because `:a == "a"` is false that confuses developers
 
-- Design for pattern match
+[x] Design match/case for enum
 enum tree a:
   empty
   node:
@@ -55,7 +177,6 @@ def f g:
 127 : string
 115 : numbers
 
-----------------------------------------------------------------------------------------------------------------
 
 - Design for no argument function
 [x] "fn f: 1" # "(int)"
@@ -75,64 +196,5 @@ def f g:
 
 - Design name space and multiple files
 [x] "def" id (":" br indent id type+ "::" type+)?
-[ ] "use" id+
+[x] "use" id+
 
-- Implement methods
-
-- log
-[ ] debug, info, warn, error :: any+ any
-
-- string
-[ ] ++ :: string string string
-[ ] size :: int
-[ ] at :: int string
-[ ] slice :: int int string
-[ ] split :: string list(string)
-[ ] index :: string list(int)
-[ ] replace :: string string int? string
-[ ] reverse :: string
-[ ] tr :: string string int? string
-
-- list(a)
-[ ] ++ a :: list(a) list(a) list(a)
-[ ] size :: int
-[ ] at :: int a @index
-[ ] map b :: (a b) list(b)
-[ ] filter :: (a bool) list(a)
-[ ] slice :: int int list(a)
-[ ] sort b :: (a b)? list(a)
-[ ] reverse :: list(a)
-[ ] zip b :: list(b) list(tuple(a b))
-[ ] empty :: bool
-[ ] present :: bool
-
-- dict(k v)
-[ ] size :: int
-[ ] at :: k v @key
-[ ] keys :: list(k)
-[ ] values :: list(v)
-[ ] filter :: (k v bool) dict(k v)
-[ ] list :: list(tuple(k v))
-[ ] include :: k bool
-[ ] empty :: bool
-[ ] present :: bool
-
-- set(a)
-[ ] size :: int
-[ ] - :: set(a) set(a)
-[ ] | :: set(a) set(a)
-[ ] & :: set(a) set(a)
-[ ] include :: a bool
-[ ] empty :: bool
-[ ] present :: bool
-
-- time
-[ ] year, month, day, hour, minute, sec, wday, mday, yday
-[ ] time.now
-
-- regexp
-[ ] split :: string list(string)
-[ ] find :: string list(string)
-[ ] replace :: (string string) string
-
-- lambda

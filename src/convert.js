@@ -20,7 +20,7 @@ const str = o =>
   typeof o === 'object' && o.variable ? (s => (o.variable=true, `var(${s})`))((o.variable=false, str(o))) :
   typeof o === 'object' && o.instance ? str(o.instance) :
   typeof o === 'object' && o.name === 'expected' ? o.generics[0].toString() + '|' + o.generics[1].map(str).join('|') :
-  typeof o === 'object' && o.name === 'struct' ? '(' + Object.keys(o.fields).sort().map(k => `${k}:${prune(o.fields[k])}`).join(' ') + ')' :
+  typeof o === 'object' && o.name === 'class' ? '(' + Object.keys(o.fields).sort().map(k => `${k}:${prune(o.fields[k])}`).join(' ') + ')' :
   typeof o === 'object' && (o.tid || o.type || o.name) ? o.toString() + (o.repeatable ? '*' : '') :
   JSON.stringify(o)
 const put = (...a) => { process.stdout.write(a.map(str).join(' ')); return a[0] }
@@ -43,7 +43,7 @@ const infer = root => {
   const terror = t => type('error', t)
   const texpected = (t, ta) => ta.length === 0 ? t : t.name === 'expected' ? (t.generics = [t.generics[0], ta], t) : type('expected', t, ta)
   const tnum = referable({name: 'num', traits: [tint, tfloat]}, 'num')
-  const tstruct = id => ((t, tv) => (t.fields = {[id]: tv}, t))(type('struct'), tvar())
+  const tclass = id => ((t, tv) => (t.fields = {[id]: tv}, t))(type('class'), tvar())
   const tenv = {
     int: tint,
     'true': tbool,
@@ -72,8 +72,8 @@ const infer = root => {
       message: tstring,
     })
   }
-  const property = (t, id) => t.tid && !t.instance ? (t.instance=tstruct(id)).fields[id] :
-    t.name === 'struct' ? t.fields[id] = t.fields[id] || tvar() :
+  const property = (t, id) => t.tid && !t.instance ? (t.instance=tclass(id)).fields[id] :
+    t.name === 'class' ? t.fields[id] = t.fields[id] || tvar() :
     _property(t, id, tprops[t.name])
   const _property = (t, id, f) => 
     !f ? failInfer(`${t.name} is not a type`, t, id) :
@@ -93,9 +93,9 @@ const infer = root => {
         l.tid && r.tid ? r.instane = lv :
         l.tid ? l.instance = rv :
         r.tid ? r.instance = lv :
-        l.name === 'struct' && r.name === 'struct' ? l.instance = (Object.assign(r.fields, l.fields), r) :
-        l.name === 'struct' && r.name in tprops && is_include(tprops[r.name](r), l.fields) ? l.instance = r :
-        r.name === 'struct' && l.name in tprops && is_include(tprops[l.name](l), r.fields) ? r.instance = l :
+        l.name === 'class' && r.name === 'class' ? l.instance = (Object.assign(r.fields, l.fields), r) :
+        l.name === 'class' && r.name in tprops && is_include(tprops[r.name](r), l.fields) ? l.instance = r :
+        r.name === 'class' && l.name in tprops && is_include(tprops[l.name](l), r.fields) ? r.instance = l :
         Array.isArray(l) && Array.isArray(r) && l.length === r.length ? l.map((t, i) => unify(t, r[i])) :
         !Array.isArray(l) && !Array.isArray(r) && l.toString() === r.toString() ? l :
         //l.name in tclasses && !Array.isArray(r) ? l.instance = narrow(tclasses[l.name], r) :
@@ -110,7 +110,7 @@ const infer = root => {
     const match = (t, cs) => match_(t, cs.map(c => [x => Array.isArray(c[2]) ? inferTop(x, wrap(c[2].slice(1)).env) : inf(x), ...c.slice(1)]))
     const match_ = (t, cs) => (cs.map(c => unify(t, c[0](c[2]))), cs.reduce((r,c) => unify(r, c[0](c.slice(3))), tvar()))
     const flat = a => Array.isArray(a) && a.length == 1 && a[0][0] == '__do' ? a[0].slice(1).map(flat) : a
-    const struct = (name, fields) => (tprops[name] = () => Object.fromEntries(fields), [...fields.map(f => type(f[1])), type(name)])
+    const class_ = (name, fields) => (tprops[name] = () => Object.fromEntries(fields), [...fields.map(f => type(f[1])), type(name)])
     const adt = (t, fields) => fields.map(f => Array.isArray(f) ? tput(f[0], () => [...f.slice(1).map(x => type(x)), t]) : tenv[f] = t)
     const squash = x => Array.isArray(x) && x[0].repeatable ? to_s(squash(x.slice(1))) : x
     const ft = (args, types) => (x => types.map(t => (y => y ? y[1] : type(t.toString()))(x.a.find(y => y[0].toString() == t.toString()))))(wrap(args))
@@ -125,7 +125,7 @@ const infer = root => {
       (unify(a[0], b[0]), _call(a.slice(1), b.slice(1)))
     const apply = ([head, ...argv]) =>
       argv.length === 0 ? inf(head) :
-      head == ':' && argv[0] == 'struct' ? put(argv[1], struct(argv[1], flat(argv.slice(2)))) :
+      head == ':' && argv[0] == 'class' ? put(argv[1], class_(argv[1], flat(argv.slice(2)))) :
       head == ':' && argv[0] == 'enum' ? (t => (put(t.name, t), adt(t, flat(argv.slice(2)))))(type(argv[1])) :
       head == ':' && argv[0] == 'match' ? match(inf(argv[1]), flat(argv.slice(2))) :
       head == ':' && argv[0] == 'if' ? (inf(argv[1]), inf(argv[2]), tvoid) :
@@ -234,7 +234,7 @@ if (require.main === module) {
   test('((x:float y:float) float)', 'p => p.x + p.y + 1.0')
   test('int', 'fn f x: x.size\nf "a"')
   test('int', 'fn f x: x.size\nf []')
-  test('string', 'struct p: name string\nfn f x: x.name\nf p("s")')
+  test('string', 'class p: name string\nfn f x: x.name\nf p("s")')
 
   // type cast
   test('int', 'int(1)')
@@ -259,11 +259,11 @@ if (require.main === module) {
   test('(num num)', 'fn f x: x + 1')
   test('(num)', 'fn f:\n  if true: throw "error"\n  1')
 
-  // user defined struct
-  test('item', 'struct item:\n  name string\nitem("moa")')
-  test('item', 'struct item:\n  name string\n  price int\nitem("moa" 1)')
-  test('string', 'struct item:\n  name string\n  price int\nitem("moa" 1).name')
-  test('int', 'struct item:\n  name string\n  price int\nitem("moa" 1).price')
+  // user defined class
+  test('item', 'class item:\n  name string\nitem("moa")')
+  test('item', 'class item:\n  name string\n  price int\nitem("moa" 1)')
+  test('string', 'class item:\n  name string\n  price int\nitem("moa" 1).name')
+  test('int', 'class item:\n  name string\n  price int\nitem("moa" 1).price')
 
   // user defined algeblaic data type
   test('ab', 'enum ab:\n  a\n  b\na')

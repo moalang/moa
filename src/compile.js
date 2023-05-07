@@ -29,7 +29,7 @@ const compile = root => {
     s === 'list.size' ? `${o}.length` :
     s === 'string.size' ? `${o}.length` :
     `${o}.${id}`
-  const struct = (name, fields) => `const ${name} = (${fields.map(f => f[0])}) => ({${fields.map(f => f[0])}, toString() { return '${name}(' + ${fields.map(f => f[1] == 'string' ? 'JSON.stringify(' + f[0] + ')' : '(' + f[0] + ').toString()').join(" + ' ' + ")} + ')' }})`
+  const class_ = (name, fields) => `const ${name} = (${fields.map(f => f[0])}) => ({${fields.map(f => f[0])}, toString() { return '${name}(' + ${fields.map(f => f[1] == 'string' ? 'JSON.stringify(' + f[0] + ')' : '(' + f[0] + ').toString()').join(" + ' ' + ")} + ')' }})`
   const adt = (name, fields) => fields.map(f => Array.isArray(f) ? adtValue(f[0], f[1]) : adtTag(f)).join('\n') + `\nconst ${name} = ({${fields.map(f => f[0])}})`
   const adtTag = name => `const ${name} = ({__tag: '${name}', toString() { return '${name}' }})`
   const adtValue = (name, v) => `const ${name} = __val => ({__tag: '${name}', __val, toString() { return '${name}(' + ${v == 'string' ? 'JSON.stringify(__val)' : '__val.toString()'} + ')' }})`
@@ -64,7 +64,7 @@ const compile = root => {
     h == 'try' ? `(() => { try { return ${js(t[0])} } catch(__error) { return (${js(t[1])})(__error) } })()` :
     h == '.' && t[1].match(/^[0-9]+$/) ? `${compile(t[0])}[${t[1]}]` : // tuple(...).1
     h == '.' ? property(t[0], t[1]) :
-    h == ':' && t[0] == 'struct' ? struct(t[1], flat(t.slice(2))) :
+    h == ':' && t[0] == 'class' ? class_(t[1], flat(t.slice(2))) :
     h == ':' && t[0] == 'enum' ? adt(t[1], flat(t.slice(2))) :
     h == ':' && t[0] == 'match' ? match(js(t[1]), flat(t.slice(2))) :
     h == ':' && t[0] == 'fn' ? fn(to_a(t[1])[0], to_a(t[1]).slice(1), to_s(t.slice(2))) :
@@ -176,15 +176,15 @@ if (require.main === module) {
   test(2, 'fn f a:\n  var b a\n  a += 1\nf(1)')
 
   // user defined type
-  test('hi', 'struct s:\n  a string\ns("hi").a')
-  test(1, 'struct s:\n  a string\n  b int\ns("hi" 1).b')
-  test(true, 'struct s:\n  a string\n  b int\ns("hi" 1) == s("hi" 1)')
-  test(false, 'struct s:\n  a string\n  b int\ns("hi" 1) == s("hi" 2)')
-  test(false, 'struct s:\n  a string\n  b int\ns("hi" 1) < s("hi" 1)')
-  test(true, 'struct s:\n  a string\n  b int\ns("hi" 1) <= s("hi" 1)')
-  test(false, 'struct s:\n  a string\n  b int\ns("hi" 1) > s("hi" 1)')
-  test(true, 'struct s:\n  a string\n  b int\ns("hi" 1) >= s("hi" 1)')
-  test('s("hi" 1)', 'struct s:\n  a string\n  b int\nstring(s("hi" 1))')
+  test('hi', 'class s:\n  a string\ns("hi").a')
+  test(1, 'class s:\n  a string\n  b int\ns("hi" 1).b')
+  test(true, 'class s:\n  a string\n  b int\ns("hi" 1) == s("hi" 1)')
+  test(false, 'class s:\n  a string\n  b int\ns("hi" 1) == s("hi" 2)')
+  test(false, 'class s:\n  a string\n  b int\ns("hi" 1) < s("hi" 1)')
+  test(true, 'class s:\n  a string\n  b int\ns("hi" 1) <= s("hi" 1)')
+  test(false, 'class s:\n  a string\n  b int\ns("hi" 1) > s("hi" 1)')
+  test(true, 'class s:\n  a string\n  b int\ns("hi" 1) >= s("hi" 1)')
+  test('s("hi" 1)', 'class s:\n  a string\n  b int\nstring(s("hi" 1))')
 
   // user defined algebraic data type
   test(1, 'enum ab:\n  a\n  b\nmatch a:\n  case a: 1\n  case b: 2')
