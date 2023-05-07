@@ -26,6 +26,10 @@
   - change flow   : let x a @ b; continue
   - sendmail(from to subject body) @ timeout: e{second (second > 30)} => throw slowTimeout(e.second)
   - line handling : let x a @ b{z}:c(z) d(y):e(y) f; g
+  idea 6
+  - alternative   : let x a or b
+  - change flow   : let x a or b; continue
+  - sendmail(from to subject body) or timeout: e{second (second > 30)} => throw 
 - [ ] Short hand
   - let x if a == b: c else if d == e: f else: g
   - let x
@@ -132,12 +136,10 @@ enum tree a:
 
 def validate bt:
   match bt:
-    case empty: true
-    case node{left:node right:node} if !(bt.left.value < bt.value < bt.right.value): false
-    case node{left:node} if bt.value < bt.left.value: false
-    case node{right:node} if bt.value > bt.right.value: false
-    case node: validate(bt.left) && validate(bt.right)
-
+    case {left:node right:node}: (bt.left.value < bt.value < bt.right.value) && validate(bt.left) && validate(bt.right)
+    case {left:node}: bt.left.value < bt.value && validate(bt.left.value)
+    case {right:node}: bt.value < bt.right.value && validate(bt.right.value)
+    case _: true
 
 - Design for error handling
 [x] "throw" exp?
@@ -151,7 +153,7 @@ try f() e => match e:
 type of errors
 - no parameter errors # throw
 - with message        # throw "unreachable"
-- with parameters     # throw {id:123 obj:f()}
+- with parameters?    # throw {id:123 obj:f()}
 
 # raise exception
 type throw a b: a b

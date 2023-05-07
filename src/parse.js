@@ -10,7 +10,8 @@
  * [x] a b: c      # (: (a b) (c))
  * [x] a b:
  *     c
- *     d e       # (: (a b) (c (d e)))
+ *     d e         # (: (a b) (c (d e)))
+ * [x] {a b:c}     # (obj a a b c)
  */
 const str = o =>
   typeof o === 'string' ? o :
