@@ -1,54 +1,75 @@
 # TODO
 - [ ] Design to handle exceptions and optional
   - transpatrency : let x f(a.b())
-  - block handling: let x try a: catch b{z}: c(z); catch d(y): e(y); catch _: f; g
-  idea 1
-  - alternative   : let x a ||| b
-  - change flow   : let x a ||| b; continue
-  - line handling : let x a |||b{z} c(z) |||d(y) e(y) ||| f; g
-  idea 2
-  - alternative   : let x try a _ => b
-  - change flow   : let x try a: catch _: b; continue
-  - line handling : let x try a: catch b{z}: c(z); catch d(y): e(y); catch _: f; g
-  idea 3
-  - alternative   : let x a @ b
-  - change flow   : let x a @ b; continue
-  - line handling : let x a @ b{z} ? c(z) : d(y) ? e(y) : f; g
-  idea 4
-  - `a @ b` could warn about `a` can throw tow or more types of exception
-  - alternative   : let x a @ b
-  - change flow   : let x a @ b; continue
-  - line handling : let x a @b{z} c(z) @d(y) e(y) @ f; g
-  idea 5
-  - `a @ b` is same as `a @error b`. `throw` is same as `throw error`
-  - `throw "failure"` is same as `throw error("failure")`
-  - alternative   : let x a @ b
-  - change flow   : let x a @ b; continue
-  - sendmail(from to subject body) @ timeout: e{second (second > 30)} => throw slowTimeout(e.second)
-  - line handling : let x a @ b{z}:c(z) d(y):e(y) f; g
-  idea 6
-  - alternative   : let x a or b
-  - change flow   : let x a or b; continue
-  - sendmail(from to subject body) or timeout: e{second (second > 30)} => throw 
-- [ ] Short hand
-  - let x if a == b: c else if d == e: f else: g
-  - let x
-    | a == b: c
-    | d == e: f
-    | g
-  - let x a == b ? c : d == e ? f : g
-  - let x match a: b ? c : d ? e : f
-  match a:
-    b ? c
-    d ? e
-    f ? g
-  match a == b ? c : d:
-    e ? f
-    g ? h
-    i ? j
+  - block handling:
+    let x try f(...) e => match e:
+      case a: g(e.a)
+      case b: h(e.b)
+      case _:
+        c
+        continue
+  idea 1: let x try a e => match e: catch error: b
+  idea 2: let x a @ b
+  idea 3: let x a ||| b
+
+# Do
+Primitive
+- int
+- float
+- string
+- function
+- tuple
+Expression
+- single operators
+- binary operators
+Container
+- list
+- dictionary
+- set
+Flow
+- if / else
+- try / catch
+- for / while / continue / break
+- return
+Type
+- annotation
+- optional
+- cast
+- class
+- enum
+- interface
+- extension
+Module
+- use
+- export
+- package manager
+IO
+- time
+- log
+- object database management system
+- extern
+- web
+- console
+Command line
+- format: moa <command> [arguments]
+- moa         # show help
+- moa shell   # interactive
+- moa run     # execute
+- moa build   # compile to executable file
+- moa test    # run tests
+- moa go      # compile to Go
+- moa js      # compile to JavaScript
+- moa swift   # compile to Swift
+- moa java    # compile to Java
+
+# Do not
+- Memory management
+- Inheritance
+- Class based access control
+- Unnecessary symbols like semi-corron, comma and parenthiese
+- Strict access control like private
 
 # Embedded objects
-
 - bool
 [ ] flip :: bool
 
@@ -113,12 +134,24 @@
 [ ] includes :: a bool
 [ ] bool :: bool
 
-- log
-[ ] debug, info, warn, error :: any+ any
+- tuple(a b ...)
+[ ] 0 :: a
+[ ] 1 :: b
 
 - time
 [ ] year, month, day, hour, minute, sec, wday, mday, yday
 [ ] time.now
+
+- log
+[ ] debug, info, warn, error :: any+ any
+
+- http
+[ ] listen string (http.request http.response) ?
+[ ] request string {method headers body} http.response
+
+- odb
+[ ] permanent a a
+[ ] transaction (void)
 
 
 ----------------------------------------------------------------------------------------------------------------
