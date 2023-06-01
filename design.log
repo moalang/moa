@@ -1,6 +1,9 @@
 # TODO
-- [ ] Design to handle exceptions and optional
-  - transpatrency : let x f(a.b())
+- Design to handle exceptions
+  - transpatrency -- return type is defined regardless throwing exception
+  - declare specific exceptions or not throwing
+    f :: int int @zdiv # it can throw @zdiv
+    f :: int int       # it does not throw any exception
   - block handling:
     let x try f(...) e => match e:
       case a: g(e.a)
@@ -14,31 +17,29 @@
 
 # Do
 Primitive
-- int
-- float
-- string
-- function
-- tuple
+- bool     : true false
+- int      : 0
+- float    : 0.1
+- string   : ""          | `$var ${exp}`
+- function : f(1 2)      | def f a b: a + b
+- tuple    : ()          | (a 1)
+- bytes    : "moa".bytes | [109 111 97].bytes
 Expression
 - single operators
 - binary operators
 Container
-- list
-- dictionary
-- set
+- list       : []    | [1 2]
+- dictionary : [:]   | [a:1 $b:2]
+- set        : set() | set(a)
 Flow
-- if / else
-- try / catch
+- if / then / else
+- try / catch / alt
 - for / while / continue / break
 - return
 Type
-- annotation
-- optional
-- cast
-- class
-- enum
-- interface
-- extension
+- annotation : f a.num err :: (a a a)@err a a@err@div
+- struct     : struct vector2: x int; y int
+- enum       : enum tree a: leaf; node: value a; left leaf(a) right leaf(a)
 Module
 - use
 - export
@@ -52,15 +53,15 @@ IO
 - console
 Command line
 - format: moa <command> [arguments]
-- moa         # show help
-- moa shell   # interactive
-- moa run     # execute
-- moa build   # compile to executable file
-- moa test    # run tests
-- moa go      # compile to Go
-- moa js      # compile to JavaScript
-- moa swift   # compile to Swift
-- moa java    # compile to Java
+- moa       # show help
+- moa shell # interactive
+- moa run   # execute
+- moa build # compile to executable file
+- moa test  # run tests
+- moa go    # compile to Go
+- moa js    # compile to JavaScript
+- moa swift # compile to Swift
+- moa java  # compile to Java
 
 # Do not
 - Memory management
@@ -68,6 +69,7 @@ Command line
 - Class based access control
 - Unnecessary symbols like semi-corron, comma and parenthiese
 - Strict access control like private
+- Providing multiple error handling like optional and exception
 
 # Embedded objects
 - bool
