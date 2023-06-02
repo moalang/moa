@@ -44,26 +44,23 @@ Module
 - use
 - export
 - package manager
+Test
+- test
 IO
 - time
+- random
+- math
 - log
-- object database management system
+- odb (object database management system)
 - extern
-- web
-- console
-Command line
-- format: moa <command> [arguments]
-- moa       # show help
-- moa shell # interactive
-- moa run   # execute
-- moa build # compile to executable file
-- moa test  # run tests
-- moa go    # compile to Go
-- moa js    # compile to JavaScript
-- moa swift # compile to Swift
-- moa java  # compile to Java
+Command line: moa <command> [arguments]
+- moa      # interactive
+- moa test # run tests
+- moa go   # compile to Go
+- moa js   # compile to JavaScript
 
 # Do not
+- API for OS
 - Memory management
 - Inheritance
 - Class based access control
