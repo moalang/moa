@@ -20,16 +20,16 @@ Primitive
 - bool     : true false
 - int      : 0
 - float    : 0.1
-- string   : ""          | `$var ${exp}`
-- function : f(1 2)      | def f a b: a + b
-- tuple    : ()          | (a 1)
+- string   : ""          | `$(a + 1)`
 - bytes    : "moa".bytes | [109 111 97].bytes
+- tuple    : ()          | (a 1)
+- function : f(1 2)      | def f a b: a + b
 Expression
-- single operators
-- binary operators
+- single operators : !
+- binary operators : + - * / % > >= < <= == != || && | & ++
 Container
 - list       : []    | [1 2]
-- dictionary : [:]   | [a:1 $b:2]
+- dictionary : [:]   | [a:1 (b):2 (c++d):3]
 - set        : set() | set(a)
 Flow
 - if / then / else
@@ -37,14 +37,16 @@ Flow
 - for / while / continue / break
 - return
 Type
-- annotation : f a.num err :: (a a a)@err a a@err@div
+- annotation : div a.num :: a a a @zdiv
 - struct     : struct vector2: x int; y int
 - enum       : enum tree a: leaf; node: value a; left leaf(a) right leaf(a)
+- interface
+- extension
 Module
 - use
 - export
 - package manager
-Test
+Development
 - test
 IO
 - time
@@ -55,7 +57,7 @@ IO
 - extern
 Command line: moa <command> [arguments]
 - moa      # interactive
-- moa test # run tests
+- moa test # run tests options: -coverage -benchmark -debug
 - moa go   # compile to Go
 - moa js   # compile to JavaScript
 
