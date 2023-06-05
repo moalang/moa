@@ -5,15 +5,18 @@
     f :: int int @zdiv # it can throw @zdiv
     f :: int int       # it does not throw any exception
   - block handling:
+    x = try f(...) e => match e:
+      case a: g e.a
+      case b: h e.b
     let x try f(...) e => match e:
       case a: g(e.a)
       case b: h(e.b)
       case _:
         c
         continue
-  idea 1: let x try a e => match e: catch error: b
-  idea 2: let x a @ b
-  idea 3: let x a ||| b
+  idea 1: x = try a e => match e: catch error: b
+  idea 2: x = a @ b
+  idea 3: x = a ||| b
 
 # Do
 Primitive
@@ -54,12 +57,13 @@ IO
 - math
 - log
 - odb (object database management system)
+- web
 - extern
-Command line: moa <command> [arguments]
-- moa      # interactive
-- moa test # run tests options: -coverage -benchmark -debug
-- moa go   # compile to Go
-- moa js   # compile to JavaScript
+Command line
+- format: moa <command> [arguments]
+- moa                          # launch interactive shell
+- moa build [go js swift java] # compile to a specific language
+- moa test                     # run tests options: -coverage -benchmark -debug
 
 # Do not
 - API for OS
