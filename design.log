@@ -1,23 +1,3 @@
-# TODO
-- Design to handle exceptions
-  - transpatrency -- return type is defined regardless throwing exception
-  - declare specific exceptions or not throwing
-    f :: int int @zdiv # it can throw @zdiv
-    f :: int int       # it does not throw any exception
-  - block handling:
-    x = try f(...) e => match e:
-      case a: g e.a
-      case b: h e.b
-    let x try f(...) e => match e:
-      case a: g(e.a)
-      case b: h(e.b)
-      case _:
-        c
-        continue
-  idea 1: x = try a e => match e: catch error: b
-  idea 2: x = a @ b
-  idea 3: x = a ||| b
-
 # Do
 Primitive
 - bool     : true false
@@ -36,15 +16,14 @@ Container
 - set        : set() | set(a)
 Flow
 - if / then / else
-- try / catch / alt
+- try
 - for / while / continue / break
 - return
 Type
 - annotation : div a.num :: a a a @zdiv
 - struct     : struct vector2: x int; y int
 - enum       : enum tree a: leaf; node: value a; left leaf(a) right leaf(a)
-- interface
-- extension
+- is         : is(variable type) # restrict variable as type in the scope
 Module
 - use
 - export
@@ -73,6 +52,33 @@ Command line
 - Unnecessary symbols like semi-corron, comma and parenthiese
 - Strict access control like private
 - Providing multiple error handling like optional and exception
+
+# Pending
+- shorthand define function
+def f: 1           =>  f = 1
+def f a b: a + b   =>  f a b = a + b
+a := 1 # override existing variable
+
+- shorthand define list
+[1 2 3]
+
+- shorthand define dictionary
+[a:1 ${b+c}:2+3]
+
+- shorthand "is" function
+is(variable type)  =>  variable@type
+
+- shorthand "if"
+if a:
+  b
+else if c:
+  d
+else:
+  e
+# ↓
+| a = b
+| c = d
+| e
 
 # Embedded objects
 - bool
@@ -161,8 +167,22 @@ Command line
 
 ----------------------------------------------------------------------------------------------------------------
 
+# TODO
+[x] Design to handle exceptions
+  - transpatrency -- return type is defined regardless throwing exception
+  - block handling:
+    try(f(...)).alt(value)
+    try(f(...)).catch(e =>
+      is(zdiv e) ? `zero division : ${e.a} ${e.op} ${e.b}` :
+      is(error1 e) || is(error2 e) ? "error 1 or 2" :
+      e.message)
+    def validate bt:
+      is(bt {left:node right:node}) ? bt.left.value < bt.value < bt.right.value && validate(bt.left) && validate(bt.right) :
+      is(bt {left:node}             ? bt.left.value < bt.value && validate(bt.left) :
+      is(bt {right:node}            ? bt.value < bt.right.value && validate(bt.right) :
+      true
 
-[x] do not pick :symbol up from Ruby because `:a == "a"` is false that confuses developers
+[x] do not pick symbol up from Ruby because `:a == "a"` is false that confuses developers
 
 [x] Design match/case for enum
 enum tree a:
@@ -172,7 +192,6 @@ enum tree a:
     left tree(a)
     right tree(a)
 
-def validate bt:
   match bt:
     case {left:node right:node}: (bt.left.value < bt.value < bt.right.value) && validate(bt.left) && validate(bt.right)
     case {left:node}: bt.left.value < bt.value && validate(bt.left.value)
