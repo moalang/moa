@@ -1,30 +1,30 @@
 # Do
 Primitive
-- bool     : true false
-- int      : 0
-- float    : 0.1
-- string   : ""          | `$(a + 1)`
-- bytes    : "moa".bytes | [109 111 97].bytes
-- tuple    : ()          | (a 1)
-- function : f(1 2)      | def f a b: a + b
+- bool
+- int
+- float
+- string
+- bytes
+- tuple
+- function
 Expression
-- single operators : !
-- binary operators : + - * / % > >= < <= == != || && | & ++
+- single operators
+- binary operators
 Container
-- list       : []    | [1 2]
-- dictionary : [:]   | [a:1 (b):2 (c++d):3]
-- set        : set() | set(a)
+- list
+- dictionary
+- set
 Flow
-- if / then / else
+- if / else
 - try
 - for / while / continue / break
 - return
 Type
-- annotation : div a.num :: a a a @zdiv
-- struct     : struct vector2: x int; y int
-- enum       : enum tree a: leaf; node: value a; left leaf(a) right leaf(a)
-- is         : is(variable type) # restrict variable as type in the scope
-Module
+- annotation
+- struct
+- enum
+- is
+Dependency
 - use
 - export
 - package manager
@@ -80,93 +80,6 @@ else:
 | c = d
 | e
 
-# Embedded objects
-- bool
-[ ] flip :: bool
-
-- int
-[ ] / :: int int float
-[ ] + - * ** // % :: int int int
-[ ] abs :: int
-[ ] neg :: int
-[ ] char :: string
-
-- float
-[ ] + - * ** / // % :: float float float
-[ ] abs :: float
-[ ] neg :: float
-[ ] floor :: int
-[ ] ceil :: int
-
-- string
-[ ] ++ :: string string string
-[ ] size :: int
-[ ] pos :: int
-[ ] at :: int string @error
-[ ] slice :: int int string
-[ ] split :: string int? list(string)
-[ ] index :: string int @error
-[ ] replace :: string string int? string
-[ ] reverse :: string
-[ ] ord :: int
-[ ] match :: string list(string)
-[ ] rsplit :: string list(string)
-[ ] rreplace :: string (list(string) string) int? string
-[ ] bool :: bool
-
-- list(a)
-[ ] ++ a :: list(a) list(a) list(a)
-[ ] size :: int
-[ ] at :: int a @error
-[ ] map b :: (a b) list(b)
-[ ] filter :: (a bool) list(a)
-[ ] slice :: int int list(a)
-[ ] sort b :: (a b)? list(a)
-[ ] reverse :: list(a)
-[ ] zip b :: list(b) list(tuple(a b))
-[ ] find :: (a bool) a @error
-[ ] bool :: bool
-
-- dict(k v)
-[ ] size :: int
-[ ] at :: k v @error
-[ ] keys :: list(k)
-[ ] values :: list(v)
-[ ] filter :: (k v bool) dict(k v)
-[ ] list :: list(tuple(k v))
-[ ] find :: (k v bool) tuple(k v) @error
-[ ] bool :: bool
-
-- set(a)
-[ ] size :: int
-[ ] - :: set(a) set(a)
-[ ] | :: set(a) set(a)
-[ ] & :: set(a) set(a)
-[ ] includes :: a bool
-[ ] bool :: bool
-
-- tuple(a b ...)
-[ ] 0 :: a
-[ ] 1 :: b
-
-- time
-[ ] year, month, day, hour, minute, sec, wday, mday, yday
-[ ] time.now
-
-- log
-[ ] debug, info, warn, error :: any+ any
-
-- http
-[ ] listen string (http.request http.response) ?
-[ ] request string {method headers body} http.response
-
-- odb
-[ ] permanent a a
-[ ] transaction (void)
-
-
-----------------------------------------------------------------------------------------------------------------
-
 # TODO
 [x] Design to handle exceptions
   - transpatrency -- return type is defined regardless throwing exception
@@ -181,6 +94,9 @@ else:
       is(bt {left:node}             ? bt.left.value < bt.value && validate(bt.left) :
       is(bt {right:node}            ? bt.value < bt.right.value && validate(bt.right) :
       true
+
+----------------------------------------------------------------------------------------------------------------
+# Done
 
 [x] do not pick symbol up from Ruby because `:a == "a"` is false that confuses developers
 
@@ -256,4 +172,3 @@ def f g:
 - Design name space and multiple files
 [x] "def" id (":" br indent id type+ "::" type+)?
 [x] "use" id+
-
