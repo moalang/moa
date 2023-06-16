@@ -1,3 +1,9 @@
+# global
+[ ] true, false :: bool
+[ ] error :: any any
+[ ] try a :: a option(a)
+[ ] any a :: any(a)
+
 # bool
 [ ] flip :: bool
 
@@ -30,6 +36,16 @@
 [ ] rsplit :: string list(string)
 [ ] rreplace :: string (list(string) string) int? string
 [ ] bool :: bool
+
+# bytes
+[ ] ++ :: bytes bytes bytes
+[ ] size :: int
+[ ] int :: int int int
+[ ] float :: int int float
+[ ] bytes :: int int bytes
+[ ] string :: int int string @error
+[ ] write :: any int @error
+[ ] at :: int int @error
 
 # list(a)
 [ ] ++ a :: list(a) list(a) list(a)
@@ -66,17 +82,37 @@
 [ ] 0 :: a
 [ ] 1 :: b
 
+# option(a)
+[ ] then b :: (a b) option(b)
+[ ] catch b :: (error b) b
+[ ] success :: bool
+
+# math
+[ ] acos acosh asin asinh atan atan2 atanh cbrt cos cosh erf erfc exp gamma log log10 log2 sin sinh sqrt tan tanh :: float float
+[ ] e, pi, inf, nan :: float
+[ ] hypot, logn :: float float float
+[ ] lgamma, frexp :: float (float, int)
+[ ] ldexp :: float int float
+
+
+
+---( effect )----------------------------------------------
+# log
+[ ] debug, info, warn, error :: any+ any
+
 # time
 [ ] year, month, day, hour, minute, sec, wday, mday, yday
 [ ] time.now
 
-# log
-[ ] debug, info, warn, error :: any+ any
+# random
+[ ] int :: int int int
+[ ] string :: string string string
+[ ] choice a :: list(a) a @error
 
 # http
 [ ] listen string (http.request http.response) ?
 [ ] request string {method headers body} http.response
 
-# odb
-[ ] permanent a a
-[ ] transaction (void)
+# odb (object database management system)
+[ ] schema a :: odb.schema(a)
+[ ] transaction a :: odb.schema(a) int @error

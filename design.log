@@ -7,6 +7,7 @@ Primitive
 - bytes
 - tuple
 - function
+- result
 Expression
 - single operators
 - binary operators
@@ -30,7 +31,7 @@ Dependency
 - package manager
 Development
 - test
-IO
+Module
 - time
 - random
 - math
@@ -45,7 +46,7 @@ Command line
 - moa test                     # run tests options: -coverage -benchmark -debug
 
 # Do not
-- API for OS
+- System call
 - Memory management
 - Inheritance
 - Class based access control
