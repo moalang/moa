@@ -7,7 +7,7 @@ Primitive
 - bytes
 - tuple
 - function
-- result
+- try
 Expression
 - single operators
 - binary operators
@@ -17,13 +17,14 @@ Container
 - set
 Flow
 - if / else
+- match
 - try
 - for / while / continue / break
 - return
 Type
 - annotation
 - struct
-- enum
+- union
 - is
 Dependency
 - use
@@ -39,11 +40,6 @@ Module
 - odb (object database management system)
 - web
 - extern
-Command line
-- format: moa <command> [arguments]
-- moa                          # launch interactive shell
-- moa build [go js swift java] # compile to a specific language
-- moa test                     # run tests options: -coverage -benchmark -debug
 
 # Do not
 - System call
@@ -101,8 +97,8 @@ else:
 
 [x] do not pick symbol up from Ruby because `:a == "a"` is false that confuses developers
 
-[x] Design match/case for enum
-enum tree a:
+[x] Design match/case for union
+union tree a:
   empty
   node:
     value a

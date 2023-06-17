@@ -1,8 +1,21 @@
 # global
 [ ] true, false :: bool
 [ ] error :: any any
-[ ] try a :: a option(a)
 [ ] any a :: any(a)
+[ ] int a :: a int @error
+[ ] float a :: a float @error
+[ ] string a :: a string
+[ ] bool a :: a bool
+[ ] bytes a :: a bytes
+[ ] list a :: a+ list(a)
+[ ] dict a b :: (a b)+ dict(a b)
+[ ] set a :: a+ set(a)
+[ ] tuple * :: tuple(*)
+[ ] try a :: a try(a)
+[ ] guard :: bool void @error
+[ ] if / else
+[ ] for / while / continue / break
+[ ] return a :: a a
 
 # bool
 [ ] flip :: bool
@@ -35,7 +48,6 @@
 [ ] match :: string list(string)
 [ ] rsplit :: string list(string)
 [ ] rreplace :: string (list(string) string) int? string
-[ ] bool :: bool
 
 # bytes
 [ ] ++ :: bytes bytes bytes
@@ -58,7 +70,6 @@
 [ ] reverse :: list(a)
 [ ] zip b :: list(b) list(tuple(a b))
 [ ] find :: (a bool) a @error
-[ ] bool :: bool
 
 # dict(k v)
 [ ] size :: int
@@ -68,7 +79,6 @@
 [ ] filter :: (k v bool) dict(k v)
 [ ] list :: list(tuple(k v))
 [ ] find :: (k v bool) tuple(k v) @error
-[ ] bool :: bool
 
 # set(a)
 [ ] size :: int
@@ -76,16 +86,14 @@
 [ ] | :: set(a) set(a)
 [ ] & :: set(a) set(a)
 [ ] includes :: a bool
-[ ] bool :: bool
 
 # tuple(a b ...)
 [ ] 0 :: a
 [ ] 1 :: b
 
-# option(a)
-[ ] then b :: (a b) option(b)
+# try(a)
+[ ] then b :: (a b) try(b)
 [ ] catch b :: (error b) b
-[ ] success :: bool
 
 # math
 [ ] acos acosh asin asinh atan atan2 atanh cbrt cos cosh erf erfc exp gamma log log10 log2 sin sinh sqrt tan tanh :: float float
@@ -98,16 +106,16 @@
 
 ---( effect )----------------------------------------------
 # log
-[ ] debug, info, warn, error :: any+ any
+[ ] debug, info, warn, error a :: a any* a
 
 # time
-[ ] year, month, day, hour, minute, sec, wday, mday, yday
+[ ] year, month, day, hour, minute, second, wday, mday, yday
 [ ] time.now
 
 # random
-[ ] int :: int int int
-[ ] string :: string string string
-[ ] choice a :: list(a) a @error
+[ ] random.int :: int int int
+[ ] random.string :: string string string
+[ ] random.choice a :: list(a) a @error
 
 # http
 [ ] listen string (http.request http.response) ?
