@@ -18,7 +18,6 @@ Container
 Flow
 - if / else
 - match
-- try
 - for / while / continue / break
 - return
 Type
