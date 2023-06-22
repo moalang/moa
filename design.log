@@ -25,20 +25,13 @@ Type
 - struct
 - union
 - is
-Dependency
-- use
-- export
-- package manager
-Development
+Embedded
 - test
-Module
 - time
 - random
 - math
-- log
 - odb (object database management system)
 - web
-- extern
 
 # Do not
 - System call
