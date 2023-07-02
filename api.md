@@ -2,6 +2,7 @@
 [ ] true, false :: bool
 [ ] error :: any any
 [ ] any a :: any(a)
+[ ] void :: tuple()
 [ ] int a :: a int @error
 [ ] float a :: a float @error
 [ ] string a :: a string
@@ -13,8 +14,12 @@
 [ ] tuple * :: tuple(*)
 [ ] try a :: a try(a)
 [ ] guard :: bool void @error
-[ ] if / else
-[ ] for / while / continue / break
+[ ] if a :: bool a void
+[ ] else a :: a void
+[ ] for a b :: a b void
+[ ] while a b :: a b void
+[ ] continue :: void
+[ ] break :: void
 [ ] return a :: a a
 
 # bool
@@ -90,6 +95,7 @@
 # tuple(a b ...)
 [ ] 0 :: a
 [ ] 1 :: b
+...
 
 # try(a)
 [ ] then b :: (a b) try(b)
