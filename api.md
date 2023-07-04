@@ -64,6 +64,9 @@
 [ ] write :: any int @error
 [ ] at :: int int @error
 
+# lambda(a b ...)
+[ ] string :: string
+
 # list(a)
 [ ] ++ a :: list(a) list(a) list(a)
 [ ] size :: int

@@ -19,29 +19,27 @@ bottom:
 id: [A-Za-z_][A-Za-z0-9_]*
 op1: [!-]
 op2: [+-/%*=<>|&^;]+
-keyword: qw(let var fn ft class enum if else match case raise try catch return for while continue break test)
+keyword: qw(let var fn ft class union if else match case raise try catch return for while continue break test)
 
-# Basic types
+# Example
 - Value
   - bool        # true, false
   - int         # 1, -1
   - float       # 1.0, -1.0
   - string      # "hi", `hi $(name)`
+  - bytes       # bytes{ 0xEF 0xBB oxBF }, bytes(1024) # bytes
   - lambda      # a,b => a + b # (int int int)
-- Reference
-  - opt         # some(1).then(x,x+1).else(-1), none # opt(int)
-  - object      # {}, {a b:1 c:{d:2}}                # {a:bool b:int c:{d:int}}
 - Container
-  - bytes       # bytes(8), bytes{ 1 2 3 } # bytes
-  - list        # [1 2]                    # list(int){ 1 2 }
-  - set         # [1 2].uniq               # set(int){ 1 2 }
-  - dictionary  # [a:1 (b):(1+2)]          # dict(string int){ a:1 (b):(1+2) }
+  - list        # [1 2]                    # list(1 2), list(int){ 1 2 }
+  - set         # [1 2].uniq               # set(1 2), set(int){ 1 2 }
+  - dictionary  # [a:1 (b):(1+2)]          # dict(a:1 (b):(1+2)), dict(string int){ a:1 (b):(1+2) }
+  - tuple       # (1, "hi")                # tuple(1, "hi"), tuple(int string){ 1 "hi" }
 - Definition
   - variable    # var a 1
   - constant    # let a 1
   - function    # fn a: 1, fn a b: b
   - class       # class a: b c
-  - enum        # enum a: b; c d
+  - union       # union a: b; c d
 - Statement
   - if          # if a: b; else if c: d; else: e
   - return      # return 1
@@ -54,11 +52,7 @@ keyword: qw(let var fn ft class enum if else match case raise try catch return f
 - Misc
   - module      # module a: inc int int; use a inc
   - comment     # # this is comment
-  - test        # test: ....
-  - log         # log.debug "message"
-  - time        # time.now.year
-  - random      # random.float, random.int(1 6), random.string("a" "z"), random.bytes(32)
-  - json        # json.encode(a), json.decode(a), json.map(a b)
+  - test        # test "name": ....
 
 # Symbols
 _          part of id
@@ -85,13 +79,13 @@ $ undefined
 ; undefined
 
 
-# Memo
+# Ideas
 - unify definition syntaxes
   - variable    # var a 1
   - constant    # let a 1
   - function    # fn a: 1, fn a b: b
   - class       # class a: b c
-  - enum        # enum a: b; c d
+  - union       # num a: b; c d
 - invent better lambda syntax
     a,b => a + b
     a,b,a+b

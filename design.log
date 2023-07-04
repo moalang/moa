@@ -1,41 +1,12 @@
 # Do
-Primitive
-- bool
-- int
-- float
-- string
-- bytes
-- tuple
-- function
-- try
-Expression
-- single operators
-- binary operators
-Container
-- list
-- dictionary
-- set
-Flow
-- if / else
-- match
-- for / while / continue / break
-- return
-Type
-- annotation
-- struct
-- union
-- is
-Embedded
-- test
-- time
-- random
-- math
-- odb (object database management system)
-- web
+- Provide primitives
+- Simple error handling
+- Multi paradigm for functional and structual
+- Abstract IO for network and disk like JavaScript
 
 # Do not
-- System call
-- Memory management
+- System call wrapper
+- Operate memory directoly
 - Inheritance
 - Class based access control
 - Unnecessary symbols like semi-corron, comma and parenthiese

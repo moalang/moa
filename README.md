@@ -10,55 +10,31 @@ $ curl https://github.com/moa/bin/moa > ~/moa/bin/moa
 $ export PATH=$PATH:~/moa/bin
 ```
 
-2. At the command prompt, create a new web application
+2. At the command prompt, create a new Moa program
 ```
-$ echo 'puts "Hello, Moa"' > main.moa
+$ echo 'console c: c.puts "Hello, Moa"' > main.moa
 ```
 
 3. Run the program
 ```
-$ moa run main.moa
+$ moa run
 Hello, Moa
 ```
-4. Compile the program to another programming languages
+
+4. Compile the program to executable file
 ```
-$ moa js main.moa
-console.log('Hello, moa')
+$ moa build
+$ ./a.out
+Hello, Moa
 
-$ moa go main.moa
-package main
-
-func main() {
-  println("Hello, moa")
-}
-```
-
-
-
-# For web development
-
-1. At the command prompt, create a new web application
-```
-$ moa -web create
+$ OS=windows ARCH=amd64 moa build
+$ ls a.exe
+a.exe
 ```
 
-2. Start the web server
+5. Create a web application and deploy to a server
 ```
-$ moa -web run
-```
-
-3. Go to `http://localhost:3000` and you'll see the wellcome page
-
-4. Edit `src/{index.mhtml, style.mcss, api.moa}` then you'll see updates by browser auto reloading
-```
-$ tree .
-├─api.moa
-├─index.mhtml
-├─script.mjs
-└─style.mcss
-```
-
-5. Deploy to server
-```
-$ moa -web deploy your_name@hostname:/path/to/dir
+$ echo 'web c: c.puts "hello"' > main.moa
+$ moa run                  # you can the behavior in local
+$ moa deploy user@hostname # deploy to ~/moa on the server and update the process non-stopping
 ```
