@@ -12,7 +12,7 @@ $ export PATH=$PATH:~/moa/bin
 
 2. At the command prompt, create a new Moa program
 ```
-$ echo 'console c: c.puts "Hello, Moa"' > main.moa
+$ echo 'def main c: c.puts "Hello, Moa"' > main.moa
 ```
 
 3. Run the program
@@ -34,7 +34,7 @@ a.exe
 
 5. Create a web application and deploy to a server
 ```
-$ echo 'web c: c.puts "hello"' > main.moa
-$ moa run                  # you can the behavior in local
+$ echo 'def main c: c.listen "hello"' > main.moa
+$ PORT=3000 moa run        # you can check the behavior in local
 $ moa deploy user@hostname # deploy to ~/moa on the server and update the process non-stopping
 ```
