@@ -32,6 +32,13 @@ $ ls a.exe
 a.exe
 ```
 
+5. Compile the program to anotner programming langauge
+```
+$ moa compile to 
+$ ./a.out
+Hello, Moa
+```
+
 5. Create a web application and deploy to a server
 ```
 $ echo 'def main c: c.listen "hello"' > main.moa

@@ -9,7 +9,7 @@ at: "[" exp "]"
 bottom:
 | "(" exp ")"                    # priority   : 1 * (2 + 3), (a+=1; b)
 | "[" exp* "]"                   # list       : [], [1 2]
-| "[" (":" | id ":" unit) "]"    # dictionary : [:], [a:1 ("b"):(2+3)]
+| "[" (":" | id ":" unit) "]"    # dict       : [:], [a:1 ("b"):(2+3)]
 | "{" id* (id ":" unit)* "}"     # object     : {}, {a b:1}
 | '"' [^"]* '"'                  # string     : "hi"
 | '`' ("$" unit | [^"])* '`'     # template   : `hi $user.name`
@@ -22,7 +22,7 @@ op2: [+-/%*=<>|&^;]+
 keyword: qw(let var fn ft class union if else match case raise try catch return for while continue break test)
 
 # Example
-- Value
+- Primitive
   - bool        # true, false
   - int         # 1, -1
   - float       # 1.0, -1.0
@@ -32,7 +32,7 @@ keyword: qw(let var fn ft class union if else match case raise try catch return 
 - Container
   - list        # [1 2]                    # list(1 2), list(int){ 1 2 }
   - set         # [1 2].uniq               # set(1 2), set(int){ 1 2 }
-  - dictionary  # [a:1 (b):(1+2)]          # dict(a:1 (b):(1+2)), dict(string int){ a:1 (b):(1+2) }
+  - dict        # [a:1 (b):(1+2)]          # dict({a:1 (b):(1+2)})
   - tuple       # (1, "hi")                # tuple(1, "hi"), tuple(int string){ 1 "hi" }
 - Definition
   - variable    # var a 1

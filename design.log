@@ -1,16 +1,16 @@
+# TODO
+[ ] should it compile to executable file or another programming language?
+
 # Do
 - Provide primitives
-- Simple error handling
 - Multi paradigm for functional and structual
-- Abstract IO for network and disk like JavaScript
+- Compile to multiple programming languages to at least JavaScript
 
 # Do not
-- System call wrapper
-- Operate memory directoly
+- Hardware operations like IO, system call and directory memory access
 - Inheritance
 - Class based access control
 - Unnecessary symbols like semi-corron, comma and parenthiese
-- Strict access control like private
 - Providing multiple error handling like optional and exception
 
 # Pending

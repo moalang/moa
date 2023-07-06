@@ -1,7 +1,11 @@
+Moa is a tool for managing Moa source code.
+
 Usage:
+  moa <command> [arguments]
+
+The commands are:
   moa                # launch repl
   moa build          # compile to a executable file
-  moa clean          # remove object files and cache files
   moa format [files] # format files
   moa help [topic]   # for more info about topic
   moa lint [files]   # report likely mistakes
