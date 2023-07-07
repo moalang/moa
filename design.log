@@ -1,5 +1,6 @@
-# TODO
-[ ] should it compile to executable file or another programming language?
+# FAQ
+[x] should it compile to executable file or another programming language? -> Yes
+[x] how integrate between Moa and IO? -> glue both by interfaces
 
 # Do
 - Provide primitives
