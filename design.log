@@ -1,11 +1,11 @@
 # FAQ
 [x] should it compile to executable file or another programming language? -> Yes
-[x] how integrate between Moa and IO? -> glue both by interfaces
+[x] how integrate between Moa and IO? -> Interfaces combine both
 
 # Do
 - Provide primitives
 - Multi paradigm for functional and structual
-- Compile to multiple programming languages to at least JavaScript
+- Try to keep conceptual integrity
 
 # Do not
 - Hardware operations like IO, system call and directory memory access
