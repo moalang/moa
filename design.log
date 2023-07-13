@@ -1,7 +1,3 @@
-# FAQ
-[x] should it compile to executable file or another programming language? -> Yes
-[x] how integrate between Moa and IO? -> Interfaces combine both
-
 # Do
 - Provide primitives
 - Multi paradigm for functional and structual
@@ -13,6 +9,14 @@
 - Class based access control
 - Unnecessary symbols like semi-corron, comma and parenthiese
 - Providing multiple error handling like optional and exception
+
+# Policy
+[x] Main purpose of Moa language is that accelarate web development
+[x] Moa language consists core and library
+[x] The core does not provide any IO
+[x] The library provides IO operation via its interface
+[x] The simpler the core, the better
+[x] The simpler the interface of library, the better
 
 # Pending
 - shorthand define function
@@ -42,6 +46,22 @@ else:
 | e
 
 # TODO
+[x] Design to type check in runtime for union and interface
+  - use case for union
+    union AB:
+      A
+      B:
+        b string
+    def show ab: if:
+      ab & A: "A"
+      ab & B && abc.b == "" : "B"
+      ab & B: "B " + abc.b
+    def validate bt: if:
+      bt & leaf                  : true
+      bt & {left:node right:node}: bt.left.value < bt.value < bt.right.value && validate(bt.left) && validate(bt.right)
+      bt & {left:node}           : bt.left.value < bt.value && validate(bt.left)
+      bt & {right:node}          : bt.value < bt.right.value && validate(bt.right)
+      false
 [x] Design to handle exceptions
   - transpatrency -- return type is defined regardless throwing exception
   - block handling:
@@ -63,7 +83,7 @@ else:
 
 [x] Design match/case for union
 union tree a:
-  empty
+  leaf
   node:
     value a
     left tree(a)
