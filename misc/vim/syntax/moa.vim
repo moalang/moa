@@ -14,12 +14,13 @@ syn match Number / [0-9]\+\(\.[0-9]\+\)\?/
 syn keyword Boolean true false
 
 " Statement
-syn keyword Statement fn ft continue break return
+syn keyword Function fn ft
+syn keyword Statement continue break return
 syn keyword StorageClass let var
-syn keyword Structure struct enum
-syn keyword Conditional if else match case
+syn keyword Structure class union
+syn keyword Conditional if else switch
 syn keyword Repeat for while
-syn keyword Keyword use throw
+syn keyword Keyword use throw catch
 syn match Operator /[+\-\*/|&]=\=/
 syn match Operator /[<>]=\=/
 syn match Operator /[=!]=/

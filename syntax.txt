@@ -7,19 +7,19 @@ prop: "." id
 call: "(" exp* ")"
 at: "[" exp "]"
 bottom:
-| "(" exp ")"                    # priority   : 1 * (2 + 3), (a+=1; b)
-| "[" exp* "]"                   # list       : [], [1 2]
-| "[" (":" | id ":" unit) "]"    # dict       : [:], [a:1 ("b"):(2+3)]
-| "{" id* (id ":" unit)* "}"     # object     : {}, {a b:1}
-| '"' [^"]* '"'                  # string     : "hi"
-| '`' ("$" unit | [^"])* '`'     # template   : `hi $user.name`
-| ("()" | id ("," id)*) "=>" exp # lambda     : a,b => a + b
-| [0-9]+ ("." [0-9]+)?           # number     : 1, 0.5
-| id                             # id         : name
+| "(" exp ")"                    # priority : 1 * (2 + 3), (a+=1; b)
+| "[" exp* "]"                   # list     : [], [1 2]
+| "[" (":" | id ":" unit) "]"    # dict     : [:], [a:1 (id):(2+3)]
+| "{" id* (id ":" unit)* "}"     # object   : {}, {a b:1}
+| '"' [^"]* '"'                  # string   : "hi"
+| '`' ("$" unit | [^"])* '`'     # template : `hi $user.name`
+| ("()" | id ("," id)*) "=>" exp # lambda   : a,b => a + b
+| [0-9]+ ("." [0-9]+)?           # number   : 1, 0.5
+| id                             # id       : name
 id: [A-Za-z_][A-Za-z0-9_]*
 op1: [!-]
 op2: [+-/%*=<>|&^;]+
-keyword: qw(let var fn ft class union if else match case raise try catch return for while continue break test)
+keyword: qw(let var fn ft class union if else switch throw catch return yield for while continue break yield use test)
 
 # Example
 - Primitive
@@ -35,6 +35,7 @@ keyword: qw(let var fn ft class union if else match case raise try catch return 
   - set         # [1 2].uniq               # set[int]( 1 2 )
   - dict        # [a:1 (b):(1+2)]          # dict[string int]( a:1 (b):(1+2) )
   - tuple       # (1, "hi")                # tuple(1 "hi"), tuple[int string]( 1 "hi" )
+  - object      # {a:b c:d,e=>f(d e)}      # new(a b c d,e=>f(d e))
 - Definition
   - variable    # var a 1
   - constant    # let a 1
@@ -44,8 +45,8 @@ keyword: qw(let var fn ft class union if else match case raise try catch return 
 - Statement
   - if          # if a: b; else if c: d; else: e
   - return      # return 1
-  - exception   # try (raise a): catch a: b; catch _: c
-  - for         # for a 9: b, for a 1 9: b, for a 1 9 2: b
+  - exception   # catch throw(f()) e => type: a; _: c
+  - for         # for 9 a => n += a
   - while       # while a: b
   - continue    # continue
   - break       # break
@@ -56,24 +57,26 @@ keyword: qw(let var fn ft class union if else match case raise try catch return 
   - test        # test "name": ....
 
 # Symbols
-_          part of id
-.          access field or method of object
-" `        string
-#          comment
-! -        singular operator
-+ - * / %  binary operators
-( )        priority
-[ ]        list or dict
-{ }        object
-< > =      comparing
-,          delimiter to arguments in anonymous function
-:          delimiter between reserved words and a following block
+_           part of id
+.           access an element of object
+" `         string
+#           comment
+! -         singular operator
+++ --       binary operator for container
+&& ||       binary operator for binary
++ - * / %   binary operator for number
+| & ^       binary operator for bit(or, and, xor)
+..          binary operator to generate list
+( )         priority
+[ ]         list or dict
+{ }         object
+< > ==      comparing
+=           update existing a variable
+,           delimiter to tuple and arguments in anonymous function
+:           delimiter to start indented block
 \ undefined
-^ undefined
 ? undefined
 @ undefined
-& undefined
-| undefined
 ~ undefined
 ' undefined
 $ undefined
@@ -106,18 +109,143 @@ $ undefined
     $
     ?
 
+# Pending
+- shorthand define function
+def f: 1           =>  f = 1
+def f a b: a + b   =>  f a b = a + b
+a := 1 # override existing variable
 
+- shorthand define list
+[1 2 3]
+
+- shorthand define dictionary
+[a:1 (b+c):2+3]
+
+- shorthand "is" function
+is(variable type)  =>  variable@type
+is(variable type)  =>  variable is type
+
+- shorthand "if"
+if a:
+  b
+else if c:
+  d
+else:
+  e
+# ↓
+| a = b
+| c = d
+| e
+# ↓
+a ? b : c ? d : e
+if a b c d e
+
+----------------------------------------------------------------------------------------------------------------
+# Done
+
+[x] Design to handle exceptions
+  - transpatrency -- return type is defined regardless throwing exception
+  - block handling:
+    try(f(...)).alt(value)
+    try(f(...)).catch(e =>
+      is(zdiv e) ? `zero division : ${e.a} ${e.op} ${e.b}` :
+      is(error1 e) || is(error2 e) ? "error 1 or 2" :
+      e.message)
+    catch f(...) e =>
+      zdiv: `zero division $e`
+      error1: `zero division $e`
+      _: e.message
+    def validate bt:
+      is(bt {left:node right:node}) ? bt.left.value < bt.value < bt.right.value && validate(bt.left) && validate(bt.right) :
+      is(bt {left:node}             ? bt.left.value < bt.value && validate(bt.left) :
+      is(bt {right:node}            ? bt.value < bt.right.value && validate(bt.right) :
+      true
+
+[x] do not pick symbol up from Ruby because `:a == "a"` is false that confuses developers
+
+[x] Design match/case for union
+union tree a:
+  leaf
+  node:
+    value a
+    left tree(a)
+    right tree(a)
+
+  match bt:
+    case {left:node right:node}: (bt.left.value < bt.value < bt.right.value) && validate(bt.left) && validate(bt.right)
+    case {left:node}: bt.left.value < bt.value && validate(bt.left.value)
+    case {right:node}: bt.value < bt.right.value && validate(bt.right.value)
+    case _: true
+
+- Design for error handling
+[x] "throw" exp?
+[x] "try" exp (id "=>" exp)
+try f() e => 1
+try f() e => match e:
+  case zdiv: true
+  case {errno}: e.errno == 0
+  caes: e.message != "dummy"
+
+type of errors
+- no parameter errors # throw
+- with message        # throw "unreachable"
+- with parameters?    # throw {id:123 obj:f()}
+
+# throw exception
+type throw a b: a b
+throw(string)
+throw(type(...))
+
+# fallback exception
+type try a b: expected(a b) (error(b) a) a
+try(f(a b) _ => fallback())
+try(f(a b) e => e.thrown)
+
+# catch exceptions
+type f: (int expected(string "zdiv"|string|bad|signal)) string
+def f g:
+  try g(1) e => match e:
+    case "zdiv": "zero division error"
+    catch string: e.thrown
+    catch bad: `bad error $e.thrown.errno.string`
+    catch: e.message
+
+887 : no specific type
+383 : unique
+127 : string
+115 : numbers
+
+
+- Design for no argument function
+[x] "fn f: 1" # "(int)"
+[x] "let v 1" # "int"
+
+- Design something looks like statements
+[x] "for" int ":" ...  | "for" id int int? int? ":" ...
+[x] "while" exp ":" ...
+[x] "if" exp ":" ... (br "else if" exp ":" ...)* ("else:" ...)?
+[x] "continue" | "break" | "yield" exp | "yeild break"
+
+- Design how to infer type of property access
+[x] f x = x.inc (x.val + 1) # f a b{inc num a; val num} :: b a
+
+- Shortcut for string template
+[x] $"This is {name}"
+
+- Design name space and multiple files
+[x] "def" id (":" br indent id type+ "::" type+)?
+[x] "use" id+
 # Done
 [x] define optional arguments
     | ft f1 a opt({b:int c:opt(int)}) int
-    | fn f1 a {b c}: a + b + c.else(-1)
+    | fn f1 a {b c}: a + b + c.or(-1)
     | fn main:
-        f1 1    # 0
-        f1 1 {} # 0
+        f1 1           # 0
+        f1 1 {}        # 0
         f1 1 {b:2 c:3} # 6
-[x] match/case syntax
-  "match" exp id?:
-    ("case" exp ("if" exp)? ":" line+ br)+
+[x] switch syntax
+  "switch" exp id?:
+    (exp ("if" exp)? ":" line+ br)+
 
   enum tree a:
     empty
@@ -128,10 +256,19 @@ $ undefined
 
   ft validate: tree(_) bool
   fn validate t:
-    match t:
-      case {left:node} if t.value < t.left.value: false
-      case {right:node} if t.value > t.right.value: false
-      case _: true
+    switch t:
+      {left:node right:node}: t.left.value < t.value < t.right.value
+      {left:node}           : t.left.value < t.value
+      {right:node}          :                t.value < t.right.value
+      _                     : true
+  fn calc records:
+    records.map(f).sum::
+      f t: switch t:
+        [_ "DEPOSIT" _ amount]     : int(amount)
+        [_ "WITHDRAWL" ... amount] : -int(amount)
+        [_ "INTEREST" amount]      : int(amount)
+        [_ "FEE" _ amount]         : -int(fee)
+        _                          : throw `Record $transaction is not in the expected format!`
 
   enum ast:
     value int

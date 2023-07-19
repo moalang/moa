@@ -1,155 +1,33 @@
 # Do
-- Provide primitives
 - Multi paradigm for functional and structual
-- Try to keep conceptual integrity
+- Keep conceptual integrity
 
 # Do not
 - Hardware operations like IO, system call and directory memory access
 - Inheritance
-- Class based access control
+- Access control and reflection
 - Unnecessary symbols like semi-corron, comma and parenthiese
-- Providing multiple error handling like optional and exception
 
 # Policy
-[x] Main purpose of Moa language is that accelarate web development
-[x] Moa language consists core and library
-[x] The core does not provide any IO
-[x] The library provides IO operation via its interface
-[x] The simpler the core, the better
-[x] The simpler the interface of library, the better
+- Main purpose of Moa language is that accelarate web development
+- Moa language consists core and library
+- The core is pure, which does not provide any IO
+- The library provides IO via its interface
 
-# Pending
-- shorthand define function
-def f: 1           =>  f = 1
-def f a b: a + b   =>  f a b = a + b
-a := 1 # override existing variable
-
-- shorthand define list
-[1 2 3]
-
-- shorthand define dictionary
-[a:1 ${b+c}:2+3]
-
-- shorthand "is" function
-is(variable type)  =>  variable@type
-
-- shorthand "if"
-if a:
-  b
-else if c:
-  d
-else:
-  e
-# ↓
-| a = b
-| c = d
-| e
-
-# TODO
-[x] Design to type check in runtime for union and interface
-  - use case for union
-    union AB:
-      A
-      B:
-        b string
-    def show ab: if:
-      ab & A: "A"
-      ab & B && abc.b == "" : "B"
-      ab & B: "B " + abc.b
-    def validate bt: if:
-      bt & leaf                  : true
-      bt & {left:node right:node}: bt.left.value < bt.value < bt.right.value && validate(bt.left) && validate(bt.right)
-      bt & {left:node}           : bt.left.value < bt.value && validate(bt.left)
-      bt & {right:node}          : bt.value < bt.right.value && validate(bt.right)
-      false
-[x] Design to handle exceptions
-  - transpatrency -- return type is defined regardless throwing exception
-  - block handling:
-    try(f(...)).alt(value)
-    try(f(...)).catch(e =>
-      is(zdiv e) ? `zero division : ${e.a} ${e.op} ${e.b}` :
-      is(error1 e) || is(error2 e) ? "error 1 or 2" :
-      e.message)
-    def validate bt:
-      is(bt {left:node right:node}) ? bt.left.value < bt.value < bt.right.value && validate(bt.left) && validate(bt.right) :
-      is(bt {left:node}             ? bt.left.value < bt.value && validate(bt.left) :
-      is(bt {right:node}            ? bt.value < bt.right.value && validate(bt.right) :
-      true
-
-----------------------------------------------------------------------------------------------------------------
-# Done
-
-[x] do not pick symbol up from Ruby because `:a == "a"` is false that confuses developers
-
-[x] Design match/case for union
-union tree a:
-  leaf
-  node:
-    value a
-    left tree(a)
-    right tree(a)
-
-  match bt:
-    case {left:node right:node}: (bt.left.value < bt.value < bt.right.value) && validate(bt.left) && validate(bt.right)
-    case {left:node}: bt.left.value < bt.value && validate(bt.left.value)
-    case {right:node}: bt.value < bt.right.value && validate(bt.right.value)
-    case _: true
-
-- Design for error handling
-[x] "throw" exp?
-[x] "try" exp (id "=>" exp)
-try f() e => 1
-try f() e => match e:
-  case zdiv: true
-  case {errno}: e.errno == 0
-  caes: e.message != "dummy"
-
-type of errors
-- no parameter errors # throw
-- with message        # throw "unreachable"
-- with parameters?    # throw {id:123 obj:f()}
-
-# raise exception
-type throw a b: a b
-throw(string)
-throw(type(...))
-
-# fallback exception
-type try a b: expected(a b) (error(b) a) a
-try(f(a b) _ => fallback())
-try(f(a b) e => e.thrown)
-
-# catch exceptions
-type f: (int expected(string "zdiv"|string|bad|signal)) string
-def f g:
-  try g(1) e => match e:
-    case "zdiv": "zero division error"
-    catch string: e.thrown
-    catch bad: `bad error $e.thrown.errno.string`
-    catch: e.message
-
-887 : no specific type
-383 : unique
-127 : string
-115 : numbers
-
-
-- Design for no argument function
-[x] "fn f: 1" # "(int)"
-[x] "let v 1" # "int"
-
-- Design something looks like statements
-[x] "for" int ":" ...  | "for" id int int? int? ":" ...
-[x] "while" exp ":" ...
-[x] "if" exp ":" ... (br "else if" exp ":" ...)* ("else:" ...)?
-[x] "continue" | "break" | "yield" exp | "yeild break"
-
-- Design how to infer type of property access
-[x] f x = x.inc (x.val + 1) # f a b{inc num a; val num} :: b a
-
-- Shortcut for string template
-[x] $"This is {name}"
-
-- Design name space and multiple files
-[x] "def" id (":" br indent id type+ "::" type+)?
-[x] "use" id+
+# example of yield, continue and break
+ft loop: iterator[int]
+fn loop:
+  yield 1
+  yield 2
+  yield 3
+  yield 4
+  yield 5
+  yield 6
+loop n =>
+  if n <= 2:
+    continue
+  if n >= 5:
+    break
+  puts(n) # display 3 and 4
+loop.map(n => n <= 2 ? continue : n >= 5 ? break : n) # [3 4]
+loop.mapi(_,i => i <= 1 ? continue : i >= 4 ? break : n) # [3 4]
