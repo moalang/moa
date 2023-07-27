@@ -14,6 +14,9 @@
 - The core is pure, which does not provide any IO
 - The library provides IO via its interface
 
+# Memo
+https://github.com/fsharp/fslang-design
+
 # example of yield, continue and break
 ft loop: iterator[int]
 fn loop:
@@ -29,5 +32,10 @@ loop n =>
   if n >= 5:
     break
   puts(n) # display 3 and 4
+def f:
+  loop n =>
+    if n == 3:
+      return 1
+    puts(n) # display 1 and 2 then return from f functions returns with some(1)
 loop.map(n => n <= 2 ? continue : n >= 5 ? break : n) # [3 4]
 loop.mapi(_,i => i <= 1 ? continue : i >= 4 ? break : n) # [3 4]
