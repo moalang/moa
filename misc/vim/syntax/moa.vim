@@ -18,9 +18,11 @@ syn keyword Function fn ft
 syn keyword Statement continue break return
 syn keyword StorageClass let var
 syn keyword Structure class union
-syn keyword Conditional if else switch
-syn keyword Repeat for while
-syn keyword Keyword use throw catch
+syn keyword Conditional if else switch case
+syn keyword Repeat for each while
+syn keyword Exception throw try catch
+syn keyword Keyword module use bool int float string bytes option list set dict tuple class some none num any iter 
+syn keyword Keyword ref array i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 type interface implement decimal assert
 syn match Operator /[+\-\*/|&]=\=/
 syn match Operator /[<>]=\=/
 syn match Operator /[=!]=/

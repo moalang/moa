@@ -1,33 +1,48 @@
 # Core syntax
 top: line*
 line: keyword? exp+ ("\n" | (":\n" ("  " line)+))
-exp: unit (op2 exp)*
-unit: op1? bottom (prop | call)*
+exp: op1 unit (op2 exp)?
+unit: bottom (prop | call)*
 call: "(" exp* ")"
 prop: "." id
 bottom:
-| "(" exp ")"          # priority : 1 * (2 + 3), (a+=1; b)
-| '"' [^"]* '"'        # string   : "hi"
-| [0-9]+ ("." [0-9]+)? # number   : 1, 0.5
-| id                   # id       : name
+| "(" exp+ ")"          # priority   : 1 * (2 + 3)
+| "(" args? ":" exp ")" # a,b: a + b : (int int int) # lambda
+| '"' [^"]* '"'         # string     : "hi"
+| [0-9]+ ("." [0-9]+)?  # number     : 1, 0.5
+| id                    # id         : name
 id: [A-Za-z_][A-Za-z0-9_]*
 op1: [!-]
-op2: [+-/%*=<>|&^;]+
-keyword: qw(let var fn ft class union if else switch case throw catch return yield for each while continue break yield use test)
-reserved: qw(bool int float string lambda i8..64 u8..64 f32 f64 list set bytes dict tuple object true false scopy dcopy)
+op2: " " [+-/%*=<>|&^;]+ " "
+args: id ("," id)*
+type: id ("[" type+ "]")?
+keyword:
+| let var fn ft class union
+| if else switch case throw catch return yield for each while continue break
+| module use test
+reserved1: bool int float string bytes option list set dict tuple class true false some none
+reserved2: num iter lazy
+reserved3: iif ref array i8..i64 u8..u64 f32 f64 type interface implement decimal assert
 
 # Syntax sugar
-| bottom "[" exp "]"                   # bottom.get(exp)
-| bottom "[" exp1 "]" = exp2           # bottom.set(exp exp)
-| bottom{ ((id ":" exp)* }             # scopy bottom id exp ...
-| bottom{:}                            # dcopy bottom
+| bottom "[" exp+ "]"                  # a[1 2]                : a.get(1).get(2)
+| bottom "[" exp+ "]" "=" exp          # a[1 2] = 3            : a.get(1).set(2 3)
+| bottom "{" ((id "=" exp)* "}"        # a{b c=1}              : var t type(bottom).copy(bottom); t.b = b; t.c = 1
 | "(" exp ("," exp)+ ")"               # (1, "hi")             : tuple 1 "hi"
 | "[" exp* "]"                         # [], [1 2]             : list, list 1 2
 | "[" (":" | id ":" unit) "]"          # [:], [a:1 (id):(2+3)] : dict, dict "a" 1 id (2+3)
-| "{" id* (id ":" unit)* "}"           # {}, {a b:1}           : object, object a a b 1
-| '`' ("$" unit | [^"])* '`'           # `hi $user.name`       : "hi %v".format user.name
-| ("()" | id ("," id)*) "=>" exp       # a,b => a + b          : lambda a b: a + b
+| "{" id* (id "=" unit)* "}"           # {}, {a b=1}           : class, class a a b 1
+| $'"' [^"]* '"'                       # $"hi $f(1) $n.f02_1"  : "hi %v %02.1f".format(f(1) n)
+| '"""' .* '"""'                       # """hi "someone""""    : `hi "someone"`
+| 'r"' [^"]+ '"'                       # "[1-9]".regexp
 | exp ("\n|" exp ("if" exp)? ":" exp)+ # switch exp: case exp: exp ...
+| [0-9_]+ ("." [0-9_]+)?               # 10_1000  : 10000
+| [0-9_]+ ("." [0-9_]+)? "f"           # 1f, 1.0f : f32(1)
+| "0x" [0-9a-fA-F_]+                   # hex number
+| "0o" [0-8_]+                         # octal number
+| "0b" [0-1_]+                         # bits number
+| id ("," id)+ "=" exp                 # a, b = c : a = c.0; b = c.1
+| type "?"                             # option[type]
 
 # Example
 - Primitive
@@ -35,14 +50,15 @@ reserved: qw(bool int float string lambda i8..64 u8..64 f32 f64 list set bytes d
   - int         # 1, -1
   - float       # 1.0, -1.0
   - string      # "hi", `hi $(name)`
-  - lambda      # () => 1,  a,b => a + b               # (int int int)
+  - lambda      # a,b: a + b
+  - bytes       # bytes(1024)
 - Container
-  - list        # [1 2]                    # list[int](1 2)
-  - set         # [1 2].uniq               # set[int](1 2)
-  - bytes       # bytes(1024)              # bytes
-  - dict        # [a:1 (b):(1+2)]          # dict[string int](a:1 (b):(1+2))
-  - tuple       # (1, "hi")                # tuple(1 "hi"), tuple[int string](1 "hi")
-  - object      # {a:b c:d,e=>f(d e)}      # object(a b c d,e=>f(d e))
+  - option      # some(1), none        # option[int]
+  - list        # [1 2]                # list[int](1 2)
+  - set         # [1 2].uniq           # set[int](1 2)
+  - dict        # [a:1 (b):(1+2)]      # dict[string int](a:1 (b):(1+2))
+  - tuple       # (1, "hi")            # tuple(1 "hi"), tuple[int string](1 "hi")
+  - class       # {a:b c:d,e=>f(d e)}  # class(a b c d,e=>f(d e))
 - Definition
   - variable    # var a 1
   - constant    # let a 1
@@ -52,17 +68,17 @@ reserved: qw(bool int float string lambda i8..64 u8..64 f32 f64 list set bytes d
 - Statement
   - if          # if a: b; else if c: d; else: e
   - return      # return 1
-  - exception   # catch throw(f()) e => type: a; _: c
+  - exception   # fn f: throw "..."; try f; catch type: a; catch _: c
   - for         # for i 9: n += i
   - each        # each i [1 2]: n += i
   - while       # while a: b
   - continue    # continue
   - break       # break
-  - yield       # yield 1; yield 2 # iterator[int]
+  - yield       # fn f: yield 1; yield 2 # iter[int]
 - Misc
   - module      # module a: inc int int; use a inc
   - comment     # # this is comment
-  - test        # test "name": ....
+  - test        # test t "label": t.eq "hi" greet
 
 # Symbols
 _           part of id
@@ -78,12 +94,12 @@ _           part of id
 ( )         priority
 [ ]         list or dict
 { }         object
+?           ternary operator
 < > ==      comparing
 =           update existing a variable
 ,           delimiter to tuple and arguments in anonymous function
 :           delimiter to start indented block
 \ undefined
-? undefined
 @ undefined
 ~ undefined
 ' undefined
@@ -92,65 +108,13 @@ $ undefined
 
 
 # Idea for shorthand
-- if expression
-if bool 1          # option[int]
-if bool 1 2        # int
-if bool 1 bool 2   # option[int]
-if bool 1 bool 2 3 # int
-if a b c d e       #
-a ? b : c ? d : e
+- iif
+iif bool 1 2        # int
+iif bool 1 bool 2 3 # int
+iif a b c d e       # a ? b : c ? d : e
 
-- (breaking change) let and function with arguments
-n = 1               # let n 1
-f = () => time.now  # fn f: time.now
-f a = a + 1         # fn f a: a + 1
-a := 1              # override existing variable
-
-
-# Pending ideas
-- shorter lambda syntax
-() => 1
-a => a
-a,b => a + b
-
-fun: 1
-fun a: a
-fun a b: a + b
-
-(:1)
-(a: a)
-(a,b: a + b)
-
-:1
-a: a
-a,b: a + b
-
-|1
-a| a
-a,b| a + b
-
-'1         #  () => 1
-a' a       #   a => a
-a,b' a + b # a,b => a + b
-
-> a,b => a + b
-> (: "zero argument function body here")
-> (a: a + 1)
-> (a,b: a + b)
-> add = (a b: a + b)
-> a,b,a+b
-> a,b:a + b
-> a,b~a + b
-> a,b$a + b
-> a,b@a + b
-> a,b;a + b
-> a,b^a + b
-> a,b$a + b
-> a,b?a + b
-> _ . \ ! ~ & | = ' #
-> ,
-> ;
-> @
-> ^
-> $
-> ?
+- (breaking change) Shorthand for let and function
+n = 1          # let n 1
+f = :time.now  # fn f: time.now
+f a = a + 1    # fn f a: a + 1
+a := 1         # override existing variable

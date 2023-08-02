@@ -1,158 +1,150 @@
-# TODO
-[ ] define a type of block syntax
-[ ] define a interface for iterator
-
 # global core
 [ ] true, false :: bool
-[ ] nil :: tuple()
-[ ] int a :: string int @error
-[ ] float a :: string float @error
-[ ] string a :: a string
-[ ] bool a :: a bool
-[ ] bytes a :: a bytes
-[ ] list a :: a+ list(a)
-[ ] dict a b :: (a b)+ dict(a b)
-[ ] set a :: a+ set(a)
-[ ] tuple ... :: tuple(...)
-[ ] throw a :: a a
-[ ] if a :: bool a nil
-[ ] else a :: a nil
-[ ] for :: ID:int int int? int? block nil
-[ ] for a :: ID:a iterator(a) block nil
-[ ] while a :: a block nil
-[ ] continue :: nil
-[ ] break :: nil
-[ ] return a :: a a
-[ ] i8, i16, i32, i64, u8, u16, u32, u64, f32, f64
-[ ] num a # int, float, i8, i16, i32, i64, u8, u16, u32, u64, f32, f64
-[ ] iterator a
-[ ] block :: (bool) # break returns false otherwise true (including continue)
+[ ] nil         :: tuple[]
+[ ] int a       :: string int @error
+[ ] float a     :: string float @error
+[ ] string a    :: a string
+[ ] bool a      :: a bool
+[ ] bytes a     :: a bytes
+[ ] list a      :: a+ list[a]
+[ ] dict a b    :: (a,b)+ dict[a b]
+[ ] set a       :: a+ set[a]
+[ ] tuple ...   :: tuple[...]
+[ ] throw a b   :: a b
+[ ] if a        :: bool a nil
+[ ] else a      :: a nil
+[ ] for a       :: ID:int int a nil
+[ ] each a b    :: ID:a iter[a] b nil
+[ ] while a     :: bool a nil
+[ ] continue    :: nil
+[ ] break       :: nil
+[ ] return a    :: a a
+[ ] num a       # int, float
+[ ] iter a      # string, list, dict, bytes, option
 
 # bool
 [ ] flip :: bool
 
 # int
-[ ] / :: int int float
-[ ] + - * ** // % | & ^ :: int int int
-[ ] abs :: int
-[ ] neg :: int
-[ ] char :: string
+[ ] + - * ** / // % | & ^ :: int int int
+[ ] abs    :: int
+[ ] neg    :: int
+[ ] char   :: string
+[ ] times  :: iter[int]
+[ ] to     :: int int? iter[int]
+[ ] string :: string
+[ ] format :: string string
 
 # float
 [ ] + - * ** / // % :: float float float
-[ ] abs :: float
-[ ] neg :: float
-[ ] floor :: int
-[ ] ceil :: int
+[ ] abs    :: float
+[ ] neg    :: float
+[ ] floor  :: int
+[ ] ceil   :: int
+[ ] round  :: int
+[ ] string :: string
+[ ] format :: string string
 
 # string
-[ ] ++ :: string string string
-[ ] size :: int
-[ ] pos :: int
-[ ] at :: int string @error
-[ ] slice :: int int? string
-[ ] split :: string int? list(string)
-[ ] index :: string int @error
-[ ] replace :: string string int? string
-[ ] reverse :: string
-[ ] ordinal :: int
-[ ] match :: string list(string)
-[ ] rsplit :: string list(string)
-[ ] rreplace :: string (list(string) string) int? string
+[ ] ++       :: string string string
+[ ] size     :: int
+[ ] pos      :: int
+[ ] get      :: int string @error
+[ ] slice    :: int int? string
+[ ] split    :: string int? list[string]
+[ ] index    :: string int
+[ ] replace  :: string string int? string
+[ ] reverse  :: string
+[ ] ucode    :: int
+[ ] match    :: string iter[string]
+[ ] rsplit   :: string int? list[string]
+[ ] rreplace :: string fn[list[string] string] int? string
 
 # bytes
 [ ] ++ :: bytes bytes bytes
-[ ] be :: bytes # change to big endian as default
-[ ] le :: bytes # change to little endian
+[ ] be :: bytes # big endian mode
+[ ] le :: bytes # little endian mode
+[ ] get :: int int @error
+[ ] set :: int int @error
 [ ] read a :: a @error
 [ ] write a :: a int @error
 [ ] size :: int
 [ ] slice :: int int? bytes
 [ ] base64 :: string
-[ ] string :: string string # .string("A-Za-z0-9+/") is almost same as .base64
-
-# lambda(a b ...)
 [ ] string :: string
 
-# list(a)
-[ ] ++ a :: list(a) list(a) list(a)
+# lambda[a b ...]
+[ ] string :: string
+
+# list[a]
+[ ] ++ a :: list[a] list[a]
 [ ] size :: int
-[ ] at :: int a @error
-[ ] map b :: (a b) list(b)
-[ ] filter :: (a bool) list(a)
-[ ] slice :: int int? list(a)
-[ ] sort b :: (a b)? list(a)
-[ ] reverse :: list(a)
-[ ] zip b :: list(b) list(tuple(a b))
-[ ] find :: (a bool) a @error
-[ ] fold b :: (a a b) b
+[ ] bool :: bool
+[ ] empty :: bool
+[ ] get :: int a @error
+[ ] set :: int a a @error
+[ ] map b :: fn[a b] list[b]
+[ ] fmap b :: fn[a list[b]] list[b]
+[ ] keep :: fn[a bool] list[a]
+[ ] all  :: fn[a bool] bool
+[ ] any  :: fn[a bool] bool
+[ ] slice :: int int? list[a]
+[ ] sort b :: fn[a b]? list[a]
+[ ] count b :: fn[a b]? dict[b int]
+[ ] group b :: fn[a b]? dict[b list[a]]
+[ ] reverse :: list[a]
+[ ] zip b :: list[b] list[tuple[a b]]
+[ ] find :: fn[a bool] option[a]
+[ ] fold b :: fn[a b b] b
+[ ] has :: a bool
 [ ] sum :: a
+[ ] min :: a
+[ ] max :: a
+[ ] minmax :: (a,a)
 
-# dict(k v)
+# dict[k v]
 [ ] size :: int
-[ ] at :: k v @error
-[ ] keys :: list(k)
-[ ] values :: list(v)
-[ ] filter :: (k v bool) dict(k v)
-[ ] list :: list(tuple(k v))
-[ ] find :: (k v bool) tuple(k v) @error
+[ ] get :: k v @error
+[ ] set :: k v v
+[ ] keys :: iter[k]
+[ ] values :: iter[v]
+[ ] list :: list[tuple[k v]]
 
-# set(a)
+# set[a]
 [ ] size :: int
-[ ] - :: set(a) set(a)
-[ ] | :: set(a) set(a)
-[ ] & :: set(a) set(a)
-[ ] ^ :: set(a) set(a)
-[ ] includes :: a bool
+[ ] - :: set[a] set[a]
+[ ] | :: set[a] set[a]
+[ ] & :: set[a] set[a]
+[ ] ^ :: set[a] set[a]
+[ ] has :: a bool
 
-# tuple(a b ...)
+# tuple[a b ...]
 [ ] 0 :: a
 [ ] 1 :: b
 ...
 
+# option[a]
+[ ] "?." id # some(true).flip is option[bool]
+
 ---( interface )---------------------------------------
 interface num a:
-  / :: a a float
-  + - * ** // % :: a a a
-  negate, abs, signum :: a
+  + - * ** / // % :: a a a
+  abs :: a
+  neg :: a
 
-class iterator a:
-  fn next: ...
+interface iter a:
+  iter :: option[a]
 
-interface iterator m a:
-  next a?
-  # for the following methods, you can override default implementations
-  map b :: (a b) m(a)
-  fmap b :: (a m(b)) m(b)
-  filter :: (a bool) m(a)
-  ++ :: m(a) m(a)
-  slice :: int int? m(a)
-  each_slice :: int m(m(a))
-  group_by b :: (a b) dict(b m(a))
-  reverse :: m(a)
-  sort :: m(a)
-  sort_by b :: (a b) m(a)
-  drop_while :: (a bool) m(a)
-  take_while (a bool) m(a)
-  zip b :: m(b) m((a,b))
+interface class a:
+ ft == : a a bool
+ ft <=>: a a int
+ ft () ...: a # T(...) returns instance of T
 
-  head :: a?
-  fold b :: (a b b) b b
-  max :: a?
-  min :: a?
-  minmax :: (a,a)?
-  sum :: a
-  size :: int
-
-  present :: bool
-  empty :: bool
-  all :: (a bool) bool
-  any :: (a bool) bool
-  include :: a bool
-
-  count_by b :: (a b)? dict(b int)
-  list :: list(a)
-
+ fn != a b: (a == b).flip
+ fn > a b : (a <=> b) == 1
+ fn >= a b: (a <=> b) >= 0
+ fn < a b : (a <=> b) == -1
+ fn <= a b: (a <=> b) <= 0
 
 ---( module )------------------------------------------
 # math
@@ -175,11 +167,11 @@ interface iterator m a:
 # random
 [ ] random.int :: int int int
 [ ] random.bytes :: int bytes
-[ ] random.choice a :: list(a) a @error
+[ ] random.choice a :: list[a] a @error
 
 # http
 [ ] listen string (http.request http.response) ?
-[ ] request string {method headers body} http.response
+[ ] request string {method::string headers::list[tuple[string list[string]]] body:bytes}? http.response
 
 # odb (object database management system)
 [ ] schema a :: odb.schema(a)
