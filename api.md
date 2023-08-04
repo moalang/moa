@@ -1,6 +1,6 @@
 # global core
 [ ] true, false :: bool
-[ ] nil         :: tuple[]
+[ ] _           :: tuple[]
 [ ] int a       :: string int @error
 [ ] float a     :: string float @error
 [ ] string a    :: a string
@@ -11,13 +11,13 @@
 [ ] set a       :: a+ set[a]
 [ ] tuple ...   :: tuple[...]
 [ ] throw a b   :: a b
-[ ] if a        :: bool a nil
-[ ] else a      :: a nil
-[ ] for a       :: ID:int int a nil
-[ ] each a b    :: ID:a iter[a] b nil
-[ ] while a     :: bool a nil
-[ ] continue    :: nil
-[ ] break       :: nil
+[ ] if a        :: bool a _
+[ ] else a      :: a _
+[ ] for a       :: ID:int int a _
+[ ] each a b    :: ID:a iter[a] b _
+[ ] while a     :: bool a _
+[ ] continue    :: _
+[ ] break       :: _
 [ ] return a    :: a a
 [ ] num a       # int, float
 [ ] iter a      # string, list, dict, bytes, option

@@ -14,27 +14,33 @@
 - The core is pure, which does not provide any IO
 - The library provides IO via its interface
 
-# Implicit data type conversion
-1 + u8(2)  # u8
-a -> lazy[a] # ft assert a: lazy[a] a; fn assert lazy[exp]: if !exp(): print('assert failed: ' exp.string)
-
-# Thinking
-- Syntax for ternary operator
-iif a >= 0 a (-1)
-
-- Syntax for optional arguments
-ft slice a: list[a] int omit[int] list[a]
-fn slice a s:
-| = a.slice s
-| e = a.slice s e
-
-- Syntax for variable arguments
-ft iif a: omits[(lazy[bool],lazy[a])] lazy[a] a
-fn iif conds f: conds.first(c: c.0())?.1().or(f)
-fn iif omits[conds] f:
-  for (cond, g) conds:
-    return g()
-  return f()
+# TODO
+[ ] Implicit data type conversion
+    1 + u8(2)              # u8
+    a -> lazy[a] <-> fn[a] # ft f a: lazy[a] a; fn f f: print(f() f.string)
+[ ] Syntax for ternary operator
+    iif a >= 0 a (-1)
+[ ] Syntax for default argument
+    ft slice a: list[a] int iffy[int] list[a]
+    fn slice xs start end=-1: ...
+[ ] Syntax for optional argument
+    ft slice a: list[a] int iffy[int] list[a]
+    fn slice xs start:
+    | = ...
+    | end = ...
+[ ] Syntax for named argument
+    ft sendmail: string {from string, title string} _
+    fn sendmail to {from, title}: ...
+[ ] Syntax for variable argument
+    ft map k v: many[tuple[k v]] dict[k v]  # accept zero or more arguments
+    ft map k v: many1[tuple[k v]] dict[k v] # accept one or more arguments
+[ ] Syntax for macro
+    ft or a: bool lazy[a] lazy[a]
+    fn or cond a b:
+      if cond:
+        return a()
+      else:
+        return b()
 
 # Todo
 - Implement bootstrap to support core syntax by JavaScript
