@@ -1,6 +1,6 @@
-# global core
-[ ] true, false :: bool
+# reserved
 [ ] _           :: tuple[]
+[ ] true, false :: bool
 [ ] int a       :: string int @error
 [ ] float a     :: string float @error
 [ ] string a    :: a string

@@ -17,30 +17,30 @@
 # TODO
 [ ] Implicit data type conversion
     1 + u8(2)              # u8
-    a -> lazy[a] <-> fn[a] # ft f a: lazy[a] a; fn f f: print(f() f.string)
+    a -> lazy[a] <-> fn[a] # ft f a: lazy[a] a; fn f f: print(f() f.string); fn g: f(1 + 2)
+    extra[a] -> a          # ft f a: extra[a] a; fn a=1: a; fn g: f + f(2)
+    many[a] -> list[a]     # ft f a: many[a] a; fn f a*: a.sum; fn g: f 1 2
 [ ] Syntax for ternary operator
     iif a >= 0 a (-1)
-[ ] Syntax for default argument
-    ft slice a: list[a] int iffy[int] list[a]
-    fn slice xs start end=-1: ...
-[ ] Syntax for optional argument
-    ft slice a: list[a] int iffy[int] list[a]
-    fn slice xs start:
-    | = ...
-    | end = ...
-[ ] Syntax for named argument
-    ft sendmail: string {from string, title string} _
-    fn sendmail to {from, title}: ...
+[ ] Syntax for default and optional argument
+    ft f: extra[int] int
+    fn f a=1: a
+    fn f a=none: a.else(1)
 [ ] Syntax for variable argument
-    ft map k v: many[tuple[k v]] dict[k v]  # accept zero or more arguments
-    ft map k v: many1[tuple[k v]] dict[k v] # accept one or more arguments
+    ft f a: many[a] int
+    fn f a*: a.sum
+    ft g k v: many[k v] dict[k v]
+    fn g kvs*: dict kvs*
 [ ] Syntax for macro
-    ft or a: bool lazy[a] lazy[a]
-    fn or cond a b:
-      if cond:
-        return a()
-      else:
-        return b()
+    ft until: lazy[bool] lazy[_] _
+    fn until f g: while f(): g()
+[ ] Syntax for named argument
+    ft f: int int int
+    fn f a b: a + b
+    fn g: f 1 2
+    fn g: f a=1 b=2
+    fn g: f b=2 a=1
+    fn g: f b=2 1   # invalid syntax, named arguments should be last
 
 # Todo
 - Implement bootstrap to support core syntax by JavaScript

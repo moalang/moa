@@ -1,120 +1,107 @@
 # Core syntax
 top: line*
-line: keyword? exp+ ("\n" | (":\n" ("  " line)+))
-exp: op1 unit (op2 exp)?
-unit: bottom (prop | call)*
-call: "(" exp* ")"
+line:
+| keyword exp+ ":" (exp | ("¥n  " line)+)
+| exp ("\n|" exp "\n|" exp)        # a\n| b \n| c   -> iif a b c
+| exp ("\n|" exp ("if" exp)? ":" exp)* # a\n|b: c
+exp: op1? unit (op2 exp)?
+unit: bottom (prop | call | index)*
 prop: "." id
+call: "(" exp* (id "=" exp)* ")"
+index: "[" exp+ "]"                # a[1]           -> a.get(1)
 bottom:
-| "(" exp+ ")"          # priority   : 1 * (2 + 3)
-| "(" args? ":" exp ")" # a,b: a + b : (int int int) # lambda
-| '"' [^"]* '"'         # string     : "hi"
-| [0-9]+ ("." [0-9]+)?  # number     : 1, 0.5
-| id                    # id         : name
-id: [A-Za-z_][A-Za-z0-9_]*
+| '"""' [^"]* '"""'                # """a"b"""      -> "a\"b"
+| "[" exp* "]"                     # [1 2]          -> list(1 2)
+| "[:]" | "[" (unit ":" exp)* "]"  # ["a":1 b:2]    -> dict "a" 1 b 2
+| "{" id* (id "=" exp)* "}"        # {a b=1}        -> class a a b 1
+| $'"' [^"]* '"'                   # "s {a} {b 04}" -> "s {} {04}".format(a b)
+| id ("," id)+ "=" exp             # a, b = c       -> a = c.0; b = c.1
+| bottom "[" exp+ "]" "=" exp      # a[1] = 2       -> a.get(1).set(2)
+| "0x" [0-9a-fA-F_]+               # 0xff           -> 255
+| "0o" [0-7_]+                     # 0o11           -> 9
+| "0b" [0-1_]+                     # 0b11           -> 3
+| [0-9_]+ ("." [0-9_]+)?           # 10_000         -> 10000
+| "(" exp ")"                      # 1 * (2 + 3)    : priority
+| '"' [^"]* '"'                    # "s"            : string
+| (id ("," id)*)? ":" exp          # a,b: a + b     : lambda
+| id
 op1: [!-]
-op2: " " [+-/%*=<>|&^;]+ " "
-args: id ("," id)*
-type: id ("[" type+ "]")?
+op2:
+| [+-*/%<>|&^=,]                   # (1, "hi")   -> tuple 1 "hi"
+| [+-*/%<>|&^=:] "="
+| "**" | "&&" | "||" | ">>" | "<<"
+| "===" | "**="
+id: [A-Za-z_][A-Za-z0-9_]*
 keyword:
-| let var fn ft class union
-| if else switch case throw catch return yield for each while continue break
-| module use test
-reserved1: bool int float string bytes option list set dict tuple class true false some none
-reserved2: num iter lazy
-reserved3: iif ref array i8..i64 u8..u64 f32 f64 type interface implement decimal assert
-
-# Syntax sugar
-| bottom "[" exp+ "]"                  # a[1 2]                : a.get(1).get(2)
-| bottom "[" exp+ "]" "=" exp          # a[1 2] = 3            : a.get(1).set(2 3)
-| bottom "{" ((id "=" exp)* "}"        # a{b c=1}              : var t type(bottom).copy(bottom); t.b = b; t.c = 1
-| "(" exp ("," exp)+ ")"               # (1, "hi")             : tuple 1 "hi"
-| "[" exp* "]"                         # [], [1 2]             : list, list 1 2
-| "[" (":" | id ":" unit) "]"          # [:], [a:1 (id):(2+3)] : dict, dict "a" 1 id (2+3)
-| "{" id* (id "=" unit)* "}"           # {}, {a b=1}           : class, class a a b 1
-| $'"' [^"]* '"'                       # $"hi $f(1) $n.f02_1"  : "hi %v %02.1f".format(f(1) n)
-| '"""' .* '"""'                       # """hi "someone""""    : `hi "someone"`
-| 'r"' [^"]+ '"'                       # "[1-9]".regexp
-| exp ("\n|" exp ("if" exp)? ":" exp)+ # switch exp: case exp: exp ...
-| [0-9_]+ ("." [0-9_]+)?               # 10_1000  : 10000
-| [0-9_]+ ("." [0-9_]+)? "f"           # 1f, 1.0f : f32(1)
-| "0x" [0-9a-fA-F_]+                   # hex number
-| "0o" [0-8_]+                         # octal number
-| "0b" [0-1_]+                         # bits number
-| id ("," id)+ "=" exp                 # a, b = c : a = c.0; b = c.1
-| type "?"                             # option[type]
+| var let fn ft class union
+| if else switch case catch for each while
+| module test
+reserved:
+| var let use
+| return yield continue break throw interface implement
+| iif
+reserved: bool int float string bytes list set dict tuple true false num iter lazy ref
+reserved: array assert i8..i64 u8..u64 f32 f64 decimal
 
 # Example
 - Primitive
-  - bool        # true, false
-  - int         # 1, -1
-  - float       # 1.0, -1.0
-  - string      # "hi", `hi $(name)`
-  - lambda      # a,b: a + b
-  - bytes       # bytes(1024)
+  - bool           # true, false
+  - int            # 1, -1
+  - float          # 1.0, -1.0
+  - string         # "hi"
+  - lambda         # a,b: a + b
+  - bytes          # bytes(1024)
 - Container
-  - option      # some(1), none        # option[int]
-  - list        # [1 2]                # list[int](1 2)
-  - set         # [1 2].uniq           # set[int](1 2)
-  - dict        # [a:1 (b):(1+2)]      # dict[string int](a:1 (b):(1+2))
-  - tuple       # (1, "hi")            # tuple(1 "hi"), tuple[int string](1 "hi")
-  - class       # {a:b c:d,e=>f(d e)}  # class(a b c d,e=>f(d e))
+  - list           # list[int](1 2)
+  - set            # set[int](1 2)
+  - dict           # dict[string int]("a" 1 b 1+2)
+  - tuple          # tuple[int string](1 "hi")
+  - class          # class(a b f x,y:g(x y))
 - Definition
-  - variable    # var a 1
-  - constant    # let a 1
-  - function    # fn a: 1, fn a b: b
-  - class       # class a: b c
-  - union       # union a: b; c d
+  - variable       # var a 1
+  - constant       # let a 1
+  - function       # ft f a: a a; fn f a: a
+  - class          # class a: b c
+  - union          # union a: b; c d
 - Statement
-  - if          # if a: b; else if c: d; else: e
-  - return      # return 1
-  - exception   # fn f: throw "..."; try f; catch type: a; catch _: c
-  - for         # for i 9: n += i
-  - each        # each i [1 2]: n += i
-  - while       # while a: b
-  - continue    # continue
-  - break       # break
-  - yield       # fn f: yield 1; yield 2 # iter[int]
+  - if / else      # if a: b; else if c: d; else: e
+  - return         # return 1
+  - switch / case  # switch a:; case b: c; else: d
+  - throw / catch  # fn f: throw "..."; try f; catch type: a; catch _: c
+  - for            # for i 9: n += i
+  - each           # each x xs: n += x
+  - while          # while a: b
+  - continue       # continue
+  - break          # break
+  - yield          # fn f: yield 1; yield 2 # iter[int]
 - Misc
-  - module      # module a: inc int int; use a inc
-  - comment     # # this is comment
-  - test        # test t "label": t.eq "hi" greet
+  - iif            # iif a b c d e   ->   a ? b : c ? d : e
+  - module         # module a: inc int int; use a inc
+  - comment        # # comment
+  - test           # test t "label": t.eq "hi" greet
 
 # Symbols
-_           part of id
-.           access an element of object
-"           string
-`           string with variables
-#           comment
-! -         singular operator
-++ --       binary operator for container
-&& ||       binary operator for boolean
-+ - * / %   binary operator for number
-| & ^       binary operator for int(or, and, xor)
-( )         priority
-[ ]         list or dict
-{ }         object
-?           ternary operator
-< > ==      comparing
-=           update existing a variable
-,           delimiter to tuple and arguments in anonymous function
-:           delimiter to start indented block
+_                  part of id
+.                  access an element of object
+"                  string
+`                  string with variables
+#                  comment
+! -                singular operator
+&& ||              binary operator for boolean
+>> <<              bit shift for integer
++ - * / % **       binary operator for number
+| & ^              binary operator for int(or, and, xor)
+( )                priority
+[ ]                list or dict
+{ }                object
+?                  ternary operator
+< <= > >= == ===   comparing
+=                  update existing a variable
+,                  delimiter to tuple and arguments in anonymous function
+:                  delimiter to start indented block
 \ undefined
 @ undefined
 ~ undefined
 ' undefined
 $ undefined
 ; undefined
-
-
-# Idea for shorthand
-- iif
-iif bool 1 2        # int
-iif bool 1 bool 2 3 # int
-iif a b c d e       # a ? b : c ? d : e
-
-- (breaking change) Shorthand for let and function
-n = 1          # let n 1
-f = :time.now  # fn f: time.now
-f a = a + 1    # fn f a: a + 1
-a := 1         # override existing variable
