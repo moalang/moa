@@ -1,11 +1,11 @@
 # reserved
 [ ] _           :: tuple[]
 [ ] true, false :: bool
-[ ] int a       :: string int @error
-[ ] float a     :: string float @error
+[ ] int         :: string int @error
+[ ] float       :: string float @error
 [ ] string a    :: a string
-[ ] bool a      :: a bool
-[ ] bytes a     :: a bytes
+[ ] bool        :: a bool
+[ ] bytes       :: a bytes
 [ ] list a      :: a+ list[a]
 [ ] dict a b    :: (a,b)+ dict[a b]
 [ ] set a       :: a+ set[a]
@@ -13,20 +13,20 @@
 [ ] throw a b   :: a b
 [ ] if a        :: bool a _
 [ ] else a      :: a _
-[ ] for a       :: ID:int int a _
-[ ] each a b    :: ID:a iter[a] b _
+[ ] for a       :: .int int int? int? a _
+[ ] each a b    :: .a iter[a] b _
 [ ] while a     :: bool a _
 [ ] continue    :: _
 [ ] break       :: _
 [ ] return a    :: a a
-[ ] num a       # int, float
-[ ] iter a      # string, list, dict, bytes, option
+[ ] num         # int, float
+[ ] iter        # string, list, dict, bytes
 
 # bool
 [ ] flip :: bool
 
 # int
-[ ] + - * ** / // % | & ^ :: int int int
+[ ] + - * ** / % | & ^ :: int int int
 [ ] abs    :: int
 [ ] neg    :: int
 [ ] char   :: string
@@ -36,7 +36,7 @@
 [ ] format :: string string
 
 # float
-[ ] + - * ** / // % :: float float float
+[ ] + - * ** / % :: float float float
 [ ] abs    :: float
 [ ] neg    :: float
 [ ] floor  :: int
@@ -94,18 +94,18 @@
 [ ] group b :: fn[a b]? dict[b list[a]]
 [ ] reverse :: list[a]
 [ ] zip b :: list[b] list[tuple[a b]]
-[ ] find :: fn[a bool] option[a]
+[ ] find :: fn[a bool] a @error
 [ ] fold b :: fn[a b b] b
 [ ] has :: a bool
 [ ] sum :: a
 [ ] min :: a
 [ ] max :: a
-[ ] minmax :: (a,a)
 
 # dict[k v]
 [ ] size :: int
 [ ] get :: k v @error
 [ ] set :: k v v
+[ ] has :: k bool
 [ ] keys :: iter[k]
 [ ] values :: iter[v]
 [ ] list :: list[tuple[k v]]
@@ -123,23 +123,17 @@
 [ ] 1 :: b
 ...
 
-# option[a]
-[ ] "?." id # some(true).flip is option[bool]
-
 ---( interface )---------------------------------------
 interface num a:
-  + - * ** / // % :: a a a
+  + - * ** / / % :: a a a
   abs :: a
   neg :: a
 
-interface iter a:
-  iter :: option[a]
-
 interface class a:
  ft == : a a bool
+ ft === : a class bool
  ft <=>: a a int
  ft () ...: a # T(...) returns instance of T
-
  fn != a b: (a == b).flip
  fn > a b : (a <=> b) == 1
  fn >= a b: (a <=> b) >= 0
@@ -161,7 +155,7 @@ interface class a:
 [ ] debug, info, warn, error a :: a any* a
 
 # time
-[ ] year, month, day, hour, minute, second, wday, mday, yday
+[ ] year, month, day, hour, minute, second, wday, mday, yday :: int
 [ ] time.now
 
 # random
@@ -170,8 +164,8 @@ interface class a:
 [ ] random.choice a :: list[a] a @error
 
 # http
-[ ] listen string (http.request http.response) ?
-[ ] request string {method::string headers::list[tuple[string list[string]]] body:bytes}? http.response
+[ ] listen string (http.request http.response) _
+[ ] request string {method.string headers.list[tuple[string list[string]]] body.bytes}? http.response
 
 # odb (object database management system)
 [ ] schema a :: odb.schema(a)

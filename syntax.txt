@@ -26,7 +26,7 @@ op2:
 | [+-*/%<>|&^=,]                        # (1, "hi")   -> tuple 1 "hi"
 | [+-*/%<>|&^=:] "="
 | "**" | "&&" | "||" | ">>" | "<<"
-| "===" | "**="
+| "===" | "**=" "<=>"
 id: [A-Za-z_][A-Za-z0-9_]*
 keyword: ft fn var let struct union if else switch case catch for each while module test
 reserved: _ return yield continue break throw interface implement use iif
