@@ -1,84 +1,68 @@
-# Core syntax
+# Syntax
 top: line*
-line:
-| keyword exp+ ":" (exp | ("¥n  " line)+)
-| exp ("\n|" exp "\n|" exp)            # a;| b;| c    -> iif a b c
-| exp ("\n|" exp ("if" exp)? ":" exp)* # a;| b: c;| d -> switch a:;  case b: c;  else: d
+line: keyword? exp+ block?
+block:
+| ":" exp
+| ":" ("\n  " line)+
+| "{" line ([\n;] line)+ "}"
 exp: op1? unit (op2 exp)?
 unit: bottom (prop | call | index)*
-prop: "." id
-call: "(" exp* (id "=" exp)* ")"
-index: "[" exp+ "]"                # a[1]           -> a.get(1)
+prop: "." type
+call: "(" exp* (id "=" exp)* ")"        # f(a b=c)
+index: "[" exp+ "]"                     # a[1]
 bottom:
-| '"""' [^"]* '"""'                # """a"b"""      -> "a\"b"
-| "[" exp* "]"                     # [1 2]          -> list(1 2)
-| "[:]" | "[" (unit ":" unit)* "]" # ["a":1 b:2]    -> dict "a" 1 b 2
-| "{" id* (id "=" unit)* "}"       # {a b=1}        -> new a a b 1
-| $'"' [^"]* '"'                   # "s {a} {b 04}" -> "s {} {04}".format(a b)
-| id ("," id)+ "=" exp             # a, b = c       -> a = c.0; b = c.1
-| bottom "[" exp+ "]" "=" exp      # a[1] = 2       -> a.get(1).set(2)
-| "0x" [0-9a-fA-F_]+               # 0xff           -> 255
-| "0o" [0-7_]+                     # 0o11           -> 9
-| "0b" [0-1_]+                     # 0b11           -> 3
-| [0-9_]+ ("." [0-9_]+)?           # 10_000         -> 10000
-| "(" exp ")"                      # 1 * (2 + 3)    : priority
-| '"' [^"]* '"'                    # "s"            : string
-| (id ("," id)*)? ":" exp          # a,b: a + b     : lambda
+| " ." type                             # .t.fields   : specific type
+| "(" exp ")"                           # 1 * (2 + 3) : priority
+| [0-9]+ ("." [0-9]+)?                  # 42          : number
+| '"' [^"]* '"'                         # "s"         : string
+| (id ("," id)*)? ":" exp               # a,b: a + b  : lambda
+| "[" exp* "]"                          # [1 2]       : list 1 2
+| "[:]" | "[" (unit ":" unit)* "]"      # ["a":1 b:2] : dict "a" 1 b 2
+| "{" (id ("." type)? ("=" unit)?)* "}" # {a b=1}     : new a a b 1
 | id
+type: id ("[" type+ "]")?
 op1: [!-]
 op2:
-| [+-*/%<>|&^=,]                   # (1, "hi")   -> tuple 1 "hi"
+| [+-*/%<>|&^=,]                        # (1, "hi")   -> tuple 1 "hi"
 | [+-*/%<>|&^=:] "="
 | "**" | "&&" | "||" | ">>" | "<<"
 | "===" | "**="
 id: [A-Za-z_][A-Za-z0-9_]*
-keyword:
-| var let fn ft class union
-| if else switch case catch for each while
-| module test
-reserved:
-| var let use
-| return yield continue break throw interface implement
-| iif
-reserved: bool int float string bytes new list set dict tuple true false num iter lazy ref
+keyword: ft fn var let struct union if else switch case catch for each while module test
+reserved: _ return yield continue break throw interface implement use iif
+reserved: bool int float string bytes new list set dict tuple num iter lazy ref true false nan inf
 reserved: array assert i8..i64 u8..u64 f32 f64 decimal
 
-# Example
-- Primitive
-  - bool           # true, false
-  - int            # 1, -1
-  - float          # 1.0, -1.0
-  - string         # "hi"
-  - lambda         # a,b: a + b
-  - bytes          # bytes(1024)
-- Container
-  - list           # list[int](1 2)
-  - set            # set[int](1 2)
-  - dict           # dict[string int]("a" 1 b 1+2)
-  - tuple          # tuple[int string](1 "hi")
-  - class          # class(a b f x,y:g(x y))
-- Definition
-  - variable       # var a 1
-  - constant       # let a 1
-  - function       # ft f a: a a; fn f a: a
-  - class          # class a: b c
-  - union          # union a: b; c d
-- Statement
-  - if / else      # if a: b; else if c: d; else: e
-  - return         # return 1
-  - switch / case  # switch a:; case b: c; else: d
-  - throw / catch  # fn f: throw "..."; try f; catch type: a; catch _: c
-  - for            # for i 9: n += i
-  - each           # each x xs: n += x
-  - while          # while a: b
-  - continue       # continue
-  - break          # break
-  - yield          # fn f: yield 1; yield 2 # iter[int]
-- Misc
-  - iif            # iif a b c d e   ->   a ? b : c ? d : e
-  - module         # module a: inc int int; use a inc
-  - comment        # # comment
-  - test           # test t "label": t.eq "hi" greet
+
+
+# Syntax sugger for value
+| '"""' [^"]* '"""'           # """a"b"""      -> "a\"b"
+| $'"' [^"]* '"'              # "s {a} {b 04}" -> "s {} {04}".format(a b)
+| id ("," id)+ "=" exp        # a, b = c       -> a = c.0; b = c.1; c
+| bottom "[" exp+ "]" "=" exp # a[1] = 2       -> a.get(1).set(2)
+| "0x" [0-9a-fA-F_]+          # 0xff           -> 255
+| "0o" [0-7_]+                # 0o11           -> 9
+| "0b" [0-1_]+                # 0b11           -> 3
+| [0-9][0-9_]+ ("." [0-9_]+)? # 10_000.1_002   -> 10000.1002
+
+
+
+# Semantics
+"fn" id pattern*: ...
+"switch" exp ":" ("\n  case " pattern (if exp+)? ":" exp+)+
+pattern: matcher ("," pattern)?           # a, b    : tuple
+matcher:
+| "(" pattern ")"                         # (x)     : priority
+| '"' [^"]* '"'                           # "s"     : string
+| [0-9]+ ("." [0-9]+)?                    # 1.2     : number
+| id term?                                # x       : capture
+term:
+| ("." type)+                             # .t      : type
+| "{" id ("." type)? ("=" pattern)? "}"   # {a b.t} : struct
+| "[" pattern* "]"                        # [0 x]   : list
+| "[:]" | "[" (pattern ":" pattern)+ "]"  # ["s":x] : dict
+
+
 
 # Symbols
 _                  part of id
@@ -105,3 +89,74 @@ _                  part of id
 ' undefined
 $ undefined
 ; undefined
+
+
+
+# Basic usage
+- Primitive
+  - bool           # true, false
+  - int            # 1, -1
+  - float          # 1.0, -1.0
+  - string         # "hi"
+  - lambda         # a,b: a + b
+  - bytes          # bytes(1024)
+- Container
+  - list           # list[int](1 2)
+  - set            # set[int](1 2)
+  - dict           # dict[string int]("a" 1 b 1+2)
+  - tuple          # tuple[int string](1 "hi")
+  - struct         # new(a b f x,y:g(x y))
+- Definition
+  - variable       # var a 1
+  - constant       # let a 1
+  - function       # ft f a: a a; fn f a: a
+  - struct         # struct a: b c
+  - union          # union a: b; c d
+- Statement
+  - if / else      # if a: b; else if c: d; else: e
+  - return         # return 1
+  - switch / case  # switch a:; case b: c; else: d
+  - throw / catch  # fn f: throw "..."; try f; catch type: a; catch _: c
+  - for            # for i 9: n += i
+  - each           # each x xs: n += x
+  - while          # while a: b
+  - continue       # continue
+  - break          # break
+  - yield          # fn f: yield 1; yield 2 # iter[int]
+- Misc
+  - iif            # iif a b c d e   ->   a ? b : c ? d : e
+  - module         # module a: inc int int; use a inc
+  - comment        # # comment
+  - test           # test t "label": t.eq "hi" greet
+
+
+
+# Advanced usage
+union ast:
+  real float
+  op2:
+    op string
+    lhs ast
+    rhs ast
+def eval a:
+  match a:
+    case x.real: x
+    case x.op2{op="+"}: eval(x.lhs) + eval(x.rhs)
+    case x.op2{op="-"}: eval(x.lhs) - eval(x.rhs)
+    else: throw $"unknown {a}"
+
+union tree a:
+  leaf
+  node:
+    value a
+    left tree[a]
+    right tree[a]
+def validate t:
+  match t:
+    case .leaf                            : true
+    case .tree[t].node if t === fn        : false
+    case .node{value} if value == nan     : false
+    case .node{value left.node right.node}: left.value <= value <= right.value && validate(left) && validate(right)
+    case .node{value left.node}           : left.value <= value && validate(left)
+    case .node{value right.node}          : value <= right.value && validate(right)
+    # else is not needed because the above covers all cases
