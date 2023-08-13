@@ -22,14 +22,14 @@ const compile = root => {
     '__call,list': '[]',
     '__call,set': '[]',
     '__call,dict': '({})',
-    '__call,obj': '({})',
+    '__call,new': '({})',
   }
   const property = (t, id) => _property(compile(t), id, `${t.type.split('(')[0]}.${id}`)
   const _property = (o, id, s) =>
     s === 'list.size' ? `${o}.length` :
     s === 'string.size' ? `${o}.length` :
     `${o}.${id}`
-  const class_ = (name, fields) => `const ${name} = (${fields.map(f => f[0])}) => ({${fields.map(f => f[0])}, toString() { return '${name}(' + ${fields.map(f => f[1] == 'string' ? 'JSON.stringify(' + f[0] + ')' : '(' + f[0] + ').toString()').join(" + ' ' + ")} + ')' }})`
+  const struct = (name, fields) => `const ${name} = (${fields.map(f => f[0])}) => ({${fields.map(f => f[0])}, toString() { return '${name}(' + ${fields.map(f => f[1] == 'string' ? 'JSON.stringify(' + f[0] + ')' : '(' + f[0] + ').toString()').join(" + ' ' + ")} + ')' }})`
   const adt = (name, fields) => fields.map(f => Array.isArray(f) ? adtValue(f[0], f[1]) : adtTag(f)).join('\n') + `\nconst ${name} = ({${fields.map(f => f[0])}})`
   const adtTag = name => `const ${name} = ({__tag: '${name}', toString() { return '${name}' }})`
   const adtValue = (name, v) => `const ${name} = __val => ({__tag: '${name}', __val, toString() { return '${name}(' + ${v == 'string' ? 'JSON.stringify(__val)' : '__val.toString()'} + ')' }})`
@@ -59,13 +59,13 @@ const compile = root => {
     h == 'set' ? `[${t.map(js).join(',')}]` :
     h == 'tuple' ? `[${t.map(js).join(',')}]` :
     h == 'dict' ? '({' + [...Array(t.length / 2).keys()].map(i => `[${t[i*2]}]: ${compile(t[i*2+1])}`).join(', ') + '})' :
-    h == 'obj' ? '({' + [...Array(t.length / 2).keys()].map(i => `${t[i*2]}: ${compile(t[i*2+1])}`).join(', ') + '})' :
+    h == 'new' ? '({' + [...Array(t.length / 2).keys()].map(i => `${t[i*2]}: ${compile(t[i*2+1])}`).join(', ') + '})' :
     h == 'throw' ? `(() => {throw Error(${string(js(t[0]), t[0].type)})})()` :
     h == 'try' ? `(() => { try { return ${js(t[0])} } catch(__error) { return (${js(t[1])})(__error) } })()` :
     h == '.' && t[1].match(/^[0-9]+$/) ? `${compile(t[0])}[${t[1]}]` : // tuple(...).1
     h == '.' ? property(t[0], t[1]) :
-    h == ':' && t[0] == 'class' ? class_(t[1], flat(t.slice(2))) :
-    h == ':' && t[0] == 'enum' ? adt(t[1], flat(t.slice(2))) :
+    h == ':' && t[0] == 'struct' ? struct(t[1], flat(t.slice(2))) :
+    h == ':' && t[0] == 'union' ? adt(t[1], flat(t.slice(2))) :
     h == ':' && t[0] == 'match' ? match(js(t[1]), flat(t.slice(2))) :
     h == ':' && t[0] == 'fn' ? fn(to_a(t[1])[0], to_a(t[1]).slice(1), to_s(t.slice(2))) :
     h == ':' && t[0] == 'if' ? `if (${js(t[1])}) { ${js(t[2])} }` :
@@ -111,7 +111,7 @@ if (require.main === module) {
   test(/hi/, 'r"hi"')
   test("hi 2", 'let n 1\nlet s "hi"\n$"{s} {n + 1}"')
   test({}, '{}')
-  test({a:1, b:"c"}, '{a:1 b:"c"}')
+  test({a:1, b:"c"}, '{a=1 b="c"}')
 
   // properties
   test(0, '"".size')
@@ -176,24 +176,24 @@ if (require.main === module) {
   test(2, 'fn f a:\n  var b a\n  a += 1\nf(1)')
 
   // user defined type
-  test('hi', 'class s:\n  a string\ns("hi").a')
-  test(1, 'class s:\n  a string\n  b int\ns("hi" 1).b')
-  test(true, 'class s:\n  a string\n  b int\ns("hi" 1) == s("hi" 1)')
-  test(false, 'class s:\n  a string\n  b int\ns("hi" 1) == s("hi" 2)')
-  test(false, 'class s:\n  a string\n  b int\ns("hi" 1) < s("hi" 1)')
-  test(true, 'class s:\n  a string\n  b int\ns("hi" 1) <= s("hi" 1)')
-  test(false, 'class s:\n  a string\n  b int\ns("hi" 1) > s("hi" 1)')
-  test(true, 'class s:\n  a string\n  b int\ns("hi" 1) >= s("hi" 1)')
-  test('s("hi" 1)', 'class s:\n  a string\n  b int\nstring(s("hi" 1))')
+  test('hi', 'struct s:\n  a string\ns("hi").a')
+  test(1, 'struct s:\n  a string\n  b int\ns("hi" 1).b')
+  test(true, 'struct s:\n  a string\n  b int\ns("hi" 1) == s("hi" 1)')
+  test(false, 'struct s:\n  a string\n  b int\ns("hi" 1) == s("hi" 2)')
+  test(false, 'struct s:\n  a string\n  b int\ns("hi" 1) < s("hi" 1)')
+  test(true, 'struct s:\n  a string\n  b int\ns("hi" 1) <= s("hi" 1)')
+  test(false, 'struct s:\n  a string\n  b int\ns("hi" 1) > s("hi" 1)')
+  test(true, 'struct s:\n  a string\n  b int\ns("hi" 1) >= s("hi" 1)')
+  test('s("hi" 1)', 'struct s:\n  a string\n  b int\nstring(s("hi" 1))')
 
   // user defined algebraic data type
-  test(1, 'enum ab:\n  a\n  b\nmatch a:\n  case a: 1\n  case b: 2')
-  test('hi', 'enum ab:\n  a string\n  b int\nmatch a "hi":\n  case a s: s\n  case b n: string(n)')
-  test('hi', 'enum ab:\n  a string\n  b int\nmatch a "hi":\n  case a s: s\n  case b n: string(n)')
-  test('1', 'enum ab:\n  a string\n  b int\nmatch b 1:\n  case a s: s\n  case b n: string(n)')
-  test('a', 'enum ab:\n  a\n  b int\n  c string\nstring(a)')
-  test('b(1)', 'enum ab:\n  a\n  b int\n  c string\nstring(b(1))')
-  test('c("hi")', 'enum ab:\n  a\n  b int\n  c string\nstring(c("hi"))')
+  test(1, 'union ab:\n  a\n  b\nmatch a:\n  case a: 1\n  case b: 2')
+  test('hi', 'union ab:\n  a string\n  b int\nmatch a "hi":\n  case a s: s\n  case b n: string(n)')
+  test('hi', 'union ab:\n  a string\n  b int\nmatch a "hi":\n  case a s: s\n  case b n: string(n)')
+  test('1', 'union ab:\n  a string\n  b int\nmatch b 1:\n  case a s: s\n  case b n: string(n)')
+  test('a', 'union ab:\n  a\n  b int\n  c string\nstring(a)')
+  test('b(1)', 'union ab:\n  a\n  b int\n  c string\nstring(b(1))')
+  test('c("hi")', 'union ab:\n  a\n  b int\n  c string\nstring(c("hi"))')
 
   // error handling
   error('zdiv', '1 / 0')

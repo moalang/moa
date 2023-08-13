@@ -3,15 +3,16 @@
  *
  * Syntax sugars
  * [x] f(...)      # (f ...)
+ * [x]  .m         # (. m)
  * [x] o.m         # (. o m)
  * [x] a b         # (a b)
  * [x] a op2 b     # (op2 a b)
  * [x] op1 a       # (op1 a)
  * [x] a b: c      # (: (a b) (c))
  * [x] a b:
- *     c
- *     d e         # (: (a b) (c (d e)))
- * [x] {a b:c}     # (obj a a b c)
+ *       c
+ *       d e       # (: (a b) (c (d e)))
+ * [x] {a b:c}     # (new a a b c)
  */
 const str = o =>
   typeof o === 'string' ? o :
@@ -25,7 +26,7 @@ const fail = m => { throw new Error(m) }
 const parse = source => {
   let pos = 0
   const tokens = source.split(/((?:!=)|[()\[\]{}!]|(?:[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+|[r$]?"[^"]*"|`[^`]*`|[A-Za-z0-9_]+)/).filter(t => t.length > 0)
-  const binaryOps = '. , * ** / // % + - = += -= *= /= %= **= => < <= > >= && || == !='.split(' ')
+  const binaryOps = '. , * ** / // % + - >> << ^ & | = += -= *= /= %= **= => < <= > >= == != === <=> && ||'.split(' ')
   const statement = () => {
     const many = (a, f) => {
       while (pos < tokens.length) {
@@ -40,8 +41,8 @@ const parse = source => {
     }
     const consume = () => ((tokens[pos].match(/^[ \t]+$/) && ++pos), tokens[pos++])
     const until = end => many([], t => t === end ? ++pos : unit())
-    const call = o => tokens[pos] === '(' && !' \t:'.includes(tokens[pos - 1]) ? ++pos && _call(o, until(')')) : o
-    const _call = (o, a) => a.length === 0 ? ['__call', o] : [o].concat(a)
+    const call = (o, a) => a.length === 0 ? ['__call', o] : [o].concat(a)
+    const index = (o, a) => ['__get', o, ...a]
     const indent = s => s === undefined ? 0 : s.match(/[\r\n]/) ? s.split(/[\r\n]/).slice(-1)[0].length : -1
     const key = o => typeof o === 'string' ? JSON.stringify(o) : o
     const pairs = a => [...Array(a.length / 3).keys()].flatMap(i => [key(a[i*3]), a[(i*3)+2]])
@@ -51,20 +52,23 @@ const parse = source => {
       ['list', ...a]
     const object = a => {
       if (a.length == 0) {
-        return ['__call', 'obj']
+        return ['__call', 'new']
       }
-      const pos = Math.max(0, a.findIndex(s => s === ':') - 1)
-      const ids = pos >= 0 ? a.slice(0, pos).flatMap(x => [x, x]) : []
-      const kvs = [...Array((a.length - pos) / 3).keys()].flatMap(i => [a[pos+i*3], a[pos+i*3+2]])
-      return ['obj', ...ids, ...kvs]
+      const pos = a.findIndex(s => Array.isArray(s) && s[0] === '=')
+      return pos === -1 ? ['new', ...a] :
+        ['new', ...a.slice(0, pos).flatMap(x => [x, x]), ...a.slice(pos).flatMap(x => [x[1], x[2]])]
     }
     const bottom = t =>
-      tokens[pos] === '.' ? (consume(), ['.', t, consume()]) :
+      tokens[pos] === '.' ? (++pos, ['.', t, consume()]) :
+      tokens[pos] === '=' ? (++pos, ['=', t, unit()]) :
       t === '[' ? container(until(']')) :
       t === '{' ? object(until('}')) :
       t === '(' ? until(')') :
       t
-    const unit = () => call(bottom(consume()))
+    const unit = () => _unit(bottom(consume()))
+    const _unit = o => tokens[pos] === '(' && !' \t:'.includes(tokens[pos - 1]) ? ++pos && call(o, until(')')) :
+                       tokens[pos] === '[' && !' \t:'.includes(tokens[pos - 1]) ? ++pos && index(o, until(']')) :
+                       o
     const mark = (m, a) => a.length >= 2 ? [m, ...a] : a
     const block = a => a.slice(-1)[0] === ':' && tokens[pos].match(/[\r\n]/) ? [...a, statement()] : a
     const line = () => block(many([], t => !t.match(/[\r\n]/) && unit()))
@@ -128,12 +132,13 @@ if (require.main === module) {
   test('(dict "a" (+ 1 2))', '[a:(1+2)]')
   test('(dict (+ 1 2) (+ 3 4))', '[(1+2):(3+4)]')
   test('(dict "a" 1 "b" (+ 1 2) c (+ 3 4))', '[a:1 b:(1+2) (c):(3+4)]')
-  test('(__call obj)', '{}')
-  test('(obj a 1)', '{a:1}')
-  test('(obj a a b b c (+ 1 2) d 3)', '{a b c:(1+2) d:3}')
+  test('(__call new)', '{}')
+  test('(new a 1)', '{a=1}')
+  test('(new a a b b c (+ 1 2) d 3)', '{a b c=(1+2) d=3}')
   test('(=> a a)', 'a => a')
   test('(=> (, a b) a)', 'a,b => a')
   test('(=> p (+ 1 2))', 'p => 1 + 2')
+  test('(. int)', '.int')
 
   // property access
   test('(. (__call list) length)', '[].length')
@@ -172,6 +177,10 @@ if (require.main === module) {
   test('(__call (. f m))', 'f.m()')
   test('((. f m) a)', 'f.m(a)')
   test('((. f m) a b)', 'f.m(a b)')
+
+  // index access
+  test('(__get x 1)', 'x[1]')
+  test('(__get x 1 2)', 'x[1 2]')
 
   // block
   test('(: a () b)', 'a: b')

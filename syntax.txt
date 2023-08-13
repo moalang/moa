@@ -1,37 +1,35 @@
 # Syntax
 top: line*
 line: keyword? exp+ block?
-block:
-| ":" exp
-| ":" ("\n  " line)+
-| "{" line ([\n;] line)+ "}"
+block: ":" (("\n  " line)+ | exp)
 exp: op1? unit (op2 exp)?
 unit: bottom (prop | call | index)*
 prop: "." type
 call: "(" exp* (id "=" exp)* ")"        # f(a b=c)
 index: "[" exp+ "]"                     # a[1]
 bottom:
-| " ." type                             # .t.fields   : specific type
-| "(" exp ")"                           # 1 * (2 + 3) : priority
-| [0-9]+ ("." [0-9]+)?                  # 42          : number
-| '"' [^"]* '"'                         # "s"         : string
-| (id ("," id)*)? ":" exp               # a,b: a + b  : lambda
-| "[" exp* "]"                          # [1 2]       : list 1 2
-| "[:]" | "[" (unit ":" unit)* "]"      # ["a":1 b:2] : dict "a" 1 b 2
-| "{" (id ("." type)? ("=" unit)?)* "}" # {a b=1}     : new a a b 1
+| " ." type                             # .t.fields    : specific type
+| "(" exp ")"                           # 1 * (2 + 3)  : priority
+| [0-9]+ ("." [0-9]+)?                  # 42           : number
+| '"' [^"]* '"'                         # "s"          : string
+| (id ("," id)*)? ":" exp               # a,b => a + b : lambda
+| "[" exp* "]"                          # [1 2]        : list 1 2
+| "[:]" | "[" (unit ":" unit)* "]"      # ["a":1 b:2]  : dict "a" 1 b 2
+| "{" (id ("." type)? ("=" unit)?)* "}" # {a b=1}      : new a a b 1
 | id
 type: id ("[" type+ "]")?
 op1: [!-]
 op2:
 | [+-*/%<>|&^=,]                        # (1, "hi")   -> tuple 1 "hi"
-| [+-*/%<>|&^=:] "="
+| [+-*/%<>|&^=] "="
 | "**" | "&&" | "||" | ">>" | "<<"
 | "===" | "**=" "<=>"
-id: [A-Za-z_][A-Za-z0-9_]*
-keyword: ft fn var let struct union if else switch case catch for each while module test
-reserved: _ return yield continue break throw interface implement use iif
-reserved: bool int float string bytes new list set dict tuple num iter lazy ref true false nan inf
-reserved: array assert i8..i64 u8..u64 f32 f64 decimal
+id: [a-za-z_][a-za-z0-9_]*
+keyword: define | statement | primitive | reservation
+define: _ ft fn struct union var let use module interface implement
+statement: if else match case catch for each while test return yield continue break throw iif
+primitive: bool int float num string bytes list set dict tuple true false nan inf new many
+reserved: iter ref lazy array assert i8..i64 u8..u64 f32 f64 decimal
 
 
 
@@ -48,21 +46,47 @@ reserved: array assert i8..i64 u8..u64 f32 f64 decimal
 
 
 # Semantics
-"fn" id pattern*: ...
-"switch" exp ":" ("\n  case " pattern (if exp+)? ":" exp+)+
-pattern: matcher ("," pattern)?           # a, b    : tuple
-matcher:
-| "(" pattern ")"                         # (x)     : priority
-| '"' [^"]* '"'                           # "s"     : string
-| [0-9]+ ("." [0-9]+)?                    # 1.2     : number
-| id term?                                # x       : capture
-term:
-| ("." type)+                             # .t      : type
-| "{" id ("." type)? ("=" pattern)? "}"   # {a b.t} : struct
-| "[" pattern* "]"                        # [0 x]   : list
-| "[:]" | "[" (pattern ":" pattern)+ "]"  # ["s":x] : dict
+- Pattern match
+  "fn" id pattern*: ...
+  "match" exp ":" ("\n  case " pattern (if exp+)? ":" exp+)+
+  pattern: matcher ("," pattern)?           # a, b    : tuple
+  matcher:
+  | "(" pattern ")"                         # (x)     : priority
+  | '"' [^"]* '"'                           # "s"     : string
+  | [0-9]+ ("." [0-9]+)?                    # 1.2     : number
+  | id term?                                # x       : capture
+  term:
+  | ("." type)+                             # .t      : type
+  | "{" id ("." type)? ("=" pattern)? "}"   # {a b.t} : struct
+  | "[" pattern* "]"                        # [0 x]   : list
+  | "[:]" | "[" (pattern ":" pattern)+ "]"  # ["s":x] : dict
 
+- Implicit type converting
+  1 + u8(2)              # u8
+  a -> lazy[a] <-> fn[a] # ft f a: lazy[a] a; fn f f: print(f() f.string); fn g: f(1 + 2)
+  many[a] -> list[a]     # ft f a: many[a] a; fn f a*: a.sum; fn g: f 1 2
 
+- Ternary operator
+  iif a >= 0 a (-1)
+
+- Default and optional argument
+  ft f: .int int
+  fn f a=1: a
+  fn f a=none: a.else(1)
+
+- Named argument
+  ft f: a.int int
+  fn f {a}: a # f(1); f(a=1)
+
+- Variable argument
+  ft f a: many[a] int
+  fn f a*: a.sum
+  ft g k v: many[k v] dict[k v]
+  fn g kvs*: dict kvs*
+
+- Macro
+  ft until: lazy[bool] lazy[_] _
+  fn until f g: while f(): g()
 
 # Symbols
 _                  part of id
@@ -98,7 +122,7 @@ $ undefined
   - int            # 1, -1
   - float          # 1.0, -1.0
   - string         # "hi"
-  - lambda         # a,b: a + b
+  - lambda         # a,b => a + b
   - bytes          # bytes(1024)
 - Container
   - list           # list[int](1 2)
@@ -115,7 +139,7 @@ $ undefined
 - Statement
   - if / else      # if a: b; else if c: d; else: e
   - return         # return 1
-  - switch / case  # switch a:; case b: c; else: d
+  - match / case   # match a:; case b: c; else: d
   - throw / catch  # fn f: throw "..."; try f; catch type: a; catch _: c
   - for            # for i 9: n += i
   - each           # each x xs: n += x

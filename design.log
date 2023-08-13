@@ -15,28 +15,9 @@
 - The library provides IO via its interface
 
 # TODO
-[ ] Implicit data type conversion
-    1 + u8(2)              # u8
-    a -> lazy[a] <-> fn[a] # ft f a: lazy[a] a; fn f f: print(f() f.string); fn g: f(1 + 2)
-    extra[a] -> a          # ft f a: extra[a] a; fn a=1: a; fn g: f + f(2)
-    many[a] -> list[a]     # ft f a: many[a] a; fn f a*: a.sum; fn g: f 1 2
-[ ] Syntax for ternary operator
-    iif a >= 0 a (-1)
-[ ] Syntax for default and optional argument
-    ft f: extra[int] int
-    fn f a=1: a
-    fn f a=none: a.else(1)
-[ ] Syntax for variable argument
-    ft f a: many[a] int
-    fn f a*: a.sum
-    ft g k v: many[k v] dict[k v]
-    fn g kvs*: dict kvs*
-[ ] Syntax for macro
-    ft until: lazy[bool] lazy[_] _
-    fn until f g: while f(): g()
 [ ] Syntax for named argument
-    ft f: int int int
-    fn f a b: a + b
+    ft f: a.int b.int int
+    fn f {a=0 b=0}: a + b
     fn g: f 1 2
     fn g: f a=1 b=2
     fn g: f b=2 a=1
