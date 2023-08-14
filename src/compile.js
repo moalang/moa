@@ -39,7 +39,7 @@
  * [x] nan
  * [x] inf
  * [x] new
- * [ ] many
+ * [x] many
  */
 const dump = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
@@ -61,7 +61,7 @@ const compile = root => {
   }
   const property = (t, id) => _property(compile(t), id, `${t.type.split('(')[0]}.${id}`)
   const _property = (o, id, s) =>
-    s === 'list.size' ? `${o}.length` :
+    s.match(/^list\[.+?\].size$/) ? `${o}.length` :
     s === 'string.size' ? `${o}.length` :
     `${o}.${id}`
   const struct = (name, fields) => `const ${name} = (${fields.map(f => f[0])}) => ({${fields.map(f => f[0])}, toString() { return '${name}(' + ${fields.map(f => f[1] == 'string' ? 'JSON.stringify(' + f[0] + ')' : '(' + f[0] + ').toString()').join(" + ' ' + ")} + ')' }})`
@@ -75,10 +75,10 @@ const compile = root => {
   const to_return = a => Array.isArray(a) && a[0] == '__do' ? a.slice(1).map(js).slice(0, -1).join(';\n') + ';\nreturn ' + js(a.slice(1).slice(-1)[0]) : `return ${js(a)}`
   const fn = (id, args, body) => `function ${id}(${args}) { ${to_return(body)} }`
   const string = (s,t) =>
-      t.startsWith('tuple(') ? `'tuple(' + ${s}.map(x => x.toString()).join(' ') + ')'` :
-      t.startsWith('list(') ? `'[' + ${s}.map(x => x.toString()).join(' ') + ']'` :
-      t.startsWith('set(') ? `'set(' + ${s}.map(x => x.toString()).join(' ') + ')'` :
-      t.startsWith('dict(') ? `'dict(' + Object.entries(${s}).map(x => x.map(y => y.toString()).join(' ')).join(' ') + ')'` :
+      t.startsWith('tuple[') ? `'tuple(' + ${s}.map(x => x.toString()).join(' ') + ')'` :
+      t.startsWith('list[') ? `'[' + ${s}.map(x => x.toString()).join(' ') + ']'` :
+      t.startsWith('set[') ? `'set(' + ${s}.map(x => x.toString()).join(' ') + ')'` :
+      t.startsWith('dict[') ? `'dict(' + Object.entries(${s}).map(x => x.map(y => y.toString()).join(' ')).join(' ') + ')'` :
       `(${s}).toString()`
   const value = x => x in constructors ? constructors[x] :
     x.startsWith('r"') ? `(new RegExp(${x.slice(1)}))` :

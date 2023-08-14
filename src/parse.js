@@ -26,7 +26,7 @@ const fail = m => { throw new Error(m) }
 const parse = source => {
   let pos = 0
   const tokens = source.split(/((?:!=)|[()\[\]{}!]|(?:[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+|[r$]?"[^"]*"|`[^`]*`|[A-Za-z0-9_]+)/).filter(t => t.length > 0)
-  const binaryOps = '. , * ** / // % + - >> << ^ & | = += -= *= /= %= **= => < <= > >= == != === <=> && ||'.split(' ')
+  const binaryOps = '. , * ** / // % + - >> << ^ & | = += -= *= /= %= **= => < <= > >= == != === !== <=> && ||'.split(' ')
   const statement = () => {
     const many = (a, f) => {
       while (pos < tokens.length) {

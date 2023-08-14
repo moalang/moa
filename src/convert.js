@@ -1,5 +1,6 @@
 /*
  * Make internal expression to be typed
+ * TODO
  * [x] ft
  * [x] fn
  * [x] struct
@@ -40,7 +41,7 @@
  * [x] nan
  * [x] inf
  * [x] new
- * [ ] many
+ * [x] many
  */
 const dump = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
@@ -49,13 +50,13 @@ const prune = t => t.instance ? t.instance = prune(t.instance) : t
 const str = o =>
   o === undefined ? 'undefined' :
   typeof o === 'string' ? o :
-  Array.isArray(o) ? `(${o.map(str).join(' ')})${o.repeatable ? '*' : ''}` :
+  Array.isArray(o) ? `(${o.map(str).join(' ')})` :
   o instanceof String ? o.toString() :
   typeof o === 'object' && o.variable ? (s => (o.variable=true, `var(${s})`))((o.variable=false, str(o))) :
   typeof o === 'object' && o.instance ? str(o.instance) :
   typeof o === 'object' && o.name === 'expected' ? o.generics[0].toString() + '|' + o.generics[1].map(str).join('|') :
   typeof o === 'object' && o.name === 'struct' ? '(' + Object.keys(o.fields).sort().map(k => `${k}:${prune(o.fields[k])}`).join(' ') + ')' :
-  typeof o === 'object' && (o.tid || o.type || o.name) ? o.toString() + (o.repeatable ? '*' : '') :
+  typeof o === 'object' && (o.tid || o.type || o.name) ? o.toString() :
   JSON.stringify(o)
 const put = (...a) => { process.stdout.write(a.map(str).join(' ')); return a[0] }
 const puts = (...a) => { console.log(a.map(str).join(' ')); return a[0] }
@@ -63,11 +64,9 @@ const infer = root => {
   let unique = 1
   const assertVariable = t => t.variable ? t : failInfer(`'${t}' is not variable`, `var(${t.toString()})`, t)
   const variable = t => (t.variable = true, t)
-  const repeat = t => (t.repeatable = true, t)
   const referable = (t, s) => (t.toString = () => t.instance ? t.instance.toString() : s, t)
   const tvar = () => (tid => referable({tid, instance: null},  tid.toString()))(unique++)
-  const type = (name, ...generics) => ({name, generics, toString: () => `${name}${generics.length ? `(${generics.map((g, i) => g.instance ? g.instance.toString() : g.toString()).join(' ')})` : ''}`})
-  const eprune = t => (t => t.name === 'expected' ? t.generics[0] : t)(prune(t))
+  const type = (name, ...generics) => ({name, generics, toString: () => `${name}${generics.length ? `[${generics.map((g, i) => g.instance ? g.instance.toString() : g.toString()).join(' ')}]` : ''}`})
   const tvoid = type('void')
   const tbool = type('bool')
   const tint = type('int')
@@ -78,6 +77,7 @@ const infer = root => {
   const texpected = (t, ta) => ta.length === 0 ? t : t.name === 'expected' ? (t.generics = [t.generics[0], ta], t) : type('expected', t, ta)
   const tnum = referable({name: 'num', traits: [tint, tfloat]}, 'num')
   const tstruct = id => ((t, tv) => (t.fields = {[id]: tv}, t))(type('struct'), tvar())
+  const many = (...t) => type('many', ...t)
   const tenv = {
     int: tint,
     'true': tbool,
@@ -85,21 +85,24 @@ const infer = root => {
     'string': () => [tvar(), tstring],
     'int': [tnum, tint],
     'float': [tnum, tfloat],
-    'list': () => (t => [t, type('list', t)])(repeat(tvar())),
-    'set': () => (t => [t, type('set', t)])(repeat(tvar())),
-    'dict': () => (a => [a, type('dict', a[0], a[1])])(repeat([tvar(), tvar()])),
+    'list': () => (t => [many(t), type('list', t)])(tvar()),
+    'set': () => (t => [many(t), type('set', t)])(tvar()),
+    'dict': () => ((k,v) => [many(k, v), type('dict', k, v)])(tvar(), tvar()),
     'throw': () => (t => [t, texpected(tvar(), [t])])(tvar()),
     'try': () => ((t,e) => [texpected(t, e), [terror(e), t], t])(tvar(), tvar()),
     'nan': tfloat,
-    'inf': tfloat
+    'inf': tfloat,
   }
   const tput = (k, v) => tenv[k] = v
-  '+ - * / % ** // += -= /= *= /= %= **='.split(' ').map(op => tput(op, (t => [t, t, t])(tnum)))
-  '&& ||'.split(' ').map(op => tput(op, [tbool, tbool, tbool]))
-  '== != < <= > >='.split(' ').map(op => tput(op, () => (t => [t, t, t])(tvar())))
+  '+ - * / % ** // += -= /= *= /= %= **= ||= &&='.split(' ').map(op => tput(op, (t => [t, t, t])(tnum)))
+  '|= ^='.split(' ').map(op => tput(op, [tint, tint, tint]))
+  '|| && ||= &&='.split(' ').map(op => tput(op, [tbool, tbool, tbool]))
+  '== === !== != < <= > >='.split(' ').map(op => tput(op, () => (t => [t, t, t])(tvar())))
+  '<=>'.split(' ').map(op => tput(op, () => (t => [t, t, tint])(tvar())))
   const tprops = {
     list: t => ({
       size: tint,
+      __get: [tint, t.generics[0]],
     }),
     string: t => ({
       size: tint,
@@ -108,6 +111,7 @@ const infer = root => {
       message: tstring,
     })
   }
+  tprops['many'] = tprops.list
   const property = (t, id) => t.tid && !t.instance ? (t.instance=tstruct(id)).fields[id] :
     t.name === 'struct' ? t.fields[id] = t.fields[id] || tvar() :
     _property(t, id, tprops[t.name])
@@ -116,29 +120,32 @@ const infer = root => {
     f(t)[id] || failInfer(`${id} is not a field of ${t.name}`, t, id)
   const inferTop = (node, env) => {
     const inf = node => inferTop(node, env)
-    const wraparg = ([arg, t]) => Array.isArray(arg) && arg[0] == '__get' && arg[1] == 'many' ?
-      [arg[2], () => type('list', repeat(t))] :
-      [arg, () => t]
-    const wrap = args => (a => ({a, env: Object.assign(Object.fromEntries(a.map(wraparg)), env)}))(to_a(args).map(a => [a, tvar()]))
+    const local = args => (a => ({
+      a,
+      env: Object.assign(Object.fromEntries(a.map(([arg, t]) => [arg, () => t])), env)
+    }))(to_a(args).map(arg => is_many(arg) ? [arg[2], many(tvar())] : [arg, tvar()]))
     const to_a = o => !Array.isArray(o) ? [o] : o[0] == ',' ? o.slice(1) : o
     const to_s = a => Array.isArray(a) && a.length === 1 ? to_s(a[0]) : a
     const to_v = f => typeof f === 'function' && f.length === 0 ? f() : f
     const is_include = (t, s) => Object.keys(s).map(k => unify(s[k], t[k]))
+    const is_many = x => Array.isArray(x) ? x[0] == '__get' && x[1] == 'many' : x.name == 'many'
+    const simplify = x => Array.isArray(x) ? x.map(simplify) : (t => t.name == 'expected' ? t.generics[0] : t)(prune(x))
     const unify = (lv, rv, f) => {
-      const l = eprune(lv)
-      const r = eprune(rv)
+      const l = simplify(lv)
+      const r = simplify(rv)
       const narrow = (ts, target) => ts.find(t => t.toString() === target.toString()) || failInfer(`Not compatible '${ts}' '${target}'`, ts.map(t => t.toString()).join('|'), target)
       const ret =
+        Array.isArray(l) && Array.isArray(r) && l.length === r.length ? l.map((t, i) => unify(t, r[i])) :
         l.tid && r.tid ? r.instane = lv :
         l.tid ? l.instance = rv :
         r.tid ? r.instance = lv :
         l.name === 'struct' && r.name === 'struct' ? l.instance = (Object.assign(r.fields, l.fields), r) :
         l.name === 'struct' && r.name in tprops && is_include(tprops[r.name](r), l.fields) ? l.instance = r :
         r.name === 'struct' && l.name in tprops && is_include(tprops[l.name](l), r.fields) ? r.instance = l :
-        Array.isArray(l) && Array.isArray(r) && l.length === r.length ? l.map((t, i) => unify(t, r[i])) :
+        is_many(l) && is_many(r) ? (unify(l.generics, r.generics), l) :
+        is_many(l) ? (unify(l.generics[0], r), l) :
+        is_many(r) ? (unify(l, r.generics[0]), r) :
         !Array.isArray(l) && !Array.isArray(r) && l.toString() === r.toString() ? l :
-        //l.name in tstruct && !Array.isArray(r) ? l.instance = narrow(tstruct[l.name], r) :
-        //r.name in tstruct && !Array.isArray(l) ? r.instance = narrow(tstruct[r.name], l) :
         l.traits && !Array.isArray(r) ? l.instance = narrow(l.traits, r) :
         r.traits && !Array.isArray(l) ? r.instance = narrow(r.traits, l) :
         f ? f() : failInfer(`Unmatch ${l} and ${r}}`, l, r)
@@ -146,23 +153,27 @@ const infer = root => {
     }
     const errors = t => t.name === 'expected' ? t.generics[1] : []
     const merge = a => (s => a.filter(v => (k => s.has(k) ? false : s.add(k))(v.toString())))(new Set())
-    const match = (t, cs) => match_(t, cs.map(c => [x => Array.isArray(c[2]) ? inferTop(x, wrap(c[2].slice(1)).env) : inf(x), ...c.slice(1)]))
+    const match = (t, cs) => match_(t, cs.map(c => [x => Array.isArray(c[2]) ? inferTop(x, local(c[2].slice(1)).env) : inf(x), ...c.slice(1)]))
     const match_ = (t, cs) => (cs.map(c => unify(t, c[0](c[2]))), cs.reduce((r,c) => unify(r, c[0](c.slice(3))), tvar()))
     const flat = a => Array.isArray(a) && a.length == 1 && a[0][0] == '__do' ? a[0].slice(1).map(flat) : a
     const struct = (name, fields) => (tprops[name] = () => Object.fromEntries(fields), [...fields.map(f => type(f[1])), type(name)])
     const union = (t, fields) => fields.map(f => Array.isArray(f) ? tput(f[0], () => [...f.slice(1).map(x => type(x)), t]) : tenv[f] = t)
-    const squash = x => Array.isArray(x) && x[0].repeatable ? to_s(squash(x.slice(1))) : x
-    const typename = x => Array.isArray(x) && x[0] == '__get' ? `${x[1]}[${x.slice(2).map(typename).join(' ')}]`  : x.toString()
-    const ft = (args, types) => (x => types.map(t => (y => y ? y[1] : type(typename(t)))(x.a.find(y => y[0].toString() == t.toString()))))(wrap(args))
-    const fnarg = x => x[1][0] == '__get' && x[1][1] == 'many' ? repeat(x[1][2]) : x[1]
-    const fn = (a, exp) => (x => [...x.a.map(fnarg), inferTop(exp, x.env)])(wrap(a))
+    const squash = x => Array.isArray(x) && is_many(x[0]) ? to_s(squash(x.slice(1))) : x
+    const ft = (args, types) => {
+      const tmap = Object.fromEntries(args.map((arg, i) => [arg, tvar()]))
+      const to_type = t => Array.isArray(t) ? t.map(to_type) : tmap[t] || type(t)
+      const x = local(args)
+      const f = t => Array.isArray(t) && t[0] == '__get' ? type(t[1], ...t.slice(2).map(to_type)) : to_type(t)
+      return types.map(f)
+    }
+    const fn = (a, exp) => (x => [...x.a.map(o => o[1]), inferTop(exp, x.env)])(local(a))
     const _do = ts => texpected(ts.slice(-1)[0], merge(ts.flatMap(errors)))
     const _try = (a, b) => to_s(_call(a, b, m => failInfer(m, a, b)))
     const call = (a, b) => texpected(to_s(_call(a, b, m => failInfer(m, a, b))), merge(b.flatMap(errors)))
     const _call = (a, b, f) => b.length === 0 ? a :
       a.length === 0 ? f('Wrong number of arguments') :
-      a[0].repeatable && Array.isArray(a[0]) ? squash(unify(a[0][0], b[0], () => false) ? _call([...a[0].slice(1), ...a], b.slice(1)) : _call(a.slice(1), b)) :
-      a[0].repeatable ? squash(unify(a[0], b[0], () => false) ? _call(a, b.slice(1)) : _call(a.slice(1), b)) :
+      is_many(a[0]) && a[0].generics.length >= 2 ? squash(unify(a[0].generics[0], b[0], () => false) ? _call([...a[0].generics.slice(1), ...a], b.slice(1)) : _call(a.slice(1), b)) :
+      is_many(a[0]) ? squash(unify(a[0], b[0], () => false) ? _call(a, b.slice(1)) : _call(a.slice(1), b)) :
       (unify(a[0], b[0]), _call(a.slice(1), b.slice(1)))
     const apply = ([head, ...argv]) =>
       argv.length === 0 ? inf(head) :
@@ -181,12 +192,12 @@ const infer = root => {
       head == 'tuple' ? type('tuple', ...argv.map(inf)) :
       head == '.' && argv[1].match(/^[0-9]+$/) ? inf(argv[0]).generics[argv[1]] :
       head == '__do' ? _do(argv.map(inf)) :
-      head == '=>' ? (x => [...x.a.map(y => y[1]), inferTop(argv[1], x.env)])(wrap(to_a(argv[0]))) :
+      head == '=>' ? (x => [...x.a.map(y => y[1]), inferTop(argv[1], x.env)])(local(to_a(argv[0]))) :
       head == '.' ? property(inf(argv[0]), argv[1]) :
-      head == '__get' ? unify(inf(argv[1]), inf(argv[0]).generics[0]) :
+      head == '__get' ? call(property(inf(argv[0]), '__get'), argv.slice(1).map(inf)) :
       head == '!' ? unify(inf(argv[0]), tbool) :
       head == '=' ? unify(get(argv[0]), inf(to_s(argv.slice(1)))) :
-      '+= -= *= /= %= **='.split(' ').includes(head.toString()) ? unify(assertVariable(get(argv[0])), inf(to_s(argv.slice(1))))  :
+      '+= -= *= /= %= **= |= &= ||= &&= ^='.split(' ').includes(head.toString()) ? unify(assertVariable(get(argv[0])), inf(to_s(argv.slice(1))))  :
       head == 'try' ? _try(inf(head), argv.map(inf)) :
       call(inf(head), argv.map(inf))
     const value = v => v.type = v.match(/^[0-9]+$/) ? tnum :
@@ -230,6 +241,8 @@ if (require.main === module) {
     }
     fail(`Expect: '${l}' is not '${r}' but got '${ret}'. src=${src}`)
   }
+  test('float', 'ft f a: a a\nf(1) + f(1.0)')
+
   // primitives
   test('bool', 'true')
   test('bool', 'false')
@@ -249,21 +262,21 @@ if (require.main === module) {
   test('{a:num b:string}', '{a=(2+3) b=""}')
 
   // containers
-  test('list(1)', '[]')
-  test('list(num)', '[1]')
-  test('list(float)', '[1.0]')
-  test('list(num)', '[1 2]')
-  test('list(float)', '[1 2.0]')
-  test('list(float)', '[1 2.0 3]')
-  test('set(1)', 'set()')
-  test('set(num)', 'set(1)')
-  test('dict(1 2)', 'dict()')
-  test('dict(string num)', 'dict("a" 1)')
-  test('dict(1 2)', '[:]')
-  test('dict(string num)', '[a:1]')
-  test('tuple(num)', 'tuple(1)')
-  test('tuple(num float)', 'tuple(1 0.0)')
-  test('tuple(num float string)', 'tuple(1 0.0 "a")')
+  test('list[1]', '[]')
+  test('list[num]', '[1]')
+  test('list[float]', '[1.0]')
+  test('list[num]', '[1 2]')
+  test('list[float]', '[1 2.0]')
+  test('list[float]', '[1 2.0 3]')
+  test('set[1]', 'set()')
+  test('set[num]', 'set(1)')
+  test('dict[1 2]', 'dict()')
+  test('dict[1 2]', '[:]')
+  test('dict[string num]', 'dict("a" 1)')
+  test('dict[string num]', '[a:1]')
+  test('tuple[num]', 'tuple(1)')
+  test('tuple[num float]', 'tuple(1 0.0)')
+  test('tuple[num float string]', 'tuple(1 0.0 "a")')
 
   // property
   test('num', 'tuple(1).0')
@@ -327,9 +340,14 @@ if (require.main === module) {
   test('float', 'ft f a: a a\nf(1) + f(1.0)')
   test('(1 2)', 'ft f a b: a b')
   test('(1 2)', 'ft f a b: b a')
+
+  // variable length argument
   test('(many[int] int)', 'ft f: many[int] int')
-  test('(many[int] int)', 'ft f: many[int] int\nfn f many[x]: x.size')
-  //test('(many[int] int)', 'ft f: many[int] int\nfn f many[x]: x[0]') // TODO
+  test('(many[int] int)', 'ft f: many[int] int\nfn f many[x]: x[0]')
+  test('(many[1] int)', 'ft f a: many[a] int\nfn f many[x]: x.size')
+  test('(many[1] 1)', 'ft f a: many[a] a\nfn f many[x]: x[0]')
+  test('(many[1] 1)', 'fn f many[x]: x[0]')
+  test('(many[1] int)', 'fn f many[x]: x.size')
 
   // single operator
   test('bool', '!true')
