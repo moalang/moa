@@ -1,5 +1,5 @@
 /*
- * This program converts a Moa program to an internal expression, which is inspired by Lisp.
+ * Convert code to internal expression
  *
  * Syntax sugars
  * [x] f(...)      # (f ...)

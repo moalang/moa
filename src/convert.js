@@ -1,5 +1,46 @@
 /*
- * This program converts some nodes in an internal expression based on type inference.
+ * Make internal expression to be typed
+ * [x] ft
+ * [x] fn
+ * [x] struct
+ * [x] union
+ * [x] var
+ * [x] let
+ * [ ] use
+ * [ ] module
+ * [ ] interface
+ * [ ] implement
+ * [x] if
+ * [x] else
+ * [x] match
+ * [x] case
+ * [ ] catch
+ * [ ] for
+ * [ ] each
+ * [ ] while
+ * [ ] test
+ * [ ] return
+ * [ ] yield
+ * [ ] continue
+ * [ ] break
+ * [ ] throw
+ * [ ] iif
+ * [x] bool
+ * [x] int
+ * [x] float
+ * [x] num
+ * [x] string
+ * [ ] bytes
+ * [x] list
+ * [x] set
+ * [x] dict
+ * [x] tuple
+ * [x] true
+ * [x] false
+ * [x] nan
+ * [x] inf
+ * [x] new
+ * [ ] many
  */
 const dump = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
@@ -50,7 +91,7 @@ const infer = root => {
     'throw': () => (t => [t, texpected(tvar(), [t])])(tvar()),
     'try': () => ((t,e) => [texpected(t, e), [terror(e), t], t])(tvar(), tvar()),
     'nan': tfloat,
-    'inf': tfloat,
+    'inf': tfloat
   }
   const tput = (k, v) => tenv[k] = v
   '+ - * / % ** // += -= /= *= /= %= **='.split(' ').map(op => tput(op, (t => [t, t, t])(tnum)))
@@ -75,7 +116,10 @@ const infer = root => {
     f(t)[id] || failInfer(`${id} is not a field of ${t.name}`, t, id)
   const inferTop = (node, env) => {
     const inf = node => inferTop(node, env)
-    const wrap = args => (a => ({a, env: Object.assign(Object.fromEntries(a.map(x => [x[0], () => x[1]])), env)}))(to_a(args).map(a => [a, tvar()]))
+    const wraparg = ([arg, t]) => Array.isArray(arg) && arg[0] == '__get' && arg[1] == 'many' ?
+      [arg[2], () => type('list', repeat(t))] :
+      [arg, () => t]
+    const wrap = args => (a => ({a, env: Object.assign(Object.fromEntries(a.map(wraparg)), env)}))(to_a(args).map(a => [a, tvar()]))
     const to_a = o => !Array.isArray(o) ? [o] : o[0] == ',' ? o.slice(1) : o
     const to_s = a => Array.isArray(a) && a.length === 1 ? to_s(a[0]) : a
     const to_v = f => typeof f === 'function' && f.length === 0 ? f() : f
@@ -108,8 +152,10 @@ const infer = root => {
     const struct = (name, fields) => (tprops[name] = () => Object.fromEntries(fields), [...fields.map(f => type(f[1])), type(name)])
     const union = (t, fields) => fields.map(f => Array.isArray(f) ? tput(f[0], () => [...f.slice(1).map(x => type(x)), t]) : tenv[f] = t)
     const squash = x => Array.isArray(x) && x[0].repeatable ? to_s(squash(x.slice(1))) : x
-    const ft = (args, types) => (x => types.map(t => (y => y ? y[1] : type(t.toString()))(x.a.find(y => y[0].toString() == t.toString()))))(wrap(args))
-    const fn = (a, exp) => (x => [...x.a.map(y => y[1]), inferTop(exp, x.env)])(wrap(a))
+    const typename = x => Array.isArray(x) && x[0] == '__get' ? `${x[1]}[${x.slice(2).map(typename).join(' ')}]`  : x.toString()
+    const ft = (args, types) => (x => types.map(t => (y => y ? y[1] : type(typename(t)))(x.a.find(y => y[0].toString() == t.toString()))))(wrap(args))
+    const fnarg = x => x[1][0] == '__get' && x[1][1] == 'many' ? repeat(x[1][2]) : x[1]
+    const fn = (a, exp) => (x => [...x.a.map(fnarg), inferTop(exp, x.env)])(wrap(a))
     const _do = ts => texpected(ts.slice(-1)[0], merge(ts.flatMap(errors)))
     const _try = (a, b) => to_s(_call(a, b, m => failInfer(m, a, b)))
     const call = (a, b) => texpected(to_s(_call(a, b, m => failInfer(m, a, b))), merge(b.flatMap(errors)))
@@ -137,6 +183,7 @@ const infer = root => {
       head == '__do' ? _do(argv.map(inf)) :
       head == '=>' ? (x => [...x.a.map(y => y[1]), inferTop(argv[1], x.env)])(wrap(to_a(argv[0]))) :
       head == '.' ? property(inf(argv[0]), argv[1]) :
+      head == '__get' ? unify(inf(argv[1]), inf(argv[0]).generics[0]) :
       head == '!' ? unify(inf(argv[0]), tbool) :
       head == '=' ? unify(get(argv[0]), inf(to_s(argv.slice(1)))) :
       '+= -= *= /= %= **='.split(' ').includes(head.toString()) ? unify(assertVariable(get(argv[0])), inf(to_s(argv.slice(1))))  :
@@ -280,6 +327,9 @@ if (require.main === module) {
   test('float', 'ft f a: a a\nf(1) + f(1.0)')
   test('(1 2)', 'ft f a b: a b')
   test('(1 2)', 'ft f a b: b a')
+  test('(many[int] int)', 'ft f: many[int] int')
+  test('(many[int] int)', 'ft f: many[int] int\nfn f many[x]: x.size')
+  //test('(many[int] int)', 'ft f: many[int] int\nfn f many[x]: x[0]') // TODO
 
   // single operator
   test('bool', '!true')

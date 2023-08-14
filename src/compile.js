@@ -1,10 +1,45 @@
 /*
- * This program generate JavaScript from an internal expression.
- * [x] Primitives
- * [x] Containers
- * [x] Syntax for 'if', 'else if' and 'else'
- * [x] Syntax for match with algebraic data type pattern matching
- * [x] Support object syntax
+ * Generate JavaScript code from internal expression
+ * [ ] ft
+ * [x] fn
+ * [x] struct
+ * [x] union
+ * [x] var
+ * [x] let
+ * [ ] use
+ * [ ] module
+ * [ ] interface
+ * [ ] implement
+ * [x] if
+ * [x] else
+ * [x] match
+ * [x] case
+ * [ ] catch
+ * [ ] for
+ * [ ] each
+ * [ ] while
+ * [ ] test
+ * [ ] return
+ * [ ] yield
+ * [ ] continue
+ * [ ] break
+ * [ ] throw
+ * [ ] iif
+ * [x] bool
+ * [x] int
+ * [x] float
+ * [x] num
+ * [x] string
+ * [x] list
+ * [x] set
+ * [x] dict
+ * [x] tuple
+ * [x] true
+ * [x] false
+ * [x] nan
+ * [x] inf
+ * [x] new
+ * [ ] many
  */
 const dump = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
@@ -76,7 +111,7 @@ const compile = root => {
     '== != < <= > >='.split(' ').includes(h.toString()) ? `JSON.stringify(${js(t[0])}) ${h} JSON.stringify(${js(t[1])})` :
     '+-*/%<>=!|&'.includes(h[0]) ? js(t[0]) + h + js(t[1]) :
     `${h}(${t.map(js).join(',')})`
-  const js = x => !Array.isArray(x) ? value(x) : 
+  const js = x => !Array.isArray(x) ? value(x) :
     x.length === 1 ? js(x[0]) :
     x in constructors ? constructors[x] :
     apply(x)

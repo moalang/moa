@@ -28,8 +28,8 @@ id: [a-za-z_][a-za-z0-9_]*
 keyword: define | statement | primitive | reservation
 define: _ ft fn struct union var let use module interface implement
 statement: if else match case catch for each while test return yield continue break throw iif
-primitive: bool int float num string bytes list set dict tuple true false nan inf new many
-reserved: iter ref lazy array assert i8..i64 u8..u64 f32 f64 decimal
+primitive: bool int float num string list set dict tuple true false nan inf new many
+reserved: bytes iter ref lazy array assert i8..i64 u8..u64 f32 f64 decimal
 
 
 
@@ -80,9 +80,9 @@ reserved: iter ref lazy array assert i8..i64 u8..u64 f32 f64 decimal
 
 - Variable argument
   ft f a: many[a] int
-  fn f a*: a.sum
+  fn f many[a]: a.sum
   ft g k v: many[k v] dict[k v]
-  fn g kvs*: dict kvs*
+  fn g many[kvs]: dict kvs
 
 - Macro
   ft until: lazy[bool] lazy[_] _
