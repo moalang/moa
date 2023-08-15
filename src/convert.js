@@ -42,6 +42,7 @@
  * [x] inf
  * [x] new
  * [x] many
+ * [ ] optional
  */
 const dump = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }

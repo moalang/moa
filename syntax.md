@@ -1,4 +1,4 @@
-# Syntax
+# BNF like definition of syntax
 top: line*
 line: keyword? exp+ block?
 block: ":" (("\n  " line)+ | exp)
@@ -28,7 +28,7 @@ id: [a-za-z_][a-za-z0-9_]*
 keyword: define | statement | primitive | reservation
 define: _ ft fn struct union var let use module interface implement
 statement: if else match case catch for each while test return yield continue break throw iif
-primitive: bool int float num string list set dict tuple true false nan inf new many
+primitive: bool int float num string list set dict tuple true false nan inf new many optional
 reserved: bytes iter ref lazy array assert i8..i64 u8..u64 f32 f64 decimal
 
 
@@ -69,8 +69,8 @@ reserved: bytes iter ref lazy array assert i8..i64 u8..u64 f32 f64 decimal
 - Ternary operator
   iif a >= 0 a (-1)
 
-- Default and optional argument
-  ft f: .int int
+- Optional argument
+  ft f: optional[int] int
   fn f a=1: a
   fn f a=none: a.else(1)
 
@@ -178,9 +178,8 @@ union tree a:
 def validate t:
   match t:
     case .leaf                            : true
-    case .tree[t].node if t === fn        : false
     case .node{value} if value == nan     : false
     case .node{value left.node right.node}: left.value <= value <= right.value && validate(left) && validate(right)
     case .node{value left.node}           : left.value <= value && validate(left)
     case .node{value right.node}          : value <= right.value && validate(right)
-    # else is not needed because the above covers all cases
+    # else is not needed because the above covers all

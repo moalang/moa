@@ -1,5 +1,10 @@
 # The Moa Programming Language
-Moa is an open source programming language which helps programming for fun!
+Build simple and reliable system rapidly
+- An open-source programming language
+- Seamless development for web frontend and backend
+- Built-in HTTP server, RDB, KVS, bidirectional RPC
+
+
 
 # Getting started
 
@@ -45,3 +50,21 @@ $ echo 'def main io: io.listen s => s.puts "hello"' > main.moa
 $ PORT=3000 moa run        # you can check the behavior in local
 $ moa deploy user@hostname # deploy to ~/moa on the server and update the process non-stopping
 ```
+
+
+
+# Usage
+Moa is a tool for managing Moa source code.
+
+Usage:
+  moa <command> [arguments]
+
+The commands are:
+  moa                # launch repl
+  moa build          # compile to a executable file
+  moa format [files] # format files
+  moa help [topic]   # for more info about topic
+  moa lint [files]   # report likely mistakes
+  moa run [exp]      # run Moa program
+  moa test [regexps] # run tests
+  moa version        # print Moa version
