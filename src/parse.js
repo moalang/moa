@@ -61,6 +61,7 @@ const parse = source => {
     const bottom = t =>
       tokens[pos] === '.' ? (++pos, ['.', t, consume()]) :
       tokens[pos] === '=' ? (++pos, ['=', t, unit()]) :
+      t === '.' && tokens[pos - 2].match(/^[ \t]+$/) ? [t, consume()] :
       t === '[' ? container(until(']')) :
       t === '{' ? object(until('}')) :
       t === '(' ? until(')') :
@@ -117,6 +118,7 @@ if (require.main === module) {
   const stringify = a => Array.isArray(a) ? `(${a.map(stringify).join(' ')})` : str(a)
   const assert = (expect, fact, src) => expect === fact ? put('.') : fail(`Expected '${expect}' but got '${fact}' in '${src}'`)
   const test = (expect, src) => assert(expect, stringify(parse(src)), src)
+  test('(f (. int))', 'f .int')
 
   // primitives
   test('1', '1')
@@ -139,6 +141,7 @@ if (require.main === module) {
   test('(=> (, a b) a)', 'a,b => a')
   test('(=> p (+ 1 2))', 'p => 1 + 2')
   test('(. int)', '.int')
+  test('(f (. int))', 'f .int')
 
   // property access
   test('(. (__call list) length)', '[].length')

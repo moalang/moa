@@ -5,5 +5,6 @@ watch:
 test:
 	clear
 	node src/parse.js
+	node src/interpriter.js
 	node src/convert.js
 	node src/compile.js
