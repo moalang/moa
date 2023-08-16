@@ -72,7 +72,7 @@ const infer = root => {
     generics,
     repeatable: name == 'many',
     omittable: name == 'many' || name == 'optional',
-    toString: () => `${name}${generics.length ? `[${generics.map((g, i) => g.instance ? g.instance.toString() : g.toString()).join(' ')}]` : ''}`})
+    toString: () => `${name}${generics.length ? `[${generics.map(g => g.instance ? g.instance.toString() : g.toString()).join(' ')}]` : ''}`})
   const tvoid = type('void')
   const tbool = type('bool')
   const tint = type('int')
@@ -83,8 +83,9 @@ const infer = root => {
   const texpected = (t, ta) => ta.length === 0 ? t : t.name === 'expected' ? (t.generics = [t.generics[0], ta], t) : type('expected', t, ta)
   const tnum = referable({name: 'num', traits: [tint, tfloat]}, 'num')
   const tstruct = id => ((t, tv) => (t.fields = {[id]: tv}, t))(type('struct'), tvar())
-  const many = (...t) => type('many', ...t)
-  const optional = (...t) => type('optional', ...t)
+  const tmany = (...t) => type('many', ...t)
+  const tlist = (...t) => type('list', ...t)
+  const toptional = (...t) => type('optional', ...t)
   const tenv = {
     int: tint,
     'true': tbool,
@@ -92,9 +93,9 @@ const infer = root => {
     'string': () => [tvar(), tstring],
     'int': [tnum, tint],
     'float': [tnum, tfloat],
-    'list': () => (t => [many(t), type('list', t)])(tvar()),
-    'set': () => (t => [many(t), type('set', t)])(tvar()),
-    'dict': () => ((k,v) => [many(k, v), type('dict', k, v)])(tvar(), tvar()),
+    'list': () => (t => [tmany(t), type('list', t)])(tvar()),
+    'set': () => (t => [tmany(t), type('set', t)])(tvar()),
+    'dict': () => ((k,v) => [tmany(k, v), type('dict', k, v)])(tvar(), tvar()),
     'throw': () => (t => [t, texpected(tvar(), [t])])(tvar()),
     'try': () => ((t,e) => [texpected(t, e), [terror(e), t], t])(tvar(), tvar()),
     'nan': tfloat,
@@ -128,12 +129,12 @@ const infer = root => {
   const inferTop = (node, env) => {
     const inf = node => inferTop(node, env)
     const parse_arg = arg =>
-      arg[0] == '__get' && arg[1] == 'many' ? [arg[2], many(tvar())] :
+      arg[0] == '__get' && arg[1] == 'many' ? [arg[2], tmany(tvar())] :
       arg[0] == '=' ? [arg[1], inferTop(arg[2], env)] :
       [arg, tvar()]
     const local = args => (a => ({
-      types: a.map((x, i) => args[i][0] == '=' ? optional(x[1]) : x[1]),
-      env: {...env, ...Object.fromEntries(a.map(([id, t]) => [id, () => t]))}
+      types: a.map(([_, t], i) => args[i][0] == '=' ? toptional(t) : t),
+      env: {...env, ...Object.fromEntries(a.map(([id, t]) => [id, () => t.name == 'many' ? tlist(t.generics[0]) : t]))}
     }))(to_a(args).map(parse_arg))
     const to_a = o => !Array.isArray(o) ? [o] : o[0] == ',' ? o.slice(1) : o
     const to_s = a => Array.isArray(a) && a.length === 1 ? to_s(a[0]) : a
@@ -149,7 +150,7 @@ const infer = root => {
         l.tid && r.tid ? r.instane = lv :
         l.tid ? l.instance = rv :
         r.tid ? r.instance = lv :
-        l.name === 'struct' && r.name === 'struct' ? l.instance = (Object.assign(r.fields, l.fields), r) :
+        l.name === 'struct' && r.name === 'struct' ? l.instance = ({...r.fields, ...l.fields}, r) :
         l.name === 'struct' && r.name in tprops && is_include(tprops[r.name](r), l.fields) ? l.instance = r :
         r.name === 'struct' && l.name in tprops && is_include(tprops[l.name](l), r.fields) ? r.instance = l :
         l.omittable && r.omittable ? (unify(l.generics, r.generics), l) :
@@ -360,6 +361,7 @@ if (require.main === module) {
   test('(many[1] 1)', 'ft f a: many[a] a\nfn f many[x]: x[0]')
   test('(many[1] 1)', 'fn f many[x]: x[0]')
   test('(many[1] int)', 'fn f many[x]: x.size')
+  test('(many[1] list[1])', 'fn f many[x]: x')
 
   // optional argument
   test('(optional[int] int)', 'ft f: optional[int] int')
