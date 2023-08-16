@@ -67,7 +67,7 @@ const infer = root => {
   const variable = t => (t.variable = true, t)
   const referable = (t, s) => (t.toString = () => t.instance ? t.instance.toString() : s, t)
   const tvar = () => (tid => referable({tid, instance: null},  tid.toString()))(unique++)
-  const type = (name, ...generics) => ({name, generics, toString: () => `${name}${generics.length ? `[${generics.map((g, i) => g.instance ? g.instance.toString() : g.toString()).join(' ')}]` : ''}`})
+  const type = (name, ...generics) => ({name, generics, repeatable: name == 'many', toString: () => `${name}${generics.length ? `[${generics.map((g, i) => g.instance ? g.instance.toString() : g.toString()).join(' ')}]` : ''}`})
   const tvoid = type('void')
   const tbool = type('bool')
   const tint = type('int')
@@ -124,12 +124,11 @@ const infer = root => {
     const local = args => (a => ({
       a,
       env: Object.assign(Object.fromEntries(a.map(([arg, t]) => [arg, () => t])), env)
-    }))(to_a(args).map(arg => is_many(arg) ? [arg[2], many(tvar())] : [arg, tvar()]))
+    }))(to_a(args).map(arg => arg[0] == '__get' && arg[1] == 'many' ? [arg[2], many(tvar())] : [arg, tvar()]))
     const to_a = o => !Array.isArray(o) ? [o] : o[0] == ',' ? o.slice(1) : o
     const to_s = a => Array.isArray(a) && a.length === 1 ? to_s(a[0]) : a
     const to_v = f => typeof f === 'function' && f.length === 0 ? f() : f
     const is_include = (t, s) => Object.keys(s).map(k => unify(s[k], t[k]))
-    const is_many = x => Array.isArray(x) ? x[0] == '__get' && x[1] == 'many' : x.name == 'many'
     const simplify = x => Array.isArray(x) ? x.map(simplify) : (t => t.name == 'expected' ? t.generics[0] : t)(prune(x))
     const unify = (lv, rv, f) => {
       const l = simplify(lv)
@@ -143,9 +142,9 @@ const infer = root => {
         l.name === 'struct' && r.name === 'struct' ? l.instance = (Object.assign(r.fields, l.fields), r) :
         l.name === 'struct' && r.name in tprops && is_include(tprops[r.name](r), l.fields) ? l.instance = r :
         r.name === 'struct' && l.name in tprops && is_include(tprops[l.name](l), r.fields) ? r.instance = l :
-        is_many(l) && is_many(r) ? (unify(l.generics, r.generics), l) :
-        is_many(l) ? (unify(l.generics[0], r), l) :
-        is_many(r) ? (unify(l, r.generics[0]), r) :
+        l.repeatable && r.repeatable ? (unify(l.generics, r.generics), l) :
+        l.repeatable ? (unify(l.generics[0], r), l) :
+        r.repeatable ? (unify(l, r.generics[0]), r) :
         !Array.isArray(l) && !Array.isArray(r) && l.toString() === r.toString() ? l :
         l.traits && !Array.isArray(r) ? l.instance = narrow(l.traits, r) :
         r.traits && !Array.isArray(l) ? r.instance = narrow(r.traits, l) :
@@ -159,7 +158,7 @@ const infer = root => {
     const flat = a => Array.isArray(a) && a.length == 1 && a[0][0] == '__do' ? a[0].slice(1).map(flat) : a
     const struct = (name, fields) => (tprops[name] = () => Object.fromEntries(fields), [...fields.map(f => type(f[1])), type(name)])
     const union = (t, fields) => fields.map(f => Array.isArray(f) ? tput(f[0], () => [...f.slice(1).map(x => type(x)), t]) : tenv[f] = t)
-    const squash = x => Array.isArray(x) && is_many(x[0]) ? to_s(squash(x.slice(1))) : x
+    const squash = x => Array.isArray(x) && x[0].repeatable ? to_s(squash(x.slice(1))) : x
     const ft = (args, types) => {
       const tmap = Object.fromEntries(args.map((arg, i) => [arg, tvar()]))
       const to_type = t => Array.isArray(t) ? t.map(to_type) : tmap[t] || type(t)
@@ -173,8 +172,8 @@ const infer = root => {
     const call = (a, b) => texpected(to_s(_call(a, b, m => failInfer(m, a, b))), merge(b.flatMap(errors)))
     const _call = (a, b, f) => b.length === 0 ? a :
       a.length === 0 ? f('Wrong number of arguments') :
-      is_many(a[0]) && a[0].generics.length >= 2 ? squash(unify(a[0].generics[0], b[0], () => false) ? _call([...a[0].generics.slice(1), ...a], b.slice(1)) : _call(a.slice(1), b)) :
-      is_many(a[0]) ? squash(unify(a[0], b[0], () => false) ? _call(a, b.slice(1)) : _call(a.slice(1), b)) :
+      a[0].repeatable && a[0].generics.length >= 2 ? squash(unify(a[0].generics[0], b[0], () => false) ? _call([...a[0].generics.slice(1), ...a], b.slice(1)) : _call(a.slice(1), b)) :
+      a[0].repeatable ? squash(unify(a[0], b[0], () => false) ? _call(a, b.slice(1)) : _call(a.slice(1), b)) :
       (unify(a[0], b[0]), _call(a.slice(1), b.slice(1)))
     const apply = ([head, ...argv]) =>
       argv.length === 0 ? inf(head) :
