@@ -42,7 +42,7 @@
  * [x] inf
  * [x] new
  * [x] many
- * [ ] optional
+ * [x] optional
  */
 const dump = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
@@ -67,7 +67,12 @@ const infer = root => {
   const variable = t => (t.variable = true, t)
   const referable = (t, s) => (t.toString = () => t.instance ? t.instance.toString() : s, t)
   const tvar = () => (tid => referable({tid, instance: null},  tid.toString()))(unique++)
-  const type = (name, ...generics) => ({name, generics, repeatable: name == 'many', toString: () => `${name}${generics.length ? `[${generics.map((g, i) => g.instance ? g.instance.toString() : g.toString()).join(' ')}]` : ''}`})
+  const type = (name, ...generics) => ({
+    name,
+    generics,
+    repeatable: name == 'many',
+    omittable: name == 'many' || name == 'optional',
+    toString: () => `${name}${generics.length ? `[${generics.map((g, i) => g.instance ? g.instance.toString() : g.toString()).join(' ')}]` : ''}`})
   const tvoid = type('void')
   const tbool = type('bool')
   const tint = type('int')
@@ -79,6 +84,7 @@ const infer = root => {
   const tnum = referable({name: 'num', traits: [tint, tfloat]}, 'num')
   const tstruct = id => ((t, tv) => (t.fields = {[id]: tv}, t))(type('struct'), tvar())
   const many = (...t) => type('many', ...t)
+  const optional = (...t) => type('optional', ...t)
   const tenv = {
     int: tint,
     'true': tbool,
@@ -121,10 +127,14 @@ const infer = root => {
     f(t)[id] || failInfer(`${id} is not a field of ${t.name}`, t, id)
   const inferTop = (node, env) => {
     const inf = node => inferTop(node, env)
+    const parse_arg = arg =>
+      arg[0] == '__get' && arg[1] == 'many' ? [arg[2], many(tvar())] :
+      arg[0] == '=' ? [arg[1], inferTop(arg[2], env)] :
+      [arg, tvar()]
     const local = args => (a => ({
-      a,
-      env: Object.assign(Object.fromEntries(a.map(([arg, t]) => [arg, () => t])), env)
-    }))(to_a(args).map(arg => arg[0] == '__get' && arg[1] == 'many' ? [arg[2], many(tvar())] : [arg, tvar()]))
+      types: a.map((x, i) => args[i][0] == '=' ? optional(x[1]) : x[1]),
+      env: {...env, ...Object.fromEntries(a.map(([id, t]) => [id, () => t]))}
+    }))(to_a(args).map(parse_arg))
     const to_a = o => !Array.isArray(o) ? [o] : o[0] == ',' ? o.slice(1) : o
     const to_s = a => Array.isArray(a) && a.length === 1 ? to_s(a[0]) : a
     const to_v = f => typeof f === 'function' && f.length === 0 ? f() : f
@@ -142,9 +152,9 @@ const infer = root => {
         l.name === 'struct' && r.name === 'struct' ? l.instance = (Object.assign(r.fields, l.fields), r) :
         l.name === 'struct' && r.name in tprops && is_include(tprops[r.name](r), l.fields) ? l.instance = r :
         r.name === 'struct' && l.name in tprops && is_include(tprops[l.name](l), r.fields) ? r.instance = l :
-        l.repeatable && r.repeatable ? (unify(l.generics, r.generics), l) :
-        l.repeatable ? (unify(l.generics[0], r), l) :
-        r.repeatable ? (unify(l, r.generics[0]), r) :
+        l.omittable && r.omittable ? (unify(l.generics, r.generics), l) :
+        l.omittable ? (unify(l.generics[0], r), l) :
+        r.omittable ? (unify(l, r.generics[0]), r) :
         !Array.isArray(l) && !Array.isArray(r) && l.toString() === r.toString() ? l :
         l.traits && !Array.isArray(r) ? l.instance = narrow(l.traits, r) :
         r.traits && !Array.isArray(l) ? r.instance = narrow(r.traits, l) :
@@ -158,22 +168,24 @@ const infer = root => {
     const flat = a => Array.isArray(a) && a.length == 1 && a[0][0] == '__do' ? a[0].slice(1).map(flat) : a
     const struct = (name, fields) => (tprops[name] = () => Object.fromEntries(fields), [...fields.map(f => type(f[1])), type(name)])
     const union = (t, fields) => fields.map(f => Array.isArray(f) ? tput(f[0], () => [...f.slice(1).map(x => type(x)), t]) : tenv[f] = t)
-    const squash = x => Array.isArray(x) && x[0].repeatable ? to_s(squash(x.slice(1))) : x
+    const squash = x => Array.isArray(x) && x[0].omittable ? to_s(squash(x.slice(1))) : x
     const ft = (args, types) => {
       const tmap = Object.fromEntries(args.map((arg, i) => [arg, tvar()]))
       const to_type = t => Array.isArray(t) ? t.map(to_type) : tmap[t] || type(t)
-      const x = local(args)
       const f = t => Array.isArray(t) && t[0] == '__get' ? type(t[1], ...t.slice(2).map(to_type)) : to_type(t)
       return types.map(f)
     }
-    const fn = (a, exp) => (x => [...x.a.map(o => o[1]), inferTop(exp, x.env)])(local(a))
+    const fn = (args, exp) => {
+      const x = local(args)
+      return [...x.types, inferTop(exp, x.env)]
+    }
     const _do = ts => texpected(ts.slice(-1)[0], merge(ts.flatMap(errors)))
     const _try = (a, b) => to_s(_call(a, b, m => failInfer(m, a, b)))
     const call = (a, b) => texpected(to_s(_call(a, b, m => failInfer(m, a, b))), merge(b.flatMap(errors)))
     const _call = (a, b, f) => b.length === 0 ? a :
       a.length === 0 ? f('Wrong number of arguments') :
       a[0].repeatable && a[0].generics.length >= 2 ? squash(unify(a[0].generics[0], b[0], () => false) ? _call([...a[0].generics.slice(1), ...a], b.slice(1)) : _call(a.slice(1), b)) :
-      a[0].repeatable ? squash(unify(a[0], b[0], () => false) ? _call(a, b.slice(1)) : _call(a.slice(1), b)) :
+      a[0].omittable ? squash(unify(a[0], b[0], () => false) ? _call(a, b.slice(1)) : _call(a.slice(1), b)) :
       (unify(a[0], b[0]), _call(a.slice(1), b.slice(1)))
     const apply = ([head, ...argv]) =>
       argv.length === 0 ? inf(head) :
@@ -192,7 +204,7 @@ const infer = root => {
       head == 'tuple' ? type('tuple', ...argv.map(inf)) :
       head == '.' && argv[1].match(/^[0-9]+$/) ? inf(argv[0]).generics[argv[1]] :
       head == '__do' ? _do(argv.map(inf)) :
-      head == '=>' ? (x => [...x.a.map(y => y[1]), inferTop(argv[1], x.env)])(local(to_a(argv[0]))) :
+      head == '=>' ? (x => [...x.types, inferTop(argv[1], x.env)])(local(to_a(argv[0]))) :
       head == '.' ? property(inf(argv[0]), argv[1]) :
       head == '__get' ? call(property(inf(argv[0]), '__get'), argv.slice(1).map(inf)) :
       head == '!' ? unify(inf(argv[0]), tbool) :
@@ -348,6 +360,12 @@ if (require.main === module) {
   test('(many[1] 1)', 'ft f a: many[a] a\nfn f many[x]: x[0]')
   test('(many[1] 1)', 'fn f many[x]: x[0]')
   test('(many[1] int)', 'fn f many[x]: x.size')
+
+  // optional argument
+  test('(optional[int] int)', 'ft f: optional[int] int')
+  test('(optional[int] int)', 'ft f: optional[int] int\nfn f x=0: x')
+  test('(optional[float] float)', 'ft f a: optional[a] a\nfn f x=0.0: x')
+  test('(optional[num] num)', 'fn f x=0: x')
 
   // single operator
   test('bool', '!true')
