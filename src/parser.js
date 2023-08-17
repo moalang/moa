@@ -88,8 +88,7 @@ const parse = source => {
     const _block = (a, n) => n === -1 || !isId(a[0]) ? a : [a[n], a[0], a.slice(1, n), a.slice(n+1)]
     const declare = a => (pos => pos === -1 ? a : [a[pos], a.slice(0, pos), a.slice(pos+1)])(a.findIndex(t => t === '::'))
     const unnest = a => a.length === 1 ? a[0] : a
-    const to_obj = o => typeof o === 'string' ? new String(o) : o
-    return Array.isArray(o) ? (o.length === 1 ? reorder(o[0]) : unnest(block(declare(op2(o)))).map(reorder)) : to_obj(o)
+    return Array.isArray(o) ? (o.length === 1 ? reorder(o[0]) : unnest(block(declare(op2(o)))).map(reorder)) : o
   }
   const if_else = o => Array.isArray(o) ? (o[0] == '__do' ? _if_else(o) : o.map(if_else)) : o
   const _if_else = lines => {

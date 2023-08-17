@@ -3,7 +3,7 @@
  */
 class List extends Array { }
 
-const { parse } = require('./parse.js')
+const { parse } = require('./parser.js')
 const dump = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
 const str = o =>
@@ -28,27 +28,27 @@ const evaluate = (x, env) => {
   const lambda = (env, args, body) => (caller, argv) => evaluate(body, {...env, ...local(caller, args, argv)})
   const method = (target, id) =>
     id.match(/^[0-9]/) ? run(target)[id] :
-    typeof target == 'string' && id == 'size' ? target.length :
-    Array.isArray(target) && id == 'size' ? target.length :
+    typeof target === 'string' && id === 'size' ? target.length :
+    Array.isArray(target) && id === 'size' ? target.length :
     typeof target === 'object' && id in target ? target[id] :
     fail(`'${id}' is unknown method of '${str(target)}'`)
   const op2 = (op, lhs, rhs) =>
-    '== != > >= < <='.split(' ').includes(op.toString()) ? eval(`'${str(lhs)}' ${op} '${str(rhs)}'`) :
+    '== != > >= < <='.split(' ').includes(op) ? eval(`'${str(lhs)}' ${op} '${str(rhs)}'`) :
     op.match(/^[+\-*/%|&]+=$/) ? env[lhs] = op2(op.slice(0, -1), lhs, rhs) :
     eval(`${lhs} ${op} ${rhs}`)
   const struct = xs => (run, ...a) =>
-    xs.length == 2 ? {[xs[0]]: run(a[0])} :
+    xs.length === 2 ? {[xs[0]]: run(a[0])} :
     Object.fromEntries(xs.slice(1).map(([id, _], i) => [id, run(a[i])]))
-  const flatten = xs => xs[0] == '__do' ? xs.slice(1).map(flatten) : xs
+  const flatten = xs => xs[0] === '__do' ? xs.slice(1).map(flatten) : xs
   const union = (id, xs) => flatten(xs).map(x => Array.isArray(x) ? [x[0], (run, v) => ({__tag: x[0], __val: run(v)})] : [x, {__tag: x}])
-  const hit = (target, cond) => cond.match(/^./) ? target.__tag == cond.slice(1) :
+  const hit = (target, cond) => cond.match(/^./) ? target.__tag === cond.slice(1) :
     fail(`'${cond}' is unknwon pattern with ${str(target)}`)
   const match = (target, conds) => {
     for (const [_1, _2, cond, body] of conds) {
-      if (cond[0] == '.') {
-        if (cond.length === 2 && target.__tag.toString() == cond[1].toString()) {
+      if (cond[0] === '.') {
+        if (cond.length === 2 && target.__tag === cond[1]) {
           return run(body)
-        } else if (cond.length === 3 && target.__tag.toString() == cond[2].toString()) {
+        } else if (cond.length === 3 && target.__tag === cond[2]) {
           return evaluate(body, {...env, ...{[cond[1]]: target.__val}})
         }
       }
@@ -56,20 +56,20 @@ const evaluate = (x, env) => {
     fail(`${conds} are not match with ${str(target)}`)
   }
   const block = (head, ...tail) =>
-    head == 'fn' ? env[tail[0][0]] = lambda(env, tail[0].slice(1), tail[1]) :
-    head == 'let' || head == 'var' ? (env[tail[0][0]] = run(tail[1])) :
-    head == 'struct' ? env[tail[0]] = struct(tail[1]) :
-    head == 'union' ? env[tail[0]] = Object.fromEntries(union(tail[0], tail[1]).map(([id, node]) => [id, env[id] = node])) :
-    head == 'match' ? match(run(tail[0]), flatten(tail[1])) :
+    head === 'fn' ? env[tail[0][0]] = lambda(env, tail[0].slice(1), tail[1]) :
+    head === 'let' || head === 'var' ? (env[tail[0][0]] = run(tail[1])) :
+    head === 'struct' ? env[tail[0]] = struct(tail[1]) :
+    head === 'union' ? env[tail[0]] = Object.fromEntries(union(tail[0], tail[1]).map(([id, node]) => [id, env[id] = node])) :
+    head === 'match' ? match(run(tail[0]), flatten(tail[1])) :
     fail(`'${head}' is unkown block with ${str(tail)}`)
   const apply = ([head, ...tail]) =>
-    head == 'string' ? str(run(tail[0])) :
-    head == '__call' ? lookup(tail[0])(run) :
-    head == '__do' ? tail.map(run).slice(-1)[0] :
-    head == '.' ? method(run(tail[0]), tail[1]) :
-    head == ':' ? block(...tail) :
-    head == '!' ? !run(tail[0]) :
-    head == 'let' || head == 'var' ? (env[tail[0]] = run(...tail.slice(1))) :
+    head === 'string' ? str(run(tail[0])) :
+    head === '__call' ? lookup(tail[0])(run) :
+    head === '__do' ? tail.map(run).slice(-1)[0] :
+    head === '.' ? method(run(tail[0]), tail[1]) :
+    head === ':' ? block(...tail) :
+    head === '!' ? !run(tail[0]) :
+    head === 'let' || head === 'var' ? (env[tail[0]] = run(...tail.slice(1))) :
     head.match(/^[+\-*\/%<>|&=!]/) ? op2(head, run(tail[0]), run(tail[1])) :
     tail.length > 0 ? lookup(head)(run, ...tail) :
     lookup(head)
@@ -77,15 +77,15 @@ const evaluate = (x, env) => {
     x instanceof Set ? x :
     Array.isArray(x) ? apply(x) :
     typeof x === 'number' ? x :
-    x == 'true' ? true :
-    x == 'false' ? false :
+    x === 'true' ? true :
+    x === 'false' ? false :
     x.match(/^[0-9]/) ? parseFloat(x) :
     x.match(/^["`]/) ? x.slice(1, x.length - 1) :
     x.match(/^r"/) ? new RegExp(x.slice(2, x.length - 1)) :
     lookup(x)
 }
 
-const input = require('fs').readFileSync(0, 'utf8');
+const input = process.argv[2]
 if (input) {
   console.log(str(evaluate(parse(input), buildin)))
 } else {
