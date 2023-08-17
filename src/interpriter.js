@@ -32,10 +32,16 @@ const evaluate = (x, env) => {
     Array.isArray(target) && id === 'size' ? target.length :
     typeof target === 'object' && id in target ? target[id] :
     fail(`'${id}' is unknown method of '${str(target)}'`)
-  const op2 = (op, lhs, rhs) =>
-    '== != > >= < <='.split(' ').includes(op) ? eval(`'${str(lhs)}' ${op} '${str(rhs)}'`) :
-    op.match(/^[+\-*/%|&]+=$/) ? env[lhs] = op2(op.slice(0, -1), lhs, rhs) :
-    eval(`${lhs} ${op} ${rhs}`)
+  const op2 = (op, lhs, rhs) => {
+    const align = x => "'" + JSON.stringify(_align(x)) + "'"
+    const _align = x => Array.isArray(x) ? x.map(_align) :
+      typeof x === 'object' ? Object.keys(x).sort().map(key => _align(x[key])) :
+      typeof x === 'number' ? (Array(16).join('0') + x).slice(-16) :
+      x
+    return '== != > >= < <='.split(' ').includes(op) ? eval(`${align(lhs)} ${op} ${align(rhs)}`) :
+      op.match(/^[+\-*/%|&]+=$/) ? env[lhs] = op2(op.slice(0, -1), lhs, rhs) :
+      eval(`${lhs} ${op} ${rhs}`)
+  }
   const struct = xs => (run, ...a) =>
     xs.length === 2 ? {[xs[0]]: run(a[0])} :
     Object.fromEntries(xs.slice(1).map(([id, _], i) => [id, run(a[i])]))
@@ -175,14 +181,14 @@ if (input) {
   test(1, 'struct s:\n  a string\n  b int\ns("hi" 1).b')
   test(true, 'struct s:\n  a string\n  b int\ns("hi" 1) == s("hi" 1)')
   test(false, 'struct s:\n  a string\n  b int\ns("hi" 1) == s("hi" 2)')
-  test(false, 'struct s:\n  a string\n  b int\ns("hi" 1) < s("hi" 1)')
   test(true, 'struct s:\n  a string\n  b int\ns("hi" 1) <= s("hi" 1)')
-  test(false, 'struct s:\n  a string\n  b int\ns("hi" 1) > s("hi" 1)')
-  test(true, 'struct s:\n  a string\n  b int\ns("hi" 1) >= s("hi" 1)')
+  test(false, 'struct s:\n  a string\n  b int\ns("hi" 1) < s("hi" 1)')
+  test(true, 'struct s:\n  a string\n  b int\ns("hi" 1) < s("hi" 2)')
+  test(true, 'struct s:\n  a string\n  b int\ns("hi" 9) < s("hi" 10)')
 
   // user defined algebraic data type
   test(1, 'union ab:\n  a\n  b\nmatch a:\n  case .a: 1\n  case .b: 2')
-  test('hi', 'union ab:\n  a string\n  b int\nmatch a "hi":\n  case s.a: s\n  case n.b: string(n)')
+  test(2, 'union ab:\n  a\n  b\nmatch b:\n  case .a: 1\n  case .b: 2')
   test('hi', 'union ab:\n  a string\n  b int\nmatch a "hi":\n  case s.a: s\n  case n.b: string(n)')
   test('1', 'union ab:\n  a string\n  b int\nmatch b 1:\n  case s.a: s\n  case n.b: string(n)')
 
