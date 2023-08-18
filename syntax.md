@@ -3,21 +3,21 @@ top: line*
 line: keyword? exp+ block?
 block: ":" (("\n  " line)+ | exp)
 exp: op1? unit (op2 exp)?
-unit: bottom (prop | call | index)*
+unit: bottom (prop | call | list | dict | struct)*
 prop: "." type
-call: "(" exp* (id "=" exp)* ")"        # f(a b=c)
-index: "[" exp+ "]"                     # a[1]
+call: "(" exp* ")"                   # f(a b=c)
+list: "[" exp* "]"                   # a[1]
+dict: "[" ":" | (unit ":" unit)+ "]" # a["a":b c:1]
+struct: "{" (id (":" unit)?)* "}"    # a{b:1}
 bottom:
-| " ." type                             # .t.fields    : specific type
-| "(" exp ")"                           # 1 * (2 + 3)  : priority
-| [0-9]+ ("." [0-9]+)?                  # 42           : number
-| '"' [^"]* '"'                         # "s"          : string
-| (id ("," id)*)? ":" exp               # a,b => a + b : lambda
-| "[" exp* "]"                          # [1 2]        : list 1 2
-| "[:]" | "[" (unit ":" unit)* "]"      # ["a":1 b:2]  : dict "a" 1 b 2
-| "{" (id ("." type)? ("=" unit)?)* "}" # {a b=1}      : new a a b 1
+| "(" exp ")"                     # 1 * (2 + 3)  : priority
+| " ." type                       # .t.fields    : type matcher
+| [0-9]+ ("." [0-9]+)?            # 1.2          : number
+| '"' [^"]* '"'                   # "s"          : string
+| list | dict | struct
+| (id ("," id)*)? "=>" exp        # a,b => a + b : lambda
 | id
-type: id ("[" type+ "]")?
+type: id ("[" id+ "]")? ("{" id ":" unit "}")?
 op1: [!-]
 op2:
 | [+-*/%<>|&^=,]                        # (1, "hi")   -> tuple 1 "hi"
@@ -25,11 +25,12 @@ op2:
 | "**" | "&&" | "||" | ">>" | "<<"
 | "===" | "**=" "<=>"
 id: [a-za-z_][a-za-z0-9_]*
-keyword: define | statement | primitive | reservation
-define: _ ft fn struct union var let use module interface implement
-statement: if else match case catch for each while test return yield continue break throw iif
-primitive: bool int float num string list set dict tuple true false nan inf new many optional
-reserved: bytes iter ref lazy array assert i8..i64 u8..u64 f32 f64 decimal
+keyword: define | branch | statement
+define: ft fn var let struct union test
+branch: iif if else match throw catch
+statement: for each while test return yield continue break
+primitive: bool int float num string list set dict tuple true false nan inf ref many option
+reservation: use module interface implement bytes iter lazy array assert i8..i64 u8..u64 f32 f64 decimal
 
 
 
@@ -48,7 +49,7 @@ reserved: bytes iter ref lazy array assert i8..i64 u8..u64 f32 f64 decimal
 # Semantics
 - Pattern match
   "fn" id pattern*: ...
-  "match" exp ":" ("\n  case " pattern (if exp+)? ":" exp+)+
+  "match" exp ":" ("\n  " pattern (if exp+)? ":" exp+)+
   pattern: matcher ("," pattern)?           # a, b    : tuple
   matcher:
   | "(" pattern ")"                         # (x)     : priority
@@ -125,11 +126,11 @@ $ undefined
   - lambda         # a,b => a + b
   - bytes          # bytes(1024)
 - Container
-  - list           # list[int](1 2)
-  - set            # set[int](1 2)
-  - dict           # dict[string int]("a" 1 b 1+2)
-  - tuple          # tuple[int string](1 "hi")
-  - struct         # new(a b f x,y:g(x y))
+  - list           # [1 2]               list[int](1 2)
+  - set            # set(1 2)            set[int](1 2)
+  - dict           # ["a":1 b:1+2]       dict[string int]("a" 1 b 1+2)
+  - tuple          # 1,"hi"              tuple[int string](1 "hi")
+  - struct         # {a:a f:x,y=>g(x y)} __new(a f x,y => g(x y))
 - Definition
   - variable       # var a 1
   - constant       # let a 1
@@ -139,8 +140,8 @@ $ undefined
 - Statement
   - if / else      # if a: b; else if c: d; else: e
   - return         # return 1
-  - match / case   # match a:; case b: c; else: d
-  - throw / catch  # fn f: throw "..."; try f; catch type: a; catch _: c
+  - match          # match a:; b: c; _: d
+  - throw / catch  # fn f: throw "..."; catch f; a.t: a; b.u: b; c: c
   - for            # for i 9: n += i
   - each           # each x xs: n += x
   - while          # while a: b

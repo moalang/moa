@@ -1,5 +1,14 @@
+# Do
+- Minimize the number of elements in code to help understanding
+- Keep conceptual integrity
+- Support both functional and imperative programming
+
+# Do not
+- Inheritance
+- Avoid symbols like semi-corron, comma and parenthiese
+
 # Todo
-- [ ] Compiler for JavaScript (1/3)
+- [ ] Compiler for JavaScript (1/2)
 - [ ] Self boot
 - [ ] HTTP server
 - [ ] Reactive module for web browser
@@ -10,15 +19,6 @@
 
 # Pending
 - Consider to add events type for UI
-
-# Do
-- Minimize the number of elements in code to help understanding
-- Support both functional and structual programming
-- Keep conceptual integrity
-
-# Do not
-- Inheritance
-- Avoid symbols like semi-corron, comma and parenthiese
 
 # Policy
 - Main purpose of Moa language is that accelarate web development

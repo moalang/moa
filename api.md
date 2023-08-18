@@ -22,9 +22,6 @@
 [ ] num         # int, float
 [ ] iter        # string, list, dict, bytes
 
-# bool
-[ ] flip :: bool
-
 # int
 [ ] + - * ** / % | & ^ :: int int int
 [ ] abs    :: int
