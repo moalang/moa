@@ -8,12 +8,12 @@
 - Avoid symbols like semi-corron, comma and parenthiese
 
 # Todo
-- [ ] Compiler for JavaScript (1/2)
-- [ ] Self boot
+- [ ] Interpriter (1/2)
+- [ ] Compiler to Go by interpriter
 - [ ] HTTP server
-- [ ] Reactive module for web browser
 - [ ] Bidirectional remote procedure call
 - [ ] Relational database and KVS
+- [ ] Reactive module for web browser
 - [ ] Debugger
 - [ ] Profiler
 
@@ -25,7 +25,6 @@
 - Moa language consists core and library
 - The core is pure, which does not provide any IO
 - The library provides IO via its interface
-
 
 # Memo
 https://www.swift.org/

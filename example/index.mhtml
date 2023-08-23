@@ -1,6 +1,26 @@
+<!doctype html>
 html lang=ja
   head
     meta charset=UTF-8
-    title: Template
+    title ${title} "|" :site_title
   body
-    h1: Hello
+    header()
+    .content
+      for $todos
+        span a href=todo/{id} title
+        if user.id == author_id
+          :you_wrote
+        else
+          {author_name}
+    footer()
+
+header:
+  .header
+    h1 a href=/ img src=logo alt=sample
+    ul
+      li a href=about "About us"
+      li a href=product "Product"
+      li a href=price "Price"
+
+footer:
+  "Copyright &copy;"

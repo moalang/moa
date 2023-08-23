@@ -4,43 +4,34 @@
 [ ] int         :: string int @error
 [ ] float       :: string float @error
 [ ] string a    :: a string
-[ ] bool        :: a bool
-[ ] bytes       :: a bytes
+[ ] bool a      :: a bool
 [ ] list a      :: a+ list[a]
 [ ] dict a b    :: (a,b)+ dict[a b]
 [ ] set a       :: a+ set[a]
 [ ] tuple ...   :: tuple[...]
 [ ] throw a b   :: a b
-[ ] if a        :: bool a _
-[ ] else a      :: a _
-[ ] for a       :: .int int int? int? a _
-[ ] each a b    :: .a iter[a] b _
-[ ] while a     :: bool a _
-[ ] continue    :: _
-[ ] break       :: _
-[ ] return a    :: a a
+[ ] catch a b   :: a matcher[a b]+ b
+[ ] match a b   :: a matcher[a b]+ b
 [ ] num         # int, float
-[ ] iter        # string, list, dict, bytes
 
-# int
-[ ] + - * ** / % | & ^ :: int int int
-[ ] abs    :: int
-[ ] neg    :: int
-[ ] char   :: string
-[ ] times  :: iter[int]
-[ ] to     :: int int? iter[int]
+# embedded a
 [ ] string :: string
 [ ] format :: string string
+[ ] bool :: bool
 
-# float
-[ ] + - * ** / % :: float float float
-[ ] abs    :: float
-[ ] neg    :: float
+# num.embedded a
+[ ] + - * ** / % | & ^ :: a a a
+[ ] abs, neg :: a
+
+# int.num
+[ ] char   :: string
+[ ] times  :: list[int]
+[ ] to     :: int list[int]
+
+# float.num
 [ ] floor  :: int
 [ ] ceil   :: int
 [ ] round  :: int
-[ ] string :: string
-[ ] format :: string string
 
 # string
 [ ] ++       :: string string string
@@ -52,32 +43,16 @@
 [ ] index    :: string int
 [ ] replace  :: string string int? string
 [ ] reverse  :: string
-[ ] ucode    :: int
-[ ] match    :: string iter[string]
+[ ] utf8     :: list[int]
+[ ] find     :: string list[string]
 [ ] rsplit   :: string int? list[string]
 [ ] rreplace :: string fn[list[string] string] int? string
 
-# bytes
-[ ] ++ :: bytes bytes bytes
-[ ] be :: bytes # big endian mode
-[ ] le :: bytes # little endian mode
-[ ] get :: int int @error
-[ ] set :: int int @error
-[ ] read a :: a @error
-[ ] write a :: a int @error
-[ ] size :: int
-[ ] slice :: int int? bytes
-[ ] base64 :: string
-[ ] string :: string
-
 # lambda[a b ...]
-[ ] string :: string
 
 # list[a]
 [ ] ++ a :: list[a] list[a]
 [ ] size :: int
-[ ] bool :: bool
-[ ] empty :: bool
 [ ] get :: int a @error
 [ ] set :: int a a @error
 [ ] map b :: fn[a b] list[b]
@@ -103,8 +78,8 @@
 [ ] get :: k v @error
 [ ] set :: k v v
 [ ] has :: k bool
-[ ] keys :: iter[k]
-[ ] values :: iter[v]
+[ ] keys :: seq[k]
+[ ] values :: seq[v]
 [ ] list :: list[tuple[k v]]
 
 # set[a]
@@ -120,24 +95,42 @@
 [ ] 1 :: b
 ...
 
----( interface )---------------------------------------
+# ---( pending )---------------------------------------
 interface num a:
   + - * ** / / % :: a a a
   abs :: a
   neg :: a
 
-interface class a:
- ft == : a a bool
- ft === : a class bool
- ft <=>: a a int
- ft () ...: a # T(...) returns instance of T
- fn != a b: (a == b).flip
- fn > a b : (a <=> b) == 1
- fn >= a b: (a <=> b) >= 0
- fn < a b : (a <=> b) == -1
- fn <= a b: (a <=> b) <= 0
+implement int num:
+  + a b: ...
 
----( module )------------------------------------------
+# primitive
+[ ] bytes       :: a bytes
+[ ] seq         # string, list, dict, bytes
+
+# statement
+[ ] if a        :: bool a _
+[ ] else a      :: a _
+[ ] for a       :: .int int int? int? a _
+[ ] each a b    :: .a seq[a] b _
+[ ] while a     :: bool a _
+[ ] continue    :: _
+[ ] break       :: _
+[ ] return a    :: a a
+
+# bytes
+[ ] ++ :: bytes bytes bytes
+[ ] be :: bytes # big endian mode
+[ ] le :: bytes # little endian mode
+[ ] get :: int int @error
+[ ] set :: int int @error
+[ ] read a :: a @error
+[ ] write a :: a int @error
+[ ] size :: int
+[ ] slice :: int int? bytes
+[ ] base64 :: string
+[ ] string :: string
+
 # math
 [ ] acos acosh asin asinh atan atan2 atanh cbrt cos cosh erf erfc exp gamma log log10 log2 sin sinh sqrt tan tanh :: float float
 [ ] e, pi, inf, nan :: float
@@ -145,9 +138,6 @@ interface class a:
 [ ] lgamma, frexp :: float (float, int)
 [ ] ldexp :: float int float
 
-
-
----( io )----------------------------------------------
 # log
 [ ] debug, info, warn, error a :: a any* a
 
