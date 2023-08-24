@@ -8,7 +8,7 @@ prop: "." id
 call: "(" exp* ")"                           # f(a b=c)
 list: "[" exp* "]"                           # a[1]
 dict: "[" ":" | (unit ":" unit)+ "]"         # a["a":b c:1]
-struct: "{" (id (":" unit)? ("=" exp)?)* "}" # a{b:1}
+struct: "{" (id ("." unit)? ("=" exp)?)* "}" # a{a b:1}
 bottom:
 | "(" exp ")"                     # 1 * (2 + 3) : priority
 | " ." id                         # .int        : type
@@ -19,7 +19,7 @@ bottom:
 | id
 op1: [!-]
 op2:
-| [+-*/%<>|&^=,]                        # (1, "hi")   -> tuple 1 "hi"
+| [+-*/%<>|&^=,]                  # (1, "hi")   -> tuple 1 "hi"
 | [+-*/%<>|&^=] "="
 | "**" | "&&" | "||" | ">>" | "<<"
 | "===" | "**=" "<=>"
@@ -49,18 +49,18 @@ reservation: deft use module interface implement bytes iter lazy array assert i8
 - Pattern match
   "def" id pattern*: ...
   "match" exp ":" ("\n  " pattern (if exp+)? ":" exp+)+
-  pattern: matcher ("," pattern)?           # a, b    : tuple
-  type: (id ".") type
+  pattern: matcher ("," pattern)?            # a, b    : tuple
+  capture: id ("." id)+
   matcher:
-  | "(" pattern ")"                         # (x)           : priority
-  | '"' [^"]* '"'                           # "s"           : string
-  | [0-9]+ ("." [0-9]+)?                    # 1.2           : number
-  | "." id term?                            # type match
-  | type term?                              # capture and type match 
+  | "(" pattern ")"                            # (x)           : priority
+  | '"' [^"]* '"'                              # "s"           : string
+  | [0-9]+ ("." [0-9]+)?                       # 1.2           : number
+  | "." id term?                               # type match
+  | capture term?                              # capture and type match 
   term:
-  | "{" (type? ("=" pattern)?)+ "}"         # {a b.int c=1} : struct
-  | "[" pattern* "]"                        # [0 x]         : list
-  | "[:]" | "[" (pattern ":" pattern)+ "]"  # ["0":a b:"1"] : dict
+  | "{" (id (("." id) | "=" exp | term)?)+ "}" # {a b.int c=1 d[0] } : struct
+  | "[" pattern* "]"                           # [0 x]               : list
+  | "[:]" | "[" (pattern ":" pattern)+ "]"     # ["0":a b:"1"]       : dict
 
 - Implicit type converting
   1 + u8(2)               # u8

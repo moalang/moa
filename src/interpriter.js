@@ -61,6 +61,8 @@ const evaluate = (x, env) => {
     }
     fail(`${conds} are not match with ${str(target)}`)
   }
+  const isTuple = t => Array.isArray(t) && t[0] === ','
+  const tuple = t => isTuple(t[0]) ? tuple(t[0].slice(1)).concat(run(t[1])) : t.map(run)
   const block = (head, ...tail) =>
     head === 'fn' ? env[tail[0][0]] = lambda(env, tail[0].slice(1), tail[1]) :
     head === 'let' || head === 'var' ? (env[tail[0][0]] = run(tail[1])) :
@@ -75,6 +77,7 @@ const evaluate = (x, env) => {
     head === '.' ? method(run(tail[0]), tail[1]) :
     head === ':' ? block(...tail) :
     head === '!' ? !run(tail[0]) :
+    head === ',' ? tuple(tail) :
     head === 'let' || head === 'var' ? (env[tail[0]] = run(...tail.slice(1))) :
     head.match(/^[+\-*\/%<>|&=!]/) ? op2(head, run(tail[0]), run(tail[1])) :
     tail.length > 0 ? lookup(head)(run, ...tail) :
@@ -115,9 +118,7 @@ if (input) {
       throw Error(`'${expect}' != '${fact}'`)
     }
   }
-  test('hi', 'union ab:\n  a string\n  b int\nmatch a "hi":\n  case s.a: s\n  case n.b: string(n)')
-  test('hi', 'union ab:\n  a string\n  b int\nmatch a "hi":\n  case s.a: s\n  case n.b: string(n)')
-  test('1', 'union ab:\n  a string\n  b int\nmatch b 1:\n  case s.a: s\n  case n.b: string(n)')
+  test([1,2,3], '1,2,3')
 
   // primitives
   test(true, 'true')
@@ -161,6 +162,8 @@ if (input) {
   test(1.5, '3 / 2')
   test(1, '3 % 2')
   test(27, '3 ** 3')
+  test(6, '3 << 1')
+  test(3, '6 >> 1')
   test(false, '1 < 1')
   test(true, '1 <= 1')
   test(false, '1 > 1')
@@ -170,6 +173,8 @@ if (input) {
   test(false, 'true && false')
   test(true, 'true && true')
   test(true, 'true || false')
+  test([1,2], '1,2')
+  test([1,2,3], '1,2,3')
 
   // user defined function
   test(1, 'fn f a: a\nf(1)')
