@@ -8,7 +8,7 @@
 - Avoid symbols like semi-corron, comma and parenthiese
 
 # Todo
-- [ ] Interpriter (1/2)
+- [x] Interpriter (2/2)
 - [ ] Compiler to Go by interpriter
 - [ ] HTTP server
 - [ ] Bidirectional remote procedure call

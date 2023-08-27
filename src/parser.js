@@ -11,7 +11,7 @@
  * [x] a b: c      # (: (a b) (c))
  * [x] a b:
  *       c
- *       d e       # (: (a b) (c (d e)))
+ *       d e       # (: (a b) (__pack c (d e)))
  * [x] {a b:c}     # (new a a b c)
  */
 const str = o =>
@@ -25,7 +25,7 @@ const dump = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
 const parse = source => {
   let pos = 0
-  const tokens = source.split(/((?:!=)|[()\[\]{}!]|(?:[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+|[r$]?"[^"]*"|`[^`]*`|[A-Za-z0-9_]+)/).filter(t => t.length > 0)
+  const tokens = source.split(/((?:!=)|[()\[\]{}!]|(?:-?[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+|"[^"]*"|[A-Za-z0-9_]+)/).filter(t => t.length > 0)
   const binaryOps = '. , * ** / // % + - >> << ^ & | = += -= *= /= %= **= => < <= > >= == != === !== <=> && ||'.split(' ')
   const statement = () => {
     const many = (a, f) => {
@@ -42,7 +42,7 @@ const parse = source => {
     const consume = () => ((tokens[pos].match(/^[ \t]+$/) && ++pos), tokens[pos++])
     const until = end => many([], t => t === end ? ++pos : unit())
     const call = (o, a) => a.length === 0 ? ['__call', o] : [o].concat(a)
-    const index = (o, a) => ['__get', o, ...a]
+    const index = (o, a) => ['__index', o, ...a]
     const indent = s => s === undefined ? 0 : s.match(/[\r\n]/) ? s.split(/[\r\n]/).slice(-1)[0].length : -1
     const key = o => typeof o === 'string' ? JSON.stringify(o) : o
     const pairs = a => [...Array(a.length / 3).keys()].flatMap(i => [key(a[i*3]), a[(i*3)+2]])
@@ -74,7 +74,7 @@ const parse = source => {
     const block = a => a.slice(-1)[0] === ':' && tokens[pos].match(/[\r\n]/) ? [...a, statement()] : a
     const line = () => block(many([], t => !t.match(/[\r\n]/) && unit()))
     const lines = n => many([], t => indent(t) === n ? (++pos, line()) : false)
-    return mark('__do', lines(indent(tokens[pos])))
+    return mark('__pack', lines(indent(tokens[pos])))
   }
   const reorder = o => {
     const isOp2 = s => typeof s === 'string' && binaryOps.includes(s)
@@ -84,31 +84,13 @@ const parse = source => {
     const prioritize = (op, l, r) => Array.isArray(l) && isOp2(l[0]) && priority(op) < priority(l[0]) ? [l[0], l[1], [op, l[2], r]] : [op, l, r]
     const priority = op => binaryOps.findIndex(t => t == op)
     const isId = o => typeof o === 'string' && /^[a-zA-Z_]/.test(o)
-    const block = a => _block(a, a.findIndex(t => t === ':'))
-    const _block = (a, n) => n === -1 || !isId(a[0]) ? a : [a[n], a[0], a.slice(1, n), a.slice(n+1)]
+    const block = a => (n => n === -1 ? a : [a[n], a.slice(0, n), a.slice(n+1)])(a.findIndex(t => t === ':'))
     const declare = a => (pos => pos === -1 ? a : [a[pos], a.slice(0, pos), a.slice(pos+1)])(a.findIndex(t => t === '::'))
     const unnest = a => a.length === 1 ? a[0] : a
     return Array.isArray(o) ? (o.length === 1 ? reorder(o[0]) : unnest(block(declare(op2(o)))).map(reorder)) : o
   }
-  const if_else = o => Array.isArray(o) ? (o[0] == '__do' ? _if_else(o) : o.map(if_else)) : o
-  const _if_else = lines => {
-    const ret = []
-    for (const line of lines) {
-      if (line[1] == 'else') {
-        if (line[2][0] == 'if') {
-          ret[ret.length - 1] = ret[ret.length - 1].concat(line[2].slice(1))
-          ret[ret.length - 1] = ret[ret.length - 1].concat(line[3])
-        } else {
-          ret[ret.length - 1] = ret[ret.length - 1].concat(line[3])
-        }
-      } else {
-        ret.push(line)
-      }
-    }
-    return lines.length >= 3 && ret.length === 2 ? ret[1] : ret
-  }
   tokens.unshift('\n')
-  return if_else(reorder(statement()))
+  return reorder(statement())
 }
 
 module.exports = { parse }
@@ -117,15 +99,12 @@ if (require.main === module) {
   const stringify = a => Array.isArray(a) ? `(${a.map(stringify).join(' ')})` : str(a)
   const assert = (expect, fact, src) => expect === fact ? put('.') : fail(`Expected '${expect}' but got '${fact}' in '${src}'`)
   const test = (expect, src) => assert(expect, stringify(parse(src)), src)
-  test('(f (. int))', 'f .int')
 
   // primitives
   test('1', '1')
   test('1.0', '1.0')
   test('id', 'id')
   test('"hi"', '"hi"')
-  test('r"hi"', 'r"hi"')
-  test('$"hi"', '$"hi"')
   test('(__call list)', '[]')
   test('(list 1 2)', '[1 2]')
   test('(__call dict)', '[:]')
@@ -143,6 +122,8 @@ if (require.main === module) {
   test('(f (. int))', 'f .int')
 
   // property access
+  test('(. a b)', 'a.b')
+  test('((. a b) c)', 'a.b c')
   test('(. (__call list) length)', '[].length')
   test('(=> p (+ (. p x) (. p y)))', 'p => p.x + p.y')
 
@@ -181,29 +162,26 @@ if (require.main === module) {
   test('((. f m) a b)', 'f.m(a b)')
 
   // index access
-  test('(__get x 1)', 'x[1]')
-  test('(__get x 1 2)', 'x[1 2]')
+  test('(__index x 1)', 'x[1]')
+  test('(__index x 1 2)', 'x[1 2]')
+
+  // steps
+  test('(__pack a b)', 'a\nb')
+  test('(__pack (a b) c)', 'a b\nc')
+  test('(__pack a (b c))', 'a\nb c')
 
   // block
-  test('(: a () b)', 'a: b')
-  test('(: a b c)', 'a b: c')
-
-  // if-else
-  test('(: if (a b) c)', 'if a b: c')
-  test('(: if (a b) c d)', 'if a b: c\nelse: d')
-
-  // top level
-  test('(__do a b)', 'a\nb')
-  test('(__do (a b) c)', 'a b\nc')
-  test('(__do a (b c))', 'a\nb c')
+  test('(: a b)', 'a: b')
+  test('(: (a b) c)', 'a b: c')
+  test('(: (a b) (c d))', 'a b: c d')
 
   // indent
-  test('(: a () b)', 'a:\n  b')
-  test('(: a () (: b () c))', 'a:\n  b:\n    c')
-  test('(: a () (: b () (__do c d)))', 'a:\n  b:\n    c\n    d')
-  test('(: a () (__do (: b () c) d))', 'a:\n  b:\n    c\n  d')
-  test('(__do (: a () (: b () c)) d)', 'a:\n  b:\n    c\nd')
-  test('(__do (: a () (__do b (: c () d) e)) f)', 'a:\n  b\n  c:\n    d\n  e\nf')
+  test('(: a b)', 'a:\n  b')
+  test('(: a (: b c))', 'a:\n  b:\n    c')
+  test('(: a (: b (__pack c d)))', 'a:\n  b:\n    c\n    d')
+  test('(: a (__pack (: b c) d))', 'a:\n  b:\n    c\n  d')
+  test('(__pack (: a (: b c)) d)', 'a:\n  b:\n    c\nd')
+  test('(__pack (: a (__pack b (: c d) e)) f)', 'a:\n  b\n  c:\n    d\n  e\nf')
 
   // combinations
   test('(! (a b))', '!a(b)')

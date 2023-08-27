@@ -24,12 +24,12 @@ op2:
 | "**" | "&&" | "||" | ">>" | "<<"
 | "===" | "**=" "<=>"
 id: [a-za-z_][a-za-z0-9_]*
-keyword: define | branch | statement
+keyword: define | branch
 define: def var let struct union test
-branch: iif if else match throw catch
-statement: for each while test return yield continue break
-primitive: bool int float num string list set dict tuple true false nan inf ref many option
-reservation: deft use module interface implement bytes iter lazy array assert i8..i64 u8..u64 f32 f64 decimal
+branch: iif match
+statement: if else for each while test return yield continue break throw catch
+primitive: bool tru false int float nan inf num string list set dict tuple
+reservation: ref many option deft use module interface implement bytes iter lazy array assert i8..i64 u8..u64 f32 f64 decimal
 
 
 
