@@ -9,11 +9,14 @@
 
 # Todo
 - [x] Interpriter (2/2)
-- [ ] Compiler to Go by interpriter
 - [ ] HTTP server
-- [ ] Bidirectional remote procedure call
 - [ ] Relational database and KVS
 - [ ] Reactive module for web browser
+- [ ] Bidirectional remote procedure call
+
+# Optimization
+- [ ] Compiler to Go by interpriter
+- [ ] Cross compile to Linux, Mac and Windows
 - [ ] Debugger
 - [ ] Profiler
 

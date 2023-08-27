@@ -26,29 +26,24 @@ $ moa run
 Hello, Moa
 ```
 
-4. Compile the program to executable file
+4. Create a web application and deploy to a server
+```
+$ echo 'def main io: io.http client => client.write "hello"' > main.moa
+$ PORT=3000 moa run        # launch http server with port 3000
+```
+
+5. Compile the program to executable file
 ```
 $ moa build
 $ ./a.out
 Hello, Moa
-
-$ OS=windows ARCH=amd64 moa build
-$ ls a.exe
-a.exe
 ```
 
-5. Compile the program to anotner programming langauge
+6. Deploy to server
 ```
-$ moa compile to 
-$ ./a.out
-Hello, Moa
-```
-
-5. Create a web application and deploy to a server
-```
-$ echo 'def main io: io.listen s => s.puts "hello"' > main.moa
-$ PORT=3000 moa run        # you can check the behavior in local
-$ moa deploy user@hostname # deploy to ~/moa on the server and update the process non-stopping
+$ OS=linux ARCH=amd64 moa build
+$ scp a.out username@hostname:/path/to/a.out
+$ ssh username@hostname /path/to/a.out # launch deployed server, gracefully stop old one if running
 ```
 
 
@@ -61,7 +56,7 @@ Usage:
 
 The commands are:
   moa                # launch repl
-  moa build          # compile to a executable file
+  moa build          # compile to an executable file without test
   moa format [files] # format files
   moa help [topic]   # for more info about topic
   moa lint [files]   # report likely mistakes
