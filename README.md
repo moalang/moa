@@ -26,9 +26,9 @@ $ moa run
 Hello, Moa
 ```
 
-4. Create a web application and deploy to a server
+4. Create a HTTP API and deploy to a server
 ```
-$ echo 'def main io: io.http client => client.write "hello"' > main.moa
+$ echo 'def main io: io.http.listen _ => (200 [("content-type" "text/plain; charset=utf-8")] "hello")' > main.moa
 $ PORT=3000 moa run        # launch http server with port 3000
 ```
 
@@ -39,11 +39,11 @@ $ ./a.out
 Hello, Moa
 ```
 
-6. Deploy to server
+6. Deploy to Linux server
 ```
 $ OS=linux ARCH=amd64 moa build
 $ scp a.out username@hostname:/path/to/a.out
-$ ssh username@hostname /path/to/a.out # launch deployed server, gracefully stop old one if running
+$ ssh username@hostname /path/to/a.out # launch deployed server and then gracefully stop old one if running
 ```
 
 
@@ -63,3 +63,35 @@ The commands are:
   moa run [exp]      # run Moa program
   moa test [regexps] # run tests
   moa version        # print Moa version
+
+
+
+# Scafold for web application in real world
+/
+|- static/index.html
+|- static/style.css
+|- static/script.js
+-- main.moa
+
+```
+struct article:
+  title string
+  content string
+
+db:
+  pv int
+  articles list[article]
+
+# main.moa
+def main io:
+  io.http.listen handle
+
+let notfound = (404 [] "")
+
+def handle peer:
+  db.pv += 1
+  iif peer.path == "/api/articles" && peer.method == "get" json(db.articles) notfound
+
+def json o:
+  (200 ["content-type" "application/json; charset=utf-8" struct(o).json)
+```
