@@ -1,8 +1,8 @@
 # reserved
 [ ] _           :: tuple[]
 [ ] true, false :: bool
-[ ] int         :: string int @error
-[ ] float       :: string float @error
+[ ] int         :: string option[int]
+[ ] float       :: string option[float]
 [ ] string a    :: a string
 [ ] bool a      :: a bool
 [ ] list a      :: a+ list[a]
@@ -37,7 +37,7 @@
 [ ] ++       :: string string string
 [ ] size     :: int
 [ ] pos      :: int
-[ ] get      :: int string @error
+[ ] get      :: int option[string]
 [ ] slice    :: int int? string
 [ ] split    :: string int? list[string]
 [ ] index    :: string int
@@ -66,7 +66,7 @@
 [ ] group b :: fn[a b]? dict[b list[a]]
 [ ] reverse :: list[a]
 [ ] zip b :: list[b] list[tuple[a b]]
-[ ] find :: fn[a bool] a @error
+[ ] find :: fn[a bool] option[a]
 [ ] fold b :: fn[a b b] b
 [ ] has :: a bool
 [ ] sum :: a
@@ -75,7 +75,7 @@
 
 # dict[k v]
 [ ] size :: int
-[ ] get :: k v @error
+[ ] get :: k option[v]
 [ ] set :: k v v
 [ ] has :: k bool
 [ ] keys :: seq[k]
@@ -124,8 +124,8 @@ implement int num:
 [ ] le :: bytes # little endian mode
 [ ] get :: int int @error
 [ ] set :: int int @error
-[ ] read a :: a @error
-[ ] write a :: a int @error
+[ ] to a :: option[a]
+[ ] write a :: a int
 [ ] size :: int
 [ ] slice :: int int? bytes
 [ ] base64 :: string
@@ -148,12 +148,12 @@ implement int num:
 # random
 [ ] random.int :: int int int
 [ ] random.bytes :: int bytes
-[ ] random.choice a :: list[a] a @error
+[ ] random.choice a :: list[a] option[a]
 
-# http
+# io.http
 [ ] listen string (http.request http.response) _
 [ ] request string {method.string headers.list[tuple[string list[string]]] body.bytes}? http.response
 
-# odb (object database management system)
-[ ] schema a :: odb.schema(a)
-[ ] transaction a :: odb.schema(a) int @error
+# io.db (object database management system)
+[ ] begin a b :: a (b) b
+[ ] readonly a b :: a (b) b

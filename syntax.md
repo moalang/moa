@@ -28,8 +28,8 @@ keyword: define | branch
 define: def var let struct union test
 branch: iif match
 statement: if else for each while test return yield continue break throw catch
-primitive: bool tru false int float nan inf num string list set dict tuple
-reservation: ref many option deft use module interface implement bytes iter lazy array assert i8..i64 u8..u64 f32 f64 decimal
+primitive: bool tru false int float nan inf num string list set dict tuple option some none
+reservation: ref many deft use module interface implement bytes iter lazy array assert i8..i64 u8..u64 f32 f64 decimal
 
 
 
@@ -47,20 +47,22 @@ reservation: ref many option deft use module interface implement bytes iter lazy
 
 # Semantics
 - Pattern match
-  "def" id pattern*: ...
-  "match" exp ":" ("\n  " pattern (if exp+)? ":" exp+)+
-  pattern: matcher ("," pattern)?            # a, b    : tuple
-  capture: id ("." id)+
+  "match(" exp "):" ("\n  " pattern (if exp)? ":" exp)+
+  pattern: matcher ("," pattern)?              # a, b    : tuple
+  type: ("." id prop*)+
+  capture: id type?
   matcher:
-  | "(" pattern ")"                            # (x)           : priority
   | '"' [^"]* '"'                              # "s"           : string
   | [0-9]+ ("." [0-9]+)?                       # 1.2           : number
-  | "." id term?                               # type match
-  | capture term?                              # capture and type match 
+  | "true" | "false"                           # true          : bool
+  | "[" pattern* "]"                           # [0 x]         : list
+  | "[:]" | "[" (pattern ":" pattern)+ "]"     # ["0":a b:"1"] : dict
+  | "(" pattern ")"                            # (a, b)        : priority
+  | type term?                                 # .type         : type match
+  | capture term?                              # id.type       : capture and type match
   term:
-  | "{" (id (("." id) | "=" exp | term)?)+ "}" # {a b.int c=1 d[0] } : struct
-  | "[" pattern* "]"                           # [0 x]               : list
-  | "[:]" | "[" (pattern ":" pattern)+ "]"     # ["0":a b:"1"]       : dict
+  | "{" (capture ("=" exp | term)?)* "}"       # {a b.int c=1 d[0] } : match structure
+  | "[" (type | capture)+ "]"                  # [.int t]            : match type parameters
 
 - Implicit type converting
   1 + u8(2)               # u8
@@ -174,10 +176,10 @@ union ast:
     rhs ast
 def eval a:
   match a:
-    case x.real: x
-    case x.op2{op="+"}: eval(x.lhs) + eval(x.rhs)
-    case x.op2{op="-"}: eval(x.lhs) - eval(x.rhs)
-    case x: throw $"unknown {x}"
+    x.real: x
+    x.op2{op="+"}: eval(x.lhs) + eval(x.rhs)
+    x.op2{op="-"}: eval(x.lhs) - eval(x.rhs)
+    x: throw $"unknown {x}"
 
 union tree a:
   leaf
@@ -187,9 +189,9 @@ union tree a:
     right tree[a]
 def validate t:
   match t:
-    case .leaf                       : true
-    case n.node if n.value == nan    : false
-    case n.node{left.node right.node}: left.value <= n.value <= right.value && validate(left) && validate(right)
-    case n.node{left.node}           : left.value <= n.value && validate(left)
-    case n.node{right.node}          : n.value <= right.value && validate(right)
+    :leaf                       : true
+    n:node if n.value == nan    : false
+    n:node{left:node right:node}: left.value <= n.value <= right.value && validate(left) && validate(right)
+    n:node{left:node}           : left.value <= n.value && validate(left)
+    n:node{right:node}          : n.value <= right.value && validate(right)
     # else is not needed because the above covers all

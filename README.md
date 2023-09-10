@@ -74,24 +74,37 @@ The commands are:
 -- main.moa
 
 ```
-struct article:
-  title string
-  content string
-
-db:
-  pv int
-  articles list[article]
-
 # main.moa
+struct user:
+  id int
+  nickname string
+  email string
+  pw_hash string
+
+var db:
+  pv int
+  users list[user]
+  sessions dict[string user]
+  ttl(sessions=30min)
+
 def main io:
-  io.http.listen handle
+  def broadcast o:
+    io.http.active_sockets.each(socket => socket.write(struct(o).json))
+  io.http.websocket "/ws" socket => io.db.readonly db () => db.sessions.includes(socket.header("sid"))
+  io.http.listen "/api/" peer => io.db.begin db () => dispatch peer broadcast
+  io.http.static "static/"
 
-let notfound = (404 [] "")
+def dispatch peer broadcast:
+  def json o:
+    (200 ["content-type","application/json; charset=utf-8"] struct(o).json)
+  def login email password:
+    db.users.find(u => u.email == email && password.eq_hash(u.pw_hash))
 
-def handle peer:
   db.pv += 1
-  iif peer.path == "/api/articles" && peer.method == "get" json(db.articles) notfound
-
-def json o:
-  (200 ["content-type" "application/json; charset=utf-8" struct(o).json)
+  let user db.sessions[peer.header("sid")]
+  match $"{peer.method} {peer.path}":
+    "post /api/login": json login(peer.post("email") peer.post("password"))
+    "get /api/uesrs" if user: json memory.users.map(u => u{id nickname})
+    "post /api/send/chat" if user: json broadcast({message: peer.post("message")})
+    _: peer.status404
 ```
