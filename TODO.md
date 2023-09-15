@@ -1,6 +1,6 @@
 # Do
 - Minimize the number of elements in code to help understanding
-- Keep conceptual integrity
+- Keep conceptual integrity based on minimal primitives
 - Support both functional and imperative programming
 
 # Do not
@@ -21,6 +21,7 @@
 - [ ] Profiler
 
 # Pending
+- [ ] Bcrypt
 - Consider to add events type for UI
 
 # Policy

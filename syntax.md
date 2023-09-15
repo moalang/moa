@@ -28,7 +28,7 @@ keyword: define | branch
 define: def var let struct union test
 branch: iif match
 statement: if else for each while test return yield continue break throw catch
-primitive: bool tru false int float nan inf num string list set dict tuple option some none
+primitive: bool tru false int float nan inf num string list set dict tuple option some none time
 reservation: ref many deft use module interface implement bytes iter lazy array assert i8..i64 u8..u64 f32 f64 decimal
 
 
@@ -42,6 +42,7 @@ reservation: ref many deft use module interface implement bytes iter lazy array 
 | "0o" [0-7_]+                # 0o11           -> 9
 | "0b" [0-1_]+                # 0b11           -> 3
 | [0-9][0-9_]+ ("." [0-9_]+)? # 10_000.1_002   -> 10000.1002
+| [0-9]+ or(sec second seconds min minute minutes hour hours day days month months year years) # into int
 
 
 

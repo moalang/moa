@@ -14,12 +14,20 @@
 [ ] match a b   :: a matcher[a b]+ b
 [ ] num         # int, float
 
-# embedded a
+# struct
 [ ] string :: string
 [ ] format :: string string
-[ ] bool :: bool
+[ ] bool   :: bool
+[ ] hash   :: int
+[ ] bytes  :: bytes
+[ ] json   :: string
 
-# num.embedded a
+# option a
+[ ] and b   :: option[a] (a b) option[b]
+[ ] or      :: option[a] a a
+[ ] default :: option[a] a
+
+# num a
 [ ] + - * ** / % | & ^ :: a a a
 [ ] abs, neg :: a
 
@@ -48,52 +56,72 @@
 [ ] rsplit   :: string int? list[string]
 [ ] rreplace :: string fn[list[string] string] int? string
 
+# bytes
+[ ] ++      :: bytes bytes bytes
+[ ] get     :: int option[int]
+[ ] set     :: int int bool
+[ ] []      :: int int @error
+[ ] []=     :: int int int @error
+[ ] size    :: int
+[ ] slice   :: int int? bytes
+[ ] base64  :: string
+
 # lambda[a b ...]
 
 # list[a]
-[ ] ++ a :: list[a] list[a]
-[ ] size :: int
-[ ] get :: int a @error
-[ ] set :: int a a @error
-[ ] map b :: fn[a b] list[b]
-[ ] fmap b :: fn[a list[b]] list[b]
-[ ] keep :: fn[a bool] list[a]
-[ ] all  :: fn[a bool] bool
-[ ] any  :: fn[a bool] bool
-[ ] slice :: int int? list[a]
-[ ] sort b :: fn[a b]? list[a]
+[ ] ++ a    :: list[a] list[a]
+[ ] size    :: int
+[ ] get     :: int option[a]
+[ ] set     :: int a bool
+[ ] []      :: int a @error
+[ ] []=     :: int a a @error
+[ ] map b   :: fn[a b] list[b]
+[ ] fmap b  :: fn[a list[b]] list[b]
+[ ] keep    :: fn[a bool] list[a]
+[ ] all     :: fn[a bool] bool
+[ ] any     :: fn[a bool] bool
+[ ] slice   :: int int? list[a]
+[ ] sort b  :: fn[a b]? list[a]
 [ ] count b :: fn[a b]? dict[b int]
 [ ] group b :: fn[a b]? dict[b list[a]]
 [ ] reverse :: list[a]
-[ ] zip b :: list[b] list[tuple[a b]]
-[ ] find :: fn[a bool] option[a]
-[ ] fold b :: fn[a b b] b
-[ ] has :: a bool
-[ ] sum :: a
-[ ] min :: a
-[ ] max :: a
+[ ] zip b   :: list[b] list[tuple[a b]]
+[ ] find    :: fn[a bool] option[a]
+[ ] fold b  :: fn[a b b] b
+[ ] has     :: a bool
+[ ] sum     :: a
+[ ] min     :: a
+[ ] max     :: a
 
 # dict[k v]
-[ ] size :: int
-[ ] get :: k option[v]
-[ ] set :: k v v
-[ ] has :: k bool
-[ ] keys :: seq[k]
+[ ] size   :: int
+[ ] get    :: k option[v]
+[ ] set    :: k v bool
+[ ] has    :: k bool
+[ ] keys   :: seq[k]
 [ ] values :: seq[v]
-[ ] list :: list[tuple[k v]]
+[ ] list   :: list[tuple[k v]]
 
 # set[a]
 [ ] size :: int
-[ ] - :: set[a] set[a]
-[ ] | :: set[a] set[a]
-[ ] & :: set[a] set[a]
-[ ] ^ :: set[a] set[a]
-[ ] has :: a bool
+[ ] -    :: set[a] set[a]
+[ ] |    :: set[a] set[a]
+[ ] &    :: set[a] set[a]
+[ ] ^    :: set[a] set[a]
+[ ] has  :: a bool
 
 # tuple[a b ...]
 [ ] 0 :: a
 [ ] 1 :: b
 ...
+
+# time
+[ ] year, month, day, hour, min, sec, wday, yday, timestamp :: int
+[ ] zone           :: string
+[ ] +              :: time int time
+[ ] -              :: time time int
+
+
 
 # ---( pending )---------------------------------------
 interface num a:
@@ -118,19 +146,6 @@ implement int num:
 [ ] break       :: _
 [ ] return a    :: a a
 
-# bytes
-[ ] ++ :: bytes bytes bytes
-[ ] be :: bytes # big endian mode
-[ ] le :: bytes # little endian mode
-[ ] get :: int int @error
-[ ] set :: int int @error
-[ ] to a :: option[a]
-[ ] write a :: a int
-[ ] size :: int
-[ ] slice :: int int? bytes
-[ ] base64 :: string
-[ ] string :: string
-
 # math
 [ ] acos acosh asin asinh atan atan2 atanh cbrt cos cosh erf erfc exp gamma log log10 log2 sin sinh sqrt tan tanh :: float float
 [ ] e, pi, inf, nan :: float
@@ -141,19 +156,17 @@ implement int num:
 # log
 [ ] debug, info, warn, error a :: a any* a
 
-# time
-[ ] year, month, day, hour, minute, second, wday, mday, yday :: int
-[ ] time.now
+# io.time
+[ ] now :: time
 
-# random
-[ ] random.int :: int int int
-[ ] random.bytes :: int bytes
-[ ] random.choice a :: list[a] option[a]
+# io.random
+[ ] int :: int int int
+[ ] bytes :: int bytes
+[ ] choice a :: list[a] option[a]
 
 # io.http
-[ ] listen string (http.request http.response) _
-[ ] request string {method.string headers.list[tuple[string list[string]]] body.bytes}? http.response
+[ ] listen (http.request http.response) _
+[ ] request string {method.string="get" headers.list[tuple[string list[string]]]=[] body.bytes=[]}? http.response
 
-# io.db (object database management system)
-[ ] begin a b :: a (b) b
-[ ] readonly a b :: a (b) b
+# io.db t
+[ ] begin a :: t (a) a

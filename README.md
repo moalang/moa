@@ -67,44 +67,60 @@ The commands are:
 
 
 # Scafold for web application in real world
-/
-|- static/index.html
-|- static/style.css
-|- static/script.js
--- main.moa
+- index.mhtml
+- main.moa
+
+```
+# index.mhtml
+<!doctype html>
+<html>
+<head>
+  <title>{{title}}</title>
+</head>
+<body>
+  <h1>ToDo list</h1>
+  <if todos>
+    <ul>
+      <for todos>
+        <li>
+          <if done>
+            <s>{{ title }}</s>
+          <else>
+            {{ deadline }} {{ title }}
+          </if>
+      </for>
+    </ul>
+  <else>
+    <p>All done</p>
+  </if>
+
+  <h1>New ToDo</h1>
+  <form method="post" action="/todos">
+    <input name="title" type="text">
+    <input name="deadline" type="datetime-local">
+    <label><input name="done" type="checkbox"> Done</label>
+    <button>Create new ToDo</button>
+  </form>
+</body>
+</html>
+```
 
 ```
 # main.moa
-struct user:
-  id int
-  nickname string
-  email string
-  pw_hash string
 
-var db:
-  pv int
-  users list[user]
-  sessions dict[string user]
-  ttl(sessions=30min)
+struct todo:
+  title string
+  deadline time
+  done bool
+
+struct schema:
+  todos list[todo]
 
 def main io:
-  def broadcast o:
-    io.http.active_sockets.each(socket => socket.write(struct(o).json))
-  io.http.websocket "/ws" socket => io.db.readonly db () => db.sessions.includes(socket.header("sid"))
-  io.http.listen "/api/" peer => io.db.begin db () => dispatch peer broadcast
-  io.http.static "static/"
-
-def dispatch peer broadcast:
-  def json o:
-    (200 ["content-type","application/json; charset=utf-8"] struct(o).json)
-  def login email password:
-    db.users.find(u => u.email == email && password.eq_hash(u.pw_hash))
-
-  db.pv += 1
-  let user db.sessions[peer.header("sid")]
-  match $"{peer.method} {peer.path}":
-    "post /api/login": json login(peer.post("email") peer.post("password"))
-    "get /api/uesrs" if user: json memory.users.map(u => u{id nickname})
-    "post /api/send/chat" if user: json broadcast({message: peer.post("message")})
-    _: peer.status404
+  io.http.listen peer => io.db[schema].begin db =>
+    def post_todos title deadline done:
+      db.todos.add {title deadline done}
+    match $"{peer.method} {peer.path}":
+      "post /todos": post_todos peer.post("title") peer.post("deadline").time peer.post("done").bool
+      _            : 404, [], "404 page not found"
 ```
