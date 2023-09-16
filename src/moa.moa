@@ -1,0 +1,16 @@
+def main io:
+  match io.argv:
+    []: repl
+    ["build"]      : io.puts "Not implemented yet"
+    ["format" path]: io.puts "Not implemented yet"
+    ["help"]       : io.puts "Not implemented yet"
+    ["help" topic] : io.puts "Not implemented yet"
+    ["lint" path]  : io.puts "Not implemented yet"
+    ["run"]        : io.puts "Not implemented yet"
+    ["run" exp]    : io.puts "Not implemented yet"
+    ["test"]       : io.puts "Not implemented yet"
+    ["test" target]: io.puts "Not implemented yet"
+    ["version"]    : io.puts "moa v0.1"
+
+def repl:
+  io.puts "repl"

@@ -65,9 +65,8 @@ const evaluate = (x, env) => {
   const tuple = t => isTuple(t[0]) ? tuple(t[0].slice(1)).concat(run(t[1])) : t.map(run)
   const iif = a => a.length === 1 ? run(a[0]) : run(a[0]) ? run(a[1]) : iif(a.slice(2))
   const eq = (a, b) => ((a, b) => a === b ? undefined : fail(`eq ${str(a)} ${str(b)}`))(str(a), str(b))
-  const ut = (a, e) => a.ma
   const block = ([head, ...tail], body) =>
-    head === 'fn' ? env[tail[0]] = lambda(env, tail.slice(1), body) :
+    head === 'def' ? env[tail[0]] = lambda(env, tail.slice(1), body) :
     head === 'let' || head === 'var' ? (env[tail[0]] = run(body)) :
     head === 'struct' ? env[tail[0]] = struct(body) :
     head === 'union' ? env[tail[0]] = Object.fromEntries(union(tail[0], body).map(([id, node]) => [id, env[id] = node])) :
@@ -102,10 +101,8 @@ const evaluate = (x, env) => {
     lookup(x)
 }
 
-const input = process.argv[2]
-if (input) {
-  console.log(str(evaluate(parse(input), buildin)))
-} else {
+module.exports = { evaluate, buildin }
+if (require.main === module) {
   const run = src => {
     try {
       return evaluate(parse(src), buildin)
@@ -134,9 +131,9 @@ if (input) {
   const test = (expect, src) => eq(expect, src)
 
   // [x] def
-  test(1, 'fn f a: a\nf(1)')
-  test(2, 'fn f a:\n  let b a + 1\n  b\nf(1)')
-  test(2, 'fn f a:\n  var b a\n  a += 1\nf(1)')
+  test(1, 'def f a: a\nf(1)')
+  test(2, 'def f a:\n  let b a + 1\n  b\nf(1)')
+  test(2, 'def f a:\n  var b a\n  a += 1\nf(1)')
   // [x] var
   test(3, 'var a 1\na+=2\na')
   // [x] let

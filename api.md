@@ -42,19 +42,21 @@
 [ ] round  :: int
 
 # string
-[ ] ++       :: string string string
-[ ] size     :: int
-[ ] pos      :: int
-[ ] get      :: int option[string]
-[ ] slice    :: int int? string
-[ ] split    :: string int? list[string]
-[ ] index    :: string int
-[ ] replace  :: string string int? string
-[ ] reverse  :: string
-[ ] utf8     :: list[int]
-[ ] find     :: string list[string]
-[ ] rsplit   :: string int? list[string]
-[ ] rreplace :: string fn[list[string] string] int? string
+[ ] ++         :: string string string
+[ ] size       :: int
+[ ] pos        :: int
+[ ] get        :: int option[string]
+[ ] slice      :: int int? string
+[ ] split      :: string int? list[string]
+[ ] index      :: string int
+[ ] replace    :: string string int? string
+[ ] reverse    :: string
+[ ] utf8       :: list[int]
+[ ] find       :: string list[string]
+[ ] starts     :: string bool
+[ ] ends       :: string bool
+[ ] rsplit     :: string int? list[string]
+[ ] rreplace   :: string (list[string] string) int? string
 
 # bytes
 [ ] ++      :: bytes bytes bytes
@@ -64,6 +66,7 @@
 [ ] []=     :: int int int @error
 [ ] size    :: int
 [ ] slice   :: int int? bytes
+[ ] string  :: string
 [ ] base64  :: string
 
 # lambda[a b ...]
@@ -75,19 +78,19 @@
 [ ] set     :: int a bool
 [ ] []      :: int a @error
 [ ] []=     :: int a a @error
-[ ] map b   :: fn[a b] list[b]
-[ ] fmap b  :: fn[a list[b]] list[b]
-[ ] keep    :: fn[a bool] list[a]
-[ ] all     :: fn[a bool] bool
-[ ] any     :: fn[a bool] bool
+[ ] map b   :: (a b) list[b]
+[ ] fmap b  :: (a list[b]) list[b]
+[ ] keep    :: (a bool) list[a]
+[ ] all     :: (a bool) bool
+[ ] any     :: (a bool) bool
 [ ] slice   :: int int? list[a]
-[ ] sort b  :: fn[a b]? list[a]
-[ ] count b :: fn[a b]? dict[b int]
-[ ] group b :: fn[a b]? dict[b list[a]]
+[ ] sort b  :: (a b)? list[a]
+[ ] count b :: (a b)? dict[b int]
+[ ] group b :: (a b)? dict[b list[a]]
 [ ] reverse :: list[a]
 [ ] zip b   :: list[b] list[tuple[a b]]
-[ ] find    :: fn[a bool] option[a]
-[ ] fold b  :: fn[a b b] b
+[ ] find    :: (a bool) option[a]
+[ ] fold b  :: (a b b) b
 [ ] has     :: a bool
 [ ] sum     :: a
 [ ] min     :: a
@@ -98,8 +101,8 @@
 [ ] get    :: k option[v]
 [ ] set    :: k v bool
 [ ] has    :: k bool
-[ ] keys   :: seq[k]
-[ ] values :: seq[v]
+[ ] keys   :: list[k]
+[ ] values :: list[v]
 [ ] list   :: list[tuple[k v]]
 
 # set[a]
@@ -122,6 +125,17 @@
 [ ] -              :: time time int
 
 
+# io.console
+[ ] argv :: list[string]
+[ ] put  :: string _ @error
+[ ] puts :: string _ @error
+
+# io.file
+[ ] list  :: string list[string] @error
+[ ] read  :: string bytes @error
+[ ] write :: string bytes @error
+
+
 
 # ---( pending )---------------------------------------
 interface num a:
@@ -131,10 +145,6 @@ interface num a:
 
 implement int num:
   + a b: ...
-
-# primitive
-[ ] bytes       :: a bytes
-[ ] seq         # string, list, dict, bytes
 
 # statement
 [ ] if a        :: bool a _
@@ -156,17 +166,13 @@ implement int num:
 # log
 [ ] debug, info, warn, error a :: a any* a
 
-# io.time
+# io
+[ ] argv :: list[string]
+[ ] put :: string _
+[ ] puts :: string _
 [ ] now :: time
-
-# io.random
-[ ] int :: int int int
-[ ] bytes :: int bytes
-[ ] choice a :: list[a] option[a]
-
-# io.http
-[ ] listen (http.request http.response) _
-[ ] request string {method.string="get" headers.list[tuple[string list[string]]]=[] body.bytes=[]}? http.response
-
-# io.db t
-[ ] begin a :: t (a) a
+[ ] randint :: int int int
+[ ] randbytes :: int bytes
+[ ] database a :: t (a) a
+[ ] http.listen (http.request http.response) _
+[ ] http.request string {method.string="get" headers.list[tuple[string list[string]]]=[] body.bytes=[]}? http.response
