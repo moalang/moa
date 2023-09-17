@@ -6,3 +6,4 @@ test:
 	clear
 	node src/parser.js
 	node src/interpriter.js
+	-node src/bootstrap.js
