@@ -107,6 +107,7 @@ The commands are:
 
 ```
 # main.moa
+use io
 
 struct todo:
   title string
@@ -116,7 +117,7 @@ struct todo:
 struct schema:
   todos list[todo]
 
-def main io:
+def main:
   io.http.listen peer => io.database[schema] db =>
     def post_todos title deadline done:
       db.todos.add {title deadline done}

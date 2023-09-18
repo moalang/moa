@@ -8,14 +8,14 @@ prop: "." id
 call: "(" exp* ")"                           # f(a b=c)
 list: "[" exp* "]"                           # a[1]
 dict: "[" ":" | (unit ":" unit)+ "]"         # a["a":b c:1]
-struct: "{" (id ("." unit)? ("=" exp)?)* "}" # a{a b:1}
+struct: "{" (id ("." unit)? ("=" exp)?)* "}" # a{a b=1}
 bottom:
-| "(" exp ")"                     # 1 * (2 + 3) : priority
-| " ." id                         # .int        : type
-| [0-9]+ ("." [0-9]+)?            # 1.2         : number
-| '"' [^"]* '"'                   # "s"         : string
-| list | dict | struct
+| "(" exp ")"                     # 1 * (2 + 3)  : priority
+| " ." id                         # .int         : type
+| [0-9]+ ("." [0-9]+)?            # 1.2          : number
+| '"' [^"]* '"'                   # "s"          : string
 | (id ("," id)*)? "=>" exp        # a,b => a + b : lambda
+| list | dict | struct
 | id
 op1: [!-]
 op2:
@@ -28,7 +28,7 @@ keyword: define | branch
 define: def var let struct union test
 branch: iif match
 statement: if else for each while test return yield continue break throw catch
-primitive: bool tru false int float nan inf num string list set dict tuple option some none time
+primitive: bool true false int float nan inf num string list set dict tuple option some none time
 reservation: ref many deft use module interface implement bytes iter lazy array assert i8..i64 u8..u64 f32 f64 decimal
 
 
@@ -146,7 +146,7 @@ $ undefined
 - Definition
   - variable       # var a 1
   - constant       # let a 1
-  - function       # ft f a: a a; def f a: a
+  - function       # def f a: a
   - struct         # struct a: b c
   - union          # union a: b; c d; e: f g
 - Statement
@@ -164,7 +164,7 @@ $ undefined
   - iif            # iif a b c d e   ->   a ? b : c ? d : e
   - module         # module a: inc int int; use a inc
   - comment        # # comment
-  - test           # test t "label": t.eq "hi" greet
+  - test           # test t: t.eq "hi" greet
 
 
 
@@ -190,9 +190,9 @@ union tree a:
     right tree[a]
 def validate t:
   match t:
-    :leaf                       : true
-    n:node if n.value == nan    : false
-    n:node{left:node right:node}: left.value <= n.value <= right.value && validate(left) && validate(right)
-    n:node{left:node}           : left.value <= n.value && validate(left)
-    n:node{right:node}          : n.value <= right.value && validate(right)
+    .leaf                       : true
+    n.node if n.value == nan    : false
+    n.node{left.node right.node}: left.value <= n.value <= right.value && validate(left) && validate(right)
+    n.node{left.node}           : left.value <= n.value && validate(left)
+    n.node{right.node}          : n.value <= right.value && validate(right)
     # else is not needed because the above covers all
