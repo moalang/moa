@@ -9,6 +9,8 @@
 
 # Todo
 - [x] Interpriter (2/2)
+- [ ] Compiler to JavaScript
+- [ ] Compiler to native code
 - [ ] HTTP server
 - [ ] Relational database and KVS
 - [ ] Reactive module for web browser

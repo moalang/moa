@@ -1,8 +1,8 @@
 # reserved
 [ ] _           :: tuple[]
 [ ] true, false :: bool
-[ ] int         :: string option[int]
-[ ] float       :: string option[float]
+[ ] int         :: string opt[int]
+[ ] float       :: string opt[float]
 [ ] string a    :: a string
 [ ] bool a      :: a bool
 [ ] list a      :: a+ list[a]
@@ -22,10 +22,10 @@
 [ ] bytes  :: bytes
 [ ] json   :: string
 
-# option a
-[ ] and b   :: option[a] (a b) option[b]
-[ ] or      :: option[a] a a
-[ ] default :: option[a] a
+# opt a
+[ ] and b   :: opt[a] (a b) opt[b]
+[ ] or      :: opt[a] a a
+[ ] catch   :: (string a) a
 
 # num a
 [ ] + - * ** / % | & ^ :: a a a
@@ -45,7 +45,7 @@
 [ ] ++         :: string string string
 [ ] size       :: int
 [ ] pos        :: int
-[ ] get        :: int option[string]
+[ ] get        :: int opt[string]
 [ ] slice      :: int int? string
 [ ] split      :: string int? list[string]
 [ ] index      :: string int
@@ -60,7 +60,7 @@
 
 # bytes
 [ ] ++      :: bytes bytes bytes
-[ ] get     :: int option[int]
+[ ] get     :: int opt[int]
 [ ] set     :: int int bool
 [ ] []      :: int int @error
 [ ] []=     :: int int int @error
@@ -74,7 +74,7 @@
 # list[a]
 [ ] ++ a    :: list[a] list[a]
 [ ] size    :: int
-[ ] get     :: int option[a]
+[ ] get     :: int opt[a]
 [ ] set     :: int a bool
 [ ] []      :: int a @error
 [ ] []=     :: int a a @error
@@ -89,7 +89,7 @@
 [ ] group b :: (a b)? dict[b list[a]]
 [ ] reverse :: list[a]
 [ ] zip b   :: list[b] list[tuple[a b]]
-[ ] find    :: (a bool) option[a]
+[ ] find    :: (a bool) opt[a]
 [ ] fold b  :: (a b b) b
 [ ] has     :: a bool
 [ ] sum     :: a
@@ -98,7 +98,7 @@
 
 # dict[k v]
 [ ] size   :: int
-[ ] get    :: k option[v]
+[ ] get    :: k opt[v]
 [ ] set    :: k v bool
 [ ] has    :: k bool
 [ ] keys   :: list[k]
@@ -124,20 +124,51 @@
 [ ] +              :: time int time
 [ ] -              :: time time int
 
+# ---( standard module )-------------------------------
 
-# io.console
+# io
 [ ] argv :: list[string]
 [ ] put  :: string _ @error
 [ ] puts :: string _ @error
-
-# io.file
-[ ] list  :: string list[string] @error
-[ ] read  :: string bytes @error
-[ ] write :: string bytes @error
-
-
+[ ] path:
+[ ]   glob     :: string list[path]
+[ ]   read     :: string? bytes @error
+[ ]   write    :: bytes int @error
+[ ]   delete _ :: @error
 
 # ---( pending )---------------------------------------
+# io
+[ ] path:
+[ ]   join     :: string path
+[ ]   read     :: bytes @error
+[ ]   write    :: bytes int @error
+[ ]   delete _ :: @error
+[ ] now  :: time
+[ ] randint :: int int int
+[ ] randbytes :: int bytes
+[ ] database t u :: t (u) u
+[ ] http:
+[ ]   listen (http.request http.response) _
+[ ]   call string {method.string="get" headers.list[tuple[string list[string]]]=[] body.bytes=[]}? http.response
+[ ]   get url option... = call url {method="get" ...option}
+[ ]   post url option... = call url {method="post" ...option}
+[ ]   request:
+        method  :: string
+        path    :: string
+        header  :: string string
+        headers :: string list[string]
+        get     :: string string
+        gets    :: string list[string]
+        post    :: string string
+        posts   :: string list[string]
+        body    :: bytes
+[ ]   response:
+        status  :: int
+        headers :: list[tuple[string string]]
+        body    :: bytes
+
+
+# interface
 interface num a:
   + - * ** / / % :: a a a
   abs :: a
@@ -165,14 +196,3 @@ implement int num:
 
 # log
 [ ] debug, info, warn, error a :: a any* a
-
-# io
-[ ] argv :: list[string]
-[ ] put :: string _
-[ ] puts :: string _
-[ ] now :: time
-[ ] randint :: int int int
-[ ] randbytes :: int bytes
-[ ] database a :: t (a) a
-[ ] http.listen (http.request http.response) _
-[ ] http.request string {method.string="get" headers.list[tuple[string list[string]]]=[] body.bytes=[]}? http.response

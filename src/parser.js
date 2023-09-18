@@ -24,6 +24,7 @@ const puts = (...a) => { console.log(a.map(str).join(' ')); return a[0] }
 const dump = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
 const parse = source => {
+  source = source.trim()
   let pos = 0
   const tokens = source.split(/((?:!=)|[()\[\]{}!]|(?:-?[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+|"[^"]*"|[A-Za-z0-9_]+)/).filter(t => t.length > 0)
   const binaryOps = '. , * ** / // % + ++ - >> << ^ & | = += -= *= /= %= **= => < <= > >= == != === !== <=> && ||'.split(' ')
@@ -186,6 +187,9 @@ if (require.main === module) {
   // combinations
   test('(! (a b))', '!a(b)')
   test('(+ (a b) c)', 'a(b) + c')
+
+  // edge case
+  test('1', '1\n')
 
   puts('ok')
 }

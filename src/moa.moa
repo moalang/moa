@@ -1,9 +1,23 @@
-def main io:
+let help "Moa is a tool for managing Moa source code.
+
+Usage:
+  moa <command> [arguments]
+
+The commands are:
+  moa                # launch repl
+  moa build          # compile to an executable file without test
+  moa format file    # format a file
+  moa help [topic]   # for more info about topic
+  moa lint file      # report likely mistakes
+  moa run [exp]      # run Moa program
+  moa test [regexps] # run tests
+  moa version        # print Moa version"
+
+def main:
   match io.argv:
-    []: repl
+    []: repl()
     ["build"]      : io.puts "Not implemented yet"
     ["format" path]: io.puts "Not implemented yet"
-    ["help"]       : io.puts "Not implemented yet"
     ["help" topic] : io.puts "Not implemented yet"
     ["lint" path]  : io.puts "Not implemented yet"
     ["run"]        : io.puts "Not implemented yet"
@@ -11,6 +25,7 @@ def main io:
     ["test"]       : io.puts "Not implemented yet"
     ["test" target]: io.puts "Not implemented yet"
     ["version"]    : io.puts "moa v0.1"
+    _              : io.puts help
 
 def repl:
   io.puts "repl"

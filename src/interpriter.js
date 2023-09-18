@@ -3,28 +3,66 @@
  */
 class List extends Array { }
 
+const fs = require('fs')
 const { parse } = require('./parser.js')
 const dump = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
-const str = o =>
-  typeof o === 'string' ? o :
+const str = o => typeof o === 'string' ? o : escape(o)
+const escape = o =>
   o instanceof Error ? `${o.constructor.name}(${o.message})` :
-  Array.isArray(o) ? `[${o.map(str).join(' ')}]` :
+  Array.isArray(o) ? `[${o.map(escape).join(' ')}]` :
   JSON.stringify(o)
-const put = x => process.stdout.write(str(x));
+const bytes = o => escape(o)
+const put = x => process.stdout.write(x);
 const puts = (...a) => { console.log(...a); return a[0]; }
 
 const isNativeArray = o => Array.isArray(o) && o.constructor === Array
+const glob = (root, patterns) => {
+  const list = node => node.isDirectory() ?
+    fs.readdirSync(node.path + node.name, {withFileTypes: true}).filter(x => !['.', '..'].includes(x)) :
+    []
+  const dfs = (nodes, [filter, ...left]) => {
+    if (filter === '*') {
+      return dfs(nodes.flatMap(list), left)
+    } else if (filter === '**') {
+      const all = []
+      while (nodes.length) {
+        const node = nodes.pop()
+        list(node).map(sub => nodes.append(sub))
+        all.append(node)
+      }
+      return dfs(all, left)
+    } else if (filter.includes('.')) {
+      const ext = '.' + filter.split('.', 2)[-1]
+      return dfs(nodes.filter(x => x.name.endsWith(ex)))
+    } else {
+      return nodes
+    }
+  }
+  return dfs(list({name: root, path: './', isDirectory: () => true}), patterns)
+}
+
 const buildin = {
   new: (run, ...a) => Object.fromEntries(Array(a.length/2).fill().map((_,i) => [a[i*2], run(a[i*2+1])])),
   dict: (run, ...a) => Object.fromEntries(Array(a.length/2).fill().map((_,i) => [run(a[i*2]), run(a[i*2+1])])),
   list: (run, ...a) => new List().concat(a.map(run)),
   tuple: (run, ...a) => new List().concat(a.map(run)),
+  io: {
+    argv: [],
+    put: (...a) => process.stdout.write(a.map(str).join(' ')),
+    puts: (...a) => console.log(a.map(str).join(' ')),
+    path: path => ({
+      read: charset => fs.readFileSync(path, charset),
+      write: o => fs.writeFileSync(path, bytes(o)),
+      delete: o => fs.unlinkSync(path),
+      glob: s => glob(path, s.split('/')),
+    }),
+  }
 }
 const evaluate = (x, env) => {
   const run = x => evaluate(x, env)
-  const lookup = key => env[key] || fail(`Not found '${key}' in [${Object.keys(env)}]`)
-  const local = (run, args, argv) => Object.fromEntries(args.map((id, i) => [id, argv[i]]))
+  const lookup = key => key in env ? env[key] : fail(`Not found '${key}' in [${Object.keys(env)}]`)
+  const local = (run, args, argv) => Object.fromEntries(args.map((id, i) => [id, run(argv[i])]))
   const lambda = (env, args, body) => (caller, argv) => evaluate(body, {...env, ...local(caller, args, argv)})
   const method = (target, id) =>
     id.match(/^[0-9]/) ? run(target)[id] :
@@ -72,6 +110,12 @@ const evaluate = (x, env) => {
           }
           return evaluate(body, {...env, ...capture})
         }
+      } else if (cond[0] === '__call') {
+        if (str(run(cond)) === str(target)) {
+          return run(body)
+        }
+      } else if (cond === '_') {
+        return run(body)
       } else if (cond[0] === '"') {
         if (target === run(cond)) {
           return run(body)
@@ -83,7 +127,7 @@ const evaluate = (x, env) => {
           return evaluate(body, {...env, [cond[1]]: target.__val})
         }
       } else {
-        fail(`${conds} are not supported matching patterns`)
+        fail(`${cond} is not supported matching pattern for ${target}`)
       }
     }
     fail(`${conds} are not match with ${str(target)}`)
@@ -91,7 +135,7 @@ const evaluate = (x, env) => {
   const isTuple = t => Array.isArray(t) && t[0] === ','
   const tuple = t => isTuple(t[0]) ? tuple(t[0].slice(1)).concat(run(t[1])) : t.map(run)
   const iif = a => a.length === 1 ? run(a[0]) : run(a[0]) ? run(a[1]) : iif(a.slice(2))
-  const eq = (a, b) => ((a, b) => a === b ? undefined : fail(`eq ${str(a)} ${str(b)}`))(str(a), str(b))
+  const eq = (a, b) => ((a, b) => a === b ? undefined : fail(`eq ${a} ${b}`))(escape(a), escape(b))
   const block = ([head, ...tail], body) =>
     head === 'def' ? env[tail[0]] = lambda(env, tail.slice(1), body) :
     head === 'let' || head === 'var' ? (env[tail[0]] = run(body)) :
@@ -101,7 +145,7 @@ const evaluate = (x, env) => {
     head === 'test' ? evaluate(body, {...env, [tail[0]]:{eq}}) :
     fail(`'${head}' is unkown block with ${str(tail)} and ${str(body)}`)
   const apply = ([head, ...tail]) =>
-    isNativeArray(head) ? apply([run(head), ...tail]) :
+    isNativeArray(head) ? apply([run(head), ...tail.map(run)]) :
     typeof head === 'function' ? head(...tail) :
     head === 'string' ? str(run(tail[0])) :
     head === 'int' ? parseInt(run(tail[0])) :
@@ -119,8 +163,9 @@ const evaluate = (x, env) => {
     head.startsWith('"') ? head :
     lookup(head)
   return x instanceof List ? x :
-    Array.isArray(x) ? apply(x) :
+    Array.isArray(x) ? (x.length === 0 ? undefined : apply(x)) :
     typeof x === 'number' ? x :
+    typeof x !== 'string' ? x :
     x === 'true' ? true :
     x === 'false' ? false :
     x.match(/^-?[0-9]/) ? parseFloat(x) :
@@ -131,9 +176,18 @@ const evaluate = (x, env) => {
 
 module.exports = { evaluate, buildin }
 if (require.main === module) {
+  let stdout = ''
+  const test_directory = '/tmp/moa'
+  const buildin_test = {...buildin, io: {
+    argv: ['a', 'b'],
+    put: (...a) => stdout += a.map(str).join(' '),
+    puts: (...a) => stdout += a.map(str).join(' ') + '\n',
+    path: path => buildin.io.path(test_directory + '/' + path),
+  }, __stdout: () => stdout }
   const run = src => {
     try {
-      return evaluate(parse(src), buildin)
+      stdout = ''
+      return evaluate(parse(src), buildin_test)
     } catch (e) {
       return e
     }
@@ -162,6 +216,7 @@ if (require.main === module) {
   const test = (expect, src) => eq(expect, src)
 
   // [x] def
+  test(1, 'def f: 1\nf()')
   test(1, 'def f a: a\nf(1)')
   test(2, 'def f a:\n  let b a + 1\n  b\nf(1)')
   test(2, 'def f a:\n  var b a\n  a += 1\nf(1)')
@@ -181,10 +236,11 @@ if (require.main === module) {
   test(true, 'struct s:\n  a string\n  b int\ns("hi" 1) < s("hi" 2)')
   test(true, 'struct s:\n  a string\n  b int\ns("hi" 9) < s("hi" 10)')
   // [x] match
-  test(1, 'match "a":\n  "a": 1\n  "b": 2')
-  test(1, 'match [1]:\n  [1]: 1\n  [2 n]: n')
+  test(1, 'match "a":\n  "a": 1')
+  test(1, 'match []:\n  []: 1')
   test(3, 'match [2 3]:\n  [1]: 1\n  [2 n]: n')
   test('b', 'match ["a" "b"]:\n  ["a" b]: b')
+  test(2, 'match 1:\n  _: 2')
   // [x] union / match
   test(1, 'union ab:\n  a\n  b\nmatch a:\n  .a: 1\n  .b: 2')
   test(2, 'union ab:\n  a\n  b\nmatch b:\n  .a: 1\n  .b: 2')
@@ -246,10 +302,23 @@ if (require.main === module) {
   test({s:1}, '[s:1]')
   test({1:2}, '[1:2]')
   test(2, '[1:2][1]')
+  // [ ] io
+  test(["a", "b"], 'io.argv')
+  test('1', 'io.put 1\n__stdout()')
+  test('1\n', 'io.puts 1\n__stdout()')
+  //path: path => ({
+  //  read: charset => fs.readFileSync(path, charset),
+  //  write: o => fs.writeFileSync(path, bytes(o)),
+  //  delete: o => fs.unlinkSync(path),
+  //  glob: s => glob(path, s.split('/')),
+  //}),
   // [x] test
   test(undefined, 'test t: t.eq 1 1')
   test(Error('eq 1 2'), 'test t: t.eq 1 2')
-  test(Error('eq "1" "2"'), 'test t: t.eq "1" "2"')
+  test(Error('eq "a" "b"'), 'test t: t.eq "a" "b"')
+  // [x] edge case
+  test(undefined, '')
+  test(undefined, '\n')
 
   puts('ok')
 }
