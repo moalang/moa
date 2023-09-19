@@ -14,7 +14,8 @@
  *       c
  *       d e       # (: (a b) (__pack c (d e)))
  * [x] {a b:c}     # (new a a b c)
- * [ ] f ... = ... # (= f (=> [...] ...))
+ * [x] f ... = ... # (= f (=> [...] ...))
+ * [x] # comment
  */
 const str = o =>
   typeof o === 'string' ? o :
@@ -26,9 +27,11 @@ const puts = (...a) => { console.log(a.map(str).join(' ')); return a[0] }
 const dump = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
 const parse = source => {
-  source = source.trim()
   let pos = 0
-  const tokens = source.split(/((?:!=)|[()\[\]{}!]|(?:-?[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+|"[^"]*"|[A-Za-z0-9_]+)/).filter(t => t.length > 0)
+  const trim = a => a.length === 0 ? [] :
+    a[0].match(/^[ \r\n\t]/) ? trim(a.slice(1)) :
+    a[a.length - 1].match(/^[ \r\n\t]/) ? trim(a.slice(0, -1)) : a
+  const tokens = trim(source.split(/((?:!=)|[()\[\]{}!]|(?:-?[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+(?:#[^\n]*|[ \t\r\n]+)*|"(?:[^"]|\\")*(?<!\\)"|[A-Za-z0-9_]+|#[^\n]*)/).filter(t => t.length > 0 && !t.startsWith('#')))
   const binaryOps = '. , * ** / // % + ++ - >> << ^ & | := += -= *= /= %= **= => < <= > >= == != === !== <=> && ||'.split(' ')
   const statement = () => {
     const many = (a, f) => {
@@ -102,12 +105,14 @@ if (require.main === module) {
   const stringify = a => Array.isArray(a) ? `(${a.map(stringify).join(' ')})` : str(a)
   const assert = (expect, fact, src) => expect === fact ? put('.') : fail(`Expected '${expect}' but got '${fact}' in '${src}'`)
   const test = (expect, src) => assert(expect, stringify(parse(src)), src)
+  test('"\\""', '"\\""')
 
   // primitives
   test('1', '1')
   test('1.0', '1.0')
   test('id', 'id')
   test('"hi"', '"hi"')
+  test('"\\""', '"\\""')
   test('(__call list)', '[]')
   test('(list 1 2)', '[1 2]')
   test('(__call dict)', '[:]')
@@ -191,12 +196,18 @@ if (require.main === module) {
   test('(__pack (: a (: b c)) d)', 'a:\n  b:\n    c\nd')
   test('(__pack (: a (__pack b (: c d) e)) f)', 'a:\n  b\n  c:\n    d\n  e\nf')
 
+  // comment
+  test('(= a 1)', '#comment\na = 1 # comment\n#comment')
+  test('(: a (__pack b c))', 'a:\n  #comment\n  b\n  #comment\n  c\n  # comment')
+
   // combinations
   test('(! (a b))', '!a(b)')
   test('(+ (a b) c)', 'a(b) + c')
 
   // edge case
   test('1', '1\n')
+  test('()', '')
+  test('()', '\n')
 
   puts('ok')
 }

@@ -30,5 +30,104 @@ main io =
 repl io = io.puts "repl"
 
 compile_to_js src =
-  log.debug src
+  log.debug src.size
   "const main = io => log.debug(io)"
+
+test t "parser":
+  test expectation source = t.eq 1 1
+  # primitives
+  test "1" "1"
+  test "1.0" "1.0"
+  test "id" "id"
+  test "\"hi\"" "\"hi\""
+  test "(__call list)" "[]"
+  test "(list 1 2)" "[1 2]"
+  test "(__call dict)" "[:]"
+  test "(dict \"a\" 1)" "[a:1]"
+  test "(dict \"a\" (+ 1 2))" "[a:(1+2)]"
+  test "(dict (+ 1 2) (+ 3 4))" "[(1+2):(3+4)]"
+  test "(dict \"a\" 1 \"b\" (+ 1 2) c (+ 3 4))" "[a:1 b:(1+2) (c):(3+4)]"
+  test "(__call new)" "{}"
+  test "(new a 1)" "{a=1}"
+  test "(new a a b b c (+ 1 2) d 3)" "{a b c=(1+2) d=3}"
+  test "(=> a a)" "a => a"
+  test "(=> (, a b) a)" "a,b => a"
+  test "(=> p (+ 1 2))" "p => 1 + 2"
+  test "(. int)" ".int"
+  test "(f (. int))" "f .int"
+
+  # definition
+  test "(= a 1)" "a = 1"
+  test "(= (f a) a)" "f a = a"
+  test "(= (f a) (__pack (= b 1) (+ a b)))" "f a =\n  b = 1\n  a + b"
+
+  # property access
+  test "(. a b)" "a.b"
+  test "((. a b) c)" "a.b c"
+  test "(. (__call list) length)" "[].length"
+  test "(=> p (+ (. p x) (. p y)))" "p => p.x + p.y"
+
+  # single operator
+  test "(! true)" "!true"
+
+  # binary operators
+  test "(+ 1 2)" "1 + 2"
+  test "(+ (+ 1 2) 3)" "1 + 2 + 3"
+  test "(!= 1 1)" "1 != 1"
+  test "(= a 1)" "a = 1"
+  test "(+= a 1)" "a += 1"
+  test "(= a (+ 1 2))" "a = 1 + 2"
+  test "(+= a (+ 1 2))" "a += 1 + 2"
+  test "(+ 1 (* 2 3))" "1 + 2 * 3"
+  test "(+ 1 (/ 2 3))" "1 + 2 / 3"
+  test "(+ 1 (% 2 3))" "1 + 2 % 3"
+  test "(+ 1 (// 2 3))" "1 + 2 // 3"
+
+  # parentheses
+  test "1" "(1)"
+  test "(f 1)" "(f 1)"
+  test "(+ 1 2)" "(1 + 2)"
+  test "(+ 1 (+ 2 3))" "1 + (2 + 3)"
+
+  # fu ction call
+  test "(__call f)" "f()"
+  test "(f 1)" "f(1)"
+  test "(f (+ 1 2))" "f(1 + 2)"
+
+  # method call
+  test "(. f m)" "f.m"
+  test "(. f 1)" "f.1"
+  test "(__call (. f m))" "f.m()"
+  test "((. f m) a)" "f.m(a)"
+  test "((. f m) a b)" "f.m(a b)"
+
+  # index access
+  test "(__index x 1)" "x[1]"
+  test "(__index x 1 2)" "x[1 2]"
+
+  # steps
+  test "(__pack a b)" "a\nb"
+  test "(__pack (a b) c)" "a b\nc"
+  test "(__pack a (b c))" "a\nb c"
+
+  # block
+  test "(: a b)" "a: b"
+  test "(: (a b) c)" "a b: c"
+  test "(: (a b) (c d))" "a b: c d"
+
+  # indent
+  test "(: a b)" "a:\n  b"
+  test "(: a (: b c))" "a:\n  b:\n    c"
+  test "(: a (: b (__pack c d)))" "a:\n  b:\n    c\n    d"
+  test "(: a (__pack (: b c) d))" "a:\n  b:\n    c\n  d"
+  test "(__pack (: a (: b c)) d)" "a:\n  b:\n    c\nd"
+  test "(__pack (: a (__pack b (: c d) e)) f)" "a:\n  b\n  c:\n    d\n  e\nf"
+
+  # combinations
+  test "(! (a b))" "!a(b)"
+  test "(+ (a b) c)" "a(b) + c"
+
+  # edge case
+  test "1" "1\n"
+  test "()" "n"
+  test "()" "\n"
