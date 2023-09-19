@@ -16,10 +16,10 @@ const put = x => process.stdout.write(x);
 const puts = (...a) => { console.log(...a); return a[0]; }
 
 const buildin = {
-  new: (run, ...a) => Object.fromEntries(Array(a.length/2).fill().map((_,i) => [a[i*2], run(a[i*2+1])])),
-  dict: (run, ...a) => Object.fromEntries(Array(a.length/2).fill().map((_,i) => [run(a[i*2]), run(a[i*2+1])])),
   list: (run, ...a) => new List().concat(a.map(run)),
   tuple: (run, ...a) => new List().concat(a.map(run)),
+  struct: (run, ...a) => Object.fromEntries(Array(a.length/2).fill().map((_,i) => [a[i*2], run(a[i*2+1])])),
+  dict: (run, ...a) => Object.fromEntries(Array(a.length/2).fill().map((_,i) => [run(a[i*2]), run(a[i*2+1])])),
 }
 const evaluate = (x, env) => {
   const run = x => evaluate(x, env)
