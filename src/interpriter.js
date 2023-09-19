@@ -143,6 +143,7 @@ if (require.main === module) {
   test(1, 'f a = a\nf(1)')
   test(2, 'f a =\n  b = a + 1\n  b\nf(1)')
   test(2, 'f a =\n  b = a\n  a += 1\nf(1)')
+
   // [x] struct
   test({}, '{}')
   test({a:1, b:"c"}, '{a=1 b="c"}')
@@ -154,16 +155,19 @@ if (require.main === module) {
   test(false, 'struct s:\n  a string\n  b int\ns("hi" 1) < s("hi" 1)')
   test(true, 'struct s:\n  a string\n  b int\ns("hi" 1) < s("hi" 2)')
   test(true, 'struct s:\n  a string\n  b int\ns("hi" 9) < s("hi" 10)')
+
   // [x] union / match
   test(1, 'union ab:\n  a\n  b\nmatch a:\n  .a: 1\n  .b: 2')
   test(2, 'union ab:\n  a\n  b\nmatch b:\n  .a: 1\n  .b: 2')
   test('hi', 'union ab:\n  a string\n  b int\nmatch a("hi"):\n  s.a: s\n  n.b: string(n)')
   test('1', 'union ab:\n  a string\n  b int\nmatch b(1):\n  s.a: s\n  n.b: string(n)')
+
   // [x] iif
   test(1, 'iif true 1 2')
   test(2, 'iif false 1 2')
   test(2, 'iif false 1 true 2 3')
   test(3, 'iif false 1 false 2 3')
+
   // [x] int
   test(1, '1')
   test(-1, '-1')
@@ -176,6 +180,7 @@ if (require.main === module) {
   test(6, '3 << 1')
   test(3, '6 >> 1')
   test(1, 'int("1")')
+
   // [x] bool true false
   test(false, '!true')
   test(true, 'true')
@@ -189,18 +194,21 @@ if (require.main === module) {
   test(true, '1 >= 1')
   test(true, '1 == 1')
   test(false, '1 != 1')
+
   // [x] string
   test('hi', '"hi"')
   test(2, '"hi".size')
   test('h', '"hi"[0]')
   test('1', 'string(1)')
   test('ab', '"a" ++ "b"')
+
   // [x] tuple
   test([1,2], '1,2')
   test([1,2,3], '1,2,3')
   test([1,2], 'tuple(1 2)')
   test(1, 'tuple(1 2.0).0')
   test(2.0, 'tuple(1 2.0).1')
+
   // [x] list
   test([], '[]')
   test([1], '[1]')
@@ -208,6 +216,7 @@ if (require.main === module) {
   test(1, '[1][0]')
   test(0, '[].size')
   test(2, '[1 2].size')
+
   // [x] dict
   test({}, 'dict()')
   test({s:1}, 'dict("s" 1)')
@@ -215,10 +224,12 @@ if (require.main === module) {
   test({s:1}, '[s:1]')
   test({1:2}, '[1:2]')
   test(2, '[1:2][1]')
+
   // [x] test
   test(undefined, 'test t: t.eq 1 1')
   test(Error('eq 1 2'), 'test t: t.eq 1 2')
   test(Error('eq "a" "b"'), 'test t: t.eq "a" "b"')
+
   // [x] edge case
   test(undefined, '')
   test(undefined, '\n')
