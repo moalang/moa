@@ -3,6 +3,7 @@
  *
  * Syntax sugars
  * [x] f(...)      # (f ...)
+ * [x] f ...       # (f ...)
  * [x]  .m         # (. m)
  * [x] o.m         # (. o m)
  * [x] a b         # (a b)
@@ -13,6 +14,7 @@
  *       c
  *       d e       # (: (a b) (__pack c (d e)))
  * [x] {a b:c}     # (new a a b c)
+ * [ ] f ... = ... # (= f (=> [...] ...))
  */
 const str = o =>
   typeof o === 'string' ? o :
@@ -27,7 +29,7 @@ const parse = source => {
   source = source.trim()
   let pos = 0
   const tokens = source.split(/((?:!=)|[()\[\]{}!]|(?:-?[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+|"[^"]*"|[A-Za-z0-9_]+)/).filter(t => t.length > 0)
-  const binaryOps = '. , * ** / // % + ++ - >> << ^ & | = += -= *= /= %= **= => < <= > >= == != === !== <=> && ||'.split(' ')
+  const binaryOps = '. , * ** / // % + ++ - >> << ^ & | := += -= *= /= %= **= => < <= > >= == != === !== <=> && ||'.split(' ')
   const statement = () => {
     const many = (a, f) => {
       while (pos < tokens.length) {
@@ -72,7 +74,7 @@ const parse = source => {
                        tokens[pos] === '[' && !' \t:'.includes(tokens[pos - 1]) ? ++pos && index(o, until(']')) :
                        o
     const mark = (m, a) => a.length >= 2 ? [m, ...a] : a
-    const block = a => a.slice(-1)[0] === ':' && tokens[pos].match(/[\r\n]/) ? [...a, statement()] : a
+    const block = a => [':', '='].includes(a.slice(-1)[0]) && tokens[pos].match(/[\r\n]/) ? [...a, statement()] : a
     const line = () => block(many([], t => !t.match(/[\r\n]/) && unit()))
     const lines = n => many([], t => indent(t) === n ? (++pos, line()) : false)
     return mark('__pack', lines(indent(tokens[pos])))
@@ -86,7 +88,7 @@ const parse = source => {
     const priority = op => binaryOps.findIndex(t => t == op)
     const isId = o => typeof o === 'string' && /^[a-zA-Z_]/.test(o)
     const block = a => (n => n === -1 ? a : [a[n], a.slice(0, n), a.slice(n+1)])(a.findIndex(t => t === ':'))
-    const declare = a => (pos => pos === -1 ? a : [a[pos], a.slice(0, pos), a.slice(pos+1)])(a.findIndex(t => t === '::'))
+    const declare = a => (pos => pos === -1 ? a : [a[pos], a.slice(0, pos), a.slice(pos+1)])(a.findIndex(t => t === '::' || t === '='))
     const unnest = a => a.length === 1 ? a[0] : a
     return Array.isArray(o) ? (o.length === 1 ? reorder(o[0]) : unnest(block(declare(op2(o)))).map(reorder)) : o
   }
@@ -121,6 +123,11 @@ if (require.main === module) {
   test('(=> p (+ 1 2))', 'p => 1 + 2')
   test('(. int)', '.int')
   test('(f (. int))', 'f .int')
+
+  // definition
+  test('(= a 1)', 'a = 1')
+  test('(= (f a) a)', 'f a = a')
+  test('(= (f a) (__pack (= b 1) (+ a b)))', 'f a =\n  b = 1\n  a + b')
 
   // property access
   test('(. a b)', 'a.b')

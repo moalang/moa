@@ -1,9 +1,9 @@
-# BNF like definition of syntax
+# Syntax
 top: line*
-line: keyword? exp+ block?
+line: exp+ block?
 block: ":" (("\n  " line)+ | exp)
 exp: op1? unit (op2 exp)?
-unit: bottom (prop | call | list | dict | struct)*
+unit: bottom (prop | call | list | struct)*
 prop: "." id
 call: "(" exp* ")"                           # f(a b=c)
 list: "[" exp* "]"                           # a[1]
@@ -11,7 +11,7 @@ dict: "[" ":" | (unit ":" unit)+ "]"         # a["a":b c:1]
 struct: "{" (id ("." unit)? ("=" exp)?)* "}" # a{a b=1}
 bottom:
 | "(" exp ")"                     # 1 * (2 + 3)  : priority
-| " ." id                         # .int         : type
+| " ." id                         # .int         : type itself
 | [0-9]+ ("." [0-9]+)?            # 1.2          : number
 | '"' [^"]* '"'                   # "s"          : string
 | (id ("," id)*)? "=>" exp        # a,b => a + b : lambda
@@ -19,17 +19,12 @@ bottom:
 | id
 op1: [!-]
 op2:
-| [+-*/%<>|&^=,]                  # (1, "hi")   -> tuple 1 "hi"
+| [+-*/%<>|&^=,]                  # (1, "hi")   -> tuple(1 "hi")
 | [+-*/%<>|&^=] "="
 | "**" | "&&" | "||" | ">>" | "<<"
 | "===" | "**=" "<=>"
 id: [a-za-z_][a-za-z0-9_]*
-keyword: define | branch
-define: def var let struct union test
-branch: iif match
-statement: if else for each while test return yield continue break throw catch
-primitive: bool true false int float nan inf num string list set dict tuple option some none time
-reservation: ref many deft use module interface implement bytes iter lazy array assert i8..i64 u8..u64 f32 f64 decimal
+embedded: class union iif match error bool true false int float num string list set dict tuple struct opt some none time log test use
 
 
 
@@ -37,7 +32,8 @@ reservation: ref many deft use module interface implement bytes iter lazy array 
 | '"""' [^"]* '"""'           # """a"b"""      -> "a\"b"
 | $'"' [^"]* '"'              # "s {a} {b 04}" -> "s {} {04}".format(a b)
 | id ("," id)+ "=" exp        # a, b = c       -> a = c.0; b = c.1; c
-| bottom "[" exp+ "]" "=" exp # a[1] = 2       -> a.get(1).set(2)
+| bottom "[" exp "]"          # a[1]           -> a.get(1)
+| bottom "[" exp "]" "=" exp  # a[1] = 2       -> a.set(1 2)
 | "0x" [0-9a-fA-F_]+          # 0xff           -> 255
 | "0o" [0-7_]+                # 0o11           -> 9
 | "0b" [0-1_]+                # 0b11           -> 3
@@ -48,7 +44,7 @@ reservation: ref many deft use module interface implement bytes iter lazy array 
 
 # Semantics
 - Pattern match
-  "match(" exp "):" ("\n  " pattern (if exp)? ":" exp)+
+  "match " exp ":" ("\n  " pattern (if exp)? ":" exp)+
   pattern: matcher ("," pattern)?              # a, b    : tuple
   type: ("." id prop*)+
   capture: id type?
@@ -66,9 +62,8 @@ reservation: ref many deft use module interface implement bytes iter lazy array 
   | "[" (type | capture)+ "]"                  # [.int t]            : match type parameters
 
 - Implicit type converting
-  1 + u8(2)               # u8
-  a -> lazy[a] <-> def[a] # ft f a: lazy[a] a; def f f: print(f() f.string); def g: f(1 + 2)
-  many[a] -> list[a]      # ft f a: many[a] a; def f a*: a.sum; def g: f 1 2
+  1 + 2                   # int
+  1 + 2.0                 # float
 
 - inline if
   iif a b c
@@ -78,34 +73,35 @@ reservation: ref many deft use module interface implement bytes iter lazy array 
     3
 
 - typed argument
-  def f a.int .int: a         # int int
-  def f a b.float: a / b      # float float float
-  def f t.num => a.t b.t: a + b # t.num => t t t
+  f a.int .int       = a     # int int
+  f a b.float        = a / b # float float float
+  f t.num => a.t b.t = a + b # t.num => t t t
 
-- Variable length argument
-  def f a=1: a        # zero or one with default
-  def f a*: a.sum     # zero or more
-  def f a+: a.sum     # one or more
-  def f a*: dict a... # pass throw
-  def f               # zero, one or three
-  | 0
-  | a: a
-  | a b: a + b
+- pass through
+  f a.. = g a..
 
-- Named argument
-  def f {a}: a        # f(a=1)
-  def f {a=0}: a      # f() or f(a=1)
-  def f {a b}: a      # f(a=1 b=2) or f(b=2 a=1)
-  def f {a b=0}: a    # f(a=1) or f(a=1 b=2) or f(b=2 a=1)
+- variable length argument
+  f (a=1) = a         # one or zero with default value
+  f a?    = a.or(1)   # zero or one
+  f a*    = a.max     # zero or more
+  f a+    = a.max     # one or more
+  f a,+  = a.max.1    # two, four or more : a is list[tuple[t u]]
+  f                   # zero, one or two
+  | = f 0
+  | a.int   = f a 0
+  | a.float = f a 0.0
+  | a b = a + b
 
-- Macro
-  def until f.lazy g.lazy: while f(): g() # f and g are not evaluated at caller
+- named argument
+  f {a}     = a    # f(a=1)
+  f {a=0}   = a    # f() or f(a=1)
+  f {a b}   = a    # f(a=1 b=2) or f(b=2 a=1)
+  f {a b=0} = a    # f(a=1) or f(a=1 b=2) or f(b=2 a=1)
 
 # Symbols
 _                  part of id
 .                  access an element of object
 "                  string
-`                  string with variables
 #                  comment
 ! -                singular operator
 && ||              binary operator for boolean
@@ -118,7 +114,7 @@ _                  part of id
 < <= > >= == ===   comparing
 =                  update existing a variable
 ,                  delimiter to tuple and arguments in anonymous function
-:                  delimiter to start indented block
+:                  delimiter to start block
 ? undefined
 \ undefined
 @ undefined
@@ -126,73 +122,63 @@ _                  part of id
 ' undefined
 $ undefined
 ; undefined
+` undefined # `
 
 
 
 # Basic usage
 - Primitive
-  - bool           # true, false
-  - int            # 1, -1
-  - float          # 1.0, -1.0
-  - string         # "hi"
-  - lambda         # a,b => a + b
-  - bytes          # bytes(1024)
+  - bool      # true, false
+  - int       # 1, -1
+  - float     # 1.0, -1.0
+  - string    # "hi"
+  - lambda    # a,b => a + b
+  - bytes     # bytes(1024)
 - Container
-  - list           # [1 2]               list[int](1 2)
-  - set            # set(1 2)            set[int](1 2)
-  - dict           # ["a":1 b:1+2]       dict[string int]("a" 1 b 1+2)
-  - tuple          # 1,"hi"              tuple[int string](1 "hi")
-  - struct         # {a:a f:x,y=>g(x y)} __new(a f x,y => g(x y))
+  - list      # list[int](1 2)                        | list(1 2)            | [1 2]
+  - dict      # dict[string int]("a" 1 b 1+2)         | dict("a" 1 b 1 + 2)  | ["a":1 b:1+2]
+  - tuple     # tuple[int string](1 "hi")             | tuple(1 "hi")        | 1, "hi"
+  - set       # set[int](1 2)                         | set(1 2)
+  - struct    # struct[a.int b.(int int)](a x => g x) | struct: a; b=1; f x = g x | {a; b=1; f(x)=g(x)}
+  - union     # union t: a; b int; c: d int
+  - class     # class t: a int; b t
 - Definition
-  - variable       # var a 1
-  - constant       # let a 1
-  - function       # def f a: a
-  - struct         # struct a: b c
-  - union          # union a: b; c d; e: f g
-- Statement
-  - if / else      # if a: b; else if c: d; else: e
-  - return         # return 1
-  - match          # match a:; b: c; _: d
-  - throw / catch  # def f: throw "..."; catch f; a.t: a; b.u: b; c: c
-  - for            # for i 9: n += i
-  - each           # each x xs: n += x
-  - while          # while a: b
-  - continue       # continue
-  - break          # break
-  - yield          # def f: yield 1; yield 2 # iter[int]
+  - variable  # a = 1
+  - function  # f a b = a + b    | f(a b) = a + b
+  - property  # now() = io.now
+- Branch
+  - iif       # iif a b c d e / iif a: 1; b: 2; c
+  - match     # match a:; b: c; b: d
+  - error     # match error("failed" 1); a.error[int]: a.value.string ++ a.stack; b.error: b.message; c: c
 - Misc
-  - iif            # iif a b c d e   ->   a ? b : c ? d : e
-  - module         # module a: inc int int; use a inc
-  - comment        # # comment
-  - test           # test t: t.eq "hi" greet
+  - comment   # # comment
+  - test      # test t: t.eq "hi" greet
 
 
 
 # Advanced usage
-union ast:
+ast = union:
   real float
   op2:
     op string
     lhs ast
     rhs ast
-def eval a:
-  match a:
-    x.real: x
-    x.op2{op="+"}: eval(x.lhs) + eval(x.rhs)
-    x.op2{op="-"}: eval(x.lhs) - eval(x.rhs)
-    x: throw $"unknown {x}"
+eval node = match node:
+  x.real: x
+  x{op="+"}: eval(x.lhs) + eval(x.rhs)
+  x{op="-"}: eval(x.lhs) - eval(x.rhs)
+  x: throw $"unknown {x}"
 
-union tree a:
+tree a = union:
   leaf
   node:
     value a
     left tree[a]
     right tree[a]
-def validate t:
-  match t:
-    .leaf                       : true
-    n.node if n.value == nan    : false
-    n.node{left.node right.node}: left.value <= n.value <= right.value && validate(left) && validate(right)
-    n.node{left.node}           : left.value <= n.value && validate(left)
-    n.node{right.node}          : n.value <= right.value && validate(right)
-    # else is not needed because the above covers all
+validate t = match t:
+  .leaf                  : true
+  {left.leaf right.leaf} : true
+  n{left.node right.node}: left.value <= n.value <= right.value && validate(left) && validate(right)
+  n{left.node}           : left.value <= n.value && validate(left)
+  n{right.node}          : n.value <= right.value && validate(right)
+  # else is not needed because the above covers all

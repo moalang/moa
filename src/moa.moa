@@ -1,4 +1,4 @@
-let help "Moa is a tool for managing Moa source code.
+help = "Moa is a tool for managing Moa source code.
 
 Usage:
   moa <command> [arguments]
@@ -13,9 +13,9 @@ The commands are:
   moa test [regexps] # run tests
   moa version        # print Moa version"
 
-def main:
+main io =
   match io.argv:
-    []: repl()
+    []: repl io
     ["build"]      : io.puts "Not implemented yet"
     ["format" path]: io.puts "Not implemented yet"
     ["help" topic] : io.puts "Not implemented yet"
@@ -27,5 +27,8 @@ def main:
     ["version"]    : io.puts "moa v0.1"
     _              : io.puts help
 
-def repl:
-  io.puts "repl"
+repl io = io.puts "repl"
+
+compile_to_js src =
+  log.debug src
+  "const main = io => log.debug(io)"

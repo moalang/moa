@@ -107,21 +107,18 @@ The commands are:
 
 ```
 # main.moa
-use io
-
-struct todo:
+todo = class:
   title string
   deadline time
   done bool
 
-struct schema:
+schema = class:
   todos list[todo]
 
-def main:
-  io.http.listen peer => io.database[schema] db =>
-    def post_todos title deadline done:
-      db.todos.add {title deadline done}
-    match $"{peer.method} {peer.path}":
-      "post /todos": post_todos peer.post("title") peer.post("deadline").time peer.post("done").bool
-      _            : 404, [], "404 page not found"
+main io = io.http.listen req => io.dbm[schema] db =>
+  ok = 200, [], ""
+  notfound = 404, [], "404 page not found"
+  match $"{req.method} {req.path}":
+    "post /todos": db.todos ++= req.post[todo]; ok
+    _            : notfound
 ```
