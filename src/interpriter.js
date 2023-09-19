@@ -2,6 +2,7 @@
  * Eval internal expression
  */
 class List extends Array { }
+class Tuple extends Array { }
 
 const fs = require('fs')
 const { parse } = require('./parser.js')
@@ -10,14 +11,16 @@ const fail = m => { throw new Error(m) }
 const str = o => typeof o === 'string' ? o : escape(o)
 const escape = o =>
   o instanceof Error ? `${o.constructor.name}(${o.message})` :
+  o instanceof Tuple ? o.map(escape).join(',') :
   Array.isArray(o) ? `[${o.map(escape).join(' ')}]` :
   JSON.stringify(o)
 const put = x => process.stdout.write(x);
 const puts = (...a) => { console.log(...a); return a[0]; }
+const tuple = (...a) => new Tuple().concat(...a)
 
 const buildin = {
   list: (run, ...a) => new List().concat(a.map(run)),
-  tuple: (run, ...a) => new List().concat(a.map(run)),
+  tuple: (run, ...a) => tuple(...a.map(run)),
   struct: (run, ...a) => Object.fromEntries(Array(a.length/2).fill().map((_,i) => [a[i*2], run(a[i*2+1])])),
   dict: (run, ...a) => Object.fromEntries(Array(a.length/2).fill().map((_,i) => [run(a[i*2]), run(a[i*2+1])])),
 }
@@ -68,8 +71,6 @@ const evaluate = (x, env) => {
     }
     fail(`${conds} are not match with ${str(target)}`)
   }
-  const isTuple = t => Array.isArray(t) && t[0] === ','
-  const tuple = t => isTuple(t[0]) ? tuple(t[0].slice(1)).concat(run(t[1])) : t.map(run)
   const iif = a => a.length === 1 ? run(a[0]) : run(a[0]) ? run(a[1]) : iif(a.slice(2))
   const eq = (a, b) => ((a, b) => a === b ? undefined : fail(`eq ${a} ${b}`))(escape(a), escape(b))
   const define = ([head, body]) => Array.isArray(head) ?
@@ -93,13 +94,14 @@ const evaluate = (x, env) => {
     head === '__pack' ? tail.map(run).slice(-1)[0] :
     head === '.' ? method(run(tail[0]), tail[1]) :
     head === ':' ? block(tail[0], tail[1]) :
-    head === ',' ? tuple(tail) :
+    head === ',' ? tuple(...tail.map(run)) :
     head === '!' ? !run(tail[0]) :
     head.match(/^[+\-*\/%<>|&=!]/) ? op2(head, tail[0], tail[1]) :
     tail.length > 0 ? lookup(head)(run, ...tail) :
     head.startsWith('"') ? head :
     lookup(head)
   return x instanceof List ? x :
+    x instanceof Tuple ? x :
     Array.isArray(x) ? (x.length === 0 ? undefined : apply(x)) :
     typeof x !== 'string' ? x :
     x === 'true' ? true :
@@ -201,11 +203,13 @@ if (require.main === module) {
   test('h', '"hi"[0]')
   test('1', 'string(1)')
   test('ab', '"a" ++ "b"')
+  test('a', 'string("a")')
+  '1 -1 0.1 true [] 0,1'.split(' ').map(s => test(s, `string(${s})`))
 
   // [x] tuple
-  test([1,2], '1,2')
-  test([1,2,3], '1,2,3')
-  test([1,2], 'tuple(1 2)')
+  test(tuple(1, 2), '1,2')
+  test(tuple(1, 2, 3), '1,2,3')
+  test(tuple(1, 2), 'tuple(1 2)')
   test(1, 'tuple(1 2.0).0')
   test(2.0, 'tuple(1 2.0).1')
 
