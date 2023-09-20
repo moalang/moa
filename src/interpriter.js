@@ -18,22 +18,25 @@ const escape = o =>
 const put = x => process.stdout.write(x);
 const puts = (...a) => { console.log(...a); return a[0]; }
 const tuple = (...a) => new Tuple().concat(...a)
+const attempt = (f, g) => { try { return f() } catch (e) { return g(e) } }
+const make = a => Object.fromEntries(Array(a.length/2).fill().map((_,i) => [a[i*2], a[i*2+1]]))
+const zip = (a, b) => a.map((x, i) => [x, b[i]])
 
 const evaluate = (x, env) => {
-  env ||= {}
   const run = x => evaluate(x, env)
+  const runWith = (x, ...a) => evaluate(x, {...env, ...make(a)})
   const lookup = key => key in env ? env[key] : fail(`Not found '${key}' in [${Object.keys(env)}]`)
-  const local = (args, argv) => Object.fromEntries(args.map((id, i) => [id, argv[i]]))
-  const lambda = (env, args, body) => (...argv) => evaluate(body, {...env, ...local(args, argv)})
+  const lambda = (env, args, body) => (...argv) => runWith(body, ...zip(args, argv).flat())
   const method = (target, id) =>
-    typeof target === 'string' && id === 'size' ? target.length :
-    typeof target === 'string' && id === 'rsplit' ? (s => target.split(new RegExp(s))) :
-    typeof target === 'string' && id === 'match' ? (s => target.match(new RegExp(s))) :
-    typeof target === 'string' && id === 'starts' ? (s => target.startsWith(s)) :
     Array.isArray(target) && id === 'size' ? target.length :
-    Array.isArray(target) && id === 'keep' ? (f => target.filter(f)) :
-    Array.isArray(target) && id === 'slice' ? ((...a) => target.slice(...a)) :
-    typeof target === 'object' && id in target ? target[id] :
+    Array.isArray(target) && id === 'keep' ? f => target.filter(f) :
+    Array.isArray(target) && id === 'slice' ? (...a) => target.slice(...a) :
+    // string methods below
+    id === 'size' ? target.length :
+    id === 'rsplit' ? s => target.split(new RegExp(s)) :
+    id === 'match' ? s => target.match(new RegExp(s)) :
+    id === 'starts' ? s => target.startsWith(s) :
+    id in target ? target[id] :
     id.match(/^[0-9]/) ? run(target)[id] :
     fail(`'${id}' is unknown method of '${typeof target}'`)
   const op2 = (op, lhs, rhs) => {
@@ -54,33 +57,12 @@ const evaluate = (x, env) => {
   const union = (id, xs) => unpack(xs).map(x => Array.isArray(x) ? [x[0], __val => ({__tag: x[0], __val})] : [x, {__tag: x}])
   const match = (target, conds) => {
     const rescue = conds.find(a => a[1][0] === '.' && a[1][2] === 'error')
-    if (rescue) {
-      try {
-        target = run(target)
-      } catch (e) {
-        return evaluate(rescue[2], {...env, [rescue[1][1]]: {message: e.message}})
-      }
-    } else {
-      target = run(target)
-    }
-    outer: for (const [_, cond, body] of conds) {
-      if (cond[0] === '"') {
-        if (target === run(cond)) {
-          return run(body)
-        }
-      } else if (cond[0] === '.') {
-        if (cond.length === 2 && target.__tag === cond[1]) {
-          return run(body)
-        } else if (cond.length === 3 && target.__tag === cond[2]) {
-          return evaluate(body, {...env, [cond[1]]: target.__val})
-        }
-      } else if (cond[0].match(/[A-Za-z_]/)) {
-        return evaluate(body, {...env, [cond]: target})
-      } else {
-        fail(`${cond} is unknown pattern for ${target}`)
-      }
-    }
-    fail(`${conds} are not match with ${str(target)}`)
+    target = rescue ? attempt(() => run(target), e => ({__tag: 'error', __val: {message: e.message}})) : run(target)
+    const _match = ([[_, cond, body], ...left]) =>
+      cond[0] === '.' ?  (target.__tag === cond[2] ? runWith(body, cond[1], target.__val) : _match(left)) :
+      cond.match(/[A-Za-z_]/) ? runWith(body, cond, target) :
+      target === run(cond) && run(body)
+    return _match(conds) || fail(`${conds} are not match with ${str(target)}`)
   }
   const iif = a => a.length === 1 ? run(a[0]) : run(a[0]) ? run(a[1]) : iif(a.slice(2))
   const eq = (a, b) => ((a, b) => a === b ? undefined : fail(`eq ${a} ${b}`))(escape(a), escape(b))
@@ -91,7 +73,7 @@ const evaluate = (x, env) => {
     head === 'struct' ? env[tail[0]] = struct(body) :
     head === 'union' ? env[tail[0]] = Object.fromEntries(union(tail[0], body).map(([id, node]) => [id, env[id] = node])) :
     head === 'match' ? match(tail[0], unpack(body)) :
-    head === 'test' ? evaluate(body, {...env, [tail[0]]:{eq}}) :
+    head === 'test' ? runWith(body, tail[0], {eq}) :
     head === 'i' && tail.join('') === 'if' ? iif(unpack(body).flatMap(a => a.slice(1))) :
     fail(`'${head}' is unkown block with ${str(tail)} and ${str(body)}`)
   const apply = ([head, ...tail]) =>
@@ -136,15 +118,8 @@ const evaluate = (x, env) => {
 
 module.exports = { evaluate }
 if (require.main === module) {
-  const run = src => {
-    try {
-      return evaluate(parse(src))
-    } catch (e) {
-      return e
-    }
-  }
   const eq = (expect, src) => {
-    const actual = run(src)
+    const actual = attempt(() => evaluate(parse(src), {}), e => e)
     if (str(expect) === str(actual)) {
       put('.')
     } else {

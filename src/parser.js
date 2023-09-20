@@ -19,7 +19,6 @@
  */
 const str = o =>
   typeof o === 'string' ? o :
-  o instanceof String ? o.toString() :
   Array.isArray(o) ? `(${o.map(str).join(' ')})` :
   JSON.stringify(o)
 const put = (...a) => { process.stdout.write(a.map(str).join(' ')); return a[0] }
@@ -31,7 +30,8 @@ const parse = source => {
   const trim = a => a.length === 0 ? [] :
     a[0].match(/^[ \r\n\t]/) ? trim(a.slice(1)) :
     a[a.length - 1].match(/^[ \r\n\t]/) ? trim(a.slice(0, -1)) : a
-  const tokens = trim(source.split(/((?:!=)|[()\[\]{}!]|(?:-?[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+(?:#[^\n]*|[ \t\r\n]+)*|""".*"""|"(?:[^"]|\\")*(?<!\\)"|[A-Za-z0-9_]+|#[^\n]*)/).filter(t => t.length > 0 && !t.startsWith('#')))
+  const regexp = /((?:!=)|[()\[\]{}!]|(?:-?[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+(?:#[^\n]*|[ \t\r\n]+)*|""".*"""|"(?:[^"]|\\")*(?<!\\)"|[A-Za-z0-9_]+|#[^\n]*)/
+  const tokens = trim(source.split(regexp).filter(t => t.length > 0 && !t.startsWith('#')))
   const binaryOps = '. , * ** / // % + ++ - >> << ^ & | := += -= *= /= %= **= < <= > >= == != === !== <=> && || =>'.split(' ')
   const statement = () => {
     const many = (a, f) => {
@@ -65,7 +65,7 @@ const parse = source => {
         ['struct', ...a.slice(0, pos).flatMap(x => [x, x]), ...a.slice(pos).flatMap(x => [x[1], x[2]])]
     }
     const bottom = t =>
-      t === '.' && tokens[pos - 2].match(/^[ \t]+$/) ? [t, consume()] :
+      t === '.' && tokens[pos - 2].match(/^[ \t\n]+$/) ? [t, '_', consume()] : // for pattern match
       t === '!' ? [t, unit()] :
       t === '[' ? container(until(']')) :
       t === '{' ? object(until('}')) :
@@ -108,6 +108,7 @@ if (require.main === module) {
   const stringify = a => Array.isArray(a) ? `(${a.map(stringify).join(' ')})` : str(a)
   const assert = (expect, fact, src) => expect === fact ? put('.') : fail(`Expected '${expect}' but got '${fact}' in '${src}'`)
   const test = (expect, src) => assert(expect, stringify(parse(src)), src)
+  test('(. _ int)', '.int')
 
   // primitives
   test('1', '1')
@@ -129,8 +130,8 @@ if (require.main === module) {
   test('(=> a a)', 'a => a')
   test('(=> (, a b) a)', 'a,b => a')
   test('(=> p (+ 1 2))', 'p => 1 + 2')
-  test('(. int)', '.int')
-  test('(f (. int))', 'f .int')
+  test('(. _ int)', '.int')
+  test('(f (. _ int))', 'f .int')
 
   // definition
   test('(= a 1)', 'a = 1')
