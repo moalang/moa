@@ -31,8 +31,8 @@ const parse = source => {
   const trim = a => a.length === 0 ? [] :
     a[0].match(/^[ \r\n\t]/) ? trim(a.slice(1)) :
     a[a.length - 1].match(/^[ \r\n\t]/) ? trim(a.slice(0, -1)) : a
-  const tokens = trim(source.split(/((?:!=)|[()\[\]{}!]|(?:-?[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+(?:#[^\n]*|[ \t\r\n]+)*|"(?:[^"]|\\")*(?<!\\)"|[A-Za-z0-9_]+|#[^\n]*)/).filter(t => t.length > 0 && !t.startsWith('#')))
-  const binaryOps = '. , * ** / // % + ++ - >> << ^ & | := += -= *= /= %= **= => < <= > >= == != === !== <=> && ||'.split(' ')
+  const tokens = trim(source.split(/((?:!=)|[()\[\]{}!]|(?:-?[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+(?:#[^\n]*|[ \t\r\n]+)*|""".*"""|"(?:[^"]|\\")*(?<!\\)"|[A-Za-z0-9_]+|#[^\n]*)/).filter(t => t.length > 0 && !t.startsWith('#')))
+  const binaryOps = '. , * ** / // % + ++ - >> << ^ & | := += -= *= /= %= **= < <= > >= == != === !== <=> && || =>'.split(' ')
   const statement = () => {
     const many = (a, f) => {
       while (pos < tokens.length) {
@@ -65,17 +65,20 @@ const parse = source => {
         ['struct', ...a.slice(0, pos).flatMap(x => [x, x]), ...a.slice(pos).flatMap(x => [x[1], x[2]])]
     }
     const bottom = t =>
-      tokens[pos] === '.' ? (++pos, ['.', t, consume()]) :
-      tokens[pos] === '=' ? (++pos, ['=', t, unit()]) :
       t === '.' && tokens[pos - 2].match(/^[ \t]+$/) ? [t, consume()] :
+      t === '!' ? [t, unit()] :
       t === '[' ? container(until(']')) :
       t === '{' ? object(until('}')) :
       t === '(' ? until(')') :
+      t.startsWith('"""') ? JSON.stringify(t.slice(3, -3)) :
       t
     const unit = () => _unit(bottom(consume()))
-    const _unit = o => tokens[pos] === '(' && !' \t:'.includes(tokens[pos - 1]) ? ++pos && call(o, until(')')) :
-                       tokens[pos] === '[' && !' \t:'.includes(tokens[pos - 1]) ? ++pos && index(o, until(']')) :
-                       o
+    const _unit = o =>
+      tokens[pos] === '(' && !' \t:'.includes(tokens[pos - 1]) ? ++pos && _unit(call(o, until(')'))) :
+      tokens[pos] === '[' && !' \t:'.includes(tokens[pos - 1]) ? ++pos && index(o, until(']')) :
+      tokens[pos] === '.' ? (++pos, _unit(['.', o, consume()])) :
+      tokens[pos] === '=' ? (++pos, ['=', o, unit()]) :
+      o
     const mark = (m, a) => a.length >= 2 ? [m, ...a] : a
     const block = a => [':', '='].includes(a.slice(-1)[0]) && tokens[pos].match(/[\r\n]/) ? [...a, statement()] : a
     const line = () => block(many([], t => !t.match(/[\r\n]/) && unit()))
@@ -105,7 +108,6 @@ if (require.main === module) {
   const stringify = a => Array.isArray(a) ? `(${a.map(stringify).join(' ')})` : str(a)
   const assert = (expect, fact, src) => expect === fact ? put('.') : fail(`Expected '${expect}' but got '${fact}' in '${src}'`)
   const test = (expect, src) => assert(expect, stringify(parse(src)), src)
-  test('"\\""', '"\\""')
 
   // primitives
   test('1', '1')
@@ -113,6 +115,7 @@ if (require.main === module) {
   test('id', 'id')
   test('"hi"', '"hi"')
   test('"\\""', '"\\""')
+  test('"\\""', '"""""""')
   test('(__call list)', '[]')
   test('(list 1 2)', '[1 2]')
   test('(__call dict)', '[:]')
@@ -155,6 +158,7 @@ if (require.main === module) {
   test('(+ 1 (/ 2 3))', '1 + 2 / 3')
   test('(+ 1 (% 2 3))', '1 + 2 % 3')
   test('(+ 1 (// 2 3))', '1 + 2 // 3')
+  test('(&& true (! false))', 'true && !false')
 
   // parentheses
   test('1', '(1)')
@@ -173,6 +177,10 @@ if (require.main === module) {
   test('(__call (. f m))', 'f.m()')
   test('((. f m) a)', 'f.m(a)')
   test('((. f m) a b)', 'f.m(a b)')
+  test('((. (list 1) m) a)', '[1].m a')
+  test('((. (list 1) m) a)', '[1].m(a)')
+  test('((. (list 1) m) (=> x (>= x 1)))', '[1].m(x => x >= 1)')
+  test('((. ((. a f) 1) g) 2)', 'a.f(1).g(2)')
 
   // index access
   test('(__index x 1)', 'x[1]')

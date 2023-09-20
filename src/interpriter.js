@@ -12,29 +12,30 @@ const str = o => typeof o === 'string' ? o : escape(o)
 const escape = o =>
   o instanceof Error ? `${o.constructor.name}(${o.message})` :
   o instanceof Tuple ? o.map(escape).join(',') :
+  typeof o === 'function' ? o.toString() :
   Array.isArray(o) ? `[${o.map(escape).join(' ')}]` :
   JSON.stringify(o)
 const put = x => process.stdout.write(x);
 const puts = (...a) => { console.log(...a); return a[0]; }
 const tuple = (...a) => new Tuple().concat(...a)
 
-const buildin = {
-  list: (run, ...a) => new List().concat(a.map(run)),
-  tuple: (run, ...a) => tuple(...a.map(run)),
-  struct: (run, ...a) => Object.fromEntries(Array(a.length/2).fill().map((_,i) => [a[i*2], run(a[i*2+1])])),
-  dict: (run, ...a) => Object.fromEntries(Array(a.length/2).fill().map((_,i) => [run(a[i*2]), run(a[i*2+1])])),
-}
 const evaluate = (x, env) => {
+  env ||= {}
   const run = x => evaluate(x, env)
   const lookup = key => key in env ? env[key] : fail(`Not found '${key}' in [${Object.keys(env)}]`)
-  const local = (run, args, argv) => Object.fromEntries(args.map((id, i) => [id, run(argv[i])]))
-  const lambda = (env, args, body) => (caller, ...argv) => evaluate(body, {...env, ...local(caller, args, argv)})
+  const local = (args, argv) => Object.fromEntries(args.map((id, i) => [id, argv[i]]))
+  const lambda = (env, args, body) => (...argv) => evaluate(body, {...env, ...local(args, argv)})
   const method = (target, id) =>
-    id.match(/^[0-9]/) ? run(target)[id] :
     typeof target === 'string' && id === 'size' ? target.length :
+    typeof target === 'string' && id === 'rsplit' ? (s => target.split(new RegExp(s))) :
+    typeof target === 'string' && id === 'match' ? (s => target.match(new RegExp(s))) :
+    typeof target === 'string' && id === 'starts' ? (s => target.startsWith(s)) :
     Array.isArray(target) && id === 'size' ? target.length :
+    Array.isArray(target) && id === 'keep' ? (f => target.filter(f)) :
+    Array.isArray(target) && id === 'slice' ? ((...a) => target.slice(...a)) :
     typeof target === 'object' && id in target ? target[id] :
-    fail(`'${id}' is unknown method of '${str(target)}'`)
+    id.match(/^[0-9]/) ? run(target)[id] :
+    fail(`'${id}' is unknown method of '${typeof target}'`)
   const op2 = (op, lhs, rhs) => {
     const toComparelable = x => "'" + JSON.stringify(_toComparelable(x)) + "'"
     const _toComparelable = x => Array.isArray(x) ? x.map(_toComparelable) :
@@ -46,16 +47,24 @@ const evaluate = (x, env) => {
       op.match(/^[+\-*/%|&]+=$/) ? env[lhs] = op2(op.slice(0, -1), run(lhs), run(rhs)) :
       eval(`${run(lhs)} ${op} ${run(rhs)}`)
   }
-  const struct = xs => (run, ...a) =>
-    xs.length === 2 ? {[xs[0]]: run(a[0])} :
-    Object.fromEntries(xs.slice(1).map(([id, _], i) => [id, run(a[i])]))
+  const struct = xs => (...a) =>
+    xs.length === 2 ? {[xs[0]]: a[0]} :
+    Object.fromEntries(xs.slice(1).map(([id, _], i) => [id, a[i]]))
   const unpack = xs => xs[0] === '__pack' ? xs.slice(1) : [xs]
-  const union = (id, xs) => unpack(xs).map(x => Array.isArray(x) ? [x[0], (run, v) => ({__tag: x[0], __val: run(v)})] : [x, {__tag: x}])
+  const union = (id, xs) => unpack(xs).map(x => Array.isArray(x) ? [x[0], __val => ({__tag: x[0], __val})] : [x, {__tag: x}])
   const match = (target, conds) => {
+    const rescue = conds.find(a => a[1][0] === '.' && a[1][2] === 'error')
+    if (rescue) {
+      try {
+        target = run(target)
+      } catch (e) {
+        return evaluate(rescue[2], {...env, [rescue[1][1]]: {message: e.message}})
+      }
+    } else {
+      target = run(target)
+    }
     outer: for (const [_, cond, body] of conds) {
-      if (cond === '_') {
-        return run(body)
-      } else if (cond[0] === '"') {
+      if (cond[0] === '"') {
         if (target === run(cond)) {
           return run(body)
         }
@@ -65,8 +74,10 @@ const evaluate = (x, env) => {
         } else if (cond.length === 3 && target.__tag === cond[2]) {
           return evaluate(body, {...env, [cond[1]]: target.__val})
         }
+      } else if (cond[0].match(/[A-Za-z_]/)) {
+        return evaluate(body, {...env, [cond]: target})
       } else {
-        fail(`${cond} is not supported matching pattern for ${target}`)
+        fail(`${cond} is unknown pattern for ${target}`)
       }
     }
     fail(`${conds} are not match with ${str(target)}`)
@@ -79,44 +90,55 @@ const evaluate = (x, env) => {
   const block = ([head, ...tail], body) =>
     head === 'struct' ? env[tail[0]] = struct(body) :
     head === 'union' ? env[tail[0]] = Object.fromEntries(union(tail[0], body).map(([id, node]) => [id, env[id] = node])) :
-    head === 'match' ? match(run(tail[0]), unpack(body)) :
+    head === 'match' ? match(tail[0], unpack(body)) :
     head === 'test' ? evaluate(body, {...env, [tail[0]]:{eq}}) :
+    head === 'i' && tail.join('') === 'if' ? iif(unpack(body).flatMap(a => a.slice(1))) :
     fail(`'${head}' is unkown block with ${str(tail)} and ${str(body)}`)
   const apply = ([head, ...tail]) =>
-    Array.isArray(head) ? apply([run(head), ...tail.map(run)]) :
-    typeof head === 'function' ? head(...tail) :
+    head === undefined ? undefined :
+    Array.isArray(head) ? apply([run(head), ...tail]) :
+    typeof head === 'function' ? head(...tail.map(run)) :
+    head === 'list' ? new List().concat(tail.map(run)) :
+    head === 'tuple' ? tuple(...tail.map(run)) :
+    head === 'struct' ? Object.fromEntries(Array(tail.length/2).fill().map((_,i) => [tail[i*2], run(tail[i*2+1])])) :
+    head === 'dict' ? Object.fromEntries(Array(tail.length/2).fill().map((_,i) => [run(tail[i*2]), run(tail[i*2+1])])) :
+    head === 'error' ? fail(str(run(tail[0]))) :
     head === 'string' ? str(run(tail[0])) :
     head === 'int' ? parseInt(run(tail[0])) :
-    head === '=' ? define(tail) :
     head === 'iif' ? iif(tail) :
+    head === '=' ? define(tail) :
     head === '__index' ? run(tail[0])[run(tail[1])] :
+    head === '__call' && tail[0] === 'struct' ? ({}) :
+    head === '__call' && tail[0] === 'dict' ? ({}) :
+    head === '__call' && tail[0] === 'list' ? [] :
     head === '__call' ? lookup(tail[0])(run) :
     head === '__pack' ? tail.map(run).slice(-1)[0] :
     head === '.' ? method(run(tail[0]), tail[1]) :
     head === ':' ? block(tail[0], tail[1]) :
     head === ',' ? tuple(...tail.map(run)) :
     head === '!' ? !run(tail[0]) :
+    head === '=>' ? lambda(env, Array.isArray(tail[0]) ? tail[0].filter(x => x !== ',') : [tail[0]], tail[1]) :
     head.match(/^[+\-*\/%<>|&=!]/) ? op2(head, tail[0], tail[1]) :
-    tail.length > 0 ? lookup(head)(run, ...tail) :
     head.startsWith('"') ? head :
+    tail.length > 0 ? lookup(head)(...tail.map(run)) :
     lookup(head)
   return x instanceof List ? x :
     x instanceof Tuple ? x :
-    Array.isArray(x) ? (x.length === 0 ? undefined : apply(x)) :
+    Array.isArray(x) ? apply(x) :
     typeof x !== 'string' ? x :
+    x === '_' ? true : // for pattern match and iif
     x === 'true' ? true :
     x === 'false' ? false :
+    x[0] === '"' ? x.slice(1, -1) :
     x.match(/^-?[0-9]/) ? parseFloat(x) :
-    x.match(/^["`]/) ? x.slice(1, -1) :
-    x.match(/^r"/) ? new RegExp(x.slice(2, -1)) :
     lookup(x)
 }
 
-module.exports = { evaluate, buildin }
+module.exports = { evaluate }
 if (require.main === module) {
   const run = src => {
     try {
-      return evaluate(parse(src), buildin)
+      return evaluate(parse(src))
     } catch (e) {
       return e
     }
@@ -164,27 +186,25 @@ if (require.main === module) {
   test('hi', 'union ab:\n  a string\n  b int\nmatch a("hi"):\n  s.a: s\n  n.b: string(n)')
   test('1', 'union ab:\n  a string\n  b int\nmatch b(1):\n  s.a: s\n  n.b: string(n)')
 
+  // [x] error / match
+  test(Error('1'), 'error 1')
+  test("f", 'f s = error "f"\nmatch f("t"):\n  e.error: e.message\n  s: s')
+  test("t", 'f s = s\nmatch f("t"):\n  e.error: e.message\n  s: s')
+
   // [x] iif
   test(1, 'iif true 1 2')
   test(2, 'iif false 1 2')
   test(2, 'iif false 1 true 2 3')
   test(3, 'iif false 1 false 2 3')
+  test(1, 'iif:\n  true: 1\n  _: 2')
+  test(2, 'iif:\n  false: 1\n  _: 2')
 
   // [x] int
   test(1, '1')
   test(-1, '-1')
-  test(3, '1 + 2')
-  test(1, '3 - 2')
-  test(6, '2 * 3')
-  test(1.5, '3 / 2')
-  test(1, '3 % 2')
-  test(27, '3 ** 3')
-  test(6, '3 << 1')
-  test(3, '6 >> 1')
   test(1, 'int("1")')
 
   // [x] bool true false
-  test(false, '!true')
   test(true, 'true')
   test(false, 'false')
   test(false, 'true && false')
@@ -197,14 +217,32 @@ if (require.main === module) {
   test(true, '1 == 1')
   test(false, '1 != 1')
 
+  // [ ] operators
+  test(false, '!true')
+  test(true, 'true && !false')
+  test(3, '1 + 2')
+  test(1, '3 - 2')
+  test(6, '2 * 3')
+  test(1.5, '3 / 2')
+  test(1, '3 % 2')
+  test(27, '3 ** 3')
+  test(6, '3 << 1')
+  test(3, '6 >> 1')
+
   // [x] string
   test('hi', '"hi"')
   test(2, '"hi".size')
+  test(['', '1', '', '2', ''], '"12".rsplit("([0-9])")')
   test('h', '"hi"[0]')
   test('1', 'string(1)')
   test('ab', '"a" ++ "b"')
   test('a', 'string("a")')
   '1 -1 0.1 true [] 0,1'.split(' ').map(s => test(s, `string(${s})`))
+
+  // [x] lambda
+  test(1, '(a => a)(1)')
+  test(3, '(a,b => a + b)(1 2)')
+  test('s', '(a => a)("s")')
 
   // [x] tuple
   test(tuple(1, 2), '1,2')
@@ -220,6 +258,7 @@ if (require.main === module) {
   test(1, '[1][0]')
   test(0, '[].size')
   test(2, '[1 2].size')
+  test([2], '[1 2].keep x => x > 1')
 
   // [x] dict
   test({}, 'dict()')
