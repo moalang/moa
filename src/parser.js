@@ -17,12 +17,12 @@
  * [x] f ... = ... # (= f (=> [...] ...))
  * [x] # comment
  */
-const str = o =>
+const string = o =>
   typeof o === 'string' ? o :
-  Array.isArray(o) ? `(${o.map(str).join(' ')})` :
+  Array.isArray(o) ? `(${o.map(string).join(' ')})` :
   JSON.stringify(o)
-const put = (...a) => { process.stdout.write(a.map(str).join(' ')); return a[0] }
-const puts = (...a) => { console.log(a.map(str).join(' ')); return a[0] }
+const put = (...a) => { process.stdout.write(a.map(string).join(' ')); return a[0] }
+const puts = (...a) => { console.log(a.map(string).join(' ')); return a[0] }
 const dump = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
 const parse = source => {
@@ -92,9 +92,8 @@ const parse = source => {
       [a[0], ...op2(a.slice(1))]
     const prioritize = (op, l, r) => Array.isArray(l) && isOp2(l[0]) && priority(op) < priority(l[0]) ? [l[0], l[1], [op, l[2], r]] : [op, l, r]
     const priority = op => binaryOps.findIndex(t => t == op)
-    const isId = o => typeof o === 'string' && /^[a-zA-Z_]/.test(o)
     const block = a => (n => n === -1 ? a : [a[n], a.slice(0, n), a.slice(n+1)])(a.findIndex(t => t === ':'))
-    const declare = a => (pos => pos === -1 ? a : [a[pos], a.slice(0, pos), a.slice(pos+1)])(a.findIndex(t => t === '::' || t === '='))
+    const declare = a => (pos => pos === -1 ? a : [a[pos], a.slice(0, pos), a.slice(pos+1)])(a.findIndex(t => t === '='))
     const unnest = a => a.length === 1 ? a[0] : a
     return Array.isArray(o) ? (o.length === 1 ? reorder(o[0]) : unnest(block(declare(op2(o)))).map(reorder)) : o
   }
@@ -105,10 +104,9 @@ const parse = source => {
 module.exports = { parse }
 
 if (require.main === module) {
-  const stringify = a => Array.isArray(a) ? `(${a.map(stringify).join(' ')})` : str(a)
+  const stringify = a => Array.isArray(a) ? `(${a.map(stringify).join(' ')})` : string(a)
   const assert = (expect, fact, src) => expect === fact ? put('.') : fail(`Expected '${expect}' but got '${fact}' in '${src}'`)
   const test = (expect, src) => assert(expect, stringify(parse(src)), src)
-  test('(. _ int)', '.int')
 
   // primitives
   test('1', '1')
