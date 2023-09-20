@@ -100,7 +100,7 @@ const evaluate = (x, env) => {
     head === '__index' ? run(tail[0])[run(tail[1])] :
     head === '__call' && tail[0] === 'struct' ? ({}) :
     head === '__call' && tail[0] === 'dict' ? ({}) :
-    head === '__call' && tail[0] === 'list' ? [] :
+    head === '__call' && tail[0] === 'list' ? list() :
     head === '__call' ? lookup(tail[0])(run) :
     head === '__pack' ? tail.map(run).slice(-1)[0] :
     head === '.' ? method(run(tail[0]), tail[1]) :
