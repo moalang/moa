@@ -8,6 +8,7 @@ The commands are:
   moa build          # compile to an executable file without test
   moa format file    # format a file
   moa help [topic]   # for more info about topic
+  moa js file        # compile to JavaScript
   moa lint file      # report likely mistakes
   moa run [exp]      # run Moa program
   moa test [regexps] # run tests
@@ -17,9 +18,10 @@ main io =
   match io.argv:
     []: repl io
     ["build"]      : io.puts "Not implemented yet"
-    ["format" path]: io.puts "Not implemented yet"
+    ["format" file]: io.puts "Not implemented yet"
     ["help" topic] : io.puts "Not implemented yet"
-    ["lint" path]  : io.puts "Not implemented yet"
+    ["js" file]    : io.puts "Not implemented yet"
+    ["lint" file]  : io.puts "Not implemented yet"
     ["run"]        : io.puts "Not implemented yet"
     ["run" exp]    : io.puts "Not implemented yet"
     ["test"]       : io.puts "Not implemented yet"

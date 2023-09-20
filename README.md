@@ -59,6 +59,7 @@ The commands are:
   moa build          # compile to an executable file without test
   moa format file    # format a file
   moa help [topic]   # for more info about topic
+  moa js file        # compile to JavaScript
   moa lint file      # report likely mistakes
   moa run [exp]      # run Moa program
   moa test [regexps] # run tests
