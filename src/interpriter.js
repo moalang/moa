@@ -60,6 +60,7 @@ const evaluate = (x, env) => {
       case '<<': return run(lhs) << run(rhs)
       case '&&': return run(lhs) && run(rhs)
       case '||': return run(lhs) || run(rhs)
+      case ':=': return lhs in env ? env[lhs] = run(rhs) : fail(`undefined ${lhs}`)
       default: return op.match(/^[+\-*/%|&]+=$/) ? env[lhs] = op2(op.slice(0, -1), run(lhs), run(rhs)) : fail(`${op} unknown operator`)
     }
   }
@@ -109,7 +110,7 @@ const evaluate = (x, env) => {
     head === ',' ? tuple(...tail.map(run)) :
     head === '!' ? !run(tail[0]) :
     head === '=>' ? lambda(env, Array.isArray(tail[0]) ? tail[0].filter(x => x !== ',') : [tail[0]], tail[1]) :
-    head.match(/^[+\-*\/%<>|&=!]/) ? op2(head, tail[0], tail[1]) :
+    head.match(/^[+\-*\/%<>|&=!:]/) ? op2(head, tail[0], tail[1]) :
     head.startsWith('"') ? head :
     tail.length > 0 ? lookup(head)(...tail.map(run)) :
     lookup(head)
@@ -168,28 +169,6 @@ if (require.main === module) {
   test(3, '(a,b => a + b)(1 2)')
   test('s', '(a => a)("s")')
 
-  // operators
-  test(false, '!true')
-  test(true, 'true && !false')
-  test(false, 'true && false')
-  test(true, 'true && true')
-  test(true, 'true || false')
-  test(false, '1 < 1')
-  test(true, '1 <= 1')
-  test(false, '1 > 1')
-  test(true, '1 >= 1')
-  test(true, '1 == 1')
-  test(false, '1 != 1')
-  test(3, '1 + 2')
-  test(1, '3 - 2')
-  test(6, '2 * 3')
-  test(1.5, '3 / 2')
-  test(Error('zero division'), '3 / 0')
-  test(1, '3 % 2')
-  test(27, '3 ** 3')
-  test(6, '3 << 1')
-  test(3, '6 >> 1')
-
   // tuple
   test(tuple(1, 2), '1,2')
   test(tuple(1, 2, 3), '1,2,3')
@@ -214,11 +193,36 @@ if (require.main === module) {
   test({1:2}, '[1:2]')
   test(2, '[1:2][1]')
 
+  // operators
+  test(false, '!true')
+  test(true, 'true && !false')
+  test(false, 'true && false')
+  test(true, 'true && true')
+  test(true, 'true || false')
+  test(false, '1 < 1')
+  test(true, '1 <= 1')
+  test(false, '1 > 1')
+  test(true, '1 >= 1')
+  test(true, '1 == 1')
+  test(false, '1 != 1')
+  test(3, '1 + 2')
+  test(1, '3 - 2')
+  test(6, '2 * 3')
+  test(1.5, '3 / 2')
+  test(Error('zero division'), '3 / 0')
+  test(1, '3 % 2')
+  test(27, '3 ** 3')
+  test(6, '3 << 1')
+  test(3, '6 >> 1')
+  test(3, 'a = 1\na += 2\na')
+  test(2, 'a = 1\na := 2\na')
+  test(Error('undefined `a`'), 'a := 1')
+
   // define
   test(1, 'a = 1\na')
   test(1, 'f a = a\nf(1)')
   test(2, 'f a =\n  b = a + 1\n  b\nf(1)')
-  test(2, 'f a =\n  b = a\n  a += 1\nf(1)')
+  test(1, 'a = 1\nf a =\n  a += 1\nf(a)\na')
 
   // class
   test({}, '{}')

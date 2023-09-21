@@ -98,6 +98,12 @@ embedded: class union iif match error bool true false int float num string list 
   f {a b}   = a    # f(a=1 b=2) or f(b=2 a=1)
   f {a b=0} = a    # f(a=1) or f(a=1 b=2) or f(b=2 a=1)
 
+- variable
+  n = 1
+  n += 2
+  n := 3 # ok
+  n = 3  # compile error
+
 # Symbols
 _                  part of id
 .                  access an element of object
