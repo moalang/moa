@@ -58,11 +58,11 @@ const parse = source => {
       ['list', ...a]
     const object = a => {
       if (a.length == 0) {
-        return ['__call', 'struct']
+        return ['__call', 'class']
       }
       const pos = a.findIndex(s => Array.isArray(s) && s[0] === '=')
-      return pos === -1 ? ['struct', ...a] :
-        ['struct', ...a.slice(0, pos).flatMap(x => [x, x]), ...a.slice(pos).flatMap(x => [x[1], x[2]])]
+      return pos === -1 ? ['class', ...a] :
+        ['class', ...a.slice(0, pos).flatMap(x => [x, x]), ...a.slice(pos).flatMap(x => [x[1], x[2]])]
     }
     const bottom = t =>
       t === '.' && tokens[pos - 2].match(/^[ \t\n]+$/) ? [t, '_', consume()] : // for pattern match
@@ -122,9 +122,9 @@ if (require.main === module) {
   test('(dict "a" (+ 1 2))', '[a:(1+2)]')
   test('(dict (+ 1 2) (+ 3 4))', '[(1+2):(3+4)]')
   test('(dict "a" 1 "b" (+ 1 2) c (+ 3 4))', '[a:1 b:(1+2) (c):(3+4)]')
-  test('(__call struct)', '{}')
-  test('(struct a 1)', '{a=1}')
-  test('(struct a a b b c (+ 1 2) d 3)', '{a b c=(1+2) d=3}')
+  test('(__call class)', '{}')
+  test('(class a 1)', '{a=1}')
+  test('(class a a b b c (+ 1 2) d 3)', '{a b c=(1+2) d=3}')
   test('(=> a a)', 'a => a')
   test('(=> (, a b) a)', 'a,b => a')
   test('(=> p (+ 1 2))', 'p => 1 + 2')

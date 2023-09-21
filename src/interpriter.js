@@ -80,7 +80,7 @@ const evaluate = (x, env) => {
     (env[head[0]] = lambda(env, head.slice(1), body))  :
     (env[head] = run(body))
   const block = ([head, ...tail], body) =>
-    head === 'struct' ? env[tail[0]] = (...a) => Object.fromEntries(unpack(body).map(([id, _], i) => [id, a[i]])) :
+    head === 'class' ? env[tail[0]] = (...a) => Object.fromEntries(unpack(body).map(([id, _], i) => [id, a[i]])) :
     head === 'union' ? env[tail[0]] = Object.fromEntries(union(tail[0], body).map(([id, node]) => [id, env[id] = node])) :
     head === 'match' ? match(tail[0], unpack(body)) :
     head === 'test' ? runWith(body, tail[0], {eq}) :
@@ -91,14 +91,14 @@ const evaluate = (x, env) => {
     typeof head === 'function' ? head(...tail.map(run)) :
     head === 'list' ? list(...tail.map(run)) :
     head === 'tuple' ? tuple(...tail.map(run)) :
-    head === 'struct' ? Object.fromEntries(Array(tail.length/2).fill().map((_,i) => [tail[i*2], run(tail[i*2+1])])) :
+    head === 'class' ? Object.fromEntries(Array(tail.length/2).fill().map((_,i) => [tail[i*2], run(tail[i*2+1])])) :
     head === 'dict' ? Object.fromEntries(Array(tail.length/2).fill().map((_,i) => [run(tail[i*2]), run(tail[i*2+1])])) :
     head === 'error' ? fail(string(run(tail[0]))) :
     head === 'string' ? escape(run(tail[0])) :
     head === 'iif' ? iif(tail) :
     head === '=' ? define(tail) :
     head === '__index' ? run(tail[0])[run(tail[1])] :
-    head === '__call' && tail[0] === 'struct' ? ({}) :
+    head === '__call' && tail[0] === 'class' ? ({}) :
     head === '__call' && tail[0] === 'dict' ? ({}) :
     head === '__call' && tail[0] === 'list' ? list() :
     head === '__call' ? lookup(tail[0])(run) :
@@ -220,17 +220,17 @@ if (require.main === module) {
   test(2, 'f a =\n  b = a + 1\n  b\nf(1)')
   test(2, 'f a =\n  b = a\n  a += 1\nf(1)')
 
-  // struct
+  // class
   test({}, '{}')
   test({a:1, b:"c"}, '{a=1 b="c"}')
-  test('hi', 'struct s:\n  a string\ns("hi").a')
-  test(1, 'struct s:\n  a string\n  b int\ns("hi" 1).b')
-  test(true, 'struct s:\n  a string\n  b int\ns("hi" 1) == s("hi" 1)')
-  test(false, 'struct s:\n  a string\n  b int\ns("hi" 1) == s("hi" 2)')
-  test(true, 'struct s:\n  a string\n  b int\ns("hi" 1) <= s("hi" 1)')
-  test(false, 'struct s:\n  a string\n  b int\ns("hi" 1) < s("hi" 1)')
-  test(true, 'struct s:\n  a string\n  b int\ns("hi" 1) < s("hi" 2)')
-  test(true, 'struct s:\n  a string\n  b int\ns("hi" 9) < s("hi" 10)')
+  test('hi', 'class s:\n  a string\ns("hi").a')
+  test(1, 'class s:\n  a string\n  b int\ns("hi" 1).b')
+  test(true, 'class s:\n  a string\n  b int\ns("hi" 1) == s("hi" 1)')
+  test(false, 'class s:\n  a string\n  b int\ns("hi" 1) == s("hi" 2)')
+  test(true, 'class s:\n  a string\n  b int\ns("hi" 1) <= s("hi" 1)')
+  test(false, 'class s:\n  a string\n  b int\ns("hi" 1) < s("hi" 1)')
+  test(true, 'class s:\n  a string\n  b int\ns("hi" 1) < s("hi" 2)')
+  test(true, 'class s:\n  a string\n  b int\ns("hi" 9) < s("hi" 10)')
 
   // union / match
   test(1, 'union ab:\n  a\n  b\nmatch a:\n  .a: 1\n  .b: 2')

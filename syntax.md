@@ -3,19 +3,19 @@ top: line*
 line: exp+ block?
 block: ":" (("\n  " line)+ | exp)
 exp: op1? unit (op2 exp)?
-unit: bottom (prop | call | list | struct)*
+unit: bottom (prop | call | list | object)*
 prop: "." id
 call: "(" exp* ")"                           # f(a b=c)
 list: "[" exp* "]"                           # a[1]
 dict: "[" ":" | (unit ":" unit)+ "]"         # a["a":b c:1]
-struct: "{" (id ("." unit)? ("=" exp)?)* "}" # a{a b=1}
+object: "{" (id ("." unit)? ("=" exp)?)* "}" # a{a b=1}
 bottom:
 | "(" exp ")"                     # 1 * (2 + 3)  : priority
 | " ." id                         # .int         : type itself
 | [0-9]+ ("." [0-9]+)?            # 1.2          : number
 | '"' [^"]* '"'                   # "s"          : string
 | (id ("," id)*)? "=>" exp        # a,b => a + b : lambda
-| list | dict | struct
+| list | dict | object
 | id
 op1: [!-]
 op2:
@@ -24,7 +24,7 @@ op2:
 | "**" | "&&" | "||" | ">>" | "<<"
 | "===" | "**=" "<=>"
 id: [a-za-z_][a-za-z0-9_]*
-embedded: class union iif match error bool true false int float num string list set dict tuple struct opt some none time log test use
+embedded: class union iif match error bool true false int float num string list set dict tuple object opt some none time log test use
 
 
 
@@ -58,7 +58,7 @@ embedded: class union iif match error bool true false int float num string list 
   | type term?                                 # .type         : type match
   | capture term?                              # id.type       : capture and type match
   term:
-  | "{" (capture ("=" exp | term)?)* "}"       # {a b.int c=1 d[0] } : match structure
+  | "{" (capture ("=" exp | term)?)* "}"       # {a b.int c=1 d[0] } : match object
   | "[" (type | capture)+ "]"                  # [.int t]            : match type parameters
 
 - Implicit type converting
@@ -139,7 +139,7 @@ $ undefined
   - dict      # dict[string int]("a" 1 b 1+2)         | dict("a" 1 b 1 + 2)  | ["a":1 b:1+2]
   - tuple     # tuple[int string](1 "hi")             | tuple(1 "hi")        | 1, "hi"
   - set       # set[int](1 2)                         | set(1 2)
-  - struct    # struct[a.int b.(int int)](a x => g x) | struct: a; b=1; f x = g x | {a; b=1; f(x)=g(x)}
+  - object    # object[a.int b.(int int)](a x => g x) | object: a; b=1; f x = g x | {a; b=1; f(x)=g(x)}
   - union     # union t: a; b int; c: d int
   - class     # class t: a int; b t
 - Definition
