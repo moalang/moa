@@ -8,6 +8,7 @@ const dump = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
 const string = o => typeof o === 'string' ? o : escape(o)
 const escape = o =>
+  o instanceof Error ? `Error(${o.message})` :
   o instanceof Tuple ? o.map(escape).join(',') :
   typeof o === 'function' ? o.toString() :
   Array.isArray(o) ? `[${o.map(escape).join(' ')}]` :
@@ -60,7 +61,7 @@ const evaluate = (x, env) => {
       case '<<': return run(lhs) << run(rhs)
       case '&&': return run(lhs) && run(rhs)
       case '||': return run(lhs) || run(rhs)
-      case ':=': return lhs in env ? env[lhs] = run(rhs) : fail(`undefined ${lhs}`)
+      case ':=': return lhs in env ? env[lhs] = run(rhs) : fail(`${lhs} missing`)
       default: return op.match(/^[+\-*/%|&]+=$/) ? env[lhs] = op2(op.slice(0, -1), run(lhs), run(rhs)) : fail(`${op} unknown operator`)
     }
   }
@@ -77,9 +78,10 @@ const evaluate = (x, env) => {
   }
   const iif = a => a.length === 1 ? run(a[0]) : run(a[0]) ? run(a[1]) : iif(a.slice(2))
   const eq = (a, b) => ((a, b) => a === b ? undefined : fail(`eq ${a} ${b}`))(escape(a), escape(b))
+  const assign = (name, value) => name in env ? fail(`${name} exists`) : env[name] = value
   const define = ([head, body]) => Array.isArray(head) ?
-    (env[head[0]] = lambda(env, head.slice(1), body))  :
-    (env[head] = run(body))
+    assign(head[0], lambda(env, head.slice(1), body))  :
+    assign(head, run(body))
   const block = ([head, ...tail], body) =>
     head === 'class' ? env[tail[0]] = (...a) => Object.fromEntries(unpack(body).map(([id, _], i) => [id, a[i]])) :
     head === 'union' ? env[tail[0]] = Object.fromEntries(union(tail[0], body).map(([id, node]) => [id, env[id] = node])) :
@@ -216,13 +218,14 @@ if (require.main === module) {
   test(3, '6 >> 1')
   test(3, 'a = 1\na += 2\na')
   test(2, 'a = 1\na := 2\na')
-  test(Error('undefined `a`'), 'a := 1')
+  test(Error('z missing'), 'z := 1')
 
   // define
   test(1, 'a = 1\na')
   test(1, 'f a = a\nf(1)')
   test(2, 'f a =\n  b = a + 1\n  b\nf(1)')
   test(1, 'a = 1\nf a =\n  a += 1\nf(a)\na')
+  test(Error('z exists'), 'z = 1\nz = 2')
 
   // class
   test({}, '{}')
