@@ -26,18 +26,20 @@ const evaluate = (x, env) => {
   const lookup = key => key in env ? env[key] : fail(`Not found '${key}' in [${Object.keys(env)}]`)
   const lambda = (env, args, body) => (...argv) => runWith(body, ...(args.flatMap((x, i) => [x, argv[i]])))
   const method = (target, id) =>
-    Array.isArray(target) && id === 'size' ? target.length :
-    Array.isArray(target) && id === 'keep' ? f => target.filter(f) :
-    Array.isArray(target) && id === 'slice' ? (...a) => target.slice(...a) :
+    target instanceof List && id === 'size' ? target.length :
+    target instanceof List && id === 'keep' ? f => target.filter(f) :
+    target instanceof List && id === 'slice' ? (...a) => target.slice(...a) :
+    target instanceof List && id === 'map' ? (...a) => target.map(...a) :
+    target instanceof List && id === 'join' ? (s) => target.join(s) :
     typeof target === 'object' && id in target ? target[id] :
     typeof target === 'string' && id === 'size' ? target.length :
-    typeof target === 'string' && id === 'rsplit' ? s => target.split(new RegExp(s)) :
+    typeof target === 'string' && id === 'rsplit' ? s => list(...target.split(new RegExp(s))) :
     typeof target === 'string' && id === 'match' ? s => target.match(new RegExp(s)) :
     typeof target === 'string' && id === 'starts' ? s => target.startsWith(s) :
-    typeof target === 'string' && id === 'split' ? s => target.split(s) :
+    typeof target === 'string' && id === 'split' ? s => list(...target.split(s)) :
     typeof target === 'string' && id === 'int' ? parseInt(target) :
     typeof target === 'string' && id.match(/^[0-9]/) ? index(target)[id] :
-    fail(`'${id}' is unknown method of '${typeof target}'`)
+    fail(`'${id}' is unknown method of '${typeof target === "object" ? target.constructor : typeof target}'`)
   const op2 = (op, lhs, rhs) => {
     const toComparable = x => "'" + JSON.stringify(_toComparable(x)) + "'"
     const _toComparable = x => Array.isArray(x) ? x.map(_toComparable) :
@@ -67,7 +69,9 @@ const evaluate = (x, env) => {
     }
   }
   const unpack = xs => xs[0] === '__pack' ? xs.slice(1) : [xs]
-  const union = (id, xs) => unpack(xs).map(x => Array.isArray(x) ? [x[0], __val => ({__tag: x[0], __val})] : [x, {__tag: x}])
+  const union = (id, xs) => unpack(xs).map(x =>
+    x[0] === ':' ? [x[1], (...a) => ({__tag: x[1], __val: Object.fromEntries(unpack(x[2]).map(([id, _], i) => [id, a[i]]))})] :
+    Array.isArray(x) ? [x[0], __val => ({__tag: x[0], __val})] : [x, {__tag: x}])
   const match = (target, conds) => {
     const rescue = conds.find(a => a[1][0] === '.' && a[1][2] === 'error')
     target = rescue ? attempt(() => run(target), e => ({__tag: 'error', __val: {message: e.message}})) : run(target)
@@ -246,10 +250,10 @@ if (require.main === module) {
   test(true, 'class s:\n  a string\n  b int\ns("hi" 9) < s("hi" 10)')
 
   // union / match
-  test(1, 'union ab:\n  a\n  b\nmatch a:\n  .a: 1\n  .b: 2')
-  test(2, 'union ab:\n  a\n  b\nmatch b:\n  .a: 1\n  .b: 2')
-  test('hi', 'union ab:\n  a string\n  b int\nmatch a("hi"):\n  s.a: s\n  n.b: string(n)')
-  test('1', 'union ab:\n  a string\n  b int\nmatch b(1):\n  s.a: s\n  n.b: string(n)')
+  test(1, 'union u:\n  a\nmatch a:\n  .a: 1')
+  test(2, 'union u:\n  a n\nmatch a(2):\n  n.a: n')
+  test(3, 'union u:\n  a:\n    b int\nmatch a(3):\n  o.a: o.b')
+  test(9, 'union u:\n  a:\n    b int\n    c int\nmatch a(4 5):\n  o.a: o.b + o.c')
 
   // error / match
   test(Error('1'), 'error 1')

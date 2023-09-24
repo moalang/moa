@@ -49,7 +49,7 @@ union type:
   ttype list[tuple[string type]]
 
 union ast:
-  define:
+  adefine:
     id string
     desc ast
   abool bool
@@ -77,12 +77,12 @@ parse source =
       a[-1].match("^[ \r\n\t]"): trim a.slice 0 -1
       _: a
     regexp = """((?:!=)|[()\[\]{}!]|(?:-?[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+(?:#[^\n]*|[ \t\r\n]+)*|"(?:[^"]|\\")*(?<!\\)"|[A-Za-z0-9_]+|#[^\n]*)"""
-    keep t = t.size > 0 && !t.starts("#")
-    source.rsplit(regexp).keep(keep)
+    source.rsplit(regexp).keep(t => t.size > 0 && !t.starts("#"))
   pos = 0
-  statement = () => aint source.int
+  statement = () => aint(source.int)
   statement()
     #many a f = tokens.get(pos).then(t => f(t).then(x => many g++[x] f).alt(a)).alt(a)
+    #many a f = match many(a ++ f(tokens[pos]) f):  .error: a
     #consume = () => tokens[pos += iif tokens[pos].match("^[ \t]+$") 2 1]
     #until end = many [] t => iif t == end pos+=1 unit()
     #call o a = iif a.size == 0 ["__call" o] [o] ++ a
@@ -142,20 +142,28 @@ parse source =
 test t "parser":
   simplify a =
     match a:
-      x.define   : x.id ++ " = " + simplify x.desc
-      x.ablool   : string x
-      x.aint     : string x
-      x.afloat   : string x
-      x.string   : x
-      x.statement: x.map(simplify).join("\n")
-      x.alambda  : args.join(" ") ++ " => " + simplify x.body
-      x.aref     : x.id
-      x.acall    : simplify(x.head) ++ "(" ++ acall.argv.map(simplify).join(" ") ++ ")"
-  test expectation source = t.eq expectation simplify(parse(source))
+      x.adefine   : x.id ++ " = " ++ simplify(x.desc)
+      x.ablool    : string x
+      x.aint      : string x
+      x.afloat    : string x
+      x.astring   : x
+      x.astatement: x.map(simplify).join("\n")
+      x.alambda   : x.args.join(",") ++ " => " ++ simplify(x.body)
+      x.aref      : x.id
+      x.acall     : simplify(x.head) ++ "(" ++ acall.argv.map(simplify).join(" ") ++ ")"
+  t1 expectation ast = t.eq expectation simplify(ast)
+  t1 "a = 1" adefine("a" aint(1))
+  t1 "1" aint(1)
+  t1 "1.1" afloat(1.1)
+  t1 "hi" astring("hi")
+  t1 "1\n2" astatement([aint(1) aint(2)])
+  t1 "a,b => 1" alambda(["a" "b"] aint(1))
+  t1 "a" aref("a")
+
+  t2 expectation source = t.eq expectation simplify(parse(source))
 
   # primitives
-  test "1" "1"
-  log.debug "ok"
+  t2 "1" "1"
 ##  test "1.0" "1.0"
 ##  test "id" "id"
 ##  test "\"hi\"" "\"hi\""
@@ -174,6 +182,7 @@ test t "parser":
 ##  test "(=> p (+ 1 2))" "p => 1 + 2"
 ##  test "(. int)" ".int"
 ##  test "(f (. int))" "f .int"
+  log.debug "ok"
 ##
 ##  # definition
 ##  test "(= a 1)" "a = 1"
