@@ -34,8 +34,9 @@ const evaluate = (x, env) => {
     typeof target === 'string' && id === 'rsplit' ? s => target.split(new RegExp(s)) :
     typeof target === 'string' && id === 'match' ? s => target.match(new RegExp(s)) :
     typeof target === 'string' && id === 'starts' ? s => target.startsWith(s) :
-    typeof target === 'string' && id.match(/^[0-9]/) ? run(target)[id] :
+    typeof target === 'string' && id === 'split' ? s => target.split(s) :
     typeof target === 'string' && id === 'int' ? parseInt(target) :
+    typeof target === 'string' && id.match(/^[0-9]/) ? index(target)[id] :
     fail(`'${id}' is unknown method of '${typeof target}'`)
   const op2 = (op, lhs, rhs) => {
     const toComparable = x => "'" + JSON.stringify(_toComparable(x)) + "'"
@@ -79,6 +80,7 @@ const evaluate = (x, env) => {
   const iif = a => a.length === 1 ? run(a[0]) : run(a[0]) ? run(a[1]) : iif(a.slice(2))
   const eq = (a, b) => ((a, b) => a === b ? undefined : fail(`eq ${a} ${b}`))(escape(a), escape(b))
   const assign = (name, value) => name in env ? fail(`${name} exists`) : env[name] = value
+  const index = (a, i) => i < 0 ? index(a, a.length + i) : i >= a.length ? fail(`${i} exceeded`) : a[i]
   const define = ([head, body]) => Array.isArray(head) ?
     assign(head[0], lambda(env, head.slice(1), body))  :
     assign(head, run(body))
@@ -100,7 +102,7 @@ const evaluate = (x, env) => {
     head === 'string' ? escape(run(tail[0])) :
     head === 'iif' ? iif(tail) :
     head === '=' ? define(tail) :
-    head === '__index' ? run(tail[0])[run(tail[1])] :
+    head === '__index' ? index(run(tail[0]), run(tail[1])) :
     head === '__call' && tail[0] === 'class' ? ({}) :
     head === '__call' && tail[0] === 'dict' ? ({}) :
     head === '__call' && tail[0] === 'list' ? list() :
@@ -149,11 +151,11 @@ if (require.main === module) {
   }
   const test = (expect, src) => eq(expect, src)
 
-  // [x] int
+  // int
   test(1, '1')
   test(-1, '-1')
 
-  // [x] bool true false
+  // bool true false
   test(true, 'true')
   test(false, 'false')
 
@@ -164,6 +166,7 @@ if (require.main === module) {
   test('h', '"hi"[0]')
   test('ab', '"a" ++ "b"')
   test(1, '"1".int')
+  test(['a', 'b'], '"a b".split(" ")')
   '1 -1 0.1 true "s" [] 0,1'.split(' ').map(s => test(s, `string(${s})`))
 
   // lambda
@@ -183,6 +186,8 @@ if (require.main === module) {
   test([1], '[1]')
   test([1,2], '[1 2]')
   test(1, '[1][0]')
+  test(2, '[1 2][-1]')
+  test(Error('0 exceeded'), '[][0]')
   test(0, '[].size')
   test(2, '[1 2].size')
   test([2], '[1 2].keep x => x > 1')
@@ -222,6 +227,7 @@ if (require.main === module) {
 
   // define
   test(1, 'a = 1\na')
+  test(1, 'f = () => 1\nf()')
   test(1, 'f a = a\nf(1)')
   test(2, 'f a =\n  b = a + 1\n  b\nf(1)')
   test(1, 'a = 1\nf a =\n  a += 1\nf(a)\na')
@@ -263,7 +269,7 @@ if (require.main === module) {
   test(Error('eq 1 2'), 'test t: t.eq 1 2')
   test(Error('eq "a" "b"'), 'test t: t.eq "a" "b"')
 
-  // [x] edge case
+  // edge case
   test(undefined, '')
   test(undefined, '\n')
 

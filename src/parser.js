@@ -32,7 +32,7 @@ const parse = source => {
     a[a.length - 1].match(/^[ \r\n\t]/) ? trim(a.slice(0, -1)) : a
   const regexp = /((?:!=)|[()\[\]{}!]|(?:-?[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+(?:#[^\n]*|[ \t\r\n]+)*|""".*"""|"(?:[^"]|\\")*(?<!\\)"|[A-Za-z0-9_]+|#[^\n]*)/
   const tokens = trim(source.split(regexp).filter(t => t.length > 0 && !t.startsWith('#')))
-  const binaryOps = '. , * ** / // % + ++ - >> << ^ & | := += -= *= /= %= **= < <= > >= == != === !== <=> && || =>'.split(' ')
+  const op2s = '. , * ** / // % + ++ - >> << ^ & | := += -= *= /= %= **= < <= > >= == != === !== <=> && || =>'.split(' ')
   const statement = () => {
     const many = (a, f) => {
       while (pos < tokens.length) {
@@ -79,19 +79,19 @@ const parse = source => {
       tokens[pos] === '.' ? (++pos, _unit(['.', o, consume()])) :
       tokens[pos] === '=' ? (++pos, ['=', o, unit()]) :
       o
-    const mark = (m, a) => a.length >= 2 ? [m, ...a] : a
-    const block = a => [':', '='].includes(a.slice(-1)[0]) && tokens[pos].match(/[\r\n]/) ? [...a, statement()] : a
+    const block = a => [':', '=', '=>'].includes(a.slice(-1)[0]) && tokens[pos].match(/[\r\n]/) ? [...a, statement()] : a
     const line = () => block(many([], t => !t.match(/[\r\n]/) && unit()))
     const lines = n => many([], t => indent(t) === n ? (++pos, line()) : false)
-    return mark('__pack', lines(indent(tokens[pos])))
+    const pack = a => a.length >= 2 ? ['__pack', ...a] : a
+    return pack(lines(indent(tokens[pos])))
   }
   const reorder = o => {
-    const isOp2 = s => typeof s === 'string' && binaryOps.includes(s)
+    const is_op2 = s => typeof s === 'string' && op2s.includes(s)
     const op2 = a => (!Array.isArray(a) || a.length <= 2) ? a :
-      isOp2(a[1]) ? op2([prioritize(a[1], a[0], a[2]), ...a.slice(3)]) :
+      is_op2(a[1]) ? op2([prioritize(a[1], a[0], a[2]), ...a.slice(3)]) :
       [a[0], ...op2(a.slice(1))]
-    const prioritize = (op, l, r) => Array.isArray(l) && isOp2(l[0]) && priority(op) < priority(l[0]) ? [l[0], l[1], [op, l[2], r]] : [op, l, r]
-    const priority = op => binaryOps.findIndex(t => t == op)
+    const prioritize = (op, l, r) => Array.isArray(l) && is_op2(l[0]) && priority(op) < priority(l[0]) ? [l[0], l[1], [op, l[2], r]] : [op, l, r]
+    const priority = op => op2s.findIndex(t => t == op)
     const block = a => (n => n === -1 ? a : [a[n], a.slice(0, n), a.slice(n+1)])(a.findIndex(t => t === ':'))
     const declare = a => (pos => pos === -1 ? a : [a[pos], a.slice(0, pos), a.slice(pos+1)])(a.findIndex(t => t === '='))
     const unnest = a => a.length === 1 ? a[0] : a
@@ -128,6 +128,8 @@ if (require.main === module) {
   test('(=> a a)', 'a => a')
   test('(=> (, a b) a)', 'a,b => a')
   test('(=> p (+ 1 2))', 'p => 1 + 2')
+  test('(=> p 1)', 'p =>\n  1')
+  test('(=> p (__pack 1 2))', 'p =>\n  1\n  2')
   test('(. _ int)', '.int')
   test('(f (. _ int))', 'f .int')
 
