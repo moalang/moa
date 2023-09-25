@@ -21,6 +21,6 @@ main({
   fs.chmodSync('a.out', '0755')
 }
 const log = {
-  debug: (...a) => console.dir(a)
+  debug: o => console.dir(o)
 }
 evaluate(parse(moa + '\n__write(compile_to_js(__source))'), {__source, __write, log})

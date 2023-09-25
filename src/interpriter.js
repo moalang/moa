@@ -7,7 +7,9 @@ const { parse } = require('./parser.js')
 const dump = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
 const string = o => typeof o === 'string' ? o : escape(o)
+const unescape = s => s.replace(/\\"/g, '"').replace(/\\\\/g, '\\').replace(/\\n/g, '\n').replace(/\\t/g, '\t')
 const escape = o =>
+  o instanceof RegExp ? o.toString() :
   o instanceof Error ? `Error(${o.message})` :
   o instanceof Tuple ? o.map(escape).join(',') :
   typeof o === 'function' ? o.toString() :
@@ -33,11 +35,14 @@ const evaluate = (x, env) => {
     target instanceof List && id === 'join' ? (s) => target.join(s) :
     typeof target === 'object' && id in target ? target[id] :
     typeof target === 'string' && id === 'size' ? target.length :
-    typeof target === 'string' && id === 'rsplit' ? s => list(...target.split(new RegExp(s))) :
-    typeof target === 'string' && id === 'match' ? s => target.match(new RegExp(s)) :
+    typeof target === 'string' && id === 'rsplit' ? r => list(...target.split(r)) :
+    typeof target === 'string' && id === 'match' ? r => target.match(r) :
     typeof target === 'string' && id === 'starts' ? s => target.startsWith(s) :
     typeof target === 'string' && id === 'split' ? s => list(...target.split(s)) :
+    typeof target === 'string' && id === 'slice' ? (...a) => target.slice(...a) :
+    typeof target === 'string' && id === 'replace' ? (...a) => target.replace(...a) :
     typeof target === 'string' && id === 'int' ? parseInt(target) :
+    typeof target === 'string' && id === 'float' ? parseFloat(target) :
     typeof target === 'string' && id.match(/^[0-9]/) ? index(target)[id] :
     fail(`'${id}' is unknown method of '${typeof target === "object" ? target.constructor : typeof target}'`)
   const op2 = (op, lhs, rhs) => {
@@ -119,7 +124,6 @@ const evaluate = (x, env) => {
     head === '!' ? !run(tail[0]) :
     head === '=>' ? lambda(env, Array.isArray(tail[0]) ? tail[0].filter(x => x !== ',') : [tail[0]], tail[1]) :
     head.match(/^[+\-*\/%<>|&=!:]/) ? op2(head, tail[0], tail[1]) :
-    head.startsWith('"') ? head :
     tail.length > 0 ? lookup(head)(...tail.map(run)) :
     lookup(head)
   return x instanceof List ? x :
@@ -129,7 +133,8 @@ const evaluate = (x, env) => {
     x === '_' ? true : // for pattern match and iif
     x === 'true' ? true :
     x === 'false' ? false :
-    x[0] === '"' ? x.slice(1, -1) :
+    x.startsWith('r"') ? new RegExp(x.slice(2, -1), "g") :
+    x.startsWith('"') ? unescape(x.slice(1, -1)) :
     x.match(/^-?[0-9]/) ? parseFloat(x) :
     lookup(x)
 }
@@ -165,11 +170,18 @@ if (require.main === module) {
 
   // string
   test('hi', '"hi"')
+  test('\t', '"\\t"')
+  test('hi', '"""hi"""')
+  test('\t', '"""\\t"""')
+  test('h"i', '"""h"i"""')
+  test(/\t/g, 'r"\\t"')
+  test(/\t/g, 'r"""\\t"""')
   test(2, '"hi".size')
-  test(['', '1', '', '2', ''], '"12".rsplit("([0-9])")')
+  test(['', '1', '', '2', ''], '"12".rsplit(r"([0-9])")')
   test('h', '"hi"[0]')
   test('ab', '"a" ++ "b"')
   test(1, '"1".int')
+  test(1.1, '"1.1".float')
   test(['a', 'b'], '"a b".split(" ")')
   '1 -1 0.1 true "s" [] 0,1'.split(' ').map(s => test(s, `string(${s})`))
 

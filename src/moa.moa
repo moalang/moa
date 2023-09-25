@@ -56,6 +56,7 @@ union ast:
   aint int
   afloat float
   astring string
+  atuple list[ast]
   astatement list[ast]
   alambda:
     args list[string]
@@ -76,10 +77,38 @@ parse source =
       a[0].match("^[ \r\n\t]"): trim a.slice 1
       a[-1].match("^[ \r\n\t]"): trim a.slice 0 -1
       _: a
-    regexp = """((?:!=)|[()\[\]{}!]|(?:-?[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+(?:#[^\n]*|[ \t\r\n]+)*|"(?:[^"]|\\")*(?<!\\)"|[A-Za-z0-9_]+|#[^\n]*)"""
+    regexp = r"""((?:!=)|[()\[\]{}!]|(?:-?[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+(?:#[^\n]*|[ \t\r\n]+)*|"(?:[^"]|\\")*(?<!\\)"|[A-Za-z0-9_]+|#[^\n]*)"""
     source.rsplit(regexp).keep(t => t.size > 0 && !t.starts("#"))
   pos = 0
-  statement = () => aint(source.int)
+  statement = () =>
+    bottom = () =>
+      t = tokens[pos]
+      iif:
+        t == "true": abool true
+        t == "false": abool false
+        t.match "^[0-9.]+\.[0-9]+$": afloat t.float
+        t.match "^[0-9]+": aint t.int
+        t.starts "\"\"\"": astring t.slice(3 -3).replace("\\t", "\t").replace("\\n", "\n").replace("\\\"", "\"")
+        t.starts "\"": astring t.slice(1 -1).replace("\\t", "\t").replace("\\n", "\n").replace("\\\"", "\"")
+        t.starts "[": alist [] # TODO
+        t.starts "[": adict [] # TODO
+        t.match "^[a-zA-Z_]": aref t
+        _: aref t
+    #exp = () =>
+      #adefine:
+      #  id string
+      #  desc ast
+      #alambda:
+      #  args list[string]
+      #  body ast
+      #  type type
+      #aref:
+      #  id string
+      #  type type
+      #acall:
+      #  head ast
+      #  argv list[ast]
+    bottom()
   statement()
     #many a f = tokens.get(pos).then(t => f(t).then(x => many g++[x] f).alt(a)).alt(a)
     #many a f = match many(a ++ f(tokens[pos]) f):  .error: a
@@ -160,13 +189,17 @@ test t "parser":
   t1 "a,b => 1" alambda(["a" "b"] aint(1))
   t1 "a" aref("a")
 
-  t2 expectation source = t.eq expectation simplify(parse(source))
+  test expectation source = t.eq expectation simplify(parse(source))
+  log.debug """"\\t\\n"""".slice(1 -1).replace("\\t", "\t").replace("\\n", "\n").replace("\\\"", "\"")
 
   # primitives
-  t2 "1" "1"
-##  test "1.0" "1.0"
-##  test "id" "id"
-##  test "\"hi\"" "\"hi\""
+  test "1" "1"
+  test "1.1" "1.1"
+  test "id" "id"
+  test "hi" "\"hi\""
+  test "\t" "\"\\t\""
+  test "hi" """"hi"""" # "
+  test "\t" """"\\t"""" # "
 ##  test "(__call list)" "[]"
 ##  test "(list 1 2)" "[1 2]"
 ##  test "(__call dict)" "[:]"

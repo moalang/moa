@@ -30,7 +30,7 @@ const parse = source => {
   const trim = a => a.length === 0 ? [] :
     a[0].match(/^[ \r\n\t]/) ? trim(a.slice(1)) :
     a[a.length - 1].match(/^[ \r\n\t]/) ? trim(a.slice(0, -1)) : a
-  const regexp = /((?:!=)|[()\[\]{}!]|(?:-?[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+(?:#[^\n]*|[ \t\r\n]+)*|""".*"""|"(?:[^"]|\\")*(?<!\\)"|[A-Za-z0-9_]+|#[^\n]*)/
+  const regexp = /((?:!=)|[()\[\]{}!]|(?:-?[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+(?:#[^\n]*|[ \t\r\n]+)*|r?""".*"""|r?"(?:[^"]|\\")*(?<!\\)"|[A-Za-z0-9_]+|#[^\n]*)/
   const tokens = trim(source.split(regexp).filter(t => t.length > 0 && !t.startsWith('#')))
   const op2s = '. , * ** / // % + ++ - >> << ^ & | := += -= *= /= %= **= < <= > >= == != === !== <=> && || =>'.split(' ')
   const statement = () => {
@@ -70,7 +70,8 @@ const parse = source => {
       t === '[' ? container(until(']')) :
       t === '{' ? object(until('}')) :
       t === '(' ? until(')') :
-      t.startsWith('"""') ? JSON.stringify(t.slice(3, -3)) :
+      t.startsWith('"""') ? '"' + t.slice(3, -3).replace(/"/g, '\\"') + '"' :
+      t.startsWith('r"""') ? 'r"' + t.slice(4, -3).replace(/"/g, '\\"') + '"' :
       t
     const unit = () => _unit(bottom(consume()))
     const _unit = o =>
@@ -105,7 +106,7 @@ module.exports = { parse }
 
 if (require.main === module) {
   const stringify = a => Array.isArray(a) ? `(${a.map(stringify).join(' ')})` : string(a)
-  const assert = (expect, fact, src) => expect === fact ? put('.') : fail(`Expected '${expect}' but got '${fact}' in '${src}'`)
+  const assert = (expect, fact, src) => expect === fact ? put('.') : fail(`Expected '${expect}' but got '${fact}' source='${src}'`)
   const test = (expect, src) => assert(expect, stringify(parse(src)), src)
 
   // primitives
@@ -115,6 +116,8 @@ if (require.main === module) {
   test('"hi"', '"hi"')
   test('"\\""', '"\\""')
   test('"\\""', '"""""""')
+  test('r"\\t"', 'r"\\t"')
+  test('r"\\t"', 'r"""\\t"""')
   test('(__call list)', '[]')
   test('(list 1 2)', '[1 2]')
   test('(__call dict)', '[:]')
