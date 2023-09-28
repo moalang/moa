@@ -20,13 +20,15 @@ const puts = (...a) => { console.log(...a); return a[0]; }
 const tuple = (...a) => new Tuple().concat(...a)
 const list = (...a) => new List().concat(...a)
 const attempt = (f, g) => { try { return f() } catch (e) { return g(e) } }
-const make = a => Object.fromEntries(Array(a.length/2).fill().map((_,i) => [a[i*2], a[i*2+1]]))
-
-const evaluate = (x, env) => {
-  const run = x => evaluate(x, env)
-  const runWith = (x, ...a) => evaluate(x, {...env, ...make(a)})
-  const lookup = key => key in env ? env[key] : fail(`Not found '${key}' in [${Object.keys(env)}]`)
-  const lambda = (env, args, body) => (...argv) => runWith(body, ...(args.flatMap((x, i) => [x, argv[i]])))
+const make_env = a => Object.fromEntries(Array(a.length/2).fill().map((_,i) => [a[i*2], {value: a[i*2+1]}]))
+const evaluate = (x, env) => execute(x, make_env(Object.entries(env).flat()))
+const execute = (x, env) => {
+  const run = x => execute(x, env)
+  const run_with = (x, ...a) => execute(x, {...env, ...make_env(a)})
+  const lookup = key => key in env ? env[key].value : fail(`Not found '${key}' in [${Object.keys(env)}]`)
+  const declare = (name, value) => name in env ? fail(`${name} exists`) : (env[name] = {value}, value)
+  const update = (name, value) => name in env ? env[name].value = value : fail(`${name} missing`)
+  const lambda = (args, body) => (...argv) => run_with(body, ...(args.flatMap((x, i) => [x, argv[i]])))
   const method = (target, id) =>
     target instanceof List && id === 'size' ? target.length :
     target instanceof List && id === 'keep' ? f => target.filter(f) :
@@ -46,18 +48,18 @@ const evaluate = (x, env) => {
     typeof target === 'string' && id.match(/^[0-9]/) ? index(target)[id] :
     fail(`'${id}' is unknown method of '${typeof target === "object" ? target.constructor : typeof target}'`)
   const op2 = (op, lhs, rhs) => {
-    const toComparable = x => "'" + JSON.stringify(_toComparable(x)) + "'"
-    const _toComparable = x => Array.isArray(x) ? x.map(_toComparable) :
-      typeof x === 'object' ? Object.keys(x).sort().map(key => _toComparable(x[key])) :
+    const to_comparable = x => "'" + JSON.stringify(_to_comparable(x)) + "'"
+    const _to_comparable = x => Array.isArray(x) ? x.map(_to_comparable) :
+      typeof x === 'object' ? Object.keys(x).sort().map(key => _to_comparable(x[key])) :
       typeof x === 'number' ? (Array(16).join('0') + x).slice(-16) :
       x
     switch (op) {
-      case '==': return toComparable(run(lhs)) == toComparable(run(rhs))
-      case '!=': return toComparable(run(lhs)) != toComparable(run(rhs))
-      case '>=': return toComparable(run(lhs)) >= toComparable(run(rhs))
-      case '<=': return toComparable(run(lhs)) <= toComparable(run(rhs))
-      case '>' : return toComparable(run(lhs)) > toComparable(run(rhs))
-      case '<' : return toComparable(run(lhs)) < toComparable(run(rhs))
+      case '==': return to_comparable(run(lhs)) == to_comparable(run(rhs))
+      case '!=': return to_comparable(run(lhs)) != to_comparable(run(rhs))
+      case '>=': return to_comparable(run(lhs)) >= to_comparable(run(rhs))
+      case '<=': return to_comparable(run(lhs)) <= to_comparable(run(rhs))
+      case '>' : return to_comparable(run(lhs)) > to_comparable(run(rhs))
+      case '<' : return to_comparable(run(lhs)) < to_comparable(run(rhs))
       case '++': return run(lhs).concat(run(rhs))
       case '+' : return run(lhs) + run(rhs)
       case '-' : return run(lhs) - run(rhs)
@@ -69,8 +71,8 @@ const evaluate = (x, env) => {
       case '<<': return run(lhs) << run(rhs)
       case '&&': return run(lhs) && run(rhs)
       case '||': return run(lhs) || run(rhs)
-      case ':=': return lhs in env ? env[lhs] = run(rhs) : fail(`${lhs} missing`)
-      default: return op.match(/^[+\-*/%|&]+=$/) ? env[lhs] = op2(op.slice(0, -1), run(lhs), run(rhs)) : fail(`${op} unknown operator`)
+      case ':=': return lhs in env ? update(lhs, run(rhs)) : fail(`${lhs} missing`)
+      default: return op.match(/^[+\-*/%|&]+=$/) ? update(lhs, op2(op.slice(0, -1), run(lhs), run(rhs))) : fail(`${op} unknown operator`)
     }
   }
   const unpack = xs => xs[0] === '__pack' ? xs.slice(1) : [xs]
@@ -80,24 +82,26 @@ const evaluate = (x, env) => {
   const match = (target, conds) => {
     const rescue = conds.find(a => a[1][0] === '.' && a[1][2] === 'error')
     target = rescue ? attempt(() => run(target), e => ({__tag: 'error', __val: {message: e.message}})) : run(target)
-    const _match = ([[_, cond, body], ...left]) =>
-      cond[0] === '.' ?  (target.__tag === cond[2] ? runWith(body, cond[1], target.__val) : _match(left)) :
-      cond.match(/[A-Za-z_]/) ? runWith(body, cond, target) :
-      target === run(cond) && run(body)
-    return _match(conds) || fail(`${conds} are not match with ${string(target)}`)
+    const branch = left => {
+      const f = ([[_, cond, body], ...left]) =>
+        cond[0] === '.' ?  (target.__tag === cond[2] ? run_with(body, cond[1], target.__val) : branch(left)) :
+        cond.match(/[A-Za-z_]/) ? run_with(body, cond, target) :
+        target === run(cond) && run(body)
+      return left.length === 0 ? fail(`${string(conds)} are not match with ${string(target)}`) : f(left)
+    }
+    return branch(conds)
   }
   const iif = a => a.length === 1 ? run(a[0]) : run(a[0]) ? run(a[1]) : iif(a.slice(2))
-  const eq = (a, b) => ((a, b) => a === b ? undefined : fail(`eq ${a} ${b}`))(escape(a), escape(b))
-  const assign = (name, value) => name in env ? fail(`${name} exists`) : env[name] = value
+  const eq = (a, b) => ((a, b) => a === b ? true : fail(`eq ${a} ${b}`))(escape(a), escape(b))
   const index = (a, i) => i < 0 ? index(a, a.length + i) : i >= a.length ? fail(`${i} exceeded`) : a[i]
   const define = ([head, body]) => Array.isArray(head) ?
-    assign(head[0], lambda(env, head.slice(1), body))  :
-    assign(head, run(body))
+    declare(head[0], lambda(head.slice(1), body))  :
+    declare(head, run(body))
   const block = ([head, ...tail], body) =>
-    head === 'class' ? env[tail[0]] = (...a) => Object.fromEntries(unpack(body).map(([id, _], i) => [id, a[i]])) :
-    head === 'union' ? env[tail[0]] = Object.fromEntries(union(tail[0], body).map(([id, node]) => [id, env[id] = node])) :
+    head === 'class' ? declare(tail[0], (...a) => Object.fromEntries(unpack(body).map(([id, _], i) => [id, a[i]]))) :
+    head === 'union' ? declare(tail[0], Object.fromEntries(union(tail[0], body).map(([id, node]) => (declare(id, node), [id, node])))) :
     head === 'match' ? match(tail[0], unpack(body)) :
-    head === 'test' ? runWith(body, tail[0], {eq}) :
+    head === 'test' ? run_with(body, tail[0], {eq}) :
     fail(`'${head}' is unkown block with ${string(tail)} and ${string(body)}`)
   const apply = ([head, ...tail]) =>
     head === undefined ? undefined :
@@ -122,11 +126,11 @@ const evaluate = (x, env) => {
     head === ':' ? block(tail[0], tail[1]) :
     head === ',' ? tuple(...tail.map(run)) :
     head === '!' ? !run(tail[0]) :
-    head === '=>' ? lambda(env, Array.isArray(tail[0]) ? tail[0].filter(x => x !== ',') : [tail[0]], tail[1]) :
+    head === '=>' ? lambda(Array.isArray(tail[0]) ? tail[0].filter(x => x !== ',') : [tail[0]], tail[1]) :
     head.match(/^[+\-*\/%<>|&=!:]/) ? op2(head, tail[0], tail[1]) :
     tail.length > 0 ? lookup(head)(...tail.map(run)) :
     lookup(head)
-  return x instanceof List ? x :
+  const ret = x instanceof List ? x :
     x instanceof Tuple ? x :
     Array.isArray(x) ? apply(x) :
     typeof x !== 'string' ? x :
@@ -137,6 +141,10 @@ const evaluate = (x, env) => {
     x.startsWith('"') ? unescape(x.slice(1, -1)) :
     x.match(/^-?[0-9]/) ? parseFloat(x) :
     lookup(x)
+  if (ret === undefined) {
+    fail(`${x} is undefined`)
+  }
+  return ret
 }
 
 module.exports = { evaluate }
@@ -159,6 +167,7 @@ if (require.main === module) {
     }
   }
   const test = (expect, src) => eq(expect, src)
+  test(2, 'f a =\n  m = a % 2\n  iif m == 0 a f(a - 1)\nf(3)') // recursion
 
   // int
   test(1, '1')
@@ -245,8 +254,9 @@ if (require.main === module) {
   test(1, 'a = 1\na')
   test(1, 'f = () => 1\nf()')
   test(1, 'f a = a\nf(1)')
-  test(2, 'f a =\n  b = a + 1\n  b\nf(1)')
-  test(1, 'a = 1\nf a =\n  a += 1\nf(a)\na')
+  test(0, 'a = 0\nf a =\n  a += 1\nf(a)\na') // local scope
+  test(1, 'a = 0\nf = () => a += 1\nf()\na') // outer scope
+  //test(2, 'f a =\n  m = a % 2\n  iif m == 0 a f(a - 1)\nf(3)') // recursion
   test(Error('z exists'), 'z = 1\nz = 2')
 
   // class
@@ -281,13 +291,12 @@ if (require.main === module) {
   test(2, 'iif:\n  false: 1\n  _: 2')
 
   // test
-  test(undefined, 'test t: t.eq 1 1')
+  test(true, 'test t: t.eq 1 1')
   test(Error('eq 1 2'), 'test t: t.eq 1 2')
   test(Error('eq "a" "b"'), 'test t: t.eq "a" "b"')
 
   // edge case
-  test(undefined, '')
-  test(undefined, '\n')
+  test(1, 'a = 0\nf = () =>\n  g = () => a += 1\n  g()\nf()\na')
 
   puts('ok')
 }
