@@ -3,6 +3,8 @@
  */
 class List extends Array { }
 class Tuple extends Array { }
+function Return(value) { this.value = value }
+Return.prototype.valueOf = function() { return this.value }
 const { parse } = require('./parser.js')
 const dump = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
@@ -38,7 +40,7 @@ const execute = (x, env) => {
     typeof target === 'object' && id in target ? target[id] :
     typeof target === 'string' && id === 'size' ? target.length :
     typeof target === 'string' && id === 'rsplit' ? r => list(...target.split(r)) :
-    typeof target === 'string' && id === 'match' ? r => target.match(r) :
+    typeof target === 'string' && id === 'match' ? r => Boolean(target.match(r)) :
     typeof target === 'string' && id === 'starts' ? s => target.startsWith(s) :
     typeof target === 'string' && id === 'split' ? s => list(...target.split(s)) :
     typeof target === 'string' && id === 'slice' ? (...a) => target.slice(...a) :
@@ -46,6 +48,7 @@ const execute = (x, env) => {
     typeof target === 'string' && id === 'int' ? parseInt(target) :
     typeof target === 'string' && id === 'float' ? parseFloat(target) :
     typeof target === 'string' && id.match(/^[0-9]/) ? index(target)[id] :
+    typeof target === 'boolean' && id === 'int' ? (target ? 1 : 0) :
     fail(`'${id}' is unknown method of '${typeof target === "object" ? target.constructor : typeof target}'`)
   const op2 = (op, lhs, rhs) => {
     const to_comparable = x => "'" + JSON.stringify(_to_comparable(x)) + "'"
@@ -91,7 +94,7 @@ const execute = (x, env) => {
     }
     return branch(conds)
   }
-  const iif = a => a.length === 1 ? run(a[0]) : run(a[0]) ? run(a[1]) : iif(a.slice(2))
+  const guard = a => a.length ? (run(a[0]) ? new Return(run(a[1])) : guard(a.slice(2))) : true
   const eq = (a, b) => ((a, b) => a === b ? true : fail(`eq ${a} ${b}`))(escape(a), escape(b))
   const index = (a, i) => i < 0 ? index(a, a.length + i) : i >= a.length ? fail(`${i} exceeded`) : a[i]
   const define = ([head, body]) => Array.isArray(head) ?
@@ -102,6 +105,7 @@ const execute = (x, env) => {
     head === 'union' ? declare(tail[0], Object.fromEntries(union(tail[0], body).map(([id, node]) => (declare(id, node), [id, node])))) :
     head === 'match' ? match(tail[0], unpack(body)) :
     head === 'test' ? run_with(body, tail[0], {eq}) :
+    head === 'guard' ? (run(tail[0]) ? new Return(run(body)) : true) :
     fail(`'${head}' is unkown block with ${string(tail)} and ${string(body)}`)
   const apply = ([head, ...tail]) =>
     head === undefined ? undefined :
@@ -113,16 +117,15 @@ const execute = (x, env) => {
     head === 'dict' ? Object.fromEntries(Array(tail.length/2).fill().map((_,i) => [run(tail[i*2]), run(tail[i*2+1])])) :
     head === 'error' ? fail(string(run(tail[0]))) :
     head === 'string' ? escape(run(tail[0])) :
-    head === 'iif' ? iif(tail) :
+    head === 'guard' ? guard(tail) :
     head === '=' ? define(tail) :
     head === '__index' ? index(run(tail[0]), run(tail[1])) :
     head === '__call' && tail[0] === 'class' ? ({}) :
     head === '__call' && tail[0] === 'dict' ? ({}) :
     head === '__call' && tail[0] === 'list' ? list() :
     head === '__call' ? lookup(tail[0])(run) :
-    head === '__pack' ? tail.map(run).slice(-1)[0] :
+    head === '__pack' ? tail.reduce((prev, x) => prev instanceof Return ? prev : run(x), null).valueOf() :
     head === '.' ? method(run(tail[0]), tail[1]) :
-    head === ':' && tail[0] === 'iif' ? iif(unpack(tail[1]).flatMap(a => a.slice(1))) :
     head === ':' ? block(tail[0], tail[1]) :
     head === ',' ? tuple(...tail.map(run)) :
     head === '!' ? !run(tail[0]) :
@@ -135,7 +138,6 @@ const execute = (x, env) => {
     x instanceof Tuple ? x :
     Array.isArray(x) ? apply(x) :
     typeof x !== 'string' ? x :
-    x === '_' ? true : // for pattern match and iif
     x === 'true' ? true :
     x === 'false' ? false :
     x.startsWith('r"') ? new RegExp(x.slice(2, -1), 'g') :
@@ -176,6 +178,8 @@ if (require.main === module) {
   // bool true false
   test(true, 'true')
   test(false, 'false')
+  test(1, 'true.int')
+  test(0, 'false.int')
 
   // string
   test('hi', '"hi"')
@@ -259,7 +263,13 @@ if (require.main === module) {
   test(1, 'f a = a\nf(1)')
   test(0, 'a = 0\nf a =\n  a += 1\nf(a)\na') // local scope
   test(1, 'a = 0\nf = () => a += 1\nf()\na') // outer scope
-  test(2, 'f a =\n  m = a % 2\n  iif m == 0 a f(a - 1)\nf(3)') // recursion
+  test(2, 'f a =\n  m = a % 2\n  guard m == 0 a\n  f(a - 1)\nf(3)') // recursion
+
+  // statement
+  test(2, 'guard false: 1\n2')
+  test(1, 'guard true: 1\n2')
+  test(1, 'guard 1==1:\n  1\n2')
+  test(2, 'guard 1==2:\n  1\n2')
   test(Error('z exists'), 'z = 1\nz = 2')
 
   // class
@@ -283,14 +293,6 @@ if (require.main === module) {
   test(Error('1'), 'error 1')
   test("f", 'f s = error "f"\nmatch f("t"):\n  e.error: e.message\n  s: s')
   test("t", 'f s = s\nmatch f("t"):\n  e.error: e.message\n  s: s')
-
-  // iif
-  test(1, 'iif true 1 2')
-  test(2, 'iif false 1 2')
-  test(2, 'iif false 1 true 2 3')
-  test(3, 'iif false 1 false 2 3')
-  test(1, 'iif:\n  true: 1\n  _: 2')
-  test(2, 'iif:\n  false: 1\n  _: 2')
 
   // test
   test(true, 'test t: t.eq 1 1')

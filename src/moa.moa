@@ -86,11 +86,11 @@ union ast:
 parse source =
   # list[string]
   tokens =
-    trim a = iif:
-      a.size == 0: []
-      a[0].match(r"^[ \r\n\t]"): trim a.slice 1
-      a[-1].match(r"^[ \r\n\t]"): trim a.slice 0 -1
-      _: a
+    trim a =
+      guard a.size == 0: []
+      guard a[0].match(r"^[ \r\n\t]"): trim a.slice 1
+      guard a[-1].match(r"^[ \r\n\t]"): trim a.slice 0 -1
+      a
     regexp = r"((?:!=)|[()\[\]{}!]|(?:-?[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+(?:#[^\n]*|[ \t\r\n]+)*|\"[^]*?(?<!\\)\"|[A-Za-z0-9_]+|#[^\n]*)"
     source.rsplit(regexp).keep(t => t.size > 0 && !t.starts("#"))
   pos = 0
@@ -98,39 +98,33 @@ parse source =
     until end =
       f a =
         x = exp()
-        iif x == aundef(end) a f(a ++ x)
+        guard x == aundef(end): a
+        f a ++ x
       f []
     unit = () =>
-      unescape s = s.replace("\\t" "\t").replace("\\n" "\n")
-      t = iif pos < tokens.size tokens[pos] ""
+      guard pos >= tokens.size: aundef("")
+      t = tokens[pos]
       pos += 1
-      iif:
-        t == ""                     : aundef t
-        t.match(r"^[ \t]+$")        : unit()
-        t == "true"                 : abool true
-        t == "false"                : abool false
-        t == "["                    : acall aref("list") until("]")
-        t == "{"                    : acall aref("dict") until("}").keep(x => x != aundef(":"))
-        t.starts "\""               : astring unescape(t.slice(1 -1))
-        t.match r"^[0-9.]+\.[0-9]+$": afloat t.float
-        t.match r"^[0-9]+"          : aint t.int
-        t.match r"^[a-zA-Z_]"       : aref t
-        _                           : aundef t
+      guard t.match(r"^[ \t]+$")         : unit()
+      guard t == "true"                  : abool true
+      guard t == "false"                 : abool false
+      guard t == "["                     : acall aref("list") until("]")
+      guard t == "{"                     : acall aref("dict") until("}").keep(x => x != aundef(":"))
+      guard t.starts("\"")               : astring t.slice(1 -1).replace("\\t" "\t").replace("\\n" "\n")
+      guard t.match(r"^[0-9.]+\.[0-9]+$"): afloat t.float
+      guard t.match(r"^[0-9]+")          : aint t.int
+      guard t.match(r"^[a-zA-Z_]")       : aref t
+      aundef t
     exp = () =>
       lhs = unit()
-      next = iif:
-        pos >= tokens.size: ""
-        (tokens[pos]).match(r"^[ \t]"): tokens[pos + 1]
-        _: tokens[pos]
-      op2s = ". , * ** / // % + ++ - >> << ^ & | := += -= *= /= %= **= < <= > >= == != === !== <=> && || =>".split(" ")
-      iif:
-        lhs == aundef("!"):
-          aop1 "!" unit()
-        op2s.has(next):
-          unit() # move position to after binary operator
-          aop2 next lhs exp()
-        _:
-          lhs
+      guard pos >= tokens.size: lhs
+      next = tokens[pos + (tokens[pos]).match(r"^[ \t]").int]
+      op2s = ". , * ** / // % + ++ - >> << ^ & | := += -= *= /= %= **= < <= > >= == != === !== <=> && || =>".split " "
+      guard lhs == aundef("!"): aop1 "!" unit()
+      guard op2s.has(next):
+        unit() # move position to after binary operator
+        aop2 next lhs exp()
+      lhs
     exp()
   top()
 
@@ -215,7 +209,7 @@ test t "parser":
   test "(+ 1 (+ 2 3))" "1 + 2 + 3"
   test "(!= 1 1)" "1 != 1"
 ##  test "(= a 1)" "a = 1"
-##  test "(+= a 1)" "a += 1"
+  test "(+= a 1)" "a += 1"
 ##  test "(= a (+ 1 2))" "a = 1 + 2"
 ##  test "(+= a (+ 1 2))" "a += 1 + 2"
 ##  test "(+ 1 (* 2 3))" "1 + 2 * 3"

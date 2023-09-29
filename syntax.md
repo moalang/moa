@@ -24,7 +24,7 @@ op2:
 | "**" | "&&" | "||" | ">>" | "<<"
 | "===" | "**=" "<=>"
 id: [a-za-z_][a-za-z0-9_]*
-embedded: class union iif match error bool true false int float num string list set dict tuple object opt some none time log test use
+embedded: class union match guard error bool true false int float num string list set dict tuple object opt some none time log test use
 
 
 
@@ -64,13 +64,6 @@ embedded: class union iif match error bool true false int float num string list 
 - Implicit type converting
   1 + 2                   # int
   1 + 2.0                 # float
-
-- inline if
-  iif a b c
-  iif:
-    a: 1
-    b: 2
-    3
 
 - typed argument
   f a.int .int       = a     # int int
@@ -153,8 +146,8 @@ $ undefined
   - function  # f a b = a + b    | f(a b) = a + b
   - property  # now() = io.now
 - Branch
-  - iif       # iif a b c d e / iif a: 1; b: 2; c
   - match     # match a:; b: c; b: d
+  - guard     # guard a b
   - error     # match error("failed" 1); a.error[int]: a.value.string ++ a.stack; b.error: b.message; c: c
 - Misc
   - comment   # # comment
