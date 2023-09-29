@@ -33,8 +33,13 @@ repl io = io.puts "repl"
 
 compile_to_js source =
   nodes = parse source
-  debug nodes
-  "const main = io => debug(io)"
+  log nodes
+  "const main = io => log(io)"
+
+class token:
+  label string
+  line int
+  column int
 
 union type:
   tundef # no type determined yet
@@ -89,6 +94,13 @@ parse source =
         x: f a ++ x
       f []
     bottom = () =>
+      g = () =>
+        pos += 1
+        bottom()
+      f = () =>
+        iif (tokens[pos]).match("^[ \t]+$") g() consume()
+      iif pos < tokens.size f() p("")
+    consume = () =>
       t = tokens[pos]
       pos += 1
       iif:
@@ -122,7 +134,7 @@ parse source =
 
 test t "parser":
   simplify a =
-    call x = simplify(x.head) ++ "(" ++ x.argv.map(simplify).join(" ") ++ ")"
+    call x = "(" + ([x.head] ++ x.argv).map(simplify).join(" ") ++ ")"
     match a:
       x.adefine   : x.id ++ " = " ++ simplify(x.desc)
       x.ablool    : string x
@@ -134,7 +146,7 @@ test t "parser":
       x.aref      : x.id
       x.acall     : call x
       x.aundef    : x
-      x           : debug(a)
+      x           : log(a)
   t1 expectation ast = t.eq expectation simplify(ast)
   t1 "a = 1" adefine("a" aint(1))
   t1 "1" aint(1)
@@ -154,8 +166,12 @@ test t "parser":
   test "\t" "\"\\t\""
   test "hi" """"hi"""" # "
   test "\t" """"\\t"""" # "
-  test "list()" "[]"
-##  test "(list 1 2)" "[1 2]"
+  test "(list)" "[]"
+  test "(list 1 2)" "[1 2]"
+
+# bug fix for a[x].f()
+# bug fix for () => ...
+
 ##  test "(__call dict)" "[:]"
 ##  test "(dict \"a\" 1)" "[a:1]"
 ##  test "(dict \"a\" (+ 1 2))" "[a:(1+2)]"

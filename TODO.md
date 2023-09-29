@@ -8,6 +8,8 @@
 - Avoid symbols like semi-corron, comma and parenthiese
 
 # Todo
+- [ ] Think new syntax for iif because its readability is not good
+- [ ] Think new syntax for match because it's not instinct enough
 - [x] Interpriter (2/2)
 - [ ] Compiler to JavaScript
 - [ ] Compiler to native code

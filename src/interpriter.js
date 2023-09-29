@@ -167,7 +167,6 @@ if (require.main === module) {
     }
   }
   const test = (expect, src) => eq(expect, src)
-  test(2, 'f a =\n  m = a % 2\n  iif m == 0 a f(a - 1)\nf(3)') // recursion
 
   // int
   test(1, '1')
@@ -256,7 +255,7 @@ if (require.main === module) {
   test(1, 'f a = a\nf(1)')
   test(0, 'a = 0\nf a =\n  a += 1\nf(a)\na') // local scope
   test(1, 'a = 0\nf = () => a += 1\nf()\na') // outer scope
-  //test(2, 'f a =\n  m = a % 2\n  iif m == 0 a f(a - 1)\nf(3)') // recursion
+  test(2, 'f a =\n  m = a % 2\n  iif m == 0 a f(a - 1)\nf(3)') // recursion
   test(Error('z exists'), 'z = 1\nz = 2')
 
   // class
