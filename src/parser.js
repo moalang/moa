@@ -53,7 +53,7 @@ const parse = source => {
         t
       const suffix = o =>
         tokens[pos] === '(' ? ++pos && suffix(call(o, until(')'))) :
-        tokens[pos] === '[' ? ++pos && index(o, until(']')) :
+        tokens[pos] === '[' ? ++pos && suffix(index(o, until(']'))) :
         tokens[pos] === '.' ? (++pos, suffix(['.', o, consume()])) :
         tokens[pos] === '=' ? (++pos, ['=', o, unit()]) :
         o
@@ -87,7 +87,6 @@ if (require.main === module) {
   const stringify = a => Array.isArray(a) ? `(${a.map(stringify).join(' ')})` : string(a)
   const assert = (expect, fact, src) => expect === fact ? put('.') : fail(`Expected '${expect}' but got '${fact}' source='${src}'`)
   const test = (expect, src) => assert(expect, stringify(parse(src)), src)
-  //test('(__call (. (__index a b) c))', 'a[b].c()')
 
   // primitives
   test('1', '1')
@@ -142,7 +141,10 @@ if (require.main === module) {
   test('1', '(1)')
   test('(f 1)', '(f 1)')
   test('(+ 1 2)', '(1 + 2)')
-  test('(+ 1 (+ 2 3))', '1 + (2 + 3)')
+  test('(+ (* 1 2) 3)', '1 * 2 + 3')
+  test('(* 1 (+ 2 3))', '1 * (2 + 3)')
+  //test('(+ 1 (* 2 3)', '1 + 2 * 3') // TODO fix me
+  //test('(* (+ 1 2) 3)', '1 + 2 * 3') // TODO fix me
 
   // function call
   test('(__call f)', 'f()')
@@ -190,11 +192,7 @@ if (require.main === module) {
   test('(! (a b))', '!a(b)')
   test('(+ (a b) c)', 'a(b) + c')
   test('(. (__index a b) c)', 'a[b].c')
-//  test('(__call (. (__index a b) c))', 'a[b].c()')
-//  test('((. (__index a b) c) d)', 'a[b].c(d)')
-// bug fix for a[x].f()
-// bug fix for () => ...
-
+  test('((. (__index a b) c) d)', 'a[b].c(d)')
 
   // edge case
   test('1', '1\n')

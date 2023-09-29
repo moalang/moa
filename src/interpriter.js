@@ -21,15 +21,15 @@ const puts = (...a) => { console.log(...a); return a[0]; }
 const tuple = (...a) => new Tuple().concat(...a)
 const list = (...a) => new List().concat(...a)
 const attempt = (f, g) => { try { return f() } catch (e) { return g(e) } }
-const make_env = a => Object.fromEntries(Array(a.length/2).fill().map((_,i) => [a[i*2], {value: a[i*2+1]}]))
-const evaluate = (x, env) => execute(x, make_env(Object.entries(env).flat()))
+const make_env = o => Object.fromEntries(Object.keys(o).map(key => [key, {value: o[key]}]))
+const evaluate = (x, env) => execute(x, make_env({...env}))
 const execute = (x, env) => {
   const run = x => execute(x, env)
-  const run_with = (x, ...a) => execute(x, {...env, ...make_env(a)})
+  const run_with = (x, e) => execute(x, {...env, ...make_env(e)})
   const lookup = key => key in env ? env[key].value : fail(`Not found '${key}' in [${Object.keys(env)}]`)
   const declare = (name, value) => name in env ? fail(`${name} exists`) : (env[name] = {value}, value)
   const update = (name, value) => name in env ? env[name].value = value : fail(`${name} missing`)
-  const lambda = (args, body) => (...argv) => run_with(body, ...(args.flatMap((x, i) => [x, argv[i]])))
+  const lambda = (args, body) => (...argv) => run_with(body, Object.fromEntries(args.map((x, i) => [x, argv[i]])))
   const method = (target, id) =>
     target instanceof List && id === 'size' ? target.length :
     target instanceof List && id === 'keep' ? f => target.filter(f) :
@@ -37,6 +37,9 @@ const execute = (x, env) => {
     target instanceof List && id === 'map' ? (...a) => target.map(...a) :
     target instanceof List && id === 'join' ? (s) => target.join(s) :
     target instanceof List && id === 'has' ? (s) => target.includes(s) :
+    target instanceof List && id === 'bool' ? target.length >= 1 :
+    target instanceof List && id === 'find' ? (f => Boolean(target.find(f))) :
+    target instanceof List && id === 'index' ? (s => target.findIndex(x => op2('==', x, s))) :
     typeof target === 'object' && id in target ? target[id] :
     typeof target === 'string' && id === 'size' ? target.length :
     typeof target === 'string' && id === 'rsplit' ? r => list(...target.split(r)) :
@@ -47,6 +50,7 @@ const execute = (x, env) => {
     typeof target === 'string' && id === 'replace' ? (...a) => target.replace(...a) :
     typeof target === 'string' && id === 'int' ? parseInt(target) :
     typeof target === 'string' && id === 'float' ? parseFloat(target) :
+    typeof target === 'string' && id === 'has' ? (s => target.includes(s)) :
     typeof target === 'string' && id.match(/^[0-9]/) ? index(target)[id] :
     typeof target === 'boolean' && id === 'int' ? (target ? 1 : 0) :
     fail(`'${id}' is unknown method of '${typeof target === "object" ? target.constructor : typeof target}'`)
@@ -58,6 +62,7 @@ const execute = (x, env) => {
       x
     switch (op) {
       case '==': return to_comparable(run(lhs)) == to_comparable(run(rhs))
+      case '===': return run(lhs).__tag === rhs
       case '!=': return to_comparable(run(lhs)) != to_comparable(run(rhs))
       case '>=': return to_comparable(run(lhs)) >= to_comparable(run(rhs))
       case '<=': return to_comparable(run(lhs)) <= to_comparable(run(rhs))
@@ -87,14 +92,16 @@ const execute = (x, env) => {
     target = rescue ? attempt(() => run(target), e => ({__tag: 'error', __val: {message: e.message}})) : run(target)
     const branch = left => {
       const f = ([[_, cond, body], ...left]) =>
-        cond[0] === '.' ?  (target.__tag === cond[2] ? run_with(body, cond[1], target.__val) : branch(left)) :
-        cond.match(/[A-Za-z_]/) ? run_with(body, cond, target) :
+        cond[0] === '.' ?  (target.__tag === cond[2] ? run_with(body, {[cond[1]]: target.__val}) : branch(left)) :
+        cond.match(/[A-Za-z_]/) ? run_with(body, {[cond]: target}) :
         target === run(cond) && run(body)
       return left.length === 0 ? fail(`${string(conds)} are not match with ${string(target)}`) : f(left)
     }
     return branch(conds)
   }
-  const guard = a => a.length ? (run(a[0]) ? new Return(run(a[1])) : guard(a.slice(2))) : true
+  const capture = (cond, e) => Array.isArray(cond) && cond[0] === '&&' ? capture(cond[1], e) && capture(cond[2], e) :
+    run_with(cond, e) && ((Array.isArray(cond) && cond[0] === '===' && cond[1].match(/^[A-Za-z_]/) && (e[cond[1]]=lookup(cond[1]).__val, true)) || true)
+  const guard = (cond, body) => (e => capture(cond, e) ? new Return(run_with(body, e)) : true)({})
   const eq = (a, b) => ((a, b) => a === b ? true : fail(`eq ${a} ${b}`))(escape(a), escape(b))
   const index = (a, i) => i < 0 ? index(a, a.length + i) : i >= a.length ? fail(`${i} exceeded`) : a[i]
   const define = ([head, body]) => Array.isArray(head) ?
@@ -104,8 +111,8 @@ const execute = (x, env) => {
     head === 'class' ? declare(tail[0], (...a) => Object.fromEntries(unpack(body).map(([id, _], i) => [id, a[i]]))) :
     head === 'union' ? declare(tail[0], Object.fromEntries(union(tail[0], body).map(([id, node]) => (declare(id, node), [id, node])))) :
     head === 'match' ? match(tail[0], unpack(body)) :
-    head === 'test' ? run_with(body, tail[0], {eq}) :
-    head === 'guard' ? (run(tail[0]) ? new Return(run(body)) : true) :
+    head === 'test' ? run_with(body, {[tail[0]]: {eq}}) :
+    head === 'guard' ? guard(tail[0], body) :
     fail(`'${head}' is unkown block with ${string(tail)} and ${string(body)}`)
   const apply = ([head, ...tail]) =>
     head === undefined ? undefined :
@@ -117,7 +124,7 @@ const execute = (x, env) => {
     head === 'dict' ? Object.fromEntries(Array(tail.length/2).fill().map((_,i) => [run(tail[i*2]), run(tail[i*2+1])])) :
     head === 'error' ? fail(string(run(tail[0]))) :
     head === 'string' ? escape(run(tail[0])) :
-    head === 'guard' ? guard(tail) :
+    head === 'guard' ? guard(tail[0], tail[1]) :
     head === '=' ? define(tail) :
     head === '__index' ? index(run(tail[0]), run(tail[1])) :
     head === '__call' && tail[0] === 'class' ? ({}) :
@@ -143,7 +150,7 @@ const execute = (x, env) => {
     x.startsWith('r"') ? new RegExp(x.slice(2, -1), 'g') :
     x.startsWith('"') ? unescape(x) :
     x.match(/^-?[0-9]/) ? parseFloat(x) :
-    lookup(x)
+    x.match(/^[A-Za-z_]/) ? lookup(x) : x
   if (ret === undefined) {
     fail(`${x} is undefined`)
   }
@@ -223,6 +230,8 @@ if (require.main === module) {
   test(0, '[].size')
   test(2, '[1 2].size')
   test([2], '[1 2].keep x => x > 1')
+  test(0, '[1].index 1')
+  test(-1, '[1].index 2')
 
   // dict
   test({}, 'dict()')
@@ -283,11 +292,16 @@ if (require.main === module) {
   test(true, 'class s:\n  a string\n  b int\ns("hi" 1) < s("hi" 2)')
   test(true, 'class s:\n  a string\n  b int\ns("hi" 9) < s("hi" 10)')
 
-  // union / match
+  // union / guard / martch
+  test(true, 'union u:\n  a\na === a')
+  test(false, 'union u:\n  a\n\n  b\na === b')
   test(1, 'union u:\n  a\nmatch a:\n  _.a: 1')
   test(2, 'union u:\n  a n\nmatch a(2):\n  n.a: n')
   test(3, 'union u:\n  a:\n    b int\nmatch a(3):\n  o.a: o.b')
   test(9, 'union u:\n  a:\n    b int\n    c int\nmatch a(4 5):\n  o.a: o.b + o.c')
+  test(1, 'union u:\n  a int\nv = a(1)\nguard v === a: v')
+  test(1, 'union u:\n  a int\nv = a(1)\nguard v === a && true: v')
+  test(1, 'union u:\n  a int\nv = a(1)\nguard v === a && v == 1: v')
 
   // error / match
   test(Error('1'), 'error 1')
