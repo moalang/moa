@@ -7,7 +7,6 @@ const { parse } = require('./parser.js')
 const dump = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
 const string = o => typeof o === 'string' ? o : escape(o)
-const unescape = s => s.replace(/\\"/g, '"').replace(/\\\\/g, '\\').replace(/\\n/g, '\n').replace(/\\t/g, '\t')
 const escape = o =>
   o instanceof RegExp ? o.toString() :
   o instanceof Error ? `Error(${o.message})` :
@@ -35,6 +34,7 @@ const execute = (x, env) => {
     target instanceof List && id === 'slice' ? (...a) => target.slice(...a) :
     target instanceof List && id === 'map' ? (...a) => target.map(...a) :
     target instanceof List && id === 'join' ? (s) => target.join(s) :
+    target instanceof List && id === 'has' ? (s) => target.includes(s) :
     typeof target === 'object' && id in target ? target[id] :
     typeof target === 'string' && id === 'size' ? target.length :
     typeof target === 'string' && id === 'rsplit' ? r => list(...target.split(r)) :
@@ -130,6 +130,7 @@ const execute = (x, env) => {
     head.match(/^[+\-*\/%<>|&=!:]/) ? op2(head, tail[0], tail[1]) :
     tail.length > 0 ? lookup(head)(...tail.map(run)) :
     lookup(head)
+  const unescape = s => JSON.parse(s.replace(/\n/g, '\\n').replace(/\t/g, '\\t'))
   const ret = x instanceof List ? x :
     x instanceof Tuple ? x :
     Array.isArray(x) ? apply(x) :
@@ -137,8 +138,8 @@ const execute = (x, env) => {
     x === '_' ? true : // for pattern match and iif
     x === 'true' ? true :
     x === 'false' ? false :
-    x.startsWith('r"') ? new RegExp(x.slice(2, -1), "g") :
-    x.startsWith('"') ? unescape(x.slice(1, -1)) :
+    x.startsWith('r"') ? new RegExp(x.slice(2, -1), 'g') :
+    x.startsWith('"') ? unescape(x) :
     x.match(/^-?[0-9]/) ? parseFloat(x) :
     lookup(x)
   if (ret === undefined) {
@@ -178,12 +179,12 @@ if (require.main === module) {
 
   // string
   test('hi', '"hi"')
+  test('h"i', '"h\\"i"')
+  test('\\', '"\\\\"')
   test('\t', '"\\t"')
-  test('hi', '"""hi"""')
-  test('\t', '"""\\t"""')
-  test('h"i', '"""h"i"""')
-  test(/\t/g, 'r"\\t"')
-  test(/\t/g, 'r"""\\t"""')
+  test('\\t', '"\\\\t"')
+  test('\\\t', '"\\\\\\t"')
+  test(/[a-z]\t/g, 'r"[a-z]\\t"')
   test(2, '"hi".size')
   test(['', '1', '', '2', ''], '"12".rsplit(r"([0-9])")')
   test('h', '"hi"[0]')
@@ -191,6 +192,9 @@ if (require.main === module) {
   test(1, '"1".int')
   test(1.1, '"1.1".float')
   test(['a', 'b'], '"a b".split(" ")')
+  test('"\\t"', 'string("\\t")')
+  test('"\\\\t"', 'string("\\\\t")')
+  test('"\\\\\\t"', 'string("\\\\\\t")')
   '1 -1 0.1 true "s" [] 0,1'.split(' ').map(s => test(s, `string(${s})`))
 
   // lambda
@@ -220,9 +224,9 @@ if (require.main === module) {
   test({}, 'dict()')
   test({s:1}, 'dict("s" 1)')
   test({1:2}, 'dict(1 2)')
-  test({s:1}, '[s:1]')
-  test({1:2}, '[1:2]')
-  test(2, '[1:2][1]')
+  test({s:1}, '{"s":1}')
+  test({1:2}, '{1:2}')
+  test(2, '{1:2}[1]')
 
   // operators
   test(false, '!true')
@@ -260,7 +264,6 @@ if (require.main === module) {
 
   // class
   test({}, '{}')
-  test({a:1, b:"c"}, '{a=1 b="c"}')
   test('hi', 'class s:\n  a string\ns("hi").a')
   test(1, 'class s:\n  a string\n  b int\ns("hi" 1).b')
   test(true, 'class s:\n  a string\n  b int\ns("hi" 1) == s("hi" 1)')
@@ -271,7 +274,7 @@ if (require.main === module) {
   test(true, 'class s:\n  a string\n  b int\ns("hi" 9) < s("hi" 10)')
 
   // union / match
-  test(1, 'union u:\n  a\nmatch a:\n  .a: 1')
+  test(1, 'union u:\n  a\nmatch a:\n  _.a: 1')
   test(2, 'union u:\n  a n\nmatch a(2):\n  n.a: n')
   test(3, 'union u:\n  a:\n    b int\nmatch a(3):\n  o.a: o.b')
   test(9, 'union u:\n  a:\n    b int\n    c int\nmatch a(4 5):\n  o.a: o.b + o.c')

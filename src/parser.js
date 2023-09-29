@@ -30,21 +30,13 @@ const parse = source => {
   const trim = a => a.length === 0 ? [] :
     a[0].match(/^[ \r\n\t]/) ? trim(a.slice(1)) :
     a[a.length - 1].match(/^[ \r\n\t]/) ? trim(a.slice(0, -1)) : a
-  const regexp = /((?:!=)|[()\[\]{}!]|(?:-?[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+(?:#[^\n]*|[ \t\r\n]+)*|r?""".*"""|r?"(?:[^"]|\\")*(?<!\\)"|[A-Za-z0-9_]+|#[^\n]*)/
+  const regexp = /((?:!=)|[()\[\]{}!]|(?:-?[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+(?:#[^\n]*|[ \t\r\n]+)*|r?`.*`|r?"[^]*?(?<!\\)"|[A-Za-z0-9_]+|#[^\n]*)/
   const tokens = trim(source.split(regexp).filter(t => t.length > 0 && !t.startsWith('#')))
   const op2s = '. , * ** / // % + ++ - >> << ^ & | := += -= *= /= %= **= < <= > >= == != === !== <=> && || =>'.split(' ')
   const statement = () => {
-    const many = (a, f) => {
-      while (pos < tokens.length) {
-        const ret = f(tokens[pos])
-        if (typeof ret === 'string' || Array.isArray(ret) || ret === true) {
-          a.push(ret)
-        } else {
-          break
-        }
-      }
-      return a
-    }
+    const many = (a, f) => pos >= tokens.length ? a : (ret =>
+      typeof ret === 'string' || Array.isArray(ret) || ret === true ?
+      many((a.push(ret), a), f) : a)(f(tokens[pos]))
     const consume = () => ((tokens[pos].match(/^[ \t]+$/) && ++pos), tokens[pos++])
     const until = end => many([], t => t === end ? ++pos : unit())
     const call = (o, a) => a.length === 0 ? ['__call', o] : [o].concat(a)
@@ -52,34 +44,21 @@ const parse = source => {
     const indent = s => s === undefined ? 0 : s.match(/[\r\n]/) ? s.split(/[\r\n]/).slice(-1)[0].length : -1
     const key = o => typeof o === 'string' ? JSON.stringify(o) : o
     const pairs = a => [...Array(a.length / 3).keys()].flatMap(i => [key(a[i*3]), a[(i*3)+2]])
-    const container = a => a.length === 0 ? ['__call', 'list'] :
-      a.length === 1 && a[0] === ':' ? ['__call', 'dict'] :
-      a.length >= 3 && a[1] === ':' ? ['dict', ...pairs(a)] :
-      ['list', ...a]
-    const object = a => {
-      if (a.length == 0) {
-        return ['__call', 'class']
-      }
-      const pos = a.findIndex(s => Array.isArray(s) && s[0] === '=')
-      return pos === -1 ? ['class', ...a] :
-        ['class', ...a.slice(0, pos).flatMap(x => [x, x]), ...a.slice(pos).flatMap(x => [x[1], x[2]])]
+    const unit = () => {
+      const prefix = t =>
+        t === '!' ? [t, unit()] :
+        t === '[' ? call('list', until(']')) :
+        t === '{' ? call('dict', until('}').filter(t => t !== ':').map(t => t[0] === ':' ? t.slice(1) : t)) :
+        t === '(' ? until(')') :
+        t
+      const suffix = o =>
+        tokens[pos] === '(' ? ++pos && suffix(call(o, until(')'))) :
+        tokens[pos] === '[' ? ++pos && index(o, until(']')) :
+        tokens[pos] === '.' ? (++pos, suffix(['.', o, consume()])) :
+        tokens[pos] === '=' ? (++pos, ['=', o, unit()]) :
+        o
+      return suffix(prefix(consume()))
     }
-    const bottom = t =>
-      t === '.' && tokens[pos - 2].match(/^[ \t\n]+$/) ? [t, '_', consume()] : // for pattern match
-      t === '!' ? [t, unit()] :
-      t === '[' ? container(until(']')) :
-      t === '{' ? object(until('}')) :
-      t === '(' ? until(')') :
-      t.startsWith('"""') ? '"' + t.slice(3, -3).replace(/"/g, '\\"') + '"' :
-      t.startsWith('r"""') ? 'r"' + t.slice(4, -3).replace(/"/g, '\\"') + '"' :
-      t
-    const unit = () => _unit(bottom(consume()))
-    const _unit = o =>
-      tokens[pos] === '(' && !' \t:'.includes(tokens[pos - 1]) ? ++pos && _unit(call(o, until(')'))) :
-      tokens[pos] === '[' && !' \t:'.includes(tokens[pos - 1]) ? ++pos && index(o, until(']')) :
-      tokens[pos] === '.' ? (++pos, _unit(['.', o, consume()])) :
-      tokens[pos] === '=' ? (++pos, ['=', o, unit()]) :
-      o
     const block = a => [':', '=', '=>'].includes(a.slice(-1)[0]) && tokens[pos].match(/[\r\n]/) ? [...a, statement()] : a
     const line = () => block(many([], t => !t.match(/[\r\n]/) && unit()))
     const lines = n => many([], t => indent(t) === n ? (++pos, line()) : false)
@@ -108,33 +87,28 @@ if (require.main === module) {
   const stringify = a => Array.isArray(a) ? `(${a.map(stringify).join(' ')})` : string(a)
   const assert = (expect, fact, src) => expect === fact ? put('.') : fail(`Expected '${expect}' but got '${fact}' source='${src}'`)
   const test = (expect, src) => assert(expect, stringify(parse(src)), src)
+  //test('(__call (. (__index a b) c))', 'a[b].c()')
 
   // primitives
   test('1', '1')
   test('1.0', '1.0')
   test('id', 'id')
   test('"hi"', '"hi"')
-  test('"\\""', '"\\""')
-  test('"\\""', '"""""""')
+  test('"h\\"i"', '"h\\"i"')
+  test('"\\\\""', '"\\\\""')
   test('r"\\t"', 'r"\\t"')
-  test('r"\\t"', 'r"""\\t"""')
   test('(__call list)', '[]')
   test('(list 1 2)', '[1 2]')
-  test('(__call dict)', '[:]')
-  test('(dict "a" 1)', '[a:1]')
-  test('(dict "a" (+ 1 2))', '[a:(1+2)]')
-  test('(dict (+ 1 2) (+ 3 4))', '[(1+2):(3+4)]')
-  test('(dict "a" 1 "b" (+ 1 2) c (+ 3 4))', '[a:1 b:(1+2) (c):(3+4)]')
-  test('(__call class)', '{}')
-  test('(class a 1)', '{a=1}')
-  test('(class a a b b c (+ 1 2) d 3)', '{a b c=(1+2) d=3}')
+  test('(__call dict)', '{}')
+  test('(dict "a" 1)', '{"a":1}')
+  test('(dict "a" (+ 1 2))', '{"a":(1+2)}')
+  test('(dict (+ 1 2) (+ 3 4))', '{(1+2):(3+4)}')
+  test('(dict "a" 1 "b" (+ 1 2) c (+ 3 4))', '{"a":1 "b":(1+2) (c):(3+4)}')
   test('(=> a a)', 'a => a')
   test('(=> (, a b) a)', 'a,b => a')
   test('(=> p (+ 1 2))', 'p => 1 + 2')
   test('(=> p 1)', 'p =>\n  1')
   test('(=> p (__pack 1 2))', 'p =>\n  1\n  2')
-  test('(. _ int)', '.int')
-  test('(f (. _ int))', 'f .int')
 
   // definition
   test('(= a 1)', 'a = 1')
@@ -215,6 +189,12 @@ if (require.main === module) {
   // combinations
   test('(! (a b))', '!a(b)')
   test('(+ (a b) c)', 'a(b) + c')
+  test('(. (__index a b) c)', 'a[b].c')
+//  test('(__call (. (__index a b) c))', 'a[b].c()')
+//  test('((. (__index a b) c) d)', 'a[b].c(d)')
+// bug fix for a[x].f()
+// bug fix for () => ...
+
 
   // edge case
   test('1', '1\n')

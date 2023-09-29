@@ -13,6 +13,5 @@ const log = o => (console.dir(o, {depth: null}), o)
 ${js}
 main({argv: process.argv.slice(2)})
 `
-fs.writeFileSync('a.out', code, 'utf8')
-fs.chmodSync('a.out', '0755')
-puts('ok')
+fs.writeFileSync('/tmp/a.out', code, 'utf8')
+fs.chmodSync('/tmp/a.out', '0755')

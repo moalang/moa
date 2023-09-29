@@ -74,6 +74,13 @@ union ast:
   acall:
     head ast
     argv list[ast]
+  aop1:
+    op string
+    body ast
+  aop2:
+    op string
+    lhs ast
+    rhs ast
   aundef string
 
 parse source =
@@ -81,55 +88,50 @@ parse source =
   tokens =
     trim a = iif:
       a.size == 0: []
-      a[0].match("^[ \r\n\t]"): trim a.slice 1
-      a[-1].match("^[ \r\n\t]"): trim a.slice 0 -1
+      a[0].match(r"^[ \r\n\t]"): trim a.slice 1
+      a[-1].match(r"^[ \r\n\t]"): trim a.slice 0 -1
       _: a
-    regexp = r"""((?:!=)|[()\[\]{}!]|(?:-?[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+(?:#[^\n]*|[ \t\r\n]+)*|"(?:[^"]|\\")*(?<!\\)"|[A-Za-z0-9_]+|#[^\n]*)"""
+    regexp = r"((?:!=)|[()\[\]{}!]|(?:-?[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+(?:#[^\n]*|[ \t\r\n]+)*|\"[^]*?(?<!\\)\"|[A-Za-z0-9_]+|#[^\n]*)"
     source.rsplit(regexp).keep(t => t.size > 0 && !t.starts("#"))
   pos = 0
   top = () =>
     until end =
-      f a = match bottom():
-        x.aundef: iif x == end a f(a ++ x)
-        x: f a ++ x
+      f a =
+        x = exp()
+        iif x == aundef(end) a f(a ++ x)
       f []
-    bottom = () =>
-      g = () =>
-        pos += 1
-        bottom()
-      f = () =>
-        iif (tokens[pos]).match("^[ \t]+$") g() consume()
-      iif pos < tokens.size f() p("")
-    consume = () =>
-      t = tokens[pos]
+    unit = () =>
+      unescape s = s.replace("\\t" "\t").replace("\\n" "\n")
+      t = iif pos < tokens.size tokens[pos] ""
       pos += 1
       iif:
-        t == "true": abool true
-        t == "false": abool false
-        t == "[": acall aref("list") until("]")
-        t.match "^[0-9.]+\.[0-9]+$": afloat t.float
-        t.match "^[0-9]+": aint t.int
-        t.starts "\"\"\"": astring t.slice(3 -3).replace("\\t", "\t").replace("\\n", "\n").replace("\\\"", "\"")
-        t.starts "\"": astring t.slice(1 -1).replace("\\t", "\t").replace("\\n", "\n").replace("\\\"", "\"")
-        t.starts "[": alist [] # TODO
-        t.starts "[": adict [] # TODO
-        t.match "^[a-zA-Z_]": aref t
-        _: aundef t
-    #exp = () =>
-      #adefine:
-      #  id string
-      #  desc ast
-      #alambda:
-      #  args list[string]
-      #  body ast
-      #  type type
-      #aref:
-      #  id string
-      #  type type
-      #acall:
-      #  head ast
-      #  argv list[ast]
-    bottom()
+        t == ""                     : aundef t
+        t.match(r"^[ \t]+$")        : unit()
+        t == "true"                 : abool true
+        t == "false"                : abool false
+        t == "["                    : acall aref("list") until("]")
+        t == "{"                    : acall aref("dict") until("}").keep(x => x != aundef(":"))
+        t.starts "\""               : astring unescape(t.slice(1 -1))
+        t.match r"^[0-9.]+\.[0-9]+$": afloat t.float
+        t.match r"^[0-9]+"          : aint t.int
+        t.match r"^[a-zA-Z_]"       : aref t
+        _                           : aundef t
+    exp = () =>
+      lhs = unit()
+      next = iif:
+        pos >= tokens.size: ""
+        (tokens[pos]).match(r"^[ \t]"): tokens[pos + 1]
+        _: tokens[pos]
+      op2s = ". , * ** / // % + ++ - >> << ^ & | := += -= *= /= %= **= < <= > >= == != === !== <=> && || =>".split(" ")
+      iif:
+        lhs == aundef("!"):
+          aop1 "!" unit()
+        op2s.has(next):
+          unit() # move position to after binary operator
+          aop2 next lhs exp()
+        _:
+          lhs
+    exp()
   top()
 
 test t "parser":
@@ -137,42 +139,50 @@ test t "parser":
     call x = "(" + ([x.head] ++ x.argv).map(simplify).join(" ") ++ ")"
     match a:
       x.adefine   : x.id ++ " = " ++ simplify(x.desc)
-      x.ablool    : string x
+      x.abool     : string x
       x.aint      : string x
       x.afloat    : string x
-      x.astring   : x
+      x.astring   : string x
       x.astatement: x.map(simplify).join("\n")
       x.alambda   : x.args.join(",") ++ " => " ++ simplify(x.body)
       x.aref      : x.id
       x.acall     : call x
-      x.aundef    : x
-      x           : log(a)
+      x.aop1      : "(" ++ x.op ++ " " ++ simplify(x.body) ++ ")"
+      x.aop2      : "(" ++ x.op ++ " " ++ simplify(x.lhs) ++ " " ++ simplify(x.rhs) + ")"
+      x.aundef    : "undefined(" ++ x ++ ")"
+      x           : a
+
   t1 expectation ast = t.eq expectation simplify(ast)
   t1 "a = 1" adefine("a" aint(1))
   t1 "1" aint(1)
   t1 "1.1" afloat(1.1)
-  t1 "hi" astring("hi")
+  t1 "\"hi\"" astring("hi")
   t1 "1\n2" astatement([aint(1) aint(2)])
   t1 "a,b => 1" alambda(["a" "b"] aint(1))
   t1 "a" aref("a")
+  t1 "true" abool(true)
+  t1 "(! true)" aop1("!" true)
+  t1 "(+ 1 2)" aop2("+" aint(1) aint(2))
 
   test expectation source = t.eq expectation simplify(parse(source))
+  test "(+ 1 2)" "1 + 2"
 
   # primitives
   test "1" "1"
   test "1.1" "1.1"
   test "id" "id"
-  test "hi" "\"hi\""
-  test "\t" "\"\\t\""
-  test "hi" """"hi"""" # "
-  test "\t" """"\\t"""" # "
+  test "\"hi\"" "\"hi\""
+  test "\"\\t\"" "\"\\t\""
+  test "true" "true"
+
+  # container
   test "(list)" "[]"
   test "(list 1 2)" "[1 2]"
-
-# bug fix for a[x].f()
-# bug fix for () => ...
-
-##  test "(__call dict)" "[:]"
+  test "(dict)" "{}"
+  test "(dict \"a\" 1)" "{\"a\":1}"
+##  test "(dict \"a\" (+ 1 2))" "{\"a\":(1+2)}"
+##  test "(dict (+ 1 2) (+ 3 4))" "{(1+2):(3+4)}"
+##  test "(dict \"a\" 1 \"b\" (+ 1 2) c (+ 3 4))" "{\"a\":1 \"b\":(1+2) (c):(3+4)}"
 ##  test "(dict \"a\" 1)" "[a:1]"
 ##  test "(dict \"a\" (+ 1 2))" "[a:(1+2)]"
 ##  test "(dict (+ 1 2) (+ 3 4))" "[(1+2):(3+4)]"
@@ -197,13 +207,13 @@ test t "parser":
 ##  test "(. (__call list) length)" "[].length"
 ##  test "(=> p (+ (. p x) (. p y)))" "p => p.x + p.y"
 ##
-##  # single operator
-##  test "(! true)" "!true"
-##
-##  # binary operators
-##  test "(+ 1 2)" "1 + 2"
-##  test "(+ (+ 1 2) 3)" "1 + 2 + 3"
-##  test "(!= 1 1)" "1 != 1"
+  # single operator
+  test "(! true)" "!true"
+
+  # binary operators
+  test "(+ 1 2)" "1 + 2"
+  test "(+ 1 (+ 2 3))" "1 + 2 + 3"
+  test "(!= 1 1)" "1 != 1"
 ##  test "(= a 1)" "a = 1"
 ##  test "(+= a 1)" "a += 1"
 ##  test "(= a (+ 1 2))" "a = 1 + 2"
