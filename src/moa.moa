@@ -161,13 +161,25 @@ parse source =
       astatement lines
     lines = until "" () =>
       head = exp()
-      f a =
+      line a =
         guard pos >= tokens.size: a
+        guard tokens[pos] == ":":
+          pos += 1
+          guard !tokens[pos].has("\n"):
+            a ++ [call(line([]))]
+          indent = tokens[pos].split("\n")[-1].size
+          pos += 1
+          block nodes =
+            guard pos >= tokens.size: nodes
+            t = tokens[pos - 1]
+            guard t.has("\n") && indent == t.split("\n")[-1].size: nodes ++ line([])
+            nodes
+          a ++ [astatement(block([call(line([]))]))]
         guard tokens[pos].has("\n"):
           pos += 1
           a
-        f a ++ [exp()]
-      argv = f []
+        line a ++ [exp()]
+      argv = line []
       eq_index = argv.index aundef("=")
       guard argv.size == 0: head
       guard head === aid && eq_index == 0: adefine head.id call(argv.slice(1))
@@ -281,24 +293,25 @@ test t "parser":
   test "(__pack a (b c))" "a\nb c"
 
   # block
-  test "(: a b)" "a: b"
-##  test "(: (a b) c)" "a b: c"
-##  test "(: (a b) (c d))" "a b: c d"
-##
-##  # indent
-##  test "(: a b)" "a:\n  b"
-##  test "(: a (: b c))" "a:\n  b:\n    c"
-##  test "(: a (: b (__pack c d)))" "a:\n  b:\n    c\n    d"
-##  test "(: a (__pack (: b c) d))" "a:\n  b:\n    c\n  d"
-##  test "(__pack (: a (: b c)) d)" "a:\n  b:\n    c\nd"
-##  test "(__pack (: a (__pack b (: c d) e)) f)" "a:\n  b\n  c:\n    d\n  e\nf"
-##
-##  # combinations
-##  test "(! (a b))" "!a(b)"
-##  test "(+ (a b) c)" "a(b) + c"
-##
-##  # edge case
-##  test "1" "1\n"
+  test "(a b)" "a: b"
+  test "(a b c)" "a b: c"
+  test "(a b (c d))" "a b: c d"
+
+  # indent
+  test "(a (__pack b))"                           "a:\n  b"
+  test "(__pack (a (__pack b)) c)"                "a:\n  b\nc"
+  test "(a (__pack b c))"                         "a:\n  b\n  c"
+  test "(a (__pack (b (__pack c))))"              "a:\n  b:\n    c"
+  test "(a (__pack (b (__pack c d))))"            "a:\n  b:\n    c\n    d"
+  test "(a (__pack (b (__pack c)) d))"            "a:\n  b:\n    c\n  d"
+  test "(__pack (a (__pack (b (__pack c)))) d)"   "a:\n  b:\n    c\nd"
+
+  # combinations
+  test "(! (a b))" "!a(b)"
+  test "(+ (a b) c)" "a(b) + c"
+
+  # edge case
+  test "1" "1\n"
 ##  test "()" "n"
 ##  test "()" "\n"
   log "ok"
