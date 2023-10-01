@@ -97,6 +97,9 @@ parse source =
       guard tokens[p].match(r"^[ \t]"): glance p + 1
       tokens[p]
     call a =
+      colon_index = a.index aundef(":")
+      guard colon_index >= 1:
+        acall aid(":") a.slice(0 colon_index) ++ a.slice(colon_index + 1)
       guard a.size == 1: a[0]
       acall a[0] a.slice(1)
     until end f =
@@ -153,24 +156,24 @@ parse source =
         guard head != "(" && rhs === aop2 && priority(lop) < priority(rhs.op): aop2 rhs.op aop2(lop lhs rhs.lhs) rhs.rhs # "1 * 2 + 3" -> (* 1 (+ 2 3)) -> (+ (* 1 2) 3)
         aop2 lop lhs rhs
       lhs
-    statement = () =>
-      lines = until "" () =>
-        head = exp()
-        f a =
-          guard pos >= tokens.size: a
-          guard tokens[pos].has("\n"):
-            pos += 1
-            a
-          f a ++ [exp()]
-        argv = f []
-        eq_index = argv.index aundef("=")
-        guard argv.size == 0: head
-        guard head === aid && eq_index == 0: adefine head.id call(argv.slice(1))
-        guard head === aid && eq_index >= 1: adefine head.id alambda(argv.slice(0 eq_index) call(argv.slice(eq_index + 1)))
-        acall head argv
+    statement lines =
       guard lines.size == 1: lines[0]
       astatement lines
-    statement()
+    lines = until "" () =>
+      head = exp()
+      f a =
+        guard pos >= tokens.size: a
+        guard tokens[pos].has("\n"):
+          pos += 1
+          a
+        f a ++ [exp()]
+      argv = f []
+      eq_index = argv.index aundef("=")
+      guard argv.size == 0: head
+      guard head === aid && eq_index == 0: adefine head.id call(argv.slice(1))
+      guard head === aid && eq_index >= 1: adefine head.id alambda(argv.slice(0 eq_index) call(argv.slice(eq_index + 1)))
+      call [head] ++ argv
+    statement lines
   top()
 
 test t "parser":
@@ -278,7 +281,7 @@ test t "parser":
   test "(__pack a (b c))" "a\nb c"
 
   # block
-##  test "(: a b)" "a: b"
+  test "(: a b)" "a: b"
 ##  test "(: (a b) c)" "a b: c"
 ##  test "(: (a b) (c d))" "a b: c d"
 ##
