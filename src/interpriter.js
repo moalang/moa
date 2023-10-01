@@ -102,7 +102,7 @@ const execute = (x, env) => {
   const capture = (cond, e) => Array.isArray(cond) && cond[0] === '&&' ? capture(cond[1], e) && capture(cond[2], e) :
     run_with(cond, e) && ((Array.isArray(cond) && cond[0] === '===' && cond[1].match(/^[A-Za-z_]/) && (e[cond[1]]=lookup(cond[1]).__val, true)) || true)
   const guard = (cond, body) => (e => capture(cond, e) ? new Return(run_with(body, e)) : true)({})
-  const eq = (a, b) => ((a, b) => a === b ? true : fail(`eq ${a} ${b}`))(escape(a), escape(b))
+  const eq = (a, b, c) => ((a, b) => a === b ? true : fail(`${a} ne ${b}` + (c ? ` # ${c}` : '')))(escape(a), escape(b))
   const index = (a, i) => i < 0 ? index(a, a.length + i) : i >= a.length ? fail(`${i} exceeded`) : a[i]
   const define = ([head, body]) => Array.isArray(head) ?
     declare(head[0], lambda(head.slice(1), body))  :
@@ -310,8 +310,8 @@ if (require.main === module) {
 
   // test
   test(true, 'test t: t.eq 1 1')
-  test(Error('eq 1 2'), 'test t: t.eq 1 2')
-  test(Error('eq "a" "b"'), 'test t: t.eq "a" "b"')
+  test(Error('1 ne 2'), 'test t: t.eq 1 2')
+  test(Error('"a" ne "b"'), 'test t: t.eq "a" "b"')
 
   // edge case
   test(1, 'a = 0\nf = () =>\n  g = () => a += 1\n  g()\nf()\na')
