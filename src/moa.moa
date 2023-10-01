@@ -99,34 +99,51 @@ parse source =
     call a =
       guard a.size == 1: a[0]
       acall a[0] a.slice(1)
-    until end =
-      f a =
+    until end f =
+      g a =
         guard pos >= tokens.size: a
-        guard tokens[pos + tokens[pos].match(r"^[ \t]").int] == end:
+        guard glance(pos) == end:
           unit()
           a
-        f a ++ exp()
-      f []
+        g a ++ f()
+      g []
     unit = () =>
-      guard pos >= tokens.size: aundef ""
-      t = tokens[pos]
-      pos += 1
-      guard t.match(r"^[ \t]+$")         : unit()
-      guard t == "true"                  : abool true
-      guard t == "false"                 : abool false
-      guard t == "("                     : call until(")")
-      guard t == "["                     : acall aid("list") until("]")
-      guard t == "{"                     : acall aid("dict") until("}").keep(x => x != aundef(":"))
-      guard t.starts("\"")               : astring t.slice(1 -1).replace("\\t" "\t").replace("\\n" "\n")
-      guard t.match(r"^[0-9.]+\.[0-9]+$"): afloat t.float
-      guard t.match(r"^[0-9]+")          : aint t.int
-      guard t.match(r"^[a-zA-Z_]")       : aid t
-      aundef t
+      bottom = () =>
+        guard pos >= tokens.size: aundef ""
+        t = tokens[pos]
+        pos += 1
+        guard t.match(r"^[ \t]+$")         : unit()
+        guard t == "true"                  : abool true
+        guard t == "false"                 : abool false
+        guard t == "("                     : call until(")" exp)
+        guard t == "["                     : acall aid("list") until("]" exp)
+        guard t == "{"                     : acall aid("dict") until("}" unit).keep(x => x != aundef(":"))
+        guard t.starts("\"")               : astring t.slice(1 -1).replace("\\t" "\t").replace("\\n" "\n")
+        guard t.match(r"^[0-9.]+\.[0-9]+$"): afloat t.float
+        guard t.match(r"^[0-9]+")          : aint t.int
+        guard t.match(r"^[a-zA-Z_]")       : aid t
+        aundef t
+      suffix x =
+        guard pos >= tokens.size: x
+        guard x === aundef: aundef x
+        guard tokens[pos] == ".":
+          pos += 1
+          field = tokens[pos]
+          pos += 1
+          suffix acall("." [x field])
+        guard tokens[pos] == "(":
+          pos += 1
+          suffix acall(x until(")" exp))
+        guard tokens[pos] == "[":
+          pos += 1
+          suffix acall("__index" [x] ++ until("]" exp))
+        x
+      suffix bottom()
     exp = () =>
       lhs = unit()
       guard pos >= tokens.size: lhs
       lop = tokens[pos + tokens[pos].match(r"^[ \t]").int]
-      op2s = ". , * ** / // % + ++ - >> << ^ & | := += -= *= /= %= **= < <= > >= == != === !== <=> && || =>".split " "
+      op2s = ", * ** / // % + ++ - >> << ^ & | := += -= *= /= %= **= < <= > >= == != === !== <=> && || =>".split " "
       priority op = op2s.index op
       guard lhs == aundef("!"): aop1 "!" unit()
       guard op2s.has(lop):
@@ -136,26 +153,21 @@ parse source =
         guard head != "(" && rhs === aop2 && priority(lop) < priority(rhs.op): aop2 rhs.op aop2(lop lhs rhs.lhs) rhs.rhs # "1 * 2 + 3" -> (* 1 (+ 2 3)) -> (+ (* 1 2) 3)
         aop2 lop lhs rhs
       lhs
-    line = () =>
-      head = exp()
-      f a =
-        guard pos >= tokens.size: a
-        guard tokens[pos].has("\n"):
-          pos += 1
-          a
-        f a ++ [exp()]
-      argv = f []
-      index = argv.index aundef("=")
-      guard argv.size == 0: head
-      guard head === aid && index == 0: adefine head.id call(argv.slice(1))
-      guard head === aid && index >= 1: adefine head.id alambda(argv.slice(0 index) call(argv.slice(index + 1)))
-      acall head argv
     statement = () =>
-      f a =
-        l = line()
-        guard l == aundef(""): a
-        f a ++ [l]
-      lines = f []
+      lines = until "" () =>
+        head = exp()
+        f a =
+          guard pos >= tokens.size: a
+          guard tokens[pos].has("\n"):
+            pos += 1
+            a
+          f a ++ [exp()]
+        argv = f []
+        eq_index = argv.index aundef("=")
+        guard argv.size == 0: head
+        guard head === aid && eq_index == 0: adefine head.id call(argv.slice(1))
+        guard head === aid && eq_index >= 1: adefine head.id alambda(argv.slice(0 eq_index) call(argv.slice(eq_index + 1)))
+        acall head argv
       guard lines.size == 1: lines[0]
       astatement lines
     statement()
@@ -163,17 +175,16 @@ parse source =
 
 test t "parser":
   stringify a =
-    call x = "(" + ([x.head] ++ x.argv).map(stringify).join(" ") ++ ")"
     match a:
       x.adefine   : x.id ++ " = " ++ stringify(x.desc)
       x.abool     : string x
       x.aint      : string x
       x.afloat    : string x
       x.astring   : string x
-      x.astatement: x.map(stringify).join("\n")
+      x.astatement: "(__pack " ++ x.map(stringify).join(" ") ++ ")"
       x.alambda   : x.args.map(stringify).join(",") ++ " => " ++ stringify(x.body)
       x.aid       : x.id
-      x.acall     : call x
+      x.acall     : "(" + ([x.head] ++ x.argv).map(stringify).join(" ") ++ ")"
       x.aop1      : "(" ++ x.op ++ " " ++ stringify(x.body) ++ ")"
       x.aop2      : "(" ++ x.op ++ " " ++ stringify(x.lhs) ++ " " ++ stringify(x.rhs) + ")"
       x.aundef    : "undefined(" ++ x ++ ")"
@@ -184,7 +195,7 @@ test t "parser":
   t1 "1" aint(1)
   t1 "1.1" afloat(1.1)
   t1 "\"hi\"" astring("hi")
-  t1 "1\n2" astatement([aint(1) aint(2)])
+  t1 "(__pack 1 2)" astatement([aint(1) aint(2)])
   t1 "a,b => 1" alambda(["a" "b"] aint(1))
   t1 "a" aid("a")
   t1 "true" abool(true)
@@ -246,27 +257,27 @@ test t "parser":
   test "(* (+ 1 2) 3)" "(1 + 2) * 3"
 
   # function call
-##  test "(f())" "f()"
-##  test "(f 1)" "f(1)"
-##  test "(f (+ 1 2))" "f(1 + 2)"
-##
-##  # method call
-##  test "(. f m)" "f.m"
-##  test "(. f 1)" "f.1"
-##  test "(__call (. f m))" "f.m()"
-##  test "((. f m) a)" "f.m(a)"
-##  test "((. f m) a b)" "f.m(a b)"
-##
-##  # index access
-##  test "(__index x 1)" "x[1]"
-##  test "(__index x 1 2)" "x[1 2]"
-##
-##  # steps
-##  test "(__pack a b)" "a\nb"
-##  test "(__pack (a b) c)" "a b\nc"
-##  test "(__pack a (b c))" "a\nb c"
-##
-##  # block
+  test "(f)" "f()"
+  test "(f 1)" "f(1)"
+  test "(f (+ 1 2))" "f(1 + 2)"
+
+  # method call
+  test "(. f m)" "f.m"
+  test "(. f 1)" "f.1"
+  test "((. f m))" "f.m()"
+  test "((. f m) a)" "f.m(a)"
+  test "((. f m) a b)" "f.m(a b)"
+
+  # index access
+  test "(__index x 1)" "x[1]"
+  test "(__index x 1 2)" "x[1 2]"
+
+  # steps
+  test "(__pack a b)" "a\nb"
+  test "(__pack (a b) c)" "a b\nc"
+  test "(__pack a (b c))" "a\nb c"
+
+  # block
 ##  test "(: a b)" "a: b"
 ##  test "(: (a b) c)" "a b: c"
 ##  test "(: (a b) (c d))" "a b: c d"
