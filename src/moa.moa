@@ -88,13 +88,13 @@ parse source =
     acall a[0] a.slice(1)
   parse_unit = () =>
     until end =
-      h a =
+      loop a =
         guard pos >= tokens.size: a
-        guard look_ahead(pos) == end:
+        guard look_ahead() == end:
           pos += 1
           a
-        h a ++ [parse_exp()]
-      h []
+        loop a ++ [parse_exp()]
+      loop []
     consume = () =>
       guard pos >= tokens.size: aundef ""
       t = tokens[pos]
@@ -143,7 +143,7 @@ parse source =
     lhs
   parse_line = () =>
     head = parse_exp()
-    f a =
+    loop a =
       guard pos >= tokens.size || tokens[pos].has("\n"): to_id_or_call [head] ++ a
       guard head === aid && look_ahead() == "=":
         pos += 1
@@ -153,8 +153,8 @@ parse source =
         body = parse_body()
         guard a.size == 0: adefine head.id body
         adefine head.id alambda(a body)
-      f a ++ [parse_exp()]
-    f []
+      loop a ++ [parse_exp()]
+    loop []
   parse_statement = () =>
     read_block indent lines =
       t = look_ahead()
@@ -169,21 +169,20 @@ parse source =
   parse_statement()
 
 test t "parser":
-  stringify a =
-    match a:
-      x.adefine   : x.id ++ " = " ++ stringify(x.body)
-      x.abool     : string x
-      x.aint      : string x
-      x.afloat    : string x
-      x.astring   : string x
-      x.astatement: "(" ++ x.map(stringify).join("; ") ++ ")"
-      x.alambda   : x.args.map(stringify).join(",") ++ " => " ++ stringify(x.body)
-      x.aid       : x.id
-      x.acall     : "(" + ([x.head] ++ x.argv).map(stringify).join(" ") ++ ")"
-      x.aop1      : "(" ++ x.op ++ " " ++ stringify(x.body) ++ ")"
-      x.aop2      : "(" ++ x.op ++ " " ++ stringify(x.lhs) ++ " " ++ stringify(x.rhs) + ")"
-      x.aundef    : "undefined(" ++ x ++ ")"
-      x           : a
+  stringify x = match x:
+    x.adefine   : x.id ++ " = " ++ stringify(x.body)
+    x.abool     : string x
+    x.aint      : string x
+    x.afloat    : string x
+    x.astring   : string x
+    x.astatement: "(" ++ x.map(stringify).join("; ") ++ ")"
+    x.alambda   : x.args.map(stringify).join(",") ++ " => " ++ stringify(x.body)
+    x.aid       : x.id
+    x.acall     : "(" + ([x.head] ++ x.argv).map(stringify).join(" ") ++ ")"
+    x.aop1      : "(" ++ x.op ++ " " ++ stringify(x.body) ++ ")"
+    x.aop2      : "(" ++ x.op ++ " " ++ stringify(x.lhs) ++ " " ++ stringify(x.rhs) + ")"
+    x.aundef    : "undefined(" ++ x ++ ")"
+    x           : x
   test_stringify expectation ast = t.eq expectation stringify(ast) ast
   test_stringify "a = 1"    adefine("a" aint(1))
   test_stringify "1"        aint(1)
