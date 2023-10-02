@@ -33,18 +33,20 @@ repl io = io.puts "repl"
 
 compile_to_js source = "const main = io => log(io)"
 
-class type:
-  id string
-  params list[type]
+union type:
+  tundef
+  tname string
+  tref ref[type]
+  tlambda list[type]
 
 class token:
-  fragment string
+  text string
   indent int
   lineno int
   column int
 
 union input:
-  ivalue token
+  itoken token
   icall list[input]
   istatement list[input]
 
@@ -75,7 +77,6 @@ union ast:
     lhs ast
     rhs ast
     type type
-  aundef string
 
 parse source =
   tokens =
@@ -83,71 +84,71 @@ parse source =
     indent = 0
     lineno = 1
     column = 1
-    source.rsplit(regexp).fmap fragment =>
-      guard fragment == "": []
-      guard fragment.has("\n"):
-        indent := fragment.split("\n")[-1].size
-        lineno += fragment.split("\n").size - 1
+    source.rsplit(regexp).fmap text =>
+      guard text == "": []
+      guard text.has("\n"):
+        indent := text.split("\n")[-1].size
+        lineno += text.split("\n").size - 1
         column := indent
         []
-      guard fragment.match(r"^[ \t\n#]"): []
-      t = token fragment indent lineno column
-      column += fragment.size
+      guard text.match(r"^[ \t#]"): []
+      t = token text indent lineno column
+      column += text.size
       t
   guard tokens.size == 0: istatement []
   pos = 0
-  eq s = pos < tokens.size && f tokens[pos].fragment == s
+  new_itoken s = itoken token(s 0 0 0)
   parse_unit = () =>
     until end =
       loop a =
         guard pos >= tokens.size: a
-        guard tokens[pos].fragment == end:
+        guard tokens[pos].text == end:
           pos += 1
           a
         loop a ++ [parse_exp()]
       loop []
     consume = () =>
-      guard pos >= tokens.size: aundef ""
+      guard pos >= tokens.size: fail "end of token"
       t = tokens[pos]
       pos += 1
-      guard t.fragment == "(": icall until(")")
-      guard t.fragment == "[": icall [ivalue(token("list" 0 0 0))] ++ until("]")
-      guard t.fragment == ":": parse_block()
-      ivalue t
+      guard t.text == "(": icall until(")")
+      guard t.text == "[": icall [new_itoken("list")] ++ until("]")
+      guard t.text == ":": parse_block()
+      itoken t
     suffix x =
       guard pos >= tokens.size: x
       t = tokens[pos]
-      guard t.fragment == ".":
+      guard t.text == ".":
         pos += 1
         field = tokens[pos]
         pos += 1
-        suffix icall([ivalue(t) x ivalue(field)])
-      guard t.fragment == "(":
+        suffix icall([itoken(t) x itoken(field)])
+      guard t.text == "(":
         pos += 1
         argv = until(")")
-        guard argv.size == 0: suffix icall([ivalue(t) x])
+        guard argv.size == 0: suffix icall([itoken(t) x])
         suffix icall([x] ++ argv)
-      guard t.fragment == "[":
+      guard t.text == "[":
         pos += 1
-        suffix icall([ivalue(token("__index" 0 0 0)) x] ++ until("]"))
+        suffix icall([new_itoken("__index") x] ++ until("]"))
       x
     suffix consume()
   parse_exp = () =>
     lhs = parse_unit()
     guard pos >= tokens.size: lhs
-    guard lhs == ivalue("!"): icall [lhs parse_unit()]
+    guard lhs == itoken("!"): icall [lhs parse_unit()]
     lop = tokens[pos]
     op2s = ", * ** / // % + ++ - >> << ^ & | := += -= *= /= %= **= < <= > >= == != === !== <=> && || =>".split " "
-    guard op2s.has(lop.fragment):
+    guard op2s.has(lop.text):
       pos += 1
-      is_group = tokens[pos].fragment == "("
+      is_group = tokens[pos].text == "("
       rhs = parse_exp()
       guard !is_group && rhs === icall:
         rop = rhs[0]
-        guard rop === ivalue && op2s.index(lop.fragment) < op2s.index(rop.fragment):
-          icall [rhs[0] icall([ivalue(lop) lhs rhs[1]]) rhs[2]] # "1 * 2 + 3" -> (* 1 (+ 2 3)) -> (+ (* 1 2) 3)
-        icall [ivalue(lop) lhs icall(rhs)]
-      icall [ivalue(lop) lhs rhs]
+        guard rop === itoken && op2s.index(lop.text) < op2s.index(rop.text):
+          icall [rhs[0] icall([itoken(lop) lhs rhs[1]]) rhs[2]] # "1 * 2 + 3" -> (* 1 (+ 2 3)) -> (+ (* 1 2) 3)
+        icall [itoken(lop) lhs icall(rhs)]
+      icall [itoken(lop) lhs rhs]
     lhs
   parse_block = () =>
     guard pos >= tokens.size: fail "empty block"
@@ -155,15 +156,14 @@ parse source =
     parse_line()
   parse_line = () =>
     lineno_ = tokens[pos].lineno
-    head = parse_exp()
     loop a =
-      guard pos >= tokens.size || tokens[pos].lineno != lineno_: icall [head] ++ a
-      guard tokens[pos].fragment == "=":
-        define_token = tokens[pos]
+      guard pos >= tokens.size || tokens[pos].lineno != lineno_: icall a
+      guard tokens[pos].text == "=":
+        define_itoken = itoken tokens[pos]
         pos += 1
-        guard a.size == 0: icall [ivalue(define_token) head parse_block()]
-        lambda = icall [ivalue(token("=>" 0 0 0)) icall(a) parse_block()]
-        icall [ivalue(define_token) head lambda]
+        guard a.size == 1: icall [define_itoken a[0] parse_block()]
+        lambda = icall [new_itoken("=>") icall(a.slice(1)) parse_block()]
+        icall [define_itoken a[0] lambda]
       loop a ++ [parse_exp()]
     loop []
   parse_statement = () =>
@@ -176,15 +176,14 @@ parse source =
 
 test t "parser":
   stringify x =
+    join a glue =
+      guard a.size == 1: stringify a[0]
+      "(" ++ a.map(stringify).join(glue) ++ ")"
     match x:
-      x.ivalue    : x.fragment
-      x.icall     :
-        guard x.size == 1: stringify x[0]
-        "(" ++ x.map(stringify).join(" ") ++ ")"
-      x.istatement:
-        guard x.size == 1: stringify x[0]
-        "(" ++ x.map(stringify).join("; ") ++ ")"
-  i1 = ivalue token("1" 0 0 0)
+      x.itoken    : x.text
+      x.icall     : join x " "
+      x.istatement: join x "; "
+  i1 = itoken token("1" 0 0 0)
   test_stringify expectation input = t.eq expectation stringify(input)
   test_stringify "1"      i1
   test_stringify "(1 1)"  icall([i1 i1])
