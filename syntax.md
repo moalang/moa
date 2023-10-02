@@ -3,19 +3,18 @@ top: line*
 line: exp+ block?
 block: ":" (("\n  " line)+ | exp)
 exp: op1? unit (op2 exp)?
-unit: bottom (prop | call | list | object)*
+unit: bottom (prop | call | list)*
 prop: "." id
 call: "(" exp* ")"                           # f(a b=c)
 list: "[" exp* "]"                           # a[1]
 dict: "[" ":" | (unit ":" unit)+ "]"         # a["a":b c:1]
-object: "{" (id ("." unit)? ("=" exp)?)* "}" # a{a b=1}
 bottom:
 | "(" exp ")"                     # 1 * (2 + 3)  : priority
 | " ." id                         # .int         : type itself
 | [0-9]+ ("." [0-9]+)?            # 1.2          : number
 | '"' [^"]* '"'                   # "s"          : string
 | (id ("," id)*)? "=>" exp        # a,b => a + b : lambda
-| list | dict | object
+| list
 | id
 op1: [!-]
 op2:
@@ -24,7 +23,8 @@ op2:
 | "**" | "&&" | "||" | ">>" | "<<"
 | "===" | "**=" "<=>"
 id: [a-za-z_][a-za-z0-9_]*
-embedded: class union match guard error bool true false int float num string list set dict tuple object opt some none time log test use
+embedded: class union match guard error bool true false int float string bytes list set dict tuple opt some none time log test use
+reserved: num
 
 
 
@@ -53,7 +53,6 @@ embedded: class union match guard error bool true false int float num string lis
   | [0-9]+ ("." [0-9]+)?                       # 1.2           : number
   | "true" | "false"                           # true          : bool
   | "[" pattern* "]"                           # [0 x]         : list
-  | "[:]" | "[" (pattern ":" pattern)+ "]"     # ["0":a b:"1"] : dict
   | "(" pattern ")"                            # (a, b)        : priority
   | type term?                                 # .type         : type match
   | capture term?                              # id.type       : capture and type match
@@ -108,7 +107,7 @@ _                  part of id
 + - * / % **       binary operator for number
 | & ^              binary operator for int(or, and, xor)
 ( )                priority
-[ ]                list or dict
+[ ]                list
 { }                object
 < <= > >= == ===   comparing
 =                  update existing a variable
@@ -135,7 +134,6 @@ $ undefined
   - bytes     # bytes(1024)
 - Container
   - list      # list[int](1 2)                        | list(1 2)            | [1 2]
-  - dict      # dict[string int]("a" 1 b 1+2)         | dict("a" 1 b 1 + 2)  | ["a":1 b:1+2]
   - tuple     # tuple[int string](1 "hi")             | tuple(1 "hi")        | 1, "hi"
   - set       # set[int](1 2)                         | set(1 2)
   - object    # object[a.int b.(int int)](a x => g x) | object: a; b=1; f x = g x | {a; b=1; f(x)=g(x)}

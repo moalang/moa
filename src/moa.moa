@@ -33,23 +33,11 @@ repl io = io.puts "repl"
 
 compile_to_js source = "const main = io => log(io)"
 
-union type:
-  tundef # no type determined yet
-  tnil   # for tag only union and field less struct
-  tbool
-  tint
-  tfloat
-  tstring
-  tlambda list[type]
-  tset type
-  tlist type
-  tdict type type
-  ttype list[tuple[string type]]
+class type:
+  id string
+  params list[type]
 
 union ast:
-  adefine:
-    id string
-    body ast
   abool bool
   aint int
   afloat float
@@ -64,6 +52,9 @@ union ast:
   acall:
     head ast
     argv list[ast]
+  adefine:
+    id string
+    body ast
   astatement list[ast]
   aop1:
     op string
@@ -79,106 +70,112 @@ parse source =
   tokens =
     trim a =
       guard a.size == 0: []
-      guard a[0].match(r"^[ \r\n\t]"): trim a.slice 1
-      guard a[-1].match(r"^[ \r\n\t]"): trim a.slice 0 -1
+      guard a[0].match(r"^[ \n\t]"): trim a.slice(1)
+      guard a[-1].match(r"^[ \n\t]"): trim a.slice(0 -1)
       a
-    regexp = r"((?:!=)|[()\[\]{}!]|(?:-?[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+(?:#[^\n]*|[ \t\r\n]+)*|\"[^]*?(?<!\\)\"|[A-Za-z0-9_]+|#[^\n]*)"
-    source.rsplit(regexp).keep(t => t.size > 0 && !t.starts("#"))
+    regexp = r"((?:!=)|[()\[\]{}!]|(?:-?[0-9]+(?:\.[0-9]+)?)|[ \t\n]+(?:#[^\n]*|[ \t\n]+)*|\"[^]*?(?<!\\)\"|[A-Za-z0-9_]+|#[^\n]*)"
+    trim source.rsplit(regexp).keep(t => t.size > 0 && !t.starts("#"))
+  guard tokens.size == 0: astatement []
   pos = 0
-  parse_top = () =>
-    look_ahead p =
-      guard pos >= tokens.size: ""
-      guard tokens[p].match(r"^[ \t]"): look_ahead p + 1
-      tokens[p]
-    to_id_or_call a =
-      colon_index = a.index aundef(":")
-      guard colon_index >= 1:
-        acall aid(":") a.slice(0 colon_index) ++ a.slice(colon_index + 1)
-      guard a.size == 1: a[0]
-      acall a[0] a.slice(1)
-    until end f =
-      g a =
-        guard pos >= tokens.size: a
-        guard look_ahead(pos) == end:
-          unit()
-          a
-        g a ++ f()
-      g []
-    unit = () =>
-      bottom = () =>
-        guard pos >= tokens.size: aundef ""
-        t = tokens[pos]
+  look_ahead = () =>
+    guard pos >= tokens.size: ""
+    guard tokens[pos].match(r"^[ \t]"):
+      pos += 1
+      look_ahead()
+    tokens[pos]
+  to_id_or_call a =
+    guard a.size == 1: a[0]
+    acall a[0] a.slice(1)
+  many f g =
+    h a =
+      guard pos >= tokens.size: a
+      guard g(look_ahead()): h a ++ [f()]
+      a
+    h []
+  until end =
+    h a =
+      guard pos >= tokens.size: a
+      guard look_ahead(pos) == end:
         pos += 1
-        guard t.match(r"^[ \t]+$")         : unit()
-        guard t == "true"                  : abool true
-        guard t == "false"                 : abool false
-        guard t == "("                     : to_id_or_call until(")" parse_exp)
-        guard t == "["                     : acall aid("list") until("]" parse_exp)
-        guard t == "{"                     : acall aid("dict") until("}" unit).keep(x => x != aundef(":"))
-        guard t.starts("\"")               : astring t.slice(1 -1).replace("\\t" "\t").replace("\\n" "\n")
-        guard t.match(r"^[0-9.]+\.[0-9]+$"): afloat t.float
-        guard t.match(r"^[0-9]+")          : aint t.int
-        guard t.match(r"^[a-zA-Z_]")       : aid t
-        aundef t
-      suffix x =
-        guard pos >= tokens.size: x
-        guard x === aundef: aundef x
-        guard tokens[pos] == ".":
+        a
+      h a ++ [parse_exp()]
+    h []
+  parse_unit = () =>
+    consume = () =>
+      guard pos >= tokens.size: aundef ""
+      t = tokens[pos]
+      pos += 1
+      guard t.match(r"^[ \t]")                : consume()
+      guard t == "true"                       : abool true
+      guard t == "false"                      : abool false
+      guard t == "("                          : to_id_or_call until(")")
+      guard t == "["                          : acall aid("list") until("]")
+      guard t.starts("\"")                    : astring t.slice(1 -1).replace("\\t" "\t").replace("\\n" "\n")
+      guard t.match(r"^[0-9.]+\.[0-9]+$")     : afloat t.float
+      guard t.match(r"^[0-9]+")               : aint t.int
+      guard t.match(r"^[a-zA-Z_]")            : aid t
+      guard t == ":" && look_ahead().has("\n"): parse_statement()
+      guard t == ":"                          : parse_line()
+      aundef t
+    suffix x =
+      guard pos >= tokens.size: x
+      guard x === aundef: aundef x
+      guard tokens[pos] == ".":
+        pos += 1
+        field = tokens[pos]
+        pos += 1
+        suffix acall("." [x field])
+      guard tokens[pos] == "(":
+        pos += 1
+        suffix acall(x until(")"))
+      guard tokens[pos] == "[":
+        pos += 1
+        suffix acall("__index" [x] ++ until("]"))
+      x
+    suffix consume()
+  parse_exp = () =>
+    lhs = parse_unit()
+    guard lhs == aundef("!"): aop1 "!" parse_unit()
+    guard pos >= tokens.size: lhs
+    lop = look_ahead()
+    op2s = ", * ** / // % + ++ - >> << ^ & | := += -= *= /= %= **= < <= > >= == != === !== <=> && || =>".split " "
+    priority op = op2s.index op
+    guard op2s.has(lop):
+      parse_unit() # move position to after binary operator
+      head = look_ahead()
+      rhs = parse_exp()
+      guard head != "(" && rhs === aop2 && priority(lop) < priority(rhs.op): aop2 rhs.op aop2(lop lhs rhs.lhs) rhs.rhs # "1 * 2 + 3" -> (* 1 (+ 2 3)) -> (+ (* 1 2) 3)
+      aop2 lop lhs rhs
+    lhs
+  parse_body = () =>
+    guard look_ahead().has("\n"): parse_statement()
+    parse_line()
+  parse_line = () =>
+    head = parse_exp()
+    guard head === aid:
+      f a =
+        guard pos >= tokens.size: to_id_or_call [aid(head.id)] ++ a
+        guard tokens[pos].has("\n"): to_id_or_call [aid(head.id)] ++ a
+        guard tokens[pos] == "=":
           pos += 1
-          field = tokens[pos]
-          pos += 1
-          suffix acall("." [x field])
-        guard tokens[pos] == "(":
-          pos += 1
-          suffix acall(x until(")" parse_exp))
-        guard tokens[pos] == "[":
-          pos += 1
-          suffix acall("__index" [x] ++ until("]" parse_exp))
-        x
-      suffix bottom()
-    parse_exp = () =>
-      lhs = unit()
-      guard pos >= tokens.size: lhs
-      lop = tokens[pos + tokens[pos].match(r"^[ \t]").int]
-      op2s = ", * ** / // % + ++ - >> << ^ & | := += -= *= /= %= **= < <= > >= == != === !== <=> && || =>".split " "
-      priority op = op2s.index op
-      guard lhs == aundef("!"): aop1 "!" unit()
-      guard op2s.has(lop):
-        unit() # move position to after binary operator
-        head = look_ahead pos
-        rhs = parse_exp()
-        guard head != "(" && rhs === aop2 && priority(lop) < priority(rhs.op): aop2 rhs.op aop2(lop lhs rhs.lhs) rhs.rhs # "1 * 2 + 3" -> (* 1 (+ 2 3)) -> (+ (* 1 2) 3)
-        aop2 lop lhs rhs
-      lhs
-    lines = until "" () =>
-      head = parse_exp()
-      parse_line a =
-        guard pos >= tokens.size: a
-        guard tokens[pos] == ":":
-          pos += 1
-          guard !tokens[pos].has("\n"):
-            a ++ [to_id_or_call(parse_line([]))]
-          indent = tokens[pos].split("\n")[-1].size
-          pos += 1
-          block nodes =
-            guard pos >= tokens.size: nodes
-            t = tokens[pos - 1]
-            guard t.has("\n") && indent == t.split("\n")[-1].size: nodes ++ parse_line([])
-            nodes
-          a ++ [astatement(block([to_id_or_call(parse_line([]))]))]
-        guard tokens[pos].has("\n"):
-          pos += 1
-          a
-        parse_line a ++ [parse_exp()]
-      argv = parse_line []
-      eq_index = argv.index aundef("=")
-      guard argv.size == 0: head
-      guard head === aid && eq_index == 0: adefine head.id to_id_or_call(argv.slice(1))
-      guard head === aid && eq_index >= 1: adefine head.id alambda(argv.slice(0 eq_index) to_id_or_call(argv.slice(eq_index + 1)))
-      to_id_or_call [head] ++ argv
-    guard lines.size == 1: lines[0]
-    astatement lines
-  parse_top()
+          body = parse_body()
+          guard a.size == 0: adefine head.id body
+          adefine head.id alambda(a body)
+        f a ++ [parse_exp()]
+      f []
+    to_id_or_call [head] ++ many(parse_exp t => !t.has("\n"))
+  parse_statement = () =>
+    read_block indent lines =
+      t = look_ahead()
+      guard t.has("\n") && t.split("\n")[-1].size == indent:
+        pos += 1
+        read_block indent lines ++ [parse_line()]
+      guard lines.size == 1: lines[0]
+      astatement lines
+    guard pos == 0: read_block 0 [parse_line()]
+    guard look_ahead().has("\n"): read_block look_ahead().split("\n")[-1].size []
+    fail "invalid indent"
+  parse_statement()
 
 test t "parser":
   stringify a =
@@ -188,7 +185,7 @@ test t "parser":
       x.aint      : string x
       x.afloat    : string x
       x.astring   : string x
-      x.astatement: "(__pack " ++ x.map(stringify).join(" ") ++ ")"
+      x.astatement: "(" ++ x.map(stringify).join("; ") ++ ")"
       x.alambda   : x.args.map(stringify).join(",") ++ " => " ++ stringify(x.body)
       x.aid       : x.id
       x.acall     : "(" + ([x.head] ++ x.argv).map(stringify).join(" ") ++ ")"
@@ -202,7 +199,7 @@ test t "parser":
   t1 "1" aint(1)
   t1 "1.1" afloat(1.1)
   t1 "\"hi\"" astring("hi")
-  t1 "(__pack 1 2)" astatement([aint(1) aint(2)])
+  t1 "(1; 2)" astatement([aint(1) aint(2)])
   t1 "a,b => 1" alambda(["a" "b"] aint(1))
   t1 "a" aid("a")
   t1 "true" abool(true)
@@ -223,12 +220,6 @@ test t "parser":
   # container
   test "(list)" "[]"
   test "(list 1 2)" "[1 2]"
-  test "(dict)" "{}"
-  test "(dict \"a\" 1)" "{\"a\":1}"
-  test "(dict \"a\" (+ 1 2))" "{\"a\":(1+2)}"
-  test "(dict (+ 1 2) (+ 3 4))" "{(1+2):(3+4)}"
-  test "(dict \"a\" 1 \"b\" (+ 1 2) c (+ 3 4))" "{\"a\":1 \"b\":(1+2) (c):(3+4)}"
-  test "(dict)" "{}"
   test "(=> a a)" "a => a"
   test "(=> (, a b) a)" "a,b => a"
   test "(=> p (+ 1 2))" "p => 1 + 2"
@@ -237,7 +228,8 @@ test t "parser":
   test "a = 1" "a = 1"
   test "f = a => a" "f a = a"
   test "a = (+ 1 2)" "a = 1 + 2"
-##  test "(= (f a) (__pack (= b 1) (+ a b)))" "f a =\n  b = 1\n  a + b"
+  test "f = a => a" "f a =\n  a"
+  test "f = a => (b = 1; (+ a b))" "f a =\n  b = 1\n  a + b"
 
   # property access
   test "(. a b)" "a.b"
@@ -280,23 +272,27 @@ test t "parser":
   test "(__index x 1 2)" "x[1 2]"
 
   # steps
-  test "(__pack a b)" "a\nb"
-  test "(__pack (a b) c)" "a b\nc"
-  test "(__pack a (b c))" "a\nb c"
+  test "(a; b)" "a\nb"
+  test "((a b); c)" "a b\nc"
+  test "(a; (b c))" "a\nb c"
 
   # block
   test "(a b)" "a: b"
+  test "(a (b c))" "a: b c"
   test "(a b c)" "a b: c"
   test "(a b (c d))" "a b: c d"
 
   # indent
-  test "(a (__pack b))"                           "a:\n  b"
-  test "(__pack (a (__pack b)) c)"                "a:\n  b\nc"
-  test "(a (__pack b c))"                         "a:\n  b\n  c"
-  test "(a (__pack (b (__pack c))))"              "a:\n  b:\n    c"
-  test "(a (__pack (b (__pack c d))))"            "a:\n  b:\n    c\n    d"
-  test "(a (__pack (b (__pack c)) d))"            "a:\n  b:\n    c\n  d"
-  test "(__pack (a (__pack (b (__pack c)))) d)"   "a:\n  b:\n    c\nd"
+  test "(a b)"               "a:\n  b"
+  test "((a b); c)"          "a:\n  b\nc"
+  test "(a (b; c))"          "a:\n  b\n  c"
+  test "(a (b c))"           "a:\n  b:\n    c"
+  test "(a b c)"             "a b:\n  c"
+  test "(a b (c d))"         "a b:\n  c d"
+  test "(a b (c; d))"        "a b:\n  c\n  d"
+  test "(a b ((c d); e))"    "a b:\n  c d\n  e"
+  test "(a b (c d e))"       "a b:\n  c d:\n  e"
+  test "(a b (c d (e f)))"   "a b:\n  c d:\n  e f"
 
   # combinations
   test "(! (a b))" "!a(b)"
@@ -304,6 +300,6 @@ test t "parser":
 
   # edge case
   test "1" "1\n"
-##  test "()" "n"
-##  test "()" "\n"
+  test "()" " "
+  test "()" "\n"
   log "ok"
