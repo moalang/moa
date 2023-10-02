@@ -33,11 +33,6 @@ repl io = io.puts "repl"
 
 compile_to_js source = "const main = io => log(io)"
 
-class token:
-  label string
-  line int
-  column int
-
 union type:
   tundef # no type determined yet
   tnil   # for tag only union and field less struct
@@ -54,13 +49,11 @@ union type:
 union ast:
   adefine:
     id string
-    desc ast
+    body ast
   abool bool
   aint int
   afloat float
   astring string
-  atuple list[ast]
-  astatement list[ast]
   alambda:
     args list[string]
     body ast
@@ -71,6 +64,7 @@ union ast:
   acall:
     head ast
     argv list[ast]
+  astatement list[ast]
   aop1:
     op string
     body ast
@@ -78,10 +72,10 @@ union ast:
     op string
     lhs ast
     rhs ast
+    type type
   aundef string
 
 parse source =
-  # list[string]
   tokens =
     trim a =
       guard a.size == 0: []
@@ -91,12 +85,12 @@ parse source =
     regexp = r"((?:!=)|[()\[\]{}!]|(?:-?[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+(?:#[^\n]*|[ \t\r\n]+)*|\"[^]*?(?<!\\)\"|[A-Za-z0-9_]+|#[^\n]*)"
     source.rsplit(regexp).keep(t => t.size > 0 && !t.starts("#"))
   pos = 0
-  top = () =>
-    glance p =
+  parse_top = () =>
+    look_ahead p =
       guard pos >= tokens.size: ""
-      guard tokens[p].match(r"^[ \t]"): glance p + 1
+      guard tokens[p].match(r"^[ \t]"): look_ahead p + 1
       tokens[p]
-    call a =
+    to_id_or_call a =
       colon_index = a.index aundef(":")
       guard colon_index >= 1:
         acall aid(":") a.slice(0 colon_index) ++ a.slice(colon_index + 1)
@@ -105,7 +99,7 @@ parse source =
     until end f =
       g a =
         guard pos >= tokens.size: a
-        guard glance(pos) == end:
+        guard look_ahead(pos) == end:
           unit()
           a
         g a ++ f()
@@ -118,8 +112,8 @@ parse source =
         guard t.match(r"^[ \t]+$")         : unit()
         guard t == "true"                  : abool true
         guard t == "false"                 : abool false
-        guard t == "("                     : call until(")" exp)
-        guard t == "["                     : acall aid("list") until("]" exp)
+        guard t == "("                     : to_id_or_call until(")" parse_exp)
+        guard t == "["                     : acall aid("list") until("]" parse_exp)
         guard t == "{"                     : acall aid("dict") until("}" unit).keep(x => x != aundef(":"))
         guard t.starts("\"")               : astring t.slice(1 -1).replace("\\t" "\t").replace("\\n" "\n")
         guard t.match(r"^[0-9.]+\.[0-9]+$"): afloat t.float
@@ -136,13 +130,13 @@ parse source =
           suffix acall("." [x field])
         guard tokens[pos] == "(":
           pos += 1
-          suffix acall(x until(")" exp))
+          suffix acall(x until(")" parse_exp))
         guard tokens[pos] == "[":
           pos += 1
-          suffix acall("__index" [x] ++ until("]" exp))
+          suffix acall("__index" [x] ++ until("]" parse_exp))
         x
       suffix bottom()
-    exp = () =>
+    parse_exp = () =>
       lhs = unit()
       guard pos >= tokens.size: lhs
       lop = tokens[pos + tokens[pos].match(r"^[ \t]").int]
@@ -151,47 +145,45 @@ parse source =
       guard lhs == aundef("!"): aop1 "!" unit()
       guard op2s.has(lop):
         unit() # move position to after binary operator
-        head = glance pos
-        rhs = exp()
+        head = look_ahead pos
+        rhs = parse_exp()
         guard head != "(" && rhs === aop2 && priority(lop) < priority(rhs.op): aop2 rhs.op aop2(lop lhs rhs.lhs) rhs.rhs # "1 * 2 + 3" -> (* 1 (+ 2 3)) -> (+ (* 1 2) 3)
         aop2 lop lhs rhs
       lhs
-    statement lines =
-      guard lines.size == 1: lines[0]
-      astatement lines
     lines = until "" () =>
-      head = exp()
-      line a =
+      head = parse_exp()
+      parse_line a =
         guard pos >= tokens.size: a
         guard tokens[pos] == ":":
           pos += 1
           guard !tokens[pos].has("\n"):
-            a ++ [call(line([]))]
+            a ++ [to_id_or_call(parse_line([]))]
           indent = tokens[pos].split("\n")[-1].size
           pos += 1
           block nodes =
             guard pos >= tokens.size: nodes
             t = tokens[pos - 1]
-            guard t.has("\n") && indent == t.split("\n")[-1].size: nodes ++ line([])
+            guard t.has("\n") && indent == t.split("\n")[-1].size: nodes ++ parse_line([])
             nodes
-          a ++ [astatement(block([call(line([]))]))]
+          a ++ [astatement(block([to_id_or_call(parse_line([]))]))]
         guard tokens[pos].has("\n"):
           pos += 1
           a
-        line a ++ [exp()]
-      argv = line []
+        parse_line a ++ [parse_exp()]
+      argv = parse_line []
       eq_index = argv.index aundef("=")
       guard argv.size == 0: head
-      guard head === aid && eq_index == 0: adefine head.id call(argv.slice(1))
-      guard head === aid && eq_index >= 1: adefine head.id alambda(argv.slice(0 eq_index) call(argv.slice(eq_index + 1)))
-      call [head] ++ argv
-    statement lines
-  top()
+      guard head === aid && eq_index == 0: adefine head.id to_id_or_call(argv.slice(1))
+      guard head === aid && eq_index >= 1: adefine head.id alambda(argv.slice(0 eq_index) to_id_or_call(argv.slice(eq_index + 1)))
+      to_id_or_call [head] ++ argv
+    guard lines.size == 1: lines[0]
+    astatement lines
+  parse_top()
 
 test t "parser":
   stringify a =
     match a:
-      x.adefine   : x.id ++ " = " ++ stringify(x.desc)
+      x.adefine   : x.id ++ " = " ++ stringify(x.body)
       x.abool     : string x
       x.aint      : string x
       x.afloat    : string x

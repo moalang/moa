@@ -35,6 +35,7 @@ const execute = (x, env) => {
     target instanceof List && id === 'keep' ? f => target.filter(f) :
     target instanceof List && id === 'slice' ? (...a) => target.slice(...a) :
     target instanceof List && id === 'map' ? (...a) => target.map(...a) :
+    target instanceof List && id === 'fmap' ? (...a) => target.flatMap(...a) :
     target instanceof List && id === 'join' ? (s) => target.join(s) :
     target instanceof List && id === 'has' ? (s) => target.includes(s) :
     target instanceof List && id === 'bool' ? target.length >= 1 :

@@ -165,6 +165,7 @@ if (require.main === module) {
   // index access
   test('(__index x 1)', 'x[1]')
   test('(__index x 1 2)', 'x[1 2]')
+  test('(. (__index x a) b)', 'x[a].b')
 
   // steps
   test('(__pack a b)', 'a\nb')
