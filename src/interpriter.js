@@ -122,14 +122,12 @@ const execute = (x, env) => {
     head === 'list' ? list(...tail.map(run)) :
     head === 'tuple' ? tuple(...tail.map(run)) :
     head === 'class' ? Object.fromEntries(Array(tail.length/2).fill().map((_,i) => [tail[i*2], run(tail[i*2+1])])) :
-    head === 'dict' ? Object.fromEntries(Array(tail.length/2).fill().map((_,i) => [run(tail[i*2]), run(tail[i*2+1])])) :
     head === 'error' ? fail(string(run(tail[0]))) :
     head === 'string' ? escape(run(tail[0])) :
     head === 'guard' ? guard(tail[0], tail[1]) :
     head === '=' ? define(tail) :
     head === '__index' ? index(run(tail[0]), run(tail[1])) :
     head === '__call' && tail[0] === 'class' ? ({}) :
-    head === '__call' && tail[0] === 'dict' ? ({}) :
     head === '__call' && tail[0] === 'list' ? list() :
     head === '__call' ? lookup(tail[0])(run) :
     head === '__pack' ? tail.reduce((prev, x) => prev instanceof Return ? prev : run(x), null).valueOf() :
@@ -234,14 +232,6 @@ if (require.main === module) {
   test(0, '[1].index 1')
   test(-1, '[1].index 2')
 
-  // dict
-  test({}, 'dict()')
-  test({s:1}, 'dict("s" 1)')
-  test({1:2}, 'dict(1 2)')
-  test({s:1}, '{"s":1}')
-  test({1:2}, '{1:2}')
-  test(2, '{1:2}[1]')
-
   // operators
   test(false, '!true')
   test(true, 'true && !false')
@@ -283,7 +273,6 @@ if (require.main === module) {
   test(Error('z exists'), 'z = 1\nz = 2')
 
   // class
-  test({}, '{}')
   test('hi', 'class s:\n  a string\ns("hi").a')
   test(1, 'class s:\n  a string\n  b int\ns("hi" 1).b')
   test(true, 'class s:\n  a string\n  b int\ns("hi" 1) == s("hi" 1)')

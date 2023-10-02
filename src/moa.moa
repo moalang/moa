@@ -86,21 +86,15 @@ parse source =
   to_id_or_call a =
     guard a.size == 1: a[0]
     acall a[0] a.slice(1)
-  many f g =
-    h a =
-      guard pos >= tokens.size: a
-      guard g(look_ahead()): h a ++ [f()]
-      a
-    h []
-  until end =
-    h a =
-      guard pos >= tokens.size: a
-      guard look_ahead(pos) == end:
-        pos += 1
-        a
-      h a ++ [parse_exp()]
-    h []
   parse_unit = () =>
+    until end =
+      h a =
+        guard pos >= tokens.size: a
+        guard look_ahead(pos) == end:
+          pos += 1
+          a
+        h a ++ [parse_exp()]
+      h []
     consume = () =>
       guard pos >= tokens.size: aundef ""
       t = tokens[pos]
@@ -135,8 +129,8 @@ parse source =
     suffix consume()
   parse_exp = () =>
     lhs = parse_unit()
-    guard lhs == aundef("!"): aop1 "!" parse_unit()
     guard pos >= tokens.size: lhs
+    guard lhs == aundef("!"): aop1 "!" parse_unit()
     lop = look_ahead()
     op2s = ", * ** / // % + ++ - >> << ^ & | := += -= *= /= %= **= < <= > >= == != === !== <=> && || =>".split " "
     priority op = op2s.index op
@@ -147,23 +141,20 @@ parse source =
       guard head != "(" && rhs === aop2 && priority(lop) < priority(rhs.op): aop2 rhs.op aop2(lop lhs rhs.lhs) rhs.rhs # "1 * 2 + 3" -> (* 1 (+ 2 3)) -> (+ (* 1 2) 3)
       aop2 lop lhs rhs
     lhs
-  parse_body = () =>
-    guard look_ahead().has("\n"): parse_statement()
-    parse_line()
   parse_line = () =>
     head = parse_exp()
-    guard head === aid:
-      f a =
-        guard pos >= tokens.size: to_id_or_call [aid(head.id)] ++ a
-        guard tokens[pos].has("\n"): to_id_or_call [aid(head.id)] ++ a
-        guard tokens[pos] == "=":
-          pos += 1
-          body = parse_body()
-          guard a.size == 0: adefine head.id body
-          adefine head.id alambda(a body)
-        f a ++ [parse_exp()]
-      f []
-    to_id_or_call [head] ++ many(parse_exp t => !t.has("\n"))
+    f a =
+      guard pos >= tokens.size || tokens[pos].has("\n"): to_id_or_call [head] ++ a
+      guard head === aid && look_ahead() == "=":
+        pos += 1
+        parse_body = () =>
+          guard look_ahead().has("\n"): parse_statement()
+          parse_line()
+        body = parse_body()
+        guard a.size == 0: adefine head.id body
+        adefine head.id alambda(a body)
+      f a ++ [parse_exp()]
+    f []
   parse_statement = () =>
     read_block indent lines =
       t = look_ahead()
@@ -193,113 +184,105 @@ test t "parser":
       x.aop2      : "(" ++ x.op ++ " " ++ stringify(x.lhs) ++ " " ++ stringify(x.rhs) + ")"
       x.aundef    : "undefined(" ++ x ++ ")"
       x           : a
+  test_stringify expectation ast = t.eq expectation stringify(ast) ast
+  test_stringify "a = 1"    adefine("a" aint(1))
+  test_stringify "1"        aint(1)
+  test_stringify "1.1"      afloat(1.1)
+  test_stringify "\"hi\""   astring("hi")
+  test_stringify "(1; 2)"   astatement([aint(1) aint(2)])
+  test_stringify "a,b => 1" alambda(["a" "b"] aint(1))
+  test_stringify "a"        aid("a")
+  test_stringify "true"     abool(true)
+  test_stringify "(! true)" aop1("!" true)
+  test_stringify "(+ 1 2)"  aop2("+" aint(1) aint(2))
+  test_stringify "a,b => 1" alambda(["a" "b"] aint(1))
 
-  t1 expectation ast = t.eq expectation stringify(ast) ast
-  t1 "a = 1" adefine("a" aint(1))
-  t1 "1" aint(1)
-  t1 "1.1" afloat(1.1)
-  t1 "\"hi\"" astring("hi")
-  t1 "(1; 2)" astatement([aint(1) aint(2)])
-  t1 "a,b => 1" alambda(["a" "b"] aint(1))
-  t1 "a" aid("a")
-  t1 "true" abool(true)
-  t1 "(! true)" aop1("!" true)
-  t1 "(+ 1 2)" aop2("+" aint(1) aint(2))
-  t1 "a,b => 1" alambda(["a" "b"] aint(1))
-
-  test expectation source = t.eq expectation stringify(parse(source)) source
-
+  test_parser expectation source = t.eq expectation stringify(parse(source)) source
   # primitives
-  test "1" "1"
-  test "1.1" "1.1"
-  test "id" "id"
-  test "\"hi\"" "\"hi\""
-  test "\"\\t\"" "\"\\t\""
-  test "true" "true"
-
+  test_parser "1" "1"
+  test_parser "1.1" "1.1"
+  test_parser "id" "id"
+  test_parser "\"hi\"" "\"hi\""
+  test_parser "\"\\t\"" "\"\\t\""
+  test_parser "true" "true"
   # container
-  test "(list)" "[]"
-  test "(list 1 2)" "[1 2]"
-  test "(=> a a)" "a => a"
-  test "(=> (, a b) a)" "a,b => a"
-  test "(=> p (+ 1 2))" "p => 1 + 2"
-
+  test_parser "(list)" "[]"
+  test_parser "(list 1 2)" "[1 2]"
+  test_parser "(=> a a)" "a => a"
+  test_parser "(=> (, a b) a)" "a,b => a"
+  test_parser "(=> p (+ 1 2))" "p => 1 + 2"
   # definition
-  test "a = 1" "a = 1"
-  test "f = a => a" "f a = a"
-  test "a = (+ 1 2)" "a = 1 + 2"
-  test "f = a => a" "f a =\n  a"
-  test "f = a => (b = 1; (+ a b))" "f a =\n  b = 1\n  a + b"
-
+  test_parser "a = 1" "a = 1"
+  test_parser "f = a => a" "f a = a"
+  test_parser "a = (+ 1 2)" "a = 1 + 2"
+  test_parser "f = a => a" "f a =\n  a"
+  test_parser "f = a => (b = 1; (+ a b))" "f a =\n  b = 1\n  a + b"
   # property access
-  test "(. a b)" "a.b"
-  test "((. a b) c)" "a.b c"
-  test "(. (list) a)" "[].a"
-  test "(=> p (+ (. p x) (. p y)))" "p => p.x + p.y"
-
+  test_parser "(. a b)" "a.b"
+  test_parser "((. a b) c)" "a.b c"
+  test_parser "(. (list) a)" "[].a"
+  test_parser "(=> p (+ (. p x) (. p y)))" "p => p.x + p.y"
   # single operator
-  test "(! true)" "!true"
-
+  test_parser "(! true)" "!true"
   # binary operators
-  test "(+ 1 2)" "1 + 2"
-  test "(+ 1 (+ 2 3))" "1 + 2 + 3"
-  test "(+ (* 1 2) 3)" "1 * 2 + 3"
-  test "(!= 1 1)" "1 != 1"
-  test "(+= a 1)" "a += 1"
-  test "(+= a (+ 1 2))" "a += 1 + 2"
-
+  test_parser "(+ 1 2)" "1 + 2"
+  test_parser "(+ 1 (+ 2 3))" "1 + 2 + 3"
+  test_parser "(+ (* 1 2) 3)" "1 * 2 + 3"
+  test_parser "(!= 1 1)" "1 != 1"
+  test_parser "(+= a 1)" "a += 1"
+  test_parser "(+= a (+ 1 2))" "a += 1 + 2"
   # parentheses
-  test "1" "(1)"
-  test "(f 1)" "(f 1)"
-  test "(+ (+ 1 2) 3)" "(1 + 2) + 3"
-  test "(* 1 (+ 2 3))" "1 * (2 + 3)"
-  test "(* (+ 1 2) 3)" "(1 + 2) * 3"
-
+  test_parser "1" "(1)"
+  test_parser "(f 1)" "(f 1)"
+  test_parser "(+ (+ 1 2) 3)" "(1 + 2) + 3"
+  test_parser "(* 1 (+ 2 3))" "1 * (2 + 3)"
+  test_parser "(* (+ 1 2) 3)" "(1 + 2) * 3"
   # function call
-  test "(f)" "f()"
-  test "(f 1)" "f(1)"
-  test "(f (+ 1 2))" "f(1 + 2)"
-
+  test_parser "(f)" "f()"
+  test_parser "(f 1)" "f(1)"
+  test_parser "(f (+ 1 2))" "f(1 + 2)"
   # method call
-  test "(. f m)" "f.m"
-  test "(. f 1)" "f.1"
-  test "((. f m))" "f.m()"
-  test "((. f m) a)" "f.m(a)"
-  test "((. f m) a b)" "f.m(a b)"
-
+  test_parser "(. f m)" "f.m"
+  test_parser "(. f 1)" "f.1"
+  test_parser "((. f m))" "f.m()"
+  test_parser "((. f m) a)" "f.m(a)"
+  test_parser "((. f m) a b)" "f.m(a b)"
   # index access
-  test "(__index x 1)" "x[1]"
-  test "(__index x 1 2)" "x[1 2]"
-
+  test_parser "(__index x 1)" "x[1]"
+  test_parser "(__index x 1 2)" "x[1 2]"
   # steps
-  test "(a; b)" "a\nb"
-  test "((a b); c)" "a b\nc"
-  test "(a; (b c))" "a\nb c"
-
+  test_parser "(a; b)" "a\nb"
+  test_parser "((a b); c)" "a b\nc"
+  test_parser "(a; (b c))" "a\nb c"
   # block
-  test "(a b)" "a: b"
-  test "(a (b c))" "a: b c"
-  test "(a b c)" "a b: c"
-  test "(a b (c d))" "a b: c d"
-
+  test_parser "(a b)" "a: b"
+  test_parser "(a (b c))" "a: b c"
+  test_parser "(a b c)" "a b: c"
+  test_parser "(a b (c d))" "a b: c d"
   # indent
-  test "(a b)"               "a:\n  b"
-  test "((a b); c)"          "a:\n  b\nc"
-  test "(a (b; c))"          "a:\n  b\n  c"
-  test "(a (b c))"           "a:\n  b:\n    c"
-  test "(a b c)"             "a b:\n  c"
-  test "(a b (c d))"         "a b:\n  c d"
-  test "(a b (c; d))"        "a b:\n  c\n  d"
-  test "(a b ((c d); e))"    "a b:\n  c d\n  e"
-  test "(a b (c d e))"       "a b:\n  c d:\n  e"
-  test "(a b (c d (e f)))"   "a b:\n  c d:\n  e f"
-
+  test_parser "(a b)"               "a:\n  b"
+  test_parser "((a b); c)"          "a:\n  b\nc"
+  test_parser "(a (b; c))"          "a:\n  b\n  c"
+  test_parser "(a (b c))"           "a:\n  b:\n    c"
+  test_parser "(a b c)"             "a b:\n  c"
+  test_parser "(a b (c d))"         "a b:\n  c d"
+  test_parser "(a b (c; d))"        "a b:\n  c\n  d"
+  test_parser "(a b ((c d); e))"    "a b:\n  c d\n  e"
+  test_parser "(a b (c d e))"       "a b:\n  c d:\n  e"
+  test_parser "(a b (c d (e f)))"   "a b:\n  c d:\n  e f"
+  # comment
+  test_parser "a = 1" "#comment\na = 1 # comment\n#comment"
+  test_parser "(a (b; c))" "a:\n  #comment\n  b\n  #comment\n  c\n  # comment"
   # combinations
-  test "(! (a b))" "!a(b)"
-  test "(+ (a b) c)" "a(b) + c"
-
+  test_parser "(! (a b))" "!a(b)"
+  test_parser "(+ (a b) c)" "a(b) + c"
+  test_parser "(. (__index a b) c)" "a[b].c"
+  test_parser "((. (__index a b) c) d)" "a[b].c(d)"
+  # combinations
+  test_parser "(! (a b))" "!a(b)"
+  test_parser "(+ (a b) c)" "a(b) + c"
   # edge case
-  test "1" "1\n"
-  test "()" " "
-  test "()" "\n"
+  test_parser "1" "1\n"
+  test_parser "()" " "
+  test_parser "()" "\n"
   log "ok"

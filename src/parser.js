@@ -48,7 +48,6 @@ const parse = source => {
       const prefix = t =>
         t === '!' ? [t, unit()] :
         t === '[' ? call('list', until(']')) :
-        t === '{' ? call('dict', until('}').filter(t => t !== ':').map(t => t[0] === ':' ? t.slice(1) : t)) :
         t === '(' ? until(')') :
         t
       const suffix = o =>
@@ -98,11 +97,6 @@ if (require.main === module) {
   test('r"\\t"', 'r"\\t"')
   test('(__call list)', '[]')
   test('(list 1 2)', '[1 2]')
-  test('(__call dict)', '{}')
-  test('(dict "a" 1)', '{"a":1}')
-  test('(dict "a" (+ 1 2))', '{"a":(1+2)}')
-  test('(dict (+ 1 2) (+ 3 4))', '{(1+2):(3+4)}')
-  test('(dict "a" 1 "b" (+ 1 2) c (+ 3 4))', '{"a":1 "b":(1+2) (c):(3+4)}')
   test('(=> a a)', 'a => a')
   test('(=> (, a b) a)', 'a,b => a')
   test('(=> p (+ 1 2))', 'p => 1 + 2')
