@@ -95,7 +95,8 @@ const execute = (x, env) => {
       const f = ([[_, cond, body], ...left]) =>
         cond[0] === '.' ?  (target.__tag === cond[2] ? run_with(body, {[cond[1]]: target.__val}) : branch(left)) :
         cond.match(/[A-Za-z_]/) ? run_with(body, {[cond]: target}) :
-        target === run(cond) && run(body)
+        target === run(cond) ? run(body) :
+        branch(left)
       return left.length === 0 ? fail(`${string(conds)} are not match with ${string(target)}`) : f(left)
     }
     return branch(conds)
@@ -271,6 +272,11 @@ if (require.main === module) {
   test(1, 'guard 1==1:\n  1\n2')
   test(2, 'guard 1==2:\n  1\n2')
   test(Error('z exists'), 'z = 1\nz = 2')
+
+  // match
+  test(1, 'match 1:\n  1: 1')
+  test(2, 'match 2:\n  1: 1\n  2: 2')
+  test(1, 'match 1:\n  _: 1')
 
   // class
   test('hi', 'class s:\n  a string\ns("hi").a')

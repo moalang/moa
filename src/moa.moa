@@ -98,40 +98,42 @@ parse source =
   guard tokens.size == 0: istatement []
   pos = 0
   new_itoken s = itoken token(s 0 0 0)
+  end_by forward check =
+    loop a =
+      guard pos >= tokens.size: a
+      guard check(tokens[pos]): a
+      loop a ++ [forward()]
+    loop []
   parse_unit = () =>
-    until end =
-      loop a =
-        guard pos >= tokens.size: a
-        guard tokens[pos].text == end:
-          pos += 1
-          a
-        loop a ++ [parse_exp()]
-      loop []
+    until end = end_by parse_exp t =>
+      guard t.text == end:
+        pos += 1
+        true
+      false
     consume = () =>
-      guard pos >= tokens.size: fail "end of token"
       t = tokens[pos]
       pos += 1
-      guard t.text == "(": icall until(")")
-      guard t.text == "[": icall [new_itoken("list")] ++ until("]")
-      guard t.text == ":": parse_block()
-      itoken t
+      match t.text:
+        "(": icall until(")")
+        "[": icall [new_itoken("list")] ++ until("]")
+        ":": parse_block()
+        _: itoken t
     suffix x =
       guard pos >= tokens.size: x
       t = tokens[pos]
-      guard t.text == ".":
-        pos += 1
-        field = tokens[pos]
-        pos += 1
-        suffix icall([itoken(t) x itoken(field)])
-      guard t.text == "(":
-        pos += 1
-        argv = until(")")
-        guard argv.size == 0: suffix icall([itoken(t) x])
-        suffix icall([x] ++ argv)
-      guard t.text == "[":
-        pos += 1
-        suffix icall([new_itoken("__index") x] ++ until("]"))
-      x
+      match t.text:
+        ".":
+          pos += 2
+          suffix icall([itoken(t) x itoken(tokens[pos - 1])])
+        "(":
+          pos += 1
+          argv = until(")")
+          guard argv.size == 0: suffix icall([new_itoken("__call") x])
+          suffix icall([x] ++ argv)
+        "[":
+          pos += 1
+          suffix icall([new_itoken("__index") x until("]")])
+        _: x
     suffix consume()
   parse_exp = () =>
     lhs = parse_unit()
@@ -151,7 +153,6 @@ parse source =
       icall [itoken(lop) lhs rhs]
     lhs
   parse_block = () =>
-    guard pos >= tokens.size: fail "empty block"
     guard tokens[pos - 1].indent < tokens[pos].indent: parse_statement()
     parse_line()
   parse_line = () =>
@@ -167,11 +168,8 @@ parse source =
       loop a ++ [parse_exp()]
     loop []
   parse_statement = () =>
-    read_block indent lines =
-      guard pos >= tokens.size || tokens[pos].indent != indent: istatement lines
-      read_block indent lines ++ [parse_line()]
-    guard pos >= tokens.size: istatement []
-    read_block tokens[pos].indent []
+    current_indent = tokens[pos].indent
+    istatement end_by(parse_line t => t.indent != current_indent)
   parse_statement()
 
 test t "parser":
@@ -232,13 +230,13 @@ test t "parser":
   test_parser "(* 1 (+ 2 3))" "1 * (2 + 3)"
   test_parser "(* (+ 1 2) 3)" "(1 + 2) * 3"
   # function call
-  test_parser "(( f)" "f()"
+  test_parser "(__call f)" "f()"
   test_parser "(f 1)" "f(1)"
   test_parser "(f (+ 1 2))" "f(1 + 2)"
   # method call
   test_parser "(. f m)" "f.m"
   test_parser "(. f 1)" "f.1"
-  test_parser "(( (. f m))" "f.m()"
+  test_parser "(__call (. f m))" "f.m()"
   test_parser "((. f m) a)" "f.m(a)"
   test_parser "((. f m) a b)" "f.m(a b)"
   # index access

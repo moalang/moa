@@ -9,6 +9,7 @@
 
 # Todo
 - [ ] Create new syntax for name of capture variable in enum matching as ===
+- [ ] Consider to split "guard" to "if" and "return"
 - [x] Interpriter (2/2)
 - [ ] Compiler to JavaScript
 - [ ] Compiler to native code
