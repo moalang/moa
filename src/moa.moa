@@ -138,14 +138,14 @@ parse source =
   parse_exp = () =>
     lhs = parse_unit()
     guard pos >= tokens.size: lhs
-    guard lhs == itoken("!"): icall [lhs parse_unit()]
     lop = tokens[pos]
     op2s = ", * ** / // % + ++ - >> << ^ & | := += -= *= /= %= **= < <= > >= == != === !== <=> && || =>".split " "
+    guard lhs == itoken("!"): icall [lhs parse_unit()]
     guard op2s.has(lop.text):
       pos += 1
-      is_group = tokens[pos].text == "("
+      rhs_first_text = tokens[pos].text
       rhs = parse_exp()
-      guard !is_group && rhs === icall:
+      guard rhs_first_text != "(" && rhs === icall:
         rop = rhs[0]
         guard rop === itoken && op2s.index(lop.text) < op2s.index(rop.text):
           icall [rhs[0] icall([itoken(lop) lhs rhs[1]]) rhs[2]] # "1 * 2 + 3" -> (* 1 (+ 2 3)) -> (+ (* 1 2) 3)
