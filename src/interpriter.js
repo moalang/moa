@@ -28,7 +28,9 @@ const execute = (x, env) => {
   const run_with = (x, e) => execute(x, {...env, ...make_env(e)})
   const lookup = key => key in env ? env[key].value : fail(`Not found '${key}' in [${Object.keys(env)}]`)
   const declare = (name, value) => name in env ? fail(`${name} exists`) : (env[name] = {value}, value)
-  const update = (name, value) => name in env ? env[name].value = value : fail(`${name} missing`)
+  const update = (key, value) =>
+    key.includes('.') ? key.slice(1).reduce((e, name) => name in e.value ? e.value[name] : fail(`${name} not in ${string(e)}`), {value: env}).value = value :
+    key in env ? env[key].value = value : fail(`${key} missing`)
   const lambda = (args, body) => (...argv) => run_with(body, Object.fromEntries(args.map((x, i) => [x, argv[i]])))
   const method = (target, id) =>
     target instanceof List && id === 'size' ? target.length :
@@ -53,6 +55,7 @@ const execute = (x, env) => {
     typeof target === 'string' && id === 'float' ? parseFloat(target) :
     typeof target === 'string' && id === 'has' ? (s => target.includes(s)) :
     typeof target === 'string' && id.match(/^[0-9]/) ? index(target)[id] :
+    typeof target === 'number' && id === 'string' ? target.toString() :
     typeof target === 'boolean' && id === 'int' ? (target ? 1 : 0) :
     fail(`'${id}' is unknown method of '${typeof target === "object" ? target.constructor : typeof target}'`)
   const op2 = (op, lhs, rhs) => {
@@ -80,7 +83,7 @@ const execute = (x, env) => {
       case '<<': return run(lhs) << run(rhs)
       case '&&': return run(lhs) && run(rhs)
       case '||': return run(lhs) || run(rhs)
-      case ':=': return lhs in env ? update(lhs, run(rhs)) : fail(`${lhs} missing`)
+      case ':=': return update(lhs, run(rhs))
       default: return op.match(/^[+\-*/%|&]+=$/) ? update(lhs, op2(op.slice(0, -1), run(lhs), run(rhs))) : fail(`${op} unknown operator`)
     }
   }
@@ -256,6 +259,7 @@ if (require.main === module) {
   test(3, '6 >> 1')
   test(3, 'a = 1\na += 2\na')
   test(2, 'a = 1\na := 2\na')
+  test(2, 'class c:\n  a int\nx = c(1)\nx.a := 2')
   test(Error('z missing'), 'z := 1')
 
   // define
