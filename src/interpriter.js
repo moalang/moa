@@ -14,12 +14,15 @@ const escape = o =>
   o instanceof Error ? `Error(${o.message})` :
   o instanceof Tuple ? o.map(escape).join(',') :
   typeof o === 'function' ? o.toString() :
+  typeof o === 'object' && o.constructor === Map ? JSON.stringify(Object.fromEntries([...o])) :
   Array.isArray(o) ? `[${o.map(escape).join(' ')}]` :
   JSON.stringify(o)
 const put = x => process.stdout.write(x);
 const puts = (...a) => { console.log(...a); return a[0]; }
+const range = (n, m) => [...Array(n)].map((_, i) => i + (m || 0))
 const tuple = (...a) => new Tuple().concat(...a)
-const list = (...a) => new List().concat(...a)
+const list = (...a) => new List().concat(...a.map(x => Array.isArray(x) ? [x] : x))
+const dict = (...a) => new Map(range(a.length / 2).map(i => [a[i*2], a[i*2+1]]))
 const attempt = (f, g) => { try { return f() } catch (e) { return g(e) } }
 const make_env = o => Object.fromEntries(Object.keys(o).map(key => [key, {value: o[key]}]))
 const evaluate = (x, env) => execute(x, make_env({...env}))
@@ -43,6 +46,7 @@ const execute = (x, env) => {
     target instanceof List && id === 'bool' ? target.length >= 1 :
     target instanceof List && id === 'find' ? (f => Boolean(target.find(f))) :
     target instanceof List && id === 'index' ? (s => target.findIndex(x => op2('==', x, s))) :
+    target instanceof List && id === 'dict' ? () => new Map([...target.map(x => [...x])]) :
     typeof target === 'object' && id in target ? target[id] :
     typeof target === 'string' && id === 'size' ? target.length :
     typeof target === 'string' && id === 'rsplit' ? r => list(...target.split(r)) :
@@ -64,6 +68,7 @@ const execute = (x, env) => {
       typeof x === 'object' ? Object.keys(x).sort().map(key => _to_comparable(x[key])) :
       typeof x === 'number' ? (Array(16).join('0') + x).slice(-16) :
       x
+    const concat = (l, r) => l.concat ? l.concat(r) : new Map([...l, ...r])
     switch (op) {
       case '==': return to_comparable(run(lhs)) == to_comparable(run(rhs))
       case '===': return run(lhs).__tag === rhs
@@ -72,7 +77,7 @@ const execute = (x, env) => {
       case '<=': return to_comparable(run(lhs)) <= to_comparable(run(rhs))
       case '>' : return to_comparable(run(lhs)) > to_comparable(run(rhs))
       case '<' : return to_comparable(run(lhs)) < to_comparable(run(rhs))
-      case '++': return run(lhs).concat(run(rhs))
+      case '++': return concat(run(lhs), run(rhs))
       case '+' : return run(lhs) + run(rhs)
       case '-' : return run(lhs) - run(rhs)
       case '*' : return run(lhs) * run(rhs)
@@ -108,7 +113,9 @@ const execute = (x, env) => {
     run_with(cond, e) && ((Array.isArray(cond) && cond[0] === '===' && cond[1].match(/^[A-Za-z_]/) && (e[cond[1]]=lookup(cond[1]).__val, true)) || true)
   const guard = (cond, body) => (e => capture(cond, e) ? new Return(run_with(body, e)) : true)({})
   const eq = (a, b, c) => ((a, b) => a === b ? true : fail(`${a} ne ${b}` + (c ? ` # ${JSON.stringify(c)}` : '')))(escape(a), escape(b))
-  const index = (a, i) => i < 0 ? index(a, a.length + i) : i >= a.length ? fail(`${i} exceeded`) : a[i]
+  const index = (a, i) =>
+    Array.isArray(a) || typeof a === 'string' ? (i < 0 ? index(a, a.length + i) : i >= a.length ? fail(`${i} exceeded`) : a[i]) :
+    a.has(i) ? a.get(i): fail(`${i} not found`)
   const define = ([head, body]) => Array.isArray(head) ?
     declare(head[0], lambda(head.slice(1), body))  :
     declare(head, run(body))
@@ -125,6 +132,7 @@ const execute = (x, env) => {
     typeof head === 'function' ? head(...tail.map(run)) :
     head === 'list' ? list(...tail.map(run)) :
     head === 'tuple' ? tuple(...tail.map(run)) :
+    head === 'dict' ? dict(...tail.map(run)) :
     head === 'class' ? Object.fromEntries(Array(tail.length/2).fill().map((_,i) => [tail[i*2], run(tail[i*2+1])])) :
     head === 'error' ? fail(string(run(tail[0]))) :
     head === 'string' ? escape(run(tail[0])) :
@@ -133,7 +141,8 @@ const execute = (x, env) => {
     head === '__index' ? index(run(tail[0]), run(tail[1])) :
     head === '__call' && tail[0] === 'class' ? ({}) :
     head === '__call' && tail[0] === 'list' ? list() :
-    head === '__call' ? lookup(tail[0])(run) :
+    head === '__call' && tail[0] === 'dict' ? dict() :
+    head === '__call' ? run(tail[0])(run) :
     head === '__pack' ? tail.reduce((prev, x) => prev instanceof Return ? prev : run(x), null).valueOf() :
     head === '.' ? method(run(tail[0]), tail[1]) :
     head === ':' ? block(tail[0], tail[1]) :
@@ -235,6 +244,13 @@ if (require.main === module) {
   test([2], '[1 2].keep x => x > 1')
   test(0, '[1].index 1')
   test(-1, '[1].index 2')
+
+  // dict
+  test({}, 'dict()')
+  test({a: 1}, 'dict("a" 1)')
+  test({a: 1, b: 2}, 'dict("a" 1) ++ (dict("b" 2))')
+  test({a: 1}, '["a",1].dict()')
+  test(1, 'dict("a" 1)["a"]')
 
   // operators
   test(false, '!true')

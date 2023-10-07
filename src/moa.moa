@@ -45,7 +45,7 @@ union type:
   tname:
     name string
     params list[type]
-  tref:
+  tid:
     id int
     type type
 
@@ -57,7 +57,7 @@ union ast:
     head ast
     argv list[ast]
   alambda:
-    args list[ast]
+    args list[token]
     body ast
   alet:
     id token
@@ -71,7 +71,7 @@ show_type t = match t:
   x.tname  :
     guard x.params.size == 0: x.name
     x.name ++ "[" ++ x.params.map(show_type).join(" ") ++ "]"
-  x.tref   :
+  x.tid    :
     match x.type:
       _.tundef: x.id.string
       t: show_type t
@@ -130,6 +130,7 @@ parse source =
               pos += 1
               false
             true
+          guard pos < tokens.size && tokens[pos].text == "=>": alambda [x] ++ remain parse_exp()
           suffix acall(new_aid_text(t "tuple") [x] ++ remain)
         "(":
           pos += 1
@@ -156,30 +157,25 @@ parse source =
           acall rcall.head [acall(new_aid(lop_token) [lhs rcall.argv[0]]) rcall.argv[1]] # "1 * 2 + 3" -> (* 1 (+ 2 3)) -> (+ (* 1 2) 3)
         acall new_aid(lop_token) [lhs rhs]
       acall new_aid(lop_token) [lhs rhs]
-    guard lop_token.text == "=>":
+    guard lop_token.text == "=>" && lhs === aid:
       pos += 1
-      to_args x =
-        guard x === acall:
-          head = x.head
-          guard head === aid && head.token.text == "tuple":
-            x.argv
-          [x]
-        [x]
-      alambda to_args(lhs) parse_exp()
+      alambda [lhs.token] parse_exp()
     lhs
   parse_block = () =>
     guard tokens[pos - 1].indent < tokens[pos].indent: parse_statement()
     parse_line()
   parse_line = () =>
-    first_token = tokens[pos]
+    first_pos = pos
+    first_lineno = tokens[pos].lineno
     loop a =
-      guard pos >= tokens.size || tokens[pos].lineno != first_token.lineno:
+      guard pos >= tokens.size || tokens[pos].lineno != first_lineno:
         guard a.size == 1: a[0]
         acall a[0] a.slice(1)
       guard tokens[pos].text == "=":
+        items = tokens.slice(first_pos pos-1)
         pos += 1
-        guard a.size == 1: alet first_token parse_block()
-        alet first_token alambda(a.slice(1) parse_block())
+        guard a.size == 1: alet items[0] parse_block()
+        alet items[0] alambda(items.slice(1) parse_block())
       loop a ++ [parse_exp()]
     loop []
   parse_statement = () =>
@@ -188,23 +184,43 @@ parse source =
   parse_statement()
 
 infer ast =
+  tbool = tname "bool" []
   tint = tname "int" []
+  tfloat = tname "float" []
   tstring = tname "string" []
-  infer_value s =
-    guard s.match(r"^[0-9]+$"): tint
-    guard s.starts("\""): tstring
-    tundef
-  match ast:
-    x.aid:
-      x.type := infer_value x.token.text
-    x.acall:
+  id = 0
+  new_tid = () => tid(id+=1 tundef)
+  inf_with ast env =
+    inf x = inf_with x env
+    inf_value s =
+      guard s == "true" || s == "false": tbool
+      guard s.match(r"^[0-9]+\.[0-9]+$"): tfloat
+      guard s.match(r"^[0-9]+$"): tint
+      guard s.match(r"^[A-Za-z_]"): env[s]
+      guard s.starts("\""): tstring
       tundef
-    x.alambda:
-      tundef
-    x.alet:
-      tundef
-    x.astatement:
-      x.lines.map(infer)[-1]
+    match ast:
+      x.aid:
+        x.type := inf_value x.token.text
+      x.acall:
+        tundef
+      x.alambda:
+        argst = x.args.map(t => t.text, new_tid())
+        new_env = env ++ argst.dict()
+        tlambda argst.map(x => x[1]) ++ [inf_with(x.body new_env)]
+      x.astatement:
+        x.lines.map(inf)[-1]
+  inf_with ast dict()
+#union type:
+#  tundef
+#  tlambda list[type]
+#  tname:
+#    name string
+#    params list[type]
+#  tid:
+#    id int
+#    token token
+#    type type
 #union ast:
 #  aid:
 #    token token
@@ -224,18 +240,20 @@ test t "parser":
     match x:
       x.aid        : x.token.text
       x.acall      : stringify(x.head) ++ "(" ++ x.argv.map(stringify).join(" ") ++ ")"
-      x.alambda    : "(" ++ x.args.map(stringify).join(",") + " => " + stringify(x.body) ++ ")"
+      x.alambda    : "(" ++ x.args.map(x => x.text).join(",") + " => " + stringify(x.body) ++ ")"
       x.alet       : x.id.text ++ " = " ++ stringify(x.body)
       x.astatement : x.lines.map(stringify).join("; ")
-  x = aid token("x" 0 0 0) tundef
+  tx = token "x" 0 0 0
+  x = aid tx tundef
   test_stringify expectation input = t.eq expectation stringify(input)
   test_stringify "x"        x
   test_stringify "x(x)"     acall(x [x])
-  test_stringify "(x => x)" alambda([x] x)
+  test_stringify "(x => x)" alambda([tx] x)
   test_stringify "y = x"    alet(token("y" 0 0 0) x)
   test_stringify "x; x"     astatement([x x])
 
   test_parser expectation source = t.eq expectation stringify(parse(source)) source
+  test_parser "(a => a)" "a => a"
 
   # primitives
   test_parser "1" "1"
@@ -327,10 +345,14 @@ test t "parser":
   test_show "(? ?)" tlambda([tundef tundef])
   test_show "a" tname("a" [])
   test_show "a[b c]" tname("a" [tname("b" []) tname("c" [])])
-  test_show "1" tref(1 tundef)
-  test_show "a" tref(1 tname("a" []))
+  test_show "1" tid(1 tundef)
+  test_show "a" tid(1 tname("a" []))
 
   test_infer expectation source = t.eq expectation show_type(infer(parse(source))) source
+  test_infer "bool" "true"
+  test_infer "bool" "false"
   test_infer "int" "1"
+  test_infer "float" "1.1"
   test_infer "string" "\"s\""
+  test_infer "(1 1)" "x => x"
   log "ok"
