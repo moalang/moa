@@ -62,11 +62,8 @@ union ast:
   alet:
     id token
     body ast
-
-union input:
-  iunit token
-  icall list[input]
-  istatement list[input]
+  astatement:
+    lines list[ast]
 
 show_type t = match t:
   _.tundef : "?"
@@ -96,9 +93,10 @@ parse source =
       t = token text indent lineno column
       column += text.size
       t
-  guard tokens.size == 0: istatement []
+  new_aid t = aid t tundef
+  new_aid_text t text = aid token(text t.indent t.lineno t.column) tundef
+  guard tokens.size == 0: astatement []
   pos = 0
-  new_iunit s = iunit token(s 0 0 0)
   end_by forward check =
     loop a =
       guard pos >= tokens.size: a
@@ -115,98 +113,130 @@ parse source =
       t = tokens[pos]
       pos += 1
       match t.text:
-        "(": icall until(")")
-        "[": icall [iunit(t)] ++ until("]")
+        "(": until(")")[0]
+        "[": acall(new_aid_text(t "list") until("]"))
         ":": parse_block()
-        _: iunit t
+        _: new_aid t
     suffix x =
       guard pos >= tokens.size: x
       t = tokens[pos]
       match t.text:
         ".":
           pos += 2
-          suffix icall([iunit(t) x iunit(tokens[pos - 1])])
+          suffix acall(new_aid(t) [x new_aid(tokens[pos - 1])])
+        ",":
+          remain = end_by consume t =>
+            guard t.text == ",":
+              pos += 1
+              false
+            true
+          suffix acall(new_aid_text(t "tuple") [x] ++ remain)
         "(":
           pos += 1
-          argv = until(")")
-          guard argv.size == 0: suffix icall([new_iunit("__call") x])
-          suffix icall([x] ++ argv)
+          suffix acall(x until(")"))
         "[":
           pos += 1
-          suffix icall([new_iunit("__index") x until("]")])
+          suffix acall(new_aid_text(t "__index") [x] ++ until("]"))
         _: x
     suffix consume()
   parse_exp = () =>
     lhs = parse_unit()
     guard pos >= tokens.size: lhs
-    guard lhs == iunit("!"): icall [lhs parse_unit()]
-    lop = tokens[pos]
-    op2s = ", * ** / // % + ++ - >> << ^ & | := += -= *= /= %= **= < <= > >= == != === !== <=> && || =>".split " "
-    guard op2s.has(lop.text):
+    guard lhs === aid && lhs.token.text == "!": acall new_aid(lhs.token) [parse_unit()]
+    lop_token = tokens[pos]
+    op2s = ", * ** / // % + ++ - >> << ^ & | := += -= *= /= %= **= < <= > >= == != === !== <=> && ||".split " "
+    guard op2s.has(lop_token.text):
       pos += 1
       rhs_first_text = tokens[pos].text
       rhs = parse_exp()
-      guard rhs_first_text != "(" && rhs === icall:
-        rop = rhs[0]
-        guard rop === iunit && op2s.index(lop.text) < op2s.index(rop.text):
-          icall [rhs[0] icall([iunit(lop) lhs rhs[1]]) rhs[2]] # "1 * 2 + 3" -> (* 1 (+ 2 3)) -> (+ (* 1 2) 3)
-        icall [iunit(lop) lhs icall(rhs)]
-      icall [iunit(lop) lhs rhs]
+      rcall = rhs
+      guard rhs_first_text != "(" && rcall === acall && rcall.argv.size == 2:
+        rop = rcall.head
+        guard rop === aid && op2s.has(rop.token.text) && op2s.index(lop_token.text) < op2s.index(rop.token.text):
+          acall rcall.head [acall(new_aid(lop_token) [lhs rcall.argv[0]]) rcall.argv[1]] # "1 * 2 + 3" -> (* 1 (+ 2 3)) -> (+ (* 1 2) 3)
+        acall new_aid(lop_token) [lhs rhs]
+      acall new_aid(lop_token) [lhs rhs]
+    guard lop_token.text == "=>":
+      pos += 1
+      to_args x =
+        guard x === acall:
+          head = x.head
+          guard head === aid && head.token.text == "tuple":
+            x.argv
+          [x]
+        [x]
+      alambda to_args(lhs) parse_exp()
     lhs
   parse_block = () =>
     guard tokens[pos - 1].indent < tokens[pos].indent: parse_statement()
     parse_line()
   parse_line = () =>
-    lineno_ = tokens[pos].lineno
+    first_token = tokens[pos]
     loop a =
-      guard pos >= tokens.size || tokens[pos].lineno != lineno_:
+      guard pos >= tokens.size || tokens[pos].lineno != first_token.lineno:
         guard a.size == 1: a[0]
-        icall a
+        acall a[0] a.slice(1)
       guard tokens[pos].text == "=":
-        define_iunit = iunit tokens[pos]
         pos += 1
-        guard a.size == 1: icall [define_iunit a[0] parse_block()]
-        lambda = icall [new_iunit("=>") icall(a.slice(1)) parse_block()]
-        icall [define_iunit a[0] lambda]
+        guard a.size == 1: alet first_token parse_block()
+        alet first_token alambda(a.slice(1) parse_block())
       loop a ++ [parse_exp()]
     loop []
   parse_statement = () =>
     current_indent = tokens[pos].indent
-    istatement end_by(parse_line t => t.indent != current_indent)
+    astatement end_by(parse_line t => t.indent != current_indent)
   parse_statement()
 
-infer input =
+infer ast =
   tint = tname "int" []
   tstring = tname "string" []
-  infer_unit_type s =
+  infer_value s =
     guard s.match(r"^[0-9]+$"): tint
     guard s.starts("\""): tstring
     tundef
-  match input:
-    x.iunit:
-      x.type := infer_unit_type x.text
-    x.icall:
+  match ast:
+    x.aid:
+      x.type := infer_value x.token.text
+    x.acall:
       tundef
-    x.istatement:
-      guard x.size == 1: infer x[0]
+    x.alambda:
       tundef
+    x.alet:
+      tundef
+    x.astatement:
+      x.lines.map(infer)[-1]
+#union ast:
+#  aid:
+#    token token
+#    type type
+#  acall:
+#    head ast
+#    argv list[ast]
+#  alambda:
+#    args list[ast]
+#    body ast
+#  alet:
+#    id token
+#    body ast
 
 test t "parser":
   stringify x =
-    join a glue =
-      guard a.size == 1: stringify a[0]
-      "(" ++ a.map(stringify).join(glue) ++ ")"
     match x:
-      x.iunit     : x.text
-      x.icall     : join x " "
-      x.istatement: join x "; "
-  i1 = iunit token("1" 0 0 0)
+      x.aid        : x.token.text
+      x.acall      : stringify(x.head) ++ "(" ++ x.argv.map(stringify).join(" ") ++ ")"
+      x.alambda    : "(" ++ x.args.map(stringify).join(",") + " => " + stringify(x.body) ++ ")"
+      x.alet       : x.id.text ++ " = " ++ stringify(x.body)
+      x.astatement : x.lines.map(stringify).join("; ")
+  x = aid token("x" 0 0 0) tundef
   test_stringify expectation input = t.eq expectation stringify(input)
-  test_stringify "1"      i1
-  test_stringify "(1 1)"  icall([i1 i1])
-  test_stringify "(1; 1)" istatement([i1 i1])
+  test_stringify "x"        x
+  test_stringify "x(x)"     acall(x [x])
+  test_stringify "(x => x)" alambda([x] x)
+  test_stringify "y = x"    alet(token("y" 0 0 0) x)
+  test_stringify "x; x"     astatement([x x])
 
   test_parser expectation source = t.eq expectation stringify(parse(source)) source
+
   # primitives
   test_parser "1" "1"
   test_parser "1.1" "1.1"
@@ -214,87 +244,83 @@ test t "parser":
   test_parser "\"hi\"" "\"hi\""
   test_parser "\"\\t\"" "\"\\t\""
   test_parser "true" "true"
+  test_parser "tuple(a b)" "a,b"
+  test_parser "tuple(a b c)" "a,b,c"
+  test_parser "(a => a)" "a => a"
   # container
-  test_parser "[" "[]"
-  test_parser "([ 1 2)" "[1 2]"
-  test_parser "(=> a a)" "a => a"
-  test_parser "(=> (, a b) a)" "a,b => a"
-  test_parser "(=> p (+ 1 2))" "p => 1 + 2"
-  # definition
-  test_parser "(= a 1)" "a = 1"
-  test_parser "(= f (=> a a))" "f a = a"
-  test_parser "(= a (+ 1 2))" "a = 1 + 2"
-  test_parser "(= f (=> a a))" "f a =\n  a"
-  test_parser "(= f (=> a (a; b)))" "f a =\n  a\n  b"
-  test_parser "(= f (=> a ((= b 1); (+ a b))))" "f a =\n  b = 1\n  a + b"
+  test_parser "list()" "[]"
+  test_parser "list(1 2)" "[1 2]"
   # property access
-  test_parser "(. a b)" "a.b"
-  test_parser "((. a b) c)" "a.b c"
-  test_parser "(. [ a)" "[].a"
-  test_parser "(=> p (+ (. p x) (. p y)))" "p => p.x + p.y"
+  test_parser ".(a b)" "a.b"
+  test_parser ".(a b)(c)" "a.b c"
+  test_parser ".(list() a)" "[].a"
+  test_parser "(p => +(.(p x) .(p y)))" "p => p.x + p.y"
   # single operator
-  test_parser "(! true)" "!true"
+  test_parser "!(true)" "!true"
   # binary operators
-  test_parser "(+ 1 2)" "1 + 2"
-  test_parser "(+ 1 (+ 2 3))" "1 + 2 + 3"
-  test_parser "(+ (* 1 2) 3)" "1 * 2 + 3"
-  test_parser "(!= 1 1)" "1 != 1"
-  test_parser "(+= a 1)" "a += 1"
-  test_parser "(+= a (+ 1 2))" "a += 1 + 2"
+  test_parser "+(1 2)" "1 + 2"
+  test_parser "+(1 +(2 3))" "1 + 2 + 3"
+  test_parser "+(*(1 2) 3)" "1 * 2 + 3"
+  test_parser "!=(1 1)" "1 != 1"
+  test_parser "+=(a 1)" "a += 1"
+  test_parser "+=(a +(1 2))" "a += 1 + 2"
   # parentheses
   test_parser "1" "(1)"
-  test_parser "(f 1)" "(f 1)"
-  test_parser "(+ (+ 1 2) 3)" "(1 + 2) + 3"
-  test_parser "(* 1 (+ 2 3))" "1 * (2 + 3)"
-  test_parser "(* (+ 1 2) 3)" "(1 + 2) * 3"
+  test_parser "+(+(1 2) 3)" "(1 + 2) + 3"
+  test_parser "*(1 +(2 3))" "1 * (2 + 3)"
+  test_parser "*(+(1 2) 3)" "(1 + 2) * 3"
+  # definition
+  test_parser "a = 1" "a = 1"
+  test_parser "f = (a => a)" "f a = a"
+  test_parser "a = +(1 2)" "a = 1 + 2"
+  test_parser "f = (a => a)" "f a =\n  a"
+  test_parser "f = (a => a; b)" "f a =\n  a\n  b"
+  test_parser "f = (a => b = 1; +(a b))" "f a =\n  b = 1\n  a + b"
   # function call
-  test_parser "(__call f)" "f()"
-  test_parser "(f 1)" "f(1)"
-  test_parser "(f (+ 1 2))" "f(1 + 2)"
+  test_parser "f()" "f()"
+  test_parser "f(1)" "f(1)"
+  test_parser "f(+(1 2))" "f(1 + 2)"
   # method call
-  test_parser "(. f m)" "f.m"
-  test_parser "(. f 1)" "f.1"
-  test_parser "(__call (. f m))" "f.m()"
-  test_parser "((. f m) a)" "f.m(a)"
-  test_parser "((. f m) a b)" "f.m(a b)"
+  test_parser ".(f m)" "f.m"
+  test_parser ".(f 1)" "f.1"
+  test_parser ".(f m)()" "f.m()"
+  test_parser ".(f m)(a)" "f.m(a)"
+  test_parser ".(f m)(a b)" "f.m(a b)"
   # index access
-  test_parser "(__index x 1)" "x[1]"
-  test_parser "(__index x 1 2)" "x[1 2]"
+  test_parser "__index(x 1)" "x[1]"
+  test_parser "__index(x 1 2)" "x[1 2]"
   # steps
-  test_parser "(a; b)" "a\nb"
-  test_parser "((a b); c)" "a b\nc"
-  test_parser "(a; (b c))" "a\nb c"
+  test_parser "a; b" "a\nb"
+  test_parser "a(b); c" "a b\nc"
+  test_parser "a; b(c)" "a\nb c"
   # block
-  test_parser "(a b)" "a: b"
-  test_parser "(a (b c))" "a: b c"
-  test_parser "(a b c)" "a b: c"
-  test_parser "(a b (c d))" "a b: c d"
+  test_parser "a(b)"      "a: b"
+  test_parser "a(b(c))"   "a: b c"
+  test_parser "a(b c)"    "a b: c"
+  test_parser "a(b c(d))" "a b: c d"
   # indent
-  test_parser "(a b)"               "a:\n  b"
-  test_parser "((a b); c)"          "a:\n  b\nc"
-  test_parser "(a (b; c))"          "a:\n  b\n  c"
-  test_parser "(a (b c))"           "a:\n  b:\n    c"
-  test_parser "(a b c)"             "a b:\n  c"
-  test_parser "(a b (c d))"         "a b:\n  c d"
-  test_parser "(a b (c; d))"        "a b:\n  c\n  d"
-  test_parser "(a b ((c d); e))"    "a b:\n  c d\n  e"
-  test_parser "(a b (c d e))"       "a b:\n  c d:\n  e"
-  test_parser "(a b (c d (e f)))"   "a b:\n  c d:\n  e f"
+  test_parser "a(b)"            "a:\n  b"
+  test_parser "a(b); c"         "a:\n  b\nc"
+  test_parser "a(b; c)"         "a:\n  b\n  c"
+  test_parser "a(b(c))"         "a:\n  b:\n    c"
+  test_parser "a(b c)"          "a b:\n  c"
+  test_parser "a(b c(d))"       "a b:\n  c d"
+  test_parser "a(b c; d)"       "a b:\n  c\n  d"
+  test_parser "a(b c(d); e)"    "a b:\n  c d\n  e"
+  test_parser "a(b c(d e))"     "a b:\n  c d:\n  e"
+  test_parser "a(b c(d e(f)))"  "a b:\n  c d:\n  e f"
   # comment
-  test_parser "(= a 1)" "#comment\na = 1 # comment\n#comment"
-  test_parser "(a (b; c))" "a:\n  #comment\n  b\n  #comment\n  c\n  # comment"
+  test_parser "a = 1" "#comment\na = 1 # comment\n#comment"
+  test_parser "a(b; c)" "a:\n  #comment\n  b\n  #comment\n  c\n  # comment"
   # combinations
-  test_parser "(! (a b))" "!a(b)"
-  test_parser "(+ (a b) c)" "a(b) + c"
-  test_parser "(. (__index a b) c)" "a[b].c"
-  test_parser "((. (__index a b) c) d)" "a[b].c(d)"
-  # combinations
-  test_parser "(! (a b))" "!a(b)"
-  test_parser "(+ (a b) c)" "a(b) + c"
+  test_parser "!(a(b))" "!a(b)"
+  test_parser "+(a(b) c)" "a(b) + c"
+  test_parser ".(__index(a b) c)" "a[b].c"
+  test_parser ".(__index(a b) c)(d)" "a[b].c(d)"
   # edge case
   test_parser "1" "1\n"
-  test_parser "()" " "
-  test_parser "()" "\n"
+  test_parser "" " "
+  test_parser "" "\n"
 
   test_show expectation type = t.eq expectation show_type(type)
   test_show "?" tundef
@@ -304,7 +330,7 @@ test t "parser":
   test_show "1" tref(1 tundef)
   test_show "a" tref(1 tname("a" []))
 
-  #test_infer expectation source = t.eq expectation show_type(infer(parse(source))) source
-  #test_infer "int" "1"
-  #test_infer "string" "\"s\""
+  test_infer expectation source = t.eq expectation show_type(infer(parse(source))) source
+  test_infer "int" "1"
+  test_infer "string" "\"s\""
   log "ok"

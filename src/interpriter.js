@@ -100,7 +100,7 @@ const execute = (x, env) => {
         cond.match(/[A-Za-z_]/) ? run_with(body, {[cond]: target}) :
         target === run(cond) ? run(body) :
         branch(left)
-      return left.length === 0 ? fail(`${string(conds)} are not match with ${string(target)}`) : f(left)
+      return left.length === 0 ? fail(`not match ${string(target)} with:\n- ${conds.map(string).join("\n- ")}`) : f(left)
     }
     return branch(conds)
   }
