@@ -32,7 +32,7 @@ const parse = source => {
     a[a.length - 1].match(/^[ \r\n\t]/) ? trim(a.slice(0, -1)) : a
   const regexp = /((?:!=)|[()\[\]{}!]|(?:-?[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+(?:#[^\n]*|[ \t\r\n]+)*|r?`.*`|r?"[^]*?(?<!\\)"|[A-Za-z0-9_]+|#[^\n]*)/
   const tokens = trim(source.split(regexp).filter(t => t.length > 0 && !t.startsWith('#')))
-  const op2s = '. , * ** / // % + ++ - >> << ^ & | := += -= *= /= %= **= < <= > >= == != === !== <=> && || =>'.split(' ')
+  const op2s = '. , * ** / // % + ++ - >> << ^ & | := += -= *= /= %= **= < <= > >= == != === !== <=> && || = =>'.split(' ')
   const statement = () => {
     const many = (a, f) => pos >= tokens.length ? a : (ret =>
       typeof ret === 'string' || Array.isArray(ret) || ret === true ?
@@ -72,9 +72,9 @@ const parse = source => {
     const prioritize = (op, l, r) => Array.isArray(l) && is_op2(l[0]) && priority(op) < priority(l[0]) ? [l[0], l[1], [op, l[2], r]] : [op, l, r]
     const priority = op => op2s.findIndex(t => t == op)
     const block = a => (n => n === -1 ? a : [a[n], a.slice(0, n), a.slice(n+1)])(a.findIndex(t => t === ':'))
-    const declare = a => (pos => pos === -1 ? a : [a[pos], a.slice(0, pos), a.slice(pos+1)])(a.findIndex(t => t === '='))
+    const declare = a => a[1] === '=' ? ['=', a[0], a.slice(2)] : a
     const unnest = a => a.length === 1 ? a[0] : a
-    return Array.isArray(o) ? (o.length === 1 ? reorder(o[0]) : unnest(block(declare(op2(o)))).map(reorder)) : o
+    return Array.isArray(o) ? (o.length === 1 ? reorder(o[0]) : unnest(block(op2(declare(o)))).map(reorder)) : o
   }
   tokens.unshift('\n')
   return reorder(statement())
@@ -102,11 +102,6 @@ if (require.main === module) {
   test('(=> p (+ 1 2))', 'p => 1 + 2')
   test('(=> p 1)', 'p =>\n  1')
   test('(=> p (__pack 1 2))', 'p =>\n  1\n  2')
-
-  // definition
-  test('(= a 1)', 'a = 1')
-  test('(= (f a) a)', 'f a = a')
-  test('(= (f a) (__pack (= b 1) (+ a b)))', 'f a =\n  b = 1\n  a + b')
 
   // property access
   test('(. a b)', 'a.b')
@@ -193,6 +188,8 @@ if (require.main === module) {
   test('1', '1\n')
   test('()', '')
   test('()', '\n')
+  test('(= a (b c))', 'a = b c')
+  test('(f (= a b))', 'f a = b')
 
   puts('ok')
 }

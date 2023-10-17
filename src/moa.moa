@@ -14,7 +14,7 @@ The commands are:
   moa test [regexps] # run tests
   moa version        # print Moa version"
 
-main io =
+def main io:
   match io.argv:
     []: repl io
     ["build"]      : io.puts "Not implemented yet"
@@ -29,9 +29,11 @@ main io =
     ["version"]    : io.puts "moa v0.1"
     _              : io.puts help
 
-repl io = io.puts "repl"
+def repl io:
+  io.puts "repl"
 
-compile_to_js source = "const main = io => log(io)"
+def compile_to_js source:
+  "const main = io => log(io)"
 
 class token:
   text string
@@ -65,16 +67,17 @@ union ast:
   astatement:
     lines list[ast]
 
-show_type t = match t:
-  _.tundef : "?"
-  x.tlambda: "(" ++ x.map(show_type).join(" ") ++ ")"
-  x.tname  :
-    guard x.params.size == 0: x.name
-    x.name ++ "[" ++ x.params.map(show_type).join(" ") ++ "]"
-  x.tid    : x.string
-  x.tref   : show_type x
+def show_type t:
+  match t:
+    _.tundef : "?"
+    x.tlambda: "(" ++ x.map(show_type).join(" ") ++ ")"
+    x.tname  :
+      guard x.params.size == 0: x.name
+      x.name ++ "[" ++ x.params.map(show_type).join(" ") ++ "]"
+    x.tid    : x.string
+    x.tref   : show_type x
 
-parse source =
+def parse source:
   tokens =
     regexp = r"((?:!=)|[()\[\]{}!]|(?:-?[0-9]+(?:\.[0-9]+)?)|[ \t\n]+(?:#[^\n]*|[ \t\n]+)*|\"[^]*?(?<!\\)\"|[A-Za-z0-9_]+|#[^\n]*)"
     indent = 0
@@ -91,22 +94,24 @@ parse source =
       t = token text indent lineno column
       column += text.size
       t
-  new_aid_text t text = aid token(text t.indent t.lineno t.column)
+  def new_aid_text t text:
+    aid token(text t.indent t.lineno t.column)
   guard tokens.size == 0: astatement []
   pos = 0
-  end_by forward check =
-    loop a =
+  def end_by forward check:
+    def loop a:
       guard pos >= tokens.size: a
       guard check(tokens[pos]): a
       loop a ++ [forward()]
     loop []
-  parse_unit = () =>
-    until end = end_by parse_exp t =>
-      guard t.text == end:
-        pos += 1
-        true
-      false
-    consume = () =>
+  def parse_unit:
+    def until end:
+      end_by parse_exp t =>
+        guard t.text == end:
+          pos += 1
+          true
+        false
+    def consume:
       t = tokens[pos]
       pos += 1
       match t.text:
@@ -114,7 +119,7 @@ parse source =
         "[": acall(new_aid_text(t "list") until("]"))
         ":": parse_block()
         _: aid t
-    suffix x =
+    def suffix x:
       guard pos >= tokens.size: x
       t = tokens[pos]
       match t.text:
@@ -137,7 +142,7 @@ parse source =
           suffix acall(new_aid_text(t "__index") [x] ++ until("]"))
         _: x
     suffix consume()
-  parse_exp = () =>
+  def parse_exp:
     lhs = parse_unit()
     guard pos >= tokens.size: lhs
     guard lhs === aid && lhs.token.text == "!": acall aid(lhs.token) [parse_unit()]
@@ -158,13 +163,13 @@ parse source =
       pos += 1
       alambda [aid(lhs.token)] parse_exp()
     lhs
-  parse_block = () =>
+  def parse_block:
     guard tokens[pos - 1].indent < tokens[pos].indent: parse_statement()
     parse_line()
-  parse_line = () =>
+  def parse_line:
     first_pos = pos
     first_token = tokens[pos]
-    loop a =
+    def loop a:
       guard pos >= tokens.size || tokens[pos].lineno != first_token.lineno:
         guard a.size == 1: a[0]
         acall a[0] a.slice(1)
@@ -174,12 +179,12 @@ parse source =
         alet first_token alambda(a.slice(1) parse_block())
       loop a ++ [parse_exp()]
     loop []
-  parse_statement = () =>
+  def parse_statement:
     current_indent = tokens[pos].indent
     astatement end_by(parse_line t => t.indent != current_indent)
   parse_statement()
 
-infer ast =
+def infer ast:
   tbool = tname "bool" []
   tint = tname "int" []
   tfloat = tname "float" []
@@ -189,7 +194,7 @@ infer ast =
   prune t = match t:
     x.tref: prune x
     _: t
-  unify a b =
+  def unify a b:
     tundef
 #    a = prune a
 #    b = prune b
@@ -211,9 +216,10 @@ infer ast =
 #108       }
 #109     }
 #110   }
-  inf_with ast env =
-    inf x = inf_with x env
-    inf_value s =
+  def inf_with ast env:
+    def inf x:
+      inf_with x env
+    def inf_value s:
       guard s == "true" || s == "false": tbool
       guard s.match(r"^[0-9]+\.[0-9]+$"): tfloat
       guard s.match(r"^[0-9]+$"): tint
@@ -257,22 +263,24 @@ infer ast =
 #    body ast
 
 test t "parser":
-  stringify x =
+  def stringify x:
     match x:
       x.aid        : x.token.text
       x.acall      : stringify(x.head) ++ "(" ++ x.argv.map(stringify).join(" ") ++ ")"
       x.alambda    : "(" ++ x.args.map(stringify).join(",") + " => " + stringify(x.body) ++ ")"
       x.alet       : x.id.text ++ " = " ++ stringify(x.body)
       x.astatement : x.lines.map(stringify).join("; ")
+  def test_stringify expectation input:
+    t.eq expectation stringify(input)
   x = aid token("x" 0 0 0) tundef
-  test_stringify expectation input = t.eq expectation stringify(input)
   test_stringify "x"        x
   test_stringify "x(x)"     acall(x [x])
   test_stringify "(x => x)" alambda([x] x)
   test_stringify "y = x"    alet(token("y" 0 0 0) x)
   test_stringify "x; x"     astatement([x x])
 
-  test_parser expectation source = t.eq expectation stringify(parse(source)) source
+  def test_parser expectation source:
+    t.eq expectation stringify(parse(source)) source
   test_parser "(a => a)" "a => a"
 
   # primitives
@@ -360,7 +368,8 @@ test t "parser":
   test_parser "" " "
   test_parser "" "\n"
 
-  test_show expectation type = t.eq expectation show_type(type)
+  def test_show expectation type:
+    t.eq expectation show_type(type)
   test_show "?" tundef
   test_show "(? ?)" tlambda([tundef tundef])
   test_show "a" tname("a" [])
@@ -368,7 +377,8 @@ test t "parser":
   test_show "1" tid(1)
   test_show "a" tref(tname("a" []))
 
-  test_infer expectation source = t.eq expectation show_type(infer(parse(source))) source
+  def test_infer expectation source:
+    t.eq expectation show_type(infer(parse(source))) source
   # primitives
   ##test_infer "bool" "true"
   ##test_infer "bool" "false"

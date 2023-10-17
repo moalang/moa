@@ -125,6 +125,7 @@ const execute = (x, env) => {
     head === 'match' ? match(tail[0], unpack(body)) :
     head === 'test' ? run_with(body, {[tail[0]]: {eq}}) :
     head === 'guard' ? guard(tail[0], body) :
+    head === 'def' ? declare(tail[0], lambda(tail.slice(1), body)) :
     fail(`'${head}' is unkown block with ${string(tail)} and ${string(body)}`)
   const apply = ([head, ...tail]) =>
     head === undefined ? undefined :
@@ -137,7 +138,7 @@ const execute = (x, env) => {
     head === 'error' ? fail(string(run(tail[0]))) :
     head === 'string' ? escape(run(tail[0])) :
     head === 'guard' ? guard(tail[0], tail[1]) :
-    head === '=' ? define(tail) :
+    head === '=' ? declare(tail[0], run(tail[1])) :
     head === '__index' ? index(run(tail[0]), run(tail[1])) :
     head === '__call' && tail[0] === 'class' ? ({}) :
     head === '__call' && tail[0] === 'list' ? list() :
@@ -279,12 +280,11 @@ if (require.main === module) {
   test(Error('z missing'), 'z := 1')
 
   // define
-  test(1, 'a = 1\na')
-  test(1, 'f = () => 1\nf()')
-  test(1, 'f a = a\nf(1)')
-  test(0, 'a = 0\nf a =\n  a += 1\nf(a)\na') // local scope
-  test(1, 'a = 0\nf = () => a += 1\nf()\na') // outer scope
-  test(2, 'f a =\n  m = a % 2\n  guard m == 0 a\n  f(a - 1)\nf(3)') // recursion
+  test(1, 'def f: 1\nf()')
+  test(1, 'def f a: a\nf(1)')
+  test(0, 'a = 0\ndef f a:\n  a += 1\nf(a)\na') // local scope
+  test(1, 'a = 0\ndef f: a += 1\nf()\na') // outer scope
+  test(2, 'def f a:\n  m = a % 2\n  guard m == 0 a\n  f(a - 1)\nf(3)') // recursion
 
   // statement
   test(2, 'guard false: 1\n2')
@@ -321,8 +321,8 @@ if (require.main === module) {
 
   // error / match
   test(Error('1'), 'error 1')
-  test("f", 'f s = error "f"\nmatch f("t"):\n  e.error: e.message\n  s: s')
-  test("t", 'f s = s\nmatch f("t"):\n  e.error: e.message\n  s: s')
+  test("f", 'def f s: error "f"\nmatch f("t"):\n  e.error: e.message\n  s: s')
+  test("t", 'def f s: s\nmatch f("t"):\n  e.error: e.message\n  s: s')
 
   // test
   test(true, 'test t: t.eq 1 1')
@@ -330,7 +330,7 @@ if (require.main === module) {
   test(Error('"a" ne "b"'), 'test t: t.eq "a" "b"')
 
   // edge case
-  test(1, 'a = 0\nf = () =>\n  g = () => a += 1\n  g()\nf()\na')
+  test(1, 'a = 0\ndef f:\n  def g: a += 1\n  g()\nf()\na')
 
   puts('ok')
 }
