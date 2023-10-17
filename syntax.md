@@ -23,8 +23,8 @@ op2:
 | "**" | "&&" | "||" | ">>" | "<<"
 | "===" | "**=" "<=>"
 id: [a-za-z_][a-za-z0-9_]*
-embedded: class union match guard error bool true false int float string bytes list set dict tuple opt some none time log test use
-reserved: num
+embedded: def class union match guard error bool true false int float string bytes list set dict tuple option some none time log test use
+reserved: num interface implement
 
 
 
@@ -73,28 +73,31 @@ reserved: num
   f a.. = g a..
 
 - variable length argument
-  f (a=1) = a         # one or zero with default value
-  f a?    = a.or(1)   # zero or one
-  f a*    = a.max     # zero or more
-  f a+    = a.max     # one or more
-  f a,+  = a.max.1    # two, four or more : a is list[tuple[t u]]
-  f                   # zero, one or two
-  | = f 0
-  | a.int   = f a 0
-  | a.float = f a 0.0
-  | a b = a + b
+  def f a=1: a         # zero or one with default value
+  def f a? : a.or(1)   # zero or one
+  def f a* : a.max     # zero or more
+  def f a+ : a.max     # one or more
+  def f a,+: a.max.1   # two, four or more : a is list[tuple[t u]]
+  def f                # zero, one or two
+  |        : 0
+  | a.int  : f a 0
+  | a.float: f a 0.0
+  | a b    : a + b
 
 - named argument
-  f {a}     = a    # f(a=1)
-  f {a=0}   = a    # f() or f(a=1)
-  f {a b}   = a    # f(a=1 b=2) or f(b=2 a=1)
-  f {a b=0} = a    # f(a=1) or f(a=1 b=2) or f(b=2 a=1)
+  def f {a}    : a     # f(a=1)
+  def f {a=0}  : a     # f() or f(a=1)
+  def f {a b}  : a     # f(a=1 b=2) or f(b=2 a=1)
+  def f {a b=0}: a     # f(a=1), f(a=1 b=2) or f(b=2 a=1)
 
 - variable
   n = 1
   n += 2
   n := 3 # ok
   n = 3  # compile error
+
+- implicit type cast
+  const int : int or float
 
 # Symbols
 _                  part of id

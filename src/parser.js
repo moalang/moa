@@ -33,12 +33,13 @@ const parse = source => {
   const regexp = /((?:!=)|[()\[\]{}!]|(?:-?[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+(?:#[^\n]*|[ \t\r\n]+)*|r?`.*`|r?"[^]*?(?<!\\)"|[A-Za-z0-9_]+|#[^\n]*)/
   const tokens = trim(source.split(regexp).filter(t => t.length > 0 && !t.startsWith('#')))
   const op2s = '. , * ** / // % + ++ - >> << ^ & | := += -= *= /= %= **= < <= > >= == != === !== <=> && || = =>'.split(' ')
+  const not_space = t => !(typeof t === 'string' && t.match(/^[ \t\r\n#]/))
   const statement = () => {
     const many = (a, f) => pos >= tokens.length ? a : (ret =>
       typeof ret === 'string' || Array.isArray(ret) || ret === true ?
       many((a.push(ret), a), f) : a)(f(tokens[pos]))
     const consume = () => ((tokens[pos].match(/^[ \t]+$/) && ++pos), tokens[pos++])
-    const until = end => many([], t => t === end ? ++pos : unit())
+    const until = end => many([], t => t === end ? ++pos : unit()).filter(not_space)
     const call = (o, a) => a.length === 0 ? ['__call', o] : [o].concat(a)
     const index = (o, a) => ['__index', o, ...a]
     const indent = s => s === undefined ? 0 : s.match(/[\r\n]/) ? s.split(/[\r\n]/).slice(-1)[0].length : -1
@@ -86,6 +87,7 @@ if (require.main === module) {
   const stringify = a => Array.isArray(a) ? `(${a.map(stringify).join(' ')})` : string(a)
   const assert = (expect, fact, src) => expect === fact ? put('.') : fail(`Expected '${expect}' but got '${fact}' source='${src}'`)
   const test = (expect, src) => assert(expect, stringify(parse(src)), src)
+  test('(f a b)', 'f(a\nb\n)')
 
   // primitives
   test('1', '1')
@@ -190,6 +192,7 @@ if (require.main === module) {
   test('()', '\n')
   test('(= a (b c))', 'a = b c')
   test('(f (= a b))', 'f a = b')
+  test('(f a b)', 'f(a\nb\n)')
 
   puts('ok')
 }
