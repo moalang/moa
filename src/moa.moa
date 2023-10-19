@@ -41,16 +41,14 @@ class token:
   lineno int
   column int
 
-union type:
-  tlambda list[type]
-  tname:
-    name string
-    generics list[type]
+class type:
+  name string
+  params list[type]
 
 union typing:
-  tyid int
-  tylambda list[typing]
-  tyname:
+  tvar int
+  tlambda list[typing]
+  tname:
     name string
     generics list[typing]
 
@@ -72,11 +70,8 @@ union ast:
     lines list[ast]
 
 def show_type t:
-  match t:
-    x.tlambda: "(" ++ x.map(show_type).join(" ") ++ ")"
-    x.tname  :
-      guard x.generics.size == 0: x.name
-      x.name ++ "[" ++ x.generics.map(show_type).join(" ") ++ "]"
+  guard t.params.size == 0: t.name
+  t.name ++ "(" ++ t.params.map(show_type).join(" ") ++ ")"
 
 def parse source:
   tokens =
@@ -197,18 +192,18 @@ def parse source:
   parse_statement()
 
 def infer ast:
-  tyenv = dict()
-  tbool = tyname "bool" [] dict()
-  tint = tyname "int" [] dict()
-  tfloat = tyname "float" [] dict()
-  tstring = tyname "string" [] dict()
+  tenv = dict()
+  tbool = tname "bool" [] dict()
+  tint = tname "int" [] dict()
+  tfloat = tname "float" [] dict()
+  tstring = tname "string" [] dict()
   id = 0
-  new_tyid = () => tyid(id+=1)
-  tzero = tyid 0
+  new_tvar = () => tvar(id+=1)
+  tzero = tvar 0
   def unify a b:
     tzero
 ##union type:
-##  tid int
+##  tvar int
 ##  tlambda list[type]
 ##  tname:
 ##    name string
@@ -216,7 +211,7 @@ def infer ast:
 ##    fields dict[string type]
 #    a = prune a
 #    b = prune b
-#    guard a == tid && b == tid && a.id == b.id:
+#    guard a == tvar && b == tvar && a.id == b.id:
 # 94   const unify = (a, b) => {
 # 95     a = prune(a)
 # 96     b = prune(b)
@@ -249,23 +244,23 @@ def infer ast:
       x.aconst: inf_const x.token.text
       x.acall : unify inf(x.head) x.argv.map(inf)
       x.alambda:
-        argst = x.args.map(t => t.text, new_tyid())
+        argst = x.args.map(t => t.text, new_tvar())
         new_env = env ++ argst.dict()
-        tylambda argst.map(x => x[1]) ++ [inf_with(x.body new_env)]
+        tlambda argst.map(x => x[1]) ++ [inf_with(x.body new_env)]
       x.astatement:
         x.lines.map(inf)[-1]
-    tyenv[ast] := ty
+    tenv[ast] := ty
     ty
   def to_type t:
     match t:
-      x.tyid: tname x.string []
-      x.tyname: tname x.name x.generics.map(to_type)
-      x.tylambda: tlambda x.map(to_type)
+      x.tvar: type x.string []
+      x.tname: type x.name x.generics.map(to_type)
+      x.tlambda: type "" x.map(to_type)
   inf_with ast dict(
-    "list" tylambda(tzero tzero)
+    "list" tlambda(tzero tzero)
     "true" tbool
     "false" tbool)
-  tyenv.vmap(to_type)
+  tenv.vmap(to_type)
 
 test t "parser":
   def stringify x:
@@ -376,8 +371,10 @@ test t "parser":
 
   def test_show expectation type:
     t.eq expectation show_type(type)
-  test_show "a" tname("a" [])
-  test_show "a[b c]" tname("a" [tname("b" []) tname("c" [])])
+  ta = type "a" []
+  test_show "a" ta
+  test_show "(a a)" type("" [ta ta])
+  test_show "t(a a)" type("t" [ta ta])
 
   def test_infer expectation source:
     node = parse source

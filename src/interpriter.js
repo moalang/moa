@@ -114,10 +114,11 @@ const execute = (x, env) => {
     run_with(cond, e) && ((Array.isArray(cond) && cond[0] === '===' && cond[1].match(/^[A-Za-z_]/) && (e[cond[1]]=lookup(cond[1]).__val, true)) || true)
   const guard = (cond, body) => (e => capture(cond, e) ? new Return(run_with(body, e)) : true)({})
   const eq = (a, b, c) => ((a, b) => a === b ? true : fail(`${a} ne ${b}` + (c ? ` # ${JSON.stringify(c)}` : '')))(escape(a), escape(b))
-  const set = (a, k, v) => Array.isArray(a) ? a[k] = v : (a.set(k, v), v)
+  const to_key = o => typeof o === 'object' ? JSON.stringify(o) : o
+  const set = (a, k, v) => Array.isArray(a) ? a[to_key(k)] = v : (a.set(to_key(k), v), v)
   const index = (a, i) =>
     Array.isArray(a) || typeof a === 'string' ? (i < 0 ? index(a, a.length + i) : i >= a.length ? fail(`${i} exceeded`) : a[i]) :
-    a.has(i) ? a.get(i): fail(`${i} not found`)
+    a.has(to_key(i)) ? a.get(to_key(i)): fail(`${to_key(i)} not found in ${JSON.stringify(a)}`)
   const define = ([head, body]) => Array.isArray(head) ?
     declare(head[0], lambda(head.slice(1), body))  :
     declare(head, run(body))
