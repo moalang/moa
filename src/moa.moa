@@ -42,12 +42,17 @@ class token:
   column int
 
 union type:
-  tid int
   tlambda list[type]
   tname:
     name string
     generics list[type]
-    fields dict[string type]
+
+union typing:
+  tyid int
+  tylambda list[typing]
+  tyname:
+    name string
+    generics list[typing]
 
 union ast:
   aid:
@@ -72,7 +77,6 @@ def show_type t:
     x.tname  :
       guard x.generics.size == 0: x.name
       x.name ++ "[" ++ x.generics.map(show_type).join(" ") ++ "]"
-    x.tid    : x.string
 
 def parse source:
   tokens =
@@ -193,13 +197,14 @@ def parse source:
   parse_statement()
 
 def infer ast:
-  tbool = tname "bool" [] dict()
-  tint = tname "int" [] dict()
-  tfloat = tname "float" [] dict()
-  tstring = tname "string" [] dict()
+  tyenv = dict()
+  tbool = tyname "bool" [] dict()
+  tint = tyname "int" [] dict()
+  tfloat = tyname "float" [] dict()
+  tstring = tyname "string" [] dict()
   id = 0
-  new_tid = () => tid(id+=1)
-  tzero = tid 0
+  new_tyid = () => tyid(id+=1)
+  tzero = tyid 0
   def unify a b:
     tzero
 ##union type:
@@ -239,20 +244,28 @@ def infer ast:
       guard s.match(r"^[A-Za-z_]"): env[s]
       guard s.starts("\""): tstring
       error s
-    match ast:
+    ty = match ast:
       x.aid   : env[x.token.text]
       x.aconst: inf_const x.token.text
       x.acall : unify inf(x.head) x.argv.map(inf)
       x.alambda:
-        argst = x.args.map(t => t.text, new_tid())
+        argst = x.args.map(t => t.text, new_tyid())
         new_env = env ++ argst.dict()
-        tlambda argst.map(x => x[1]) ++ [inf_with(x.body new_env)]
+        tylambda argst.map(x => x[1]) ++ [inf_with(x.body new_env)]
       x.astatement:
         x.lines.map(inf)[-1]
+    tyenv[ast] := ty
+    ty
+  def to_type t:
+    match t:
+      x.tyid: tname x.string []
+      x.tyname: tname x.name x.generics.map(to_type)
+      x.tylambda: tlambda x.map(to_type)
   inf_with ast dict(
-    "list" tlambda(tzero tzero)
+    "list" tylambda(tzero tzero)
     "true" tbool
     "false" tbool)
+  tyenv.vmap(to_type)
 
 test t "parser":
   def stringify x:
@@ -365,11 +378,10 @@ test t "parser":
     t.eq expectation show_type(type)
   test_show "a" tname("a" [])
   test_show "a[b c]" tname("a" [tname("b" []) tname("c" [])])
-  test_show "1" tid(1)
 
   def test_infer expectation source:
-    ps = parse source
-    t.eq expectation show_type(infer(ps)) source ++ " :: " + stringify(ps)
+    node = parse source
+    t.eq expectation show_type(infer(node)[node]) source ++ " :: " + stringify(node)
   # primitives
   test_infer "bool" "true"
   test_infer "bool" "false"
@@ -378,7 +390,7 @@ test t "parser":
   test_infer "string" "\"s\""
   test_infer "(1 1)" "x => x"
   # container
-  ##test_infer "list[0]" "[]"
+  #test_infer "list[0]" "[]"
   ##test_infer "list[int]" "[1]"
   ### property access
   ##test_infer "int" "[].size"

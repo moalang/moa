@@ -47,6 +47,7 @@ const execute = (x, env) => {
     target instanceof List && id === 'find' ? (f => Boolean(target.find(f))) :
     target instanceof List && id === 'index' ? (s => target.findIndex(x => op2('==', x, s))) :
     target instanceof List && id === 'dict' ? () => new Map([...target.map(x => [...x])]) :
+    target instanceof Map && id === 'vmap' ? f => new Map([...target.entries()].map(([k,v]) => [k, f(v)])) :
     typeof target === 'object' && id in target ? target[id] :
     typeof target === 'string' && id === 'size' ? target.length :
     typeof target === 'string' && id === 'rsplit' ? r => list(...target.split(r)) :
@@ -88,7 +89,7 @@ const execute = (x, env) => {
       case '<<': return run(lhs) << run(rhs)
       case '&&': return run(lhs) && run(rhs)
       case '||': return run(lhs) || run(rhs)
-      case ':=': return update(lhs, run(rhs))
+      case ':=': return lhs[0] === '__index' ? set(run(lhs[1]), run(lhs[2]), run(rhs)) : update(lhs, run(rhs))
       default: return op.match(/^[+\-*/%|&]+=$/) ? update(lhs, op2(op.slice(0, -1), run(lhs), run(rhs))) : fail(`${op} unknown operator`)
     }
   }
@@ -113,6 +114,7 @@ const execute = (x, env) => {
     run_with(cond, e) && ((Array.isArray(cond) && cond[0] === '===' && cond[1].match(/^[A-Za-z_]/) && (e[cond[1]]=lookup(cond[1]).__val, true)) || true)
   const guard = (cond, body) => (e => capture(cond, e) ? new Return(run_with(body, e)) : true)({})
   const eq = (a, b, c) => ((a, b) => a === b ? true : fail(`${a} ne ${b}` + (c ? ` # ${JSON.stringify(c)}` : '')))(escape(a), escape(b))
+  const set = (a, k, v) => Array.isArray(a) ? a[k] = v : (a.set(k, v), v)
   const index = (a, i) =>
     Array.isArray(a) || typeof a === 'string' ? (i < 0 ? index(a, a.length + i) : i >= a.length ? fail(`${i} exceeded`) : a[i]) :
     a.has(i) ? a.get(i): fail(`${i} not found`)
@@ -252,6 +254,8 @@ if (require.main === module) {
   test({a: 1, b: 2}, 'dict("a" 1) ++ (dict("b" 2))')
   test({a: 1}, '["a",1].dict()')
   test(1, 'dict("a" 1)["a"]')
+  test({a:1}, 'd=dict()\nd["a"]:=1\nd')
+  test({a:2}, 'dict("a" 1).vmap(n => n + 1)')
 
   // operators
   test(false, '!true')
