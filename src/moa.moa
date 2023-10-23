@@ -43,18 +43,7 @@ class token:
 
 class type:
   name string
-  generics list[type]
-
-union typing:
-  tvar int
-  tlambda list[typing]
-  tname:
-    name string
-    generics list[typing]
-
-#class typing_arg:
-#  targ typing
-#  suppliment_type typing
+  params list[type]
 
 union ast:
   aid:
@@ -74,8 +63,9 @@ union ast:
     lines list[ast]
 
 def show_type t:
-  guard t.generics.size == 0: t.name
-  t.name ++ "(" ++ t.generics.map(show_type).join(" ") ++ ")"
+  guard t.params.size == 0: t.name
+  guard t.name == "": "(" ++ t.params.map(show_type).join(" ") ++ ")"
+  t.name ++ "[" ++ t.params.map(show_type).join(" ") ++ "]"
 
 def parse source:
   tokens =
@@ -198,32 +188,38 @@ def parse source:
   parse_statement()
 
 def infer node:
-  tv0 = tvar 0
-  tbool = tname "bool" []
-  tint = tname "int" []
-  tfloat = tname "float" []
-  tstring = tname "string" []
-  def tlist t:
-    tname "list" [t]
   id = 0
-  new_tvar = () => tvar(id+=1)
+  def tvar: type (id+=1).string []
+  tv1 = tvar()
+  tbool = type "bool" []
+  tint = type "int" []
+  tfloat = type "float" []
+  tstring = type "string" []
+  tlist = type "list" [tv1]
+  def is_var t:
+    t.name.match(r"^[0-9]")
+  def tlambda params:
+    type "" params
+  def copy a b:
+    a.name := b.name
+    a.params := b.params
+    a
+  def call f params:
+    guard f.name == "list":
+      guard params.size == 0: f
+      unify f.params[0] params[0]
+      f
+    guard f.name != "": error "not function" f params
+    guard params.size == 0 && f.params.size == 1: f.params[0]
+    unify f.params[0] params[0]
+    call tlambda(f.params.slice(1)) params.slice(1)
   def unify a b:
-    log "---"
-    log a
-    log "---"
-    log b
-    log "---"
-    tv0
-##union type:
-##  tvar int
-##  tlambda list[type]
-##  tname:
-##    name string
-##    generics list[type]
-##    fields dict[string type]
-#    a = prune a
-#    b = prune b
-#    guard a == tvar && b == tvar && a.id == b.id:
+    va = is_var a
+    vb = is_var b
+    guard va && vb: copy a b
+    guard va: copy a b
+    guard vb: copy b a
+    tv1
 # 94   const unify = (a, b) => {
 # 95     a = prune(a)
 # 96     b = prune(b)
@@ -234,9 +230,9 @@ def infer node:
 #101     } else if (b.var) {
 #102       unify(b, a)
 #103     } else {
-#104       if (a.name !== b.name) { fail(`type miss match`, {a,b}) }
+#104       if (a.name !== b.name) { error(`type miss match`, {a,b}) }
 #105       if (a.types || b.types) {
-#106         if (a.types.length !== b.types.length) { fail('types miss match', {a,b}) } // TODO
+#106         if (a.types.length !== b.types.length) { error('types miss match', {a,b}) } // TODO
 #107         a.types.map((t,i) => unify(t, b.types[i]))
 #108       }
 #109     }
@@ -255,25 +251,20 @@ def infer node:
     ty = match node:
       x.aid   : env[x.token.text]
       x.aconst: inf_const x.token.text
-      x.acall : unify inf(x.head) x.argv.map(inf)
+      x.acall : call inf(x.head) x.argv.map(inf)
       x.alambda:
-        argst = x.args.map(t => t.text, new_tvar())
+        argst = x.args.map(t => t.text, tvar())
         new_env = env ++ argst.dict()
         tlambda argst.map(x => x[1]) ++ [inf_with(x.body new_env)]
       x.node:
         x.lines.map(inf)[-1]
     tenv[node] := ty
     ty
-  def to_type t:
-    match t:
-      x.tvar: type x.string []
-      x.tname: type x.name x.generics.map(to_type)
-      x.tlambda: type "" x.map(to_type)
   inf_with node dict(
-    "list" tlambda([tv0 tlist(tv0)])
+    "list" tlist
     "true" tbool
     "false" tbool)
-  tenv.vmap(to_type)
+  tenv
 
 test t "parser":
   def stringify x:
@@ -382,12 +373,12 @@ test t "parser":
   test_parser "" " "
   test_parser "" "\n"
 
-  def test_show expectation type:
-    t.eq expectation show_type(type)
+  def test_show expectation ty:
+    t.eq expectation show_type(ty)
   ta = type "a" []
   test_show "a" ta
   test_show "(a a)" type("" [ta ta])
-  test_show "t(a a)" type("t" [ta ta])
+  test_show "t[a a]" type("t" [ta ta])
 
   def test_infer expectation source:
     node = parse source
@@ -398,11 +389,11 @@ test t "parser":
   test_infer "int" "1"
   test_infer "float" "1.1"
   test_infer "string" "\"s\""
-  test_infer "(1 1)" "x => x"
+  test_infer "(2 2)" "x => x"
   # container
-  #test_infer "list[0]" "[]"
-  ##test_infer "list[int]" "[1]"
-  ### property access
+  test_infer "list[1]" "[]"
+  test_infer "list[int]" "[1]"
+  # property access
   ##test_infer "int" "[].size"
   ### single operator
   ##test_parser "bool" "!true"

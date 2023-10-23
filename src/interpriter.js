@@ -91,7 +91,9 @@ const execute = (x, env) => {
       case '<<': return run(lhs) << run(rhs)
       case '&&': return run(lhs) && run(rhs)
       case '||': return run(lhs) || run(rhs)
-      case ':=': return lhs[0] === '__index' ? set(run(lhs[1]), run(lhs[2]), run(rhs)) : update(lhs, run(rhs))
+      case ':=': return lhs[0] === '__index' ? set(run(lhs[1]), run(lhs[2]), run(rhs)) :
+          lhs[0] === '.' ? run(lhs[1])[lhs[2]] = run(rhs) :
+          update(lhs, run(rhs))
       default: return op.match(/^[+\-*/%|&]+=$/) ? update(lhs, op2(op.slice(0, -1), run(lhs), run(rhs))) : fail(`${op} unknown operator`)
     }
   }
@@ -140,7 +142,7 @@ const execute = (x, env) => {
     head === 'tuple' ? tuple(...tail.map(run)) :
     head === 'dict' ? dict(...tail.map(run)) :
     head === 'class' ? Object.fromEntries(Array(tail.length/2).fill().map((_,i) => [tail[i*2], run(tail[i*2+1])])) :
-    head === 'error' ? fail(string(run(tail[0]))) :
+    head === 'error' ? fail(tail.map(run).map(string).join(' ')) :
     head === 'string' ? escape(run(tail[0])) :
     head === 'guard' ? guard(tail[0], tail[1]) :
     head === '=' ? declare(tail[0], run(tail[1])) :
@@ -343,6 +345,7 @@ if (require.main === module) {
 
   // error / match
   test(Error('1'), 'error 1')
+  test(Error('1 2'), 'error 1 2')
   test("f", 'def f s: error "f"\nmatch f("t"):\n  e.error: e.message\n  s: s')
   test("t", 'def f s: s\nmatch f("t"):\n  e.error: e.message\n  s: s')
 

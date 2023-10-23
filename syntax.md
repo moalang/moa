@@ -98,6 +98,8 @@ reserved: num interface implement
 
 - implicit type cast
   const int : int or float
+  true : some as option[{}]
+  false : none
 
 # Symbols
 _                  part of id

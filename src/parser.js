@@ -163,6 +163,10 @@ if (require.main === module) {
   test('(__pack (a b) c)', 'a b\nc')
   test('(__pack a (b c))', 'a\nb c')
 
+  // assignment
+  test('(= a b)', 'a = b')
+  test('(= a (__pack b c))', 'a =\n  b\n  c')
+
   // block
   test('(: a b)', 'a: b')
   test('(: (a b) c)', 'a b: c')
