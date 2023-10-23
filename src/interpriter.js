@@ -3,6 +3,8 @@
  */
 class List extends Array { }
 class Tuple extends Array { }
+const none = { and: _ => none, or: v => v }
+const some = x => ({ and: f => some(f(x)), or: _ => x, __value: x })
 function Return(value) { this.value = value }
 Return.prototype.valueOf = function() { return this.value }
 const { parse } = require('./parser.js')
@@ -153,6 +155,7 @@ const execute = (x, env) => {
     head === ',' ? tuple(...tail.map(run)) :
     head === '!' ? !run(tail[0]) :
     head === '=>' ? lambda(Array.isArray(tail[0]) ? tail[0].filter(x => x !== ',') : [tail[0]], tail[1]) :
+    head === 'some' ? some(...tail.map(run)) :
     head.match(/^[+\-*\/%<>|&=!:]/) ? op2(head, tail[0], tail[1]) :
     tail.length > 0 ? lookup(head)(...tail.map(run)) :
     lookup(head)
@@ -163,6 +166,8 @@ const execute = (x, env) => {
     typeof x !== 'string' ? x :
     x === 'true' ? true :
     x === 'false' ? false :
+    x === 'some' ? some :
+    x === 'none' ? none :
     x.startsWith('r"') ? new RegExp(x.slice(2, -1), 'g') :
     x.startsWith('"') ? unescape(x) :
     x.match(/^-?[0-9]/) ? parseFloat(x) :
@@ -257,6 +262,18 @@ if (require.main === module) {
   test(1, 'dict("a" 1)["a"]')
   test({a:1}, 'd=dict()\nd["a"]:=1\nd')
   test({a:2}, 'dict("a" 1).vmap(n => n + 1)')
+
+  // option
+  test(none, 'none')
+  test(some(1), 'some 1')
+  test(true, 'none == none')
+  test(true, 'some(1) == some(1)')
+  test(false, 'some(1) == some(2)')
+  test(false, 'some(1) == none')
+  test(none, 'none.and(a => a)')
+  test(1, 'none.or(1)')
+  test(some(2), 'some(1).and(a => a + 1)')
+  test(0, 'some(0).or(1)')
 
   // operators
   test(false, '!true')

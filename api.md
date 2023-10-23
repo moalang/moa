@@ -13,7 +13,6 @@
 [ ] and b    :: opt[a] (a b) opt[b]
 [ ] or       :: opt[a] a a
 [ ] default  :: a
-[ ] location :: string
 
 # num a
 [ ] + - * ** / % | & ^ :: a a a

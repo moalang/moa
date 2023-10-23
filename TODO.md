@@ -8,9 +8,8 @@
 - Avoid symbols like semi-corron, comma and parenthiese
 
 # Todo
-- [ ] Create new syntax for name of capture variable in enum matching as ===
-- [ ] Consider to split "guard" to "if" and "return"
 - [x] Interpriter (2/2)
+- [x] Implement opt
 - [ ] Compiler to JavaScript
 - [ ] Compiler to native code
 - [ ] HTTP server
@@ -25,6 +24,8 @@
 - [ ] Profiler
 
 # Pending
+- [ ] Create new syntax for name of capture variable in enum matching as ===
+- [ ] Consider to split "guard" to "if" and "return"
 - [ ] Bcrypt
 - Consider to add events type for UI
 
