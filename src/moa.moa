@@ -43,7 +43,7 @@ class token:
 
 class type:
   name string
-  params list[type]
+  generics list[type]
 
 union typing:
   tvar int
@@ -51,6 +51,10 @@ union typing:
   tname:
     name string
     generics list[typing]
+
+#class typing_arg:
+#  targ typing
+#  suppliment_type typing
 
 union ast:
   aid:
@@ -70,8 +74,8 @@ union ast:
     lines list[ast]
 
 def show_type t:
-  guard t.params.size == 0: t.name
-  t.name ++ "(" ++ t.params.map(show_type).join(" ") ++ ")"
+  guard t.generics.size == 0: t.name
+  t.name ++ "(" ++ t.generics.map(show_type).join(" ") ++ ")"
 
 def parse source:
   tokens =
@@ -188,20 +192,28 @@ def parse source:
     loop []
   def parse_statement:
     current_indent = tokens[pos].indent
-    astatement end_by(parse_line t => t.indent != current_indent)
+    lines = end_by(parse_line t => t.indent != current_indent)
+    guard lines.size == 1: lines[0]
+    astatement lines
   parse_statement()
 
-def infer ast:
-  tenv = dict()
-  tbool = tname "bool" [] dict()
-  tint = tname "int" [] dict()
-  tfloat = tname "float" [] dict()
-  tstring = tname "string" [] dict()
+def infer node:
+  tv0 = tvar 0
+  tbool = tname "bool" []
+  tint = tname "int" []
+  tfloat = tname "float" []
+  tstring = tname "string" []
+  def tlist t:
+    tname "list" [t]
   id = 0
   new_tvar = () => tvar(id+=1)
-  tzero = tvar 0
   def unify a b:
-    tzero
+    log "---"
+    log a
+    log "---"
+    log b
+    log "---"
+    tv0
 ##union type:
 ##  tvar int
 ##  tlambda list[type]
@@ -229,7 +241,8 @@ def infer ast:
 #108       }
 #109     }
 #110   }
-  def inf_with ast env:
+  tenv = dict()
+  def inf_with node env:
     def inf x:
       inf_with x env
     def inf_const s:
@@ -239,7 +252,7 @@ def infer ast:
       guard s.match(r"^[A-Za-z_]"): env[s]
       guard s.starts("\""): tstring
       error s
-    ty = match ast:
+    ty = match node:
       x.aid   : env[x.token.text]
       x.aconst: inf_const x.token.text
       x.acall : unify inf(x.head) x.argv.map(inf)
@@ -247,17 +260,17 @@ def infer ast:
         argst = x.args.map(t => t.text, new_tvar())
         new_env = env ++ argst.dict()
         tlambda argst.map(x => x[1]) ++ [inf_with(x.body new_env)]
-      x.astatement:
+      x.node:
         x.lines.map(inf)[-1]
-    tenv[ast] := ty
+    tenv[node] := ty
     ty
   def to_type t:
     match t:
       x.tvar: type x.string []
       x.tname: type x.name x.generics.map(to_type)
       x.tlambda: type "" x.map(to_type)
-  inf_with ast dict(
-    "list" tlambda(tzero tzero)
+  inf_with node dict(
+    "list" tlambda([tv0 tlist(tv0)])
     "true" tbool
     "false" tbool)
   tenv.vmap(to_type)
@@ -378,7 +391,7 @@ test t "parser":
 
   def test_infer expectation source:
     node = parse source
-    t.eq expectation show_type(infer(node)[node]) source ++ " :: " + stringify(node)
+    t.eq expectation show_type(infer(node)[node]) source ++ " -> " + stringify(node)
   # primitives
   test_infer "bool" "true"
   test_infer "bool" "false"
