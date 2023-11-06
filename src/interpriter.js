@@ -52,6 +52,7 @@ const execute = (x, env) => {
     target instanceof List && id === 'dict' ? () => new Map([...target.map(x => [...x])]) :
     target instanceof List && id === 'zip' ? (a => range(Math.min(target.length, a.length)).map(i => tuple(target[i], a[i]))) :
     target instanceof List && id === 'all' ? (f => target.find(x => !f(x)) === undefined) :
+    target instanceof List && id === 'size' ? target.length :
     target instanceof Map && id === 'vmap' ? f => new Map([...target.entries()].map(([k,v]) => [k, f(v)])) :
     target instanceof Map && id === 'has' ? x => target.has(x) :
     target instanceof Map && id === 'get' ? x => target.get(x) :
@@ -256,6 +257,7 @@ if (require.main === module) {
 
   // list
   test([], '[]')
+  test(0, '[].size')
   test([1], '[1]')
   test([1,2], '[1 2]')
   test(1, '[1][0]')

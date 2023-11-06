@@ -189,6 +189,7 @@ if (require.main === module) {
   test('(+ (a b) c)', 'a(b) + c')
   test('(. (__index a b) c)', 'a[b].c')
   test('((. (__index a b) c) d)', 'a[b].c(d)')
+  test('(. (__call list) a)', '[].a')
 
   // edge case
   test('1', '1\n')
