@@ -47,8 +47,9 @@ class token:
   args list[token]
   type type
 
+tundef = type "" []
+
 def parse source:
-  tundef = type "" []
   tokens =
     regexp = r"((?:!=)|[()\[\]{}!]|(?:-?[0-9]+(?:\.[0-9]+)?)|[ \t\n]+(?:#[^\n]*|[ \t\n]+)*|\"[^]*?(?<!\\)\"|[A-Za-z0-9_]+|#[^\n]*)"
     indent = 0
@@ -171,55 +172,72 @@ def parse source:
 
 def infer root:
   id = 0
-  def tvar:
+  def new_var:
     type (id+=1).string []
-  tv1 = tvar()
+  def new_more t:
+    type "__more" [t]
+  def tfunc types:
+    type "" types
+  tv1 = new_var()
   tbool = type "bool" []
   tint = type "int" []
   tfloat = type "float" []
   tstring = type "string" []
-  tlist = type "list" [tv1]
-  def is_var t:
-    t.name.match(r"^[0-9]")
-  def tlambda params:
-    type "" params
-  def copy a b:
-    a.name := b.name
-    a.params := b.params
-    a
-  def unify a b:
-    va = is_var a
-    vb = is_var b
-    guard va && vb: copy a b
-    guard va: copy a b
-    guard vb: copy b a
-    tv1
-  def inf_with node env:
-    def inf x:
-      inf_with x env
-    def inf_const s:
-      guard s == "true" || s == "false": tbool
-      guard s.match(r"^[0-9]+\.[0-9]+$"): tfloat
-      guard s.match(r"^[0-9]+$"): tint
-      guard s.match(r"^[A-Za-z_]"): env[s]
-      guard s.starts("\""): tstring
-      error s
-    def inf_call f params:
-      guard f.name == "list":
-        guard params.size == 0: f
-        unify f.params[0] params[0]
-        f
-      guard f.name != "": error "not function" f params
-      guard params.size == 0 && f.params.size == 1: f.params[0]
-      unify f.params[0] params[0]
-      inf_call tlambda(f.params.slice(1)) params.slice(1)
-    guard node.args.size == 0: node.type := env[node.text]
-    node.type := inf_call node node.args
-  inf_with root dict(
+  tlist = tfunc [new_more(tv1) type("list" [tv1])]
+  def analyze node ng tenv:
+    def squash_type t:
+      t.params = squash_params t.params
+      t
+    def squash_params a:
+      guard a.size >= 2 && a[0].name == "__more": squash_params a.slice(1)
+      a
+    def unify a b:
+      def copy a b:
+        b.name := a.name
+        b.params := a.params
+        true
+      guard a.name.match(r"^[0-9]"): copy b a
+      guard b.name.match(r"^[0-9]"): copy a b
+      guard a.name == "__more": unify a.params[0] b
+      guard b.name == "__more": unify a b.params[0]
+      guard a == b: true
+      false
+    def apply a b:
+      guard a.size == 0: error "internal applying error"
+      guard b.size == 0:
+        params = squash_params a
+        guard params.size == 1: params[0]
+        error "wrong number of arguments"
+      guard unify(a[0] b[0]):
+        guard a[0].name == "__more":
+          apply a b.slice(1)
+        apply a.slice(1) b.slice(1)
+      guard a[0].name == "__more":
+        apply a.slice(1) b.slice(1)
+      error "type miss match"
+    def inf node:
+      def inf_text s:
+        guard s.match(r"^[0-9]+\.[0-9]+$"): tfloat
+        guard s.match(r"^[0-9]+$"): tint
+        guard s.match(r"^[A-Za-z_]"): tenv[s]
+        guard s.starts("\""): tstring
+        error s
+      guard node.args.size == 0: inf_text node.text
+      guard node.text == "__apply":
+        ts = node.args.map(inf)
+        apply ts[0].params ts.slice(1)
+      guard node.text == "=>":
+        argst = node.args.slice(0 -1).map(t => t.text, new_var())
+        new_tenv = tenv ++ argst.dict()
+        new_ng = ng ++ set(argst.map(at => at.0))
+        tfunc argst.map(at => at.1) ++ [analyze(node.args[-1] new_ng new_tenv).type]
+      apply tenv[node.text].params node.args.map(inf)
+    node.type := inf(node)
+    node
+  analyze root set() dict(
     "list" tlist
     "true" tbool
     "false" tbool)
-  root
 
 test t "parser":
   def show_token t:
@@ -231,9 +249,16 @@ test t "parser":
     t.text ++ "(" ++ t.args.map(show_token).join(" ") ++ ")"
 
   def show_type t:
-    guard t.params.size == 0: t.name
-    guard t.name == "": "(" ++ t.params.map(show_type).join(" ") ++ ")"
-    t.name ++ "[" ++ t.params.map(show_type).join(" ") ++ "]"
+    def stringify t:
+      guard t.params.size == 0: t.name
+      guard t.name == "": "(" ++ t.params.map(stringify).join(" ") ++ ")"
+      t.name ++ "[" ++ t.params.map(stringify).join(" ") ++ "]"
+    def simplify t:
+      g = dict()
+      t.replace r"[0-9]+" p =>
+        guard g.has(p): g.get(p)
+        g[p] = g.size.string
+    simplify(stringify(t))
 
   def test_parser expectation source:
     t.eq expectation show_token(parse(source)) source
@@ -337,14 +362,14 @@ test t "parser":
   # primitives
   test_infer "bool" "true"
   test_infer "bool" "false"
-##  test_infer "int" "1"
-##  test_infer "float" "1.1"
-##  test_infer "string" "\"s\""
-##  test_infer "(2 2)" "x => x"
-##  # container
-##  test_infer "list[1]" "[]"
-##  test_infer "list[int]" "[1]"
-##  # property access
+  test_infer "int" "1"
+  test_infer "float" "1.1"
+  test_infer "string" "\"s\""
+  test_infer "(0 0)" "x => x"
+  # container
+  test_infer "list[0]" "[]"
+  test_infer "list[int]" "[1]"
+  # property access
 ##  ##test_infer "int" "[].size"
 ##  ### single operator
 ##  ##test_parser "bool" "!true"

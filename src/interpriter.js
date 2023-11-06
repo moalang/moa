@@ -24,6 +24,7 @@ const puts = (...a) => { console.log(...a); return a[0]; }
 const range = (n, m) => [...Array(n)].map((_, i) => i + (m || 0))
 const tuple = (...a) => new Tuple().concat(...a)
 const list = (...a) => new List().concat(...a.map(x => Array.isArray(x) ? [x] : x))
+const set = (...a) => new Set(a)
 const dict = (...a) => new Map(range(a.length / 2).map(i => [a[i*2], a[i*2+1]]))
 const attempt = (f, g) => { try { return f() } catch (e) { return g(e) } }
 const make_env = o => Object.fromEntries(Object.keys(o).map(key => [key, {value: o[key]}]))
@@ -49,7 +50,12 @@ const execute = (x, env) => {
     target instanceof List && id === 'find' ? (f => Boolean(target.find(f))) :
     target instanceof List && id === 'index' ? (s => target.findIndex(x => op2('==', x, s))) :
     target instanceof List && id === 'dict' ? () => new Map([...target.map(x => [...x])]) :
+    target instanceof List && id === 'zip' ? (a => range(Math.min(target.length, a.length)).map(i => tuple(target[i], a[i]))) :
+    target instanceof List && id === 'all' ? (f => target.find(x => !f(x)) === undefined) :
     target instanceof Map && id === 'vmap' ? f => new Map([...target.entries()].map(([k,v]) => [k, f(v)])) :
+    target instanceof Map && id === 'has' ? x => target.has(x) :
+    target instanceof Map && id === 'get' ? x => target.get(x) :
+    target instanceof Set && id === 'add' ? x => target.add(x) :
     typeof target === 'object' && id in target ? target[id] :
     typeof target === 'string' && id === 'size' ? target.length :
     typeof target === 'string' && id === 'rsplit' ? r => list(...target.split(r)) :
@@ -71,7 +77,10 @@ const execute = (x, env) => {
       typeof x === 'object' ? Object.keys(x).sort().map(key => _to_comparable(x[key])) :
       typeof x === 'number' ? (Array(16).join('0') + x).slice(-16) :
       x
-    const concat = (l, r) => l.concat ? l.concat(r) : new Map([...l, ...r])
+    const concat = (l, r) =>
+      l.concat ? l.concat(r) :
+      l.constructor === Set ? new Set([...l, ...r]) :
+      new Map([...l, ...r])
     switch (op) {
       case '==': return to_comparable(run(lhs)) == to_comparable(run(rhs))
       case '===': return run(lhs).__tag === rhs
@@ -91,7 +100,7 @@ const execute = (x, env) => {
       case '<<': return run(lhs) << run(rhs)
       case '&&': return run(lhs) && run(rhs)
       case '||': return run(lhs) || run(rhs)
-      case ':=': return lhs[0] === '__index' ? set(run(lhs[1]), run(lhs[2]), run(rhs)) :
+      case ':=': return lhs[0] === '__index' ? set_env(run(lhs[1]), run(lhs[2]), run(rhs)) :
           lhs[0] === '.' ? run(lhs[1])[lhs[2]] = run(rhs) :
           update(lhs, run(rhs))
       default: return op.match(/^[+\-*/%|&]+=$/) ? update(lhs, op2(op.slice(0, -1), run(lhs), run(rhs))) : fail(`${op} unknown operator`)
@@ -119,7 +128,7 @@ const execute = (x, env) => {
   const guard = (cond, body) => (e => capture(cond, e) ? new Return(run_with(body, e)) : true)({})
   const eq = (a, b, c) => ((a, b) => a === b ? true : fail(`${a} ne ${b}` + (c ? ` # ${JSON.stringify(c)}` : '')))(escape(a), escape(b))
   const to_key = o => typeof o === 'object' ? JSON.stringify(o) : o
-  const set = (a, k, v) => Array.isArray(a) ? a[to_key(k)] = v : (a.set(to_key(k), v), v)
+  const set_env = (a, k, v) => Array.isArray(a) ? a[to_key(k)] = v : (a.set(to_key(k), v), v)
   const index = (a, i) =>
     Array.isArray(a) || typeof a === 'string' ? (i < 0 ? index(a, a.length + i) : i >= a.length ? fail(`${i} exceeded`) : a[i]) :
     a.has(to_key(i)) ? a.get(to_key(i)): fail(`${to_key(i)} not found in ${JSON.stringify(a)}`)
@@ -139,6 +148,7 @@ const execute = (x, env) => {
     Array.isArray(head) ? apply([run(head), ...tail]) :
     typeof head === 'function' ? head(...tail.map(run)) :
     head === 'list' ? list(...tail.map(run)) :
+    head === 'set' ? set(...tail.map(run)) :
     head === 'tuple' ? tuple(...tail.map(run)) :
     head === 'dict' ? dict(...tail.map(run)) :
     head === 'class' ? Object.fromEntries(Array(tail.length/2).fill().map((_,i) => [tail[i*2], run(tail[i*2+1])])) :
@@ -149,6 +159,7 @@ const execute = (x, env) => {
     head === '__index' ? index(run(tail[0]), run(tail[1])) :
     head === '__call' && tail[0] === 'class' ? ({}) :
     head === '__call' && tail[0] === 'list' ? list() :
+    head === '__call' && tail[0] === 'set' ? set() :
     head === '__call' && tail[0] === 'dict' ? dict() :
     head === '__call' ? run(tail[0])(run) :
     head === '__pack' ? tail.reduce((prev, x) => prev instanceof Return ? prev : run(x), null).valueOf() :
@@ -255,12 +266,21 @@ if (require.main === module) {
   test([2], '[1 2].keep x => x > 1')
   test(0, '[1].index 1')
   test(-1, '[1].index 2')
+  test("a", '["a"].zip(["1"])[0].0')
+  test(1, '["a"].zip(["1"])[0].1')
+  test({a: 1}, '["a",1].dict()')
+  test(true, '[].all(x => x == 1)')
+  test(true, '[1].all(x => x == 1)')
+  test(false, '[2].all(x => x == 1)')
+
+  // set
+  test(new Set(), 'set()')
+  test(new Set([1, 2]), 'set(1) ++ set(2)')
 
   // dict
   test({}, 'dict()')
   test({a: 1}, 'dict("a" 1)')
   test({a: 1, b: 2}, 'dict("a" 1) ++ (dict("b" 2))')
-  test({a: 1}, '["a",1].dict()')
   test(1, 'dict("a" 1)["a"]')
   test({a:1}, 'd=dict()\nd["a"]:=1\nd')
   test({a:2}, 'dict("a" 1).vmap(n => n + 1)')
