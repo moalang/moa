@@ -47,9 +47,8 @@ class token:
   args list[token]
   type type
 
-tundef = type "" []
-
 def parse source:
+  tundef = type "" []
   tokens =
     regexp = r"((?:!=)|[()\[\]{}!]|(?:-?[0-9]+(?:\.[0-9]+)?)|[ \t\n]+(?:#[^\n]*|[ \t\n]+)*|\"[^]*?(?<!\\)\"|[A-Za-z0-9_]+|#[^\n]*)"
     indent = 0
@@ -66,7 +65,7 @@ def parse source:
       t = token text indent lineno column [] tundef
       column += text.size
       t
-  guard tokens.size == 0: token "__statement" 0 0 0 [] tundef []
+  guard tokens.size == 0: token "__statement" 0 0 0 [] tundef
   def rename t text args:
     token(text t.indent t.lineno t.column args t.type)
   def apply t args:
@@ -93,9 +92,12 @@ def parse source:
     def consume:
       t = tokens[pos]
       pos += 1
-      guard t.text == "(": until(")")[0]
       guard t.text == "[": call(rename(t "list" until("]")))
       guard t.text == ":": parse_block()
+      guard t.text == "(":
+        a = until(")")
+        guard a.size == 0: rename t "" []
+        a[0]
       t
     def suffix x:
       guard pos >= tokens.size: x
@@ -134,6 +136,7 @@ def parse source:
       apply lop [lhs rhs]
     guard lop.text == "=>":
       pos += 1
+      guard lhs.text == "": apply rename(lop "->" []) [parse_exp()]
       apply lop [lhs parse_exp()]
     lhs
   def parse_block:
@@ -151,7 +154,7 @@ def parse source:
         guard tokens[pos].text == ":": a
         take_args a ++ tokens[pos]
       args = take_args []
-      body = token "=>" 0 0 0 args ++ [parse_exp()] tundef []
+      body = token "=>" 0 0 0 args ++ [parse_exp()] tundef
       rename first_token "=" [name] ++ body
     guard pos + 1 < tokens.size && tokens[pos+1].text == "=":
       eq = tokens[pos+1]
@@ -167,7 +170,7 @@ def parse source:
     current_indent = tokens[pos].indent
     lines = end_by(parse_line t => t.indent != current_indent)
     guard lines.size == 1: lines[0]
-    token "__statement" 0 0 0 lines tundef []
+    token "__statement" 0 0 0 lines tundef
   parse_statement()
 
 def infer root:
@@ -184,7 +187,10 @@ def infer root:
   tfloat = type "float" []
   tstring = type "string" []
   tlist = tfunc [new_more(tv1) type("list" [tv1])]
-  tprop = dict("list" dict("size" _ => tint))
+  tprop = dict("list" dict(
+    "size" _ => tint
+    "map" t => tfunc([tfunc([t.params[0] tv1]) type("list" [tv1])])
+    ))
   def analyze node ng tenv:
     def squash_type t:
       t.params = squash_params t.params
@@ -234,9 +240,13 @@ def infer root:
         new_tenv = tenv ++ argst.dict()
         new_ng = ng ++ set(argst.map(at => at.0))
         tfunc argst.map(at => at.1) ++ [analyze(node.args[-1] new_ng new_tenv).type]
+      guard node.text == "->":
+        tfunc node.args.map(inf)
       guard node.text == ".":
         t = inf node.args[0]
-        tprop[t.name][node.args[1].text](node.type.params)
+        tprop[t.name][node.args[1].text](t)
+      guard node.text == "=": tenv[node.args[0].text] := inf(node.args[1])
+      guard node.text == "__statement": node.args.map(inf)[-1]
       apply tenv[node.text].params node.args.map(inf)
     node.type := inf(node)
     node
@@ -252,9 +262,11 @@ def infer root:
 
 test t "parser":
   def show_token t:
+    guard t.text == "" && t.args == []: "()"
     guard t.text == "__apply": show_token(t.args[0]) ++ "(" ++ t.args.slice(1).map(show_token).join(" ") ++ ")"
     guard t.text == "__statement": t.args.map(show_token).join("; ")
     guard t.text == "=": show_token(t.args[0]) ++ " = " ++ t.args.slice(1).map(show_token).join(" ")
+    guard t.text == "->": "(() => " ++ show_token(t.args[-1]) ++ ")"
     guard t.text == "=>": "(" ++ t.args.slice(0 -1).map(show_token).join(" ") ++ " => " ++ show_token(t.args[-1]) ++ ")"
     guard t.args.size == 0: t.text
     t.text ++ "(" ++ t.args.map(show_token).join(" ") ++ ")"
@@ -273,7 +285,6 @@ test t "parser":
 
   def test_parser expectation source:
     t.eq expectation show_token(parse(source)) source
-  test_parser "+(*(1 2) 3)" "1 * 2 + 3"
 
   # primitives
   test_parser "1" "1"
@@ -309,6 +320,7 @@ test t "parser":
   test_parser "*(+(1 2) 3)" "(1 + 2) * 3"
   # definition
   test_parser "a = 1" "a = 1"
+  test_parser "(() => 1)" "() => 1"
   test_parser "f = (a => a)" "def f a: a"
   test_parser "a = +(1 2)" "a = 1 + 2"
   test_parser "f = (a => a)" "def f a:\n  a"
@@ -370,6 +382,7 @@ test t "parser":
   def test_infer expectation source:
     node = parse source
     t.eq expectation show_type(infer(node).type) source ++ " -> " + show_token(node)
+
   # primitives
   test_infer "bool" "true"
   test_infer "bool" "false"
@@ -386,15 +399,16 @@ test t "parser":
   test_infer "bool" "!true"
   # binary operators
   test_infer "int" "1 + 2"
-  ### definition
-  ##test_infer "int" "a = 1"
-  ##test_infer "(1 1)" "f a = a"
-  ### function call
-  ##test_infer "(int)" "f = () => 1"
-  ##test_infer "int" "f = () => 1\nf()"
-  ### method call
-  ##test_infer "list[int]" "[1].map(x => x + 1)"
-  ### index access
+  # definition
+  test_infer "int" "a = 1"
+  test_infer "(0 0)" "a = x => x"
+  test_infer "(int)" "f = () => 1"
+  test_infer "(0 0)" "def f a: a"
+  # function call
+  test_infer "int" "f = () => 1\nf()"
+  # method call
+  test_infer "list[int]" "[1].map(x => x + 1)"
+  # index access
   ##test_infer "int" "[1][0]"
   ### steps
   ##test_infer "int" "true\n1"
