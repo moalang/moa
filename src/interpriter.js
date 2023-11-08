@@ -156,7 +156,7 @@ const execute = (x, env) => {
     head === 'error' ? fail(tail.map(run).map(string).join(' ')) :
     head === 'string' ? escape(run(tail[0])) :
     head === 'guard' ? guard(tail[0], tail[1]) :
-    head === '=' ? declare(tail[0], run(tail[1])) :
+    head === '=' ? tail[0][0] == '.' ? run(tail[0][1])[tail[0][2]] = run(tail[1]) : declare(tail[0], run(tail[1])) :
     head === '__index' ? index(run(tail[0]), run(tail[1])) :
     head === '__call' && tail[0] === 'class' ? ({}) :
     head === '__call' && tail[0] === 'list' ? list() :
@@ -322,7 +322,10 @@ if (require.main === module) {
   test(3, '6 >> 1')
   test(3, 'a = 1\na += 2\na')
   test(2, 'a = 1\na := 2\na')
+  test(2, 'class c:\n  a int\nx = c(1)\nx.a = 2')
+  test(2, 'class c:\n  a int\nx = c(1)\nx.a = 2\nx.a')
   test(2, 'class c:\n  a int\nx = c(1)\nx.a := 2')
+  test(2, 'class c:\n  a int\nx = c(1)\nx.a := 2\nx.a')
   test(Error('z missing'), 'z := 1')
 
   // define

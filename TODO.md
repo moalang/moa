@@ -10,6 +10,8 @@
 # Todo
 - [x] Interpriter (2/2)
 - [x] Implement opt
+- [x] Update property by "a.b = c" syntax
+- [ ] Think to revive "=" symbol to define function
 - [ ] Compiler to JavaScript
 - [ ] Compiler to native code
 - [ ] HTTP server
