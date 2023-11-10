@@ -86,7 +86,6 @@ if (require.main === module) {
   const stringify = a => Array.isArray(a) ? `(${a.map(stringify).join(' ')})` : string(a)
   const assert = (expect, fact, src) => expect === fact ? put('.') : fail(`Expected '${expect}' but got '${fact}' source='${src}'`)
   const test = (expect, src) => assert(expect, stringify(parse(src)), src)
-  //test('(+ 1 (* 2 3)', '1 + 2 * 3') // TODO fix me
 
   // primitives
   test('1', '1')
@@ -133,8 +132,7 @@ if (require.main === module) {
   test('(+ 1 2)', '(1 + 2)')
   test('(+ (* 1 2) 3)', '1 * 2 + 3')
   test('(* 1 (+ 2 3))', '1 * (2 + 3)')
-  //test('(+ 1 (* 2 3)', '1 + 2 * 3') // TODO fix me
-  //test('(* (+ 1 2) 3)', '1 + 2 * 3') // TODO fix me
+  test('(+ 1 (* 2 3))', '1 + 2 * 3')
 
   // function call
   test('(__call f)', 'f()')
