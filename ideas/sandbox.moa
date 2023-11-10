@@ -1,0 +1,31 @@
+# Sandbox to define new syntax
+
+## Primitives
+true | false  # bool
+1 | -1        # int
+1.0 | -1.0    # float
+"hi"          # string
+: 1 | x: x | a,b: a + b # lambda
+
+## Structure
+(a="a" b=1)    # object
+a:int b:string # class
+TODO           # union
+
+## Container
+[1]    # list
+"a", 1 # tuple
+TODO   # dictionary
+
+## Definition
+a = 1
+f() = time.now()
+g x = x
+
+## Branch
+if cond: ...
+iif a b c d e # inline if
+
+
+embedded: def class union match guard error bool true false int float string bytes list set dict tuple option some none time log test use
+reserved: num interface implement

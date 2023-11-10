@@ -1,8 +1,19 @@
 # The Moa Programming Language
-Build simple and reliable system rapidly
+Build robust web application rapidly
+- Embedded components to enhance development experience
 - An open-source programming language
-- Seamless development for web frontend and backend
-- Built-in HTTP server, RDB, KVS, bidirectional RPC
+
+Embedded components
+- HTTP server
+- Transactional object database
+- Logging
+- Web interface library
+- Bidirectional RPC
+- Time machine debugger
+- Development dashboard
+- Deployment tool
+- Development dashboard
+- Monitoring dashboard for production
 
 
 
@@ -17,7 +28,7 @@ $ export PATH=$PATH:~/moa/bin
 
 2. At the command prompt, create a new Moa program
 ```
-$ echo 'def main io: io.puts "Hello, Moa"' > main.moa
+$ echo 'main io = io.puts "Hello, Moa"' > main.moa
 ```
 
 3. Run the program
@@ -26,48 +37,14 @@ $ moa run
 Hello, Moa
 ```
 
-4. Create a HTTP API and deploy to a server
-```
-$ echo 'def main io: io.http.listen _ => (200 [("content-type" "text/plain; charset=utf-8")] "hello")' > main.moa
-$ PORT=3000 moa run        # launch http server with port 3000
-```
-
-5. Compile the program to executable file
+4. Compile the program to executable file
 ```
 $ moa build
 $ ./a.out
 Hello, Moa
 ```
 
-6. Deploy to Linux server
-```
-$ OS=linux ARCH=amd64 moa build
-$ scp a.out username@hostname:/path/to/a.out
-$ ssh username@hostname /path/to/a.out # launch deployed server and then gracefully stop old one if running
-```
-
-
-
-# Usage
-Moa is a tool for managing Moa source code.
-
-Usage:
-  moa <command> [arguments]
-
-The commands are:
-  moa                # launch repl
-  moa build          # compile to an executable file without test
-  moa format file    # format a file
-  moa help [topic]   # for more info about topic
-  moa js file        # compile to JavaScript
-  moa lint file      # report likely mistakes
-  moa run [exp]      # run Moa program
-  moa test [regexps] # run tests
-  moa version        # print Moa version
-
-
-
-# Scafold for web application in real world
+5. ToDo web application example
 - index.mhtml
 - main.moa
 
@@ -76,50 +53,43 @@ The commands are:
 <!doctype html>
 <html>
 <head>
-  <title>{{title}}</title>
+  <title>Access counter</title>
 </head>
 <body>
-  <h1>ToDo list</h1>
-  <if todos>
-    <ul>
-      <for todos>
-        <li>
-          <if done>
-            <s>{{ title }}</s>
-          <else>
-            {{ deadline }} {{ title }}
-          </if>
-      </for>
-    </ul>
-  <else>
-    <p>All done</p>
-  </if>
-
-  <h1>New ToDo</h1>
-  <form method="post" action="/todos">
-    <input name="title" type="text">
-    <input name="deadline" type="datetime-local">
-    <label><input name="done" type="checkbox"> Done</label>
-    <button>Create new ToDo</button>
-  </form>
+  <iframe src=/api/counter></iframe>
 </body>
 </html>
 ```
 
 ```
 # main.moa
-todo = class:
-  title string
-  deadline time
-  done bool
+schema = access_counter:int
 
-schema = class:
-  todos list[todo]
-
-main io = io.http.listen req => io.dbm[schema] db =>
-  ok = 200, [], ""
-  notfound = 404, [], "404 page not found"
-  match $"{req.method} {req.path}":
-    "post /todos": db.todos ++= req.post[todo]; ok
-    _            : notfound
+main io =
+  req <- io.http.listen
+  db <- io.db schema
+  n = db.access_counter += 1
+  req.ok n.string
 ```
+
+6. Deploy to Linux server
+```
+$ OS=linux ARCH=amd64 moa build
+$ scp a.out username@hostname:/path/to/a.out
+$ ssh username@hostname /path/to/a.out upgrade # launch deployed server and then gracefully stop old one if running
+```
+
+
+
+7. Manual for moa command
+Moa is a tool for managing Moa source code.
+
+Usage:
+  moa <command> [arguments]
+
+The commands are:
+  moa               # launch repl
+  moa build         # compile to an optimized executable file
+  moa run           # run Moa program
+  moa test [regexp] # run tests
+  moa version       # print Moa version

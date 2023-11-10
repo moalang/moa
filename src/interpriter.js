@@ -8,7 +8,7 @@ const some = x => ({ and: f => some(f(x)), or: _ => x, __value: x })
 function Return(value) { this.value = value }
 Return.prototype.valueOf = function() { return this.value }
 const { parse } = require('./parser.js')
-const dump = o => { console.dir(o, {depth: null}); return o }
+const log = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
 const string = o => typeof o === 'string' ? o : escape(o)
 const escape = o =>
@@ -207,7 +207,7 @@ if (require.main === module) {
         puts('Error: ', actual.stack)
       }
       put('Nodes: ')
-      dump(parse(src))
+      log(parse(src))
       throw Error('Test was failed')
     }
   }

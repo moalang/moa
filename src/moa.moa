@@ -6,10 +6,6 @@ Usage:
 The commands are:
   moa                # launch repl
   moa build          # compile to an executable file without test
-  moa format file    # format a file
-  moa help [topic]   # for more info about topic
-  moa js file        # compile to JavaScript
-  moa lint file      # report likely mistakes
   moa run [exp]      # run Moa program
   moa test [regexps] # run tests
   moa version        # print Moa version"
@@ -18,12 +14,7 @@ def main io:
   match io.argv:
     []: repl io
     ["build"]      : io.puts "Not implemented yet"
-    ["format" file]: io.puts "Not implemented yet"
-    ["help" topic] : io.puts "Not implemented yet"
-    ["js" file]    : io.puts "Not implemented yet"
-    ["lint" file]  : io.puts "Not implemented yet"
     ["run"]        : io.puts "Not implemented yet"
-    ["run" exp]    : io.puts "Not implemented yet"
     ["test"]       : io.puts "Not implemented yet"
     ["test" target]: io.puts "Not implemented yet"
     ["version"]    : io.puts "moa v0.1"

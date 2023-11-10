@@ -11,6 +11,11 @@
 - [x] Interpriter (2/2)
 - [x] Implement opt
 - [x] Update property by "a.b = c" syntax
+- [ ] Define a syntax for local definitions
+- [ ] Define a syntax for single line branch
+- [ ] Define a syntax to create a lambda without argument
+- [ ] Define a syntax for pattern matching
+- [x] Define a syntax to catch an error : try(exp)
 - [ ] Think to revive "=" symbol to define function
 - [ ] Compiler to JavaScript
 - [ ] Compiler to native code

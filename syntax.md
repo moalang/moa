@@ -136,7 +136,6 @@ $ undefined
   - float     # 1.0, -1.0
   - string    # "hi"
   - lambda    # a,b => a + b
-  - bytes     # bytes(1024)
 - Container
   - list      # list[int](1 2)                        | list(1 2)            | [1 2]
   - tuple     # tuple[int string](1 "hi")             | tuple(1 "hi")        | 1, "hi"

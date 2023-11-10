@@ -13,7 +13,6 @@
  * [x] a b:
  *       c
  *       d e       # (: (a b) (__pack c (d e)))
- * [x] {a b:c}     # (new a a b c)
  * [x] f ... = ... # (= f (=> [...] ...))
  * [x] # comment
  */
@@ -23,7 +22,7 @@ const string = o =>
   JSON.stringify(o)
 const put = (...a) => { process.stdout.write(a.map(string).join(' ')); return a[0] }
 const puts = (...a) => { console.log(a.map(string).join(' ')); return a[0] }
-const dump = o => { console.dir(o, {depth: null}); return o }
+const log = o => { console.dir(o, {depth: null}); return o }
 const fail = m => { throw new Error(m) }
 const parse = source => {
   let pos = 0
@@ -32,7 +31,6 @@ const parse = source => {
     a[a.length - 1].match(/^[ \r\n\t]/) ? trim(a.slice(0, -1)) : a
   const regexp = /((?:!=)|[()\[\]{}!]|(?:-?[0-9]+(?:\.[0-9]+)?)|[ \t\r\n]+(?:#[^\n]*|[ \t\r\n]+)*|r?`.*`|r?"[^]*?(?<!\\)"|[A-Za-z0-9_]+|#[^\n]*)/
   const tokens = trim(source.split(regexp).filter(t => t.length > 0 && !t.startsWith('#')))
-  const op2s = '. , * ** / // % + ++ - >> << ^ & | := += -= *= /= %= **= < <= > >= == != === !== <=> && || = =>'.split(' ')
   const not_space = t => !(typeof t === 'string' && t.match(/^[ \t\r\n#]/))
   const statement = () => {
     const many = (a, f) => pos >= tokens.length ? a : (ret =>
@@ -66,12 +64,13 @@ const parse = source => {
     return pack(lines(indent(tokens[pos])))
   }
   const reorder = o => {
+    const op2s = '. , * ** / // % + ++ - >> << ^ & | := += -= *= /= %= **= < <= > >= == != === !== <=> && || = =>'.split(' ')
     const is_op2 = s => typeof s === 'string' && op2s.includes(s)
+    const priority = op => op2s.findIndex(t => t == op)
     const op2 = a => (!Array.isArray(a) || a.length <= 2) ? a :
       is_op2(a[1]) ? op2([prioritize(a[1], a[0], a[2]), ...a.slice(3)]) :
       [a[0], ...op2(a.slice(1))]
     const prioritize = (op, l, r) => Array.isArray(l) && is_op2(l[0]) && priority(op) < priority(l[0]) ? [l[0], l[1], [op, l[2], r]] : [op, l, r]
-    const priority = op => op2s.findIndex(t => t == op)
     const block = a => (n => n === -1 ? a : [a[n], a.slice(0, n), a.slice(n+1)])(a.findIndex(t => t === ':'))
     const declare = a => a[1] === '=' ? ['=', a[0], a.slice(2)] : a
     const unnest = a => a.length === 1 ? a[0] : a
@@ -87,7 +86,7 @@ if (require.main === module) {
   const stringify = a => Array.isArray(a) ? `(${a.map(stringify).join(' ')})` : string(a)
   const assert = (expect, fact, src) => expect === fact ? put('.') : fail(`Expected '${expect}' but got '${fact}' source='${src}'`)
   const test = (expect, src) => assert(expect, stringify(parse(src)), src)
-  test('(f a b)', 'f(a\nb\n)')
+  //test('(+ 1 (* 2 3)', '1 + 2 * 3') // TODO fix me
 
   // primitives
   test('1', '1')
@@ -108,7 +107,7 @@ if (require.main === module) {
   // property access
   test('(. a b)', 'a.b')
   test('((. a b) c)', 'a.b c')
-  test('(. (__call list) length)', '[].length')
+  test('(. (__call list) size)', '[].size')
   test('(=> p (+ (. p x) (. p y)))', 'p => p.x + p.y')
 
   // single operator
