@@ -1,0 +1,8 @@
+#!node
+const fs = require('fs')
+const path = process.argv[2]
+process.argv.slice(2).map(path => {
+  const source = fs.readFileSync(path, 'utf-8')
+  const tokens = source.replace(/"[^"]*"/g, ' "" ').replace(/#.*/g, '').split(/(:=|[.\[\](){}:]|[+\-*/=!%&|]+|[ \r\n\t]+|[^ .\[\](){}:+\-*/=!%&|]+)/).filter(t => t.trim())
+  console.log(tokens.length, "\t", path)
+})
