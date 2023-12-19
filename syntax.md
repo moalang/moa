@@ -22,7 +22,7 @@ op2:
 | ("**" | "++" | "&&" | "||") "="?
 | ">>" | "<<"
 id: [A-Za-z_][A-Za-z0-9_]*
-reserved1: let var def class if match for while yield return throw catch test use module
+reserved1: let var def class if iif match for while yield return throw catch test use module
 reserved2: bool int float string tuple struct list set dict option
 reserved3: true false some none
 reserved4: time log http cache orm sql

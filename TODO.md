@@ -5,19 +5,15 @@
 
 # Do not
 - Inheritance
-- Avoid symbols like semi-corron, comma and parenthiese
 
 # Todo
-- [x] Define a syntax for single line branch -> iif
-- [x] Define a syntax to create a lambda without argument -> : ...
-- [x] Define a syntax for pattern matching -> not supported yet
-- [ ] Merge "let" and "var" to "=" symbol
-- [ ] Bootstrap
+- [ ] Interpriter
 - [ ] Type inference
 - [ ] Compiler to JavaScript
-- [ ] Compiler to native binary
+- [ ] Compiler to executable file via LLVM
 - [ ] HTTP server
 - [ ] Transactional database
+- [ ] Debugger
 - [ ] Reactive UI framework
 - [ ] Bidirectional remote procedure call
 

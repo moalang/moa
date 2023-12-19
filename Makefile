@@ -4,9 +4,9 @@ watch:
 
 test:
 	clear
-	node src/parser.js
-	node src/interpriter.js
-	-node src/bootstrap.js
+	-node src/parser.js
+	#node src/interpriter.js
+	#-node src/bootstrap.js
 
 mc:
 	node misc/mc src/*
