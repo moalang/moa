@@ -15,14 +15,13 @@ syn keyword Boolean true false
 
 " Statement
 syn keyword Function def
-"syn keyword Statement continue break return
-"syn keyword StorageClass let var
+syn keyword Statement continue break return yield
+syn keyword StorageClass let var
 syn keyword Structure class union
-syn keyword Conditional guard match
-"syn keyword Repeat for each while
-"syn keyword Exception throw try catch
-syn keyword Exception throw
-"syn keyword Keyword module use bool int float string bytes option list set dict tuple class some none num any iter
+syn keyword Conditional if else guard match
+syn keyword Repeat for while
+syn keyword Exception throw try catch
+syn keyword Keyword module use
 syn keyword Keyword bool true false int float string bytes opt list set dict tuple class some none num
 syn keyword Keyword ref array i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 interface implement decimal assert
 syn match Operator /[+\-\*/|&]=\=/
