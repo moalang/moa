@@ -45,21 +45,19 @@ const parse = source => {
   const pack = a => a.length === 1 ? a[0] : a.length > 1 ? ['__pack', ...a] : a
 
   const parse_unit = () => {
-    const t = consume()
     const suffix = t => (tt =>
-        tt === ',' ? suffix([t, ...many(t => t === ',' && ++pos && consume())]) :
-        tt === '.' ? ++pos && suffix([tt, t, consume()]) :
-        tt === '(' ? ++pos && suffix(call([t, ...until(')')])) :
-        tt === '[' ? ++pos && suffix(call(['__index', t, ...until(']')])) :
-        tt == '=>' ? ++pos && [tt, t, parse_block()] :
-        t
-      )(read())
-    return suffix(
+      tt === ',' ? suffix([t, ...many(t => t === ',' && ++pos && consume())]) :
+      tt === '.' ? ++pos && suffix([tt, t, consume()]) :
+      tt === '(' ? ++pos && suffix(call([t, ...until(')')])) :
+      tt === '[' ? ++pos && suffix(call(['__index', t, ...until(']')])) :
+      tt == '=>' ? ++pos && [tt, t, parse_block()] :
+      t)(read())
+    return (t => suffix(
       t === '!' ? [t, parse_unit()] :
       t === '[' ? call(['list', ...until(']')]) :
       t === '(' ? squash(until(')')) :
       t === ':' ? parse_block() :
-      t)
+      t))(consume())
   }
   const parse_exp = () => {
     const lhs = parse_unit()
