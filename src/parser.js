@@ -35,7 +35,6 @@ const parse = source => {
   const read = () => (t => t.match(/^[ #]/) ? tokens[++pos] || '' : t)(tokens[pos] || '')
   const loop = (a, f) => pos < tokens.length ? (v => v ? loop(a.concat([v]), f) : a)(f(read())) :a
   const many = f => loop([], f)
-  const many1 = f => (a => a.length ? a : null)(many(f))
   const until = s => many(t => (t.includes('\n') && ++pos, read() === s ? (++pos, null) : parse_exp()))
 
   const consume = () => (t => ++pos && t)(read() || fail('out of index', pos, tokens))
@@ -43,7 +42,7 @@ const parse = source => {
   const indent = t => t.includes('\n') ? t.split('\n').slice(-1)[0].length : fail('not break line', t)
   const call = a => a.length === 1 ? ['__call', ...a] : a
   const squash = a => a.length === 1 ? a[0] : a
-  const pack = a => a.length === 1 ? squash(a[0]) : a.length > 1 ? ['__pack', ...a.map(squash)] : a
+  const pack = a => a.length === 1 ? a[0] : a.length > 1 ? ['__pack', ...a] : a
 
   const parse_unit = () => {
     const t = consume()
@@ -64,12 +63,12 @@ const parse = source => {
   }
   const parse_exp = () => {
     const lhs = parse_unit()
-    const op2 = op => op.match(/^[+\-*/%|&:]?=$/) ? [op, lhs, squash(parse_line())] : [op, lhs, parse_exp()]
+    const op2 = op => op.match(/^[+\-*/%|&:]?=$/) ? [op, lhs, parse_line()] : [op, lhs, parse_exp()]
     return read().match(/^:?[!+\-*/%<>!=^|&]/) ? op2(consume()) : lhs
   }
-  const parse_line = () => many1(t => !t.includes('\n') && t !== ')' && t !== ']' && parse_exp())
-  const parse_lines = n => pack(many1(t => (t.includes('\n') && indent(t) === n && ++pos, parse_line())))
-  const parse_block = () => (t => t.includes('\n') ? parse_lines(indent(t)) : squash(parse_line()))(tokens[pos])
+  const parse_line = () => (a => a.length && a)(squash(many(t => !t.includes('\n') && t !== ')' && t !== ']' && parse_exp())))
+  const parse_lines = n => pack(many(t => (t.includes('\n') && indent(t) === n && ++pos, parse_line())))
+  const parse_block = () => (t => t.includes('\n') ? parse_lines(indent(t)) : parse_line())(read())
   return parse_lines(0)
 }
 
