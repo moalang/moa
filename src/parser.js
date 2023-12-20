@@ -54,6 +54,7 @@ const parse = source => {
       t)(read())
     return (t => suffix(
       t === '!' ? [t, parse_unit()] :
+      t === '-' ? [t, parse_unit()] :
       t === '[' ? call(['list', ...until(']')]) :
       t === '(' ? squash(until(')')) :
       t === ':' ? parse_block() :
@@ -79,6 +80,7 @@ if (require.main === module) {
 
   // primitives
   test('1', '1')
+  test('(- 1)', '-1')
   test('1.0', '1.0')
   test('id', 'id')
   test('"hi"', '"hi"')
