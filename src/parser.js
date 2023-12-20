@@ -28,7 +28,7 @@ const parse = source => {
   if (source.trim().length === 0) {
     return []
   }
-  const regexp = /([!+\-*/%<>:!=^|&]+|[()\[\]{}]|r?"[^]*?(?<!\\)"|-?[0-9]+(?:\.[0-9]+)|[0-9A-Za-z_]+|(?:#[^\n]*|[ \n])+)/ // operator | parenthesis | string | number | id | comment and spaces
+  const regexp = /([!+\-*/%<>:!=^|&]+|[()\[\]{}]|r?"[^]*?(?<!\\)"|r?'[^]*?(?<!\\)'|-?[0-9]+(?:\.[0-9]+)|[0-9A-Za-z_]+|(?:#[^\n]*|[ \n])+)/ // operator | parenthesis | string | number | id | comment and spaces
   const tokens = source.trim().split(regexp).filter(s => s.length)
 
   var pos = 0
@@ -87,6 +87,7 @@ if (require.main === module) {
   test('"h\\"i"', '"h\\"i"')
   test('"\\\\""', '"\\\\""')
   test('r"\\t"', 'r"\\t"')
+  test("r'\\t'", "r'\\t'")
   test('(=> a b)', 'a => b')
 
   // container

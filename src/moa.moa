@@ -1,168 +1,78 @@
-help = "Moa is a tool for managing Moa source code.
-
-Usage:
-  moa <command> [arguments]
-
-The commands are:
-  moa                # launch repl
-  moa build          # compile to an executable file without test
-  moa run [exp]      # run Moa program
-  moa test [regexps] # run tests
-  moa version        # print Moa version"
-
-def main io:
-  match io.argv:
-    []: repl io
-    ["build"]      : io.puts "Not implemented yet"
-    ["run"]        : io.puts "Not implemented yet"
-    ["test"]       : io.puts "Not implemented yet"
-    ["test" target]: io.puts "Not implemented yet"
-    ["version"]    : io.puts "moa v0.1"
-    _              : io.puts help
-
-def repl io:
-  io.puts "repl"
-
 def compile_to_js source:
-  "const main = io => log(io)"
+  "const main = io => io.write(`Hello world`)"
 
-class type:
-  name string
-  params list[type]
+# string.trim
+# string.split
+# string.size
+# string.match
+# string.has
+# list.filter
+# list.size
+# list.slice
+def parse input:
+  guard true: []
+  let source input.trim()
+  guard source.size === 0: []
+  # operator | parenthesis | string | number | id | comment and spaces
+  let regexp r'([!+\-*/%<>:!=^|&]+|[()\[\]{}]|r?"[^]*?(?<!\\)"|-?[0-9]+(?:\.[0-9]+)|[0-9A-Za-z_]+|(?:#[^\n]*|[ \n])+)'
+  let tokens source.split(regexp).filter(s => s.size)
 
-class token:
-  text string
-  indent int
-  lineno int
-  column int
-  args list[token]
-  type type
+  var pos 0
+  def read:
+    guard pos >= tokens.size: ""
+    guard t.match(r"^[ #]"): tokens[pos += 1]
+    tokens[pos]
+  def _loop a f: pos < tokens.size ? (v => v ? loop(a.concat([v]), f) : a)(f(read())) :a
+  def loop a f:
+    let t read()
+    guard t == "": a
+    let v = f(t)
+    guard v == "": a
+    loop a ++ [v] f
+  def many f: loop([], f)
+  def until s:
+    many t =>
+      if t.has("\n"):
+        pos += 1
+      iif read() === s:
+        pos += 1; none
+        parse_exp()
 
-def parse source:
-  tundef = type "" []
-  tokens =
-    regexp = r"((?:!=)|[()\[\]{}!]|(?:-?[0-9]+(?:\.[0-9]+)?)|[ \t\n]+(?:#[^\n]*|[ \t\n]+)*|\"[^]*?(?<!\\)\"|[A-Za-z0-9_]+|#[^\n]*)"
-    indent = 0
-    lineno = 1
-    column = 1
-    source.rsplit(regexp).fmap text =>
-      guard text == "": []
-      guard text.has("\n"):
-        indent := text.split("\n")[-1].size
-        lineno += text.split("\n").size - 1
-        column := indent
-        []
-      guard text.match(r"^[ \t#]"): []
-      t = token text indent lineno column [] tundef
-      column += text.size
-      t
-  guard tokens.size == 0: token "__statement" 0 0 0 [] tundef
-  def rename t text args:
-    token(text t.indent t.lineno t.column args t.type)
-  def apply t args:
-    guard args.size == 0: rename t "__apply" [t]
-    guard t.args.size > 0: rename t "__apply" [t] ++ args
-    rename t t.text args
-  def call t:
-    guard t.args.size == 0: rename(t "__apply" [t])
+  def consume: (t => ++pos && t)(read() || fail('out of index', pos, tokens))
+  def consume:
+    t = read()
+    pos += 1
     t
-  pos = 0
-  def end_by forward check:
-    def loop a:
-      guard pos >= tokens.size: a
-      guard check(tokens[pos]): a
-      loop a ++ [forward()]
-    loop []
-  def until end:
-    end_by parse_exp t =>
-      guard t.text == end:
-        pos += 1
-        true
-      false
+
+  def indent t: t.includes("\n") ? t.split("\n").slice(-1)[0].size : fail("not break line", t)
+  def call a: a.size === 1 ? ["__call", ...a] : a
+  def squash a: a.size === 1 ? a[0] : a
+  def pack a: a.size === 1 ? a[0] : a.size > 1 ? ["__pack", ...a] : a
+
   def parse_unit:
-    def consume:
-      t = tokens[pos]
-      pos += 1
-      guard t.text == "[": call(rename(t "list" until("]")))
-      guard t.text == ":": parse_block()
-      guard t.text == "(":
-        a = until(")")
-        guard a.size == 0: rename t "" []
-        a[0]
-      t
-    def suffix x:
-      guard pos >= tokens.size: x
-      t = tokens[pos]
-      guard t.text == ".":
-        pos += 2
-        suffix apply(t [x tokens[pos - 1]])
-      guard t.text == ",":
-        remain = end_by consume t =>
-          guard t.text == ",":
-            pos += 1
-            false
-          true
-        guard pos < tokens.size && tokens[pos].text == "=>": alambda [t] ++ remain parse_exp()
-        suffix rename(t "tuple" [x] ++ remain)
-      guard t.text == "(":
-        pos += 1
-        suffix apply(x until(")"))
-      guard t.text == "[":
-        pos += 1
-        suffix rename(t "__index" [x] ++ until("]"))
-      x
-    suffix consume()
+    def suffix t:
+      let tt = read()
+      tt === "," ? suffix([t, ...many(t => t === "," && ++pos && consume())]) :
+      tt === "." ? ++pos && suffix([tt, t, consume()]) :
+      tt === "(" ? ++pos && suffix(call([t, ...until(")")])) :
+      tt === "[" ? ++pos && suffix(call(["__index", t, ...until("]")])) :
+      tt == "=>" ? ++pos && [tt, t, parse_block()] :
+    let t consume()
+    suffix(
+      t === "!" ? [t, parse_unit()] :
+      t === "-" ? [t, parse_unit()] :
+      t === "[" ? call(["list", ...until("]")]) :
+      t === "(" ? squash(until(")")) :
+      t === ":" ? parse_block() :
+      t)
   def parse_exp:
-    lhs = parse_unit()
-    guard pos >= tokens.size: lhs
-    guard lhs.text == "!": apply lhs [parse_unit()]
-    lop = tokens[pos]
-    op2s = ", * ** / // % + ++ - >> << ^ & | := += -= *= /= %= **= < <= > >= == != === !== <=> && || =".split " "
-    guard op2s.has(lop.text):
-      pos += 1
-      rhs_first_text = tokens[pos].text
-      rhs = parse_exp()
-      guard rhs_first_text != "(" && op2s.has(rhs.text) && op2s.index(lop.text) < op2s.index(rhs.text):
-        rename rhs rhs.text [apply(lop [lhs rhs.args[0]]) rhs.args[1]]
-      apply lop [lhs rhs]
-    guard lop.text == "=>":
-      pos += 1
-      guard lhs.text == "": apply rename(lop "->" []) [parse_exp()]
-      apply lop [lhs parse_exp()]
-    lhs
-  def parse_block:
-    guard tokens[pos - 1].indent < tokens[pos].indent: parse_statement()
-    parse_line()
-  def parse_line:
-    first_pos = pos
-    first_token = tokens[pos]
-    guard first_token.text == "def":
-      pos += 1
-      name = tokens[pos]
-      def take_args a:
-        pos += 1
-        guard pos >= tokens.size: a
-        guard tokens[pos].text == ":": a
-        take_args a ++ tokens[pos]
-      args = take_args []
-      body = token "=>" 0 0 0 args ++ [parse_exp()] tundef
-      rename first_token "=" [name] ++ body
-    guard pos + 1 < tokens.size && tokens[pos+1].text == "=":
-      eq = tokens[pos+1]
-      pos += 2
-      apply eq [first_token parse_exp()]
-    def loop a:
-      guard pos >= tokens.size || tokens[pos].lineno != first_token.lineno:
-        guard a.size == 1: a[0]
-        apply a[0] a.slice(1)
-      loop a ++ [parse_exp()]
-    loop []
-  def parse_statement:
-    current_indent = tokens[pos].indent
-    lines = end_by(parse_line t => t.indent != current_indent)
-    guard lines.size == 1: lines[0]
-    token "__statement" 0 0 0 lines tundef
-  parse_statement()
+    let lhs parse_unit()
+    let op2 op => op.match(r"^[+\-*/%|&:]?=$") ? [op, lhs, parse_line()] : [op, lhs, parse_exp()]
+    read().match(r"^:?[!+\-*/%<>!=^|&]") ? op2(consume()) : lhs
+  def parse_line: (a => a.length && a)(squash(many(t => !t.includes("\n") && t !== ")" && t !== "]" && parse_exp())))
+  def parse_lines n: pack(many(t => (t.includes("\n") && indent(t) === n && ++pos, parse_line())))
+  def parse_block: (t => t.includes("\n") ? parse_lines(indent(t)) : parse_line())(read())
+  parse_lines 0
 
 def infer root:
   id = 0
@@ -252,7 +162,9 @@ def infer root:
     "true" tbool
     "false" tbool)
 
-test t "parser":
+test t:
+  guard true: []
+
   def show_token t:
     guard t.text == "" && t.args == []: "()"
     guard t.text == "__apply": show_token(t.args[0]) ++ "(" ++ t.args.slice(1).map(show_token).join(" ") ++ ")"

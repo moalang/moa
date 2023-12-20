@@ -83,6 +83,7 @@ const execute = (node, env) => {
     s === 'true' ? true :
     s === 'false' ? false :
     s.startsWith('r"') ? new RegExp(s.slice(2, -1), 'g') :
+    s.startsWith("r'") ? new RegExp(s.slice(2, -1), 'g') :
     s.startsWith('"') ? JSON.parse(s.replace(/\n/g, '\\n').replace(/\t/g, '\\t')) :
     s.match(/^-?[0-9]/) ? parseFloat(s) :
     s in embedded ? embedded[s] : lookup(s)
