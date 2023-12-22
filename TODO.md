@@ -7,7 +7,8 @@
 - Inheritance
 
 # Todo
-- [ ] Interpriter
+- [x] Interpriter
+- [ ] Design simple flow control
 - [ ] Type inference
 - [ ] Compiler to JavaScript
 - [ ] Compiler to executable file via LLVM
