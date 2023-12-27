@@ -36,29 +36,31 @@ const parse = source => {
   const loop = (a, f) => pos < tokens.length ? (v => v ? loop(a.concat([v]), f) : a)(f(read())) :a
   const many = f => loop([], f)
   const until = s => many(t => (t.includes('\n') && ++pos, read() === s ? (++pos, null) : parse_exp()))
-
   const consume = () => (t => ++pos && t)(read() || fail('out of index', pos, tokens))
-
   const indent = t => t.includes('\n') ? t.split('\n').slice(-1)[0].length : fail('not break line', t)
   const call = a => a.length === 1 ? ['__call', ...a] : a
   const squash = a => a.length === 1 ? a[0] : a
   const pack = a => a.length === 1 ? a[0] : a.length > 1 ? ['__pack', ...a] : a
 
   const parse_unit = () => {
-    const suffix = t => (tt =>
-      tt === ',' ? suffix([t, ...many(t => t === ',' && ++pos && consume())]) :
-      tt === '.' ? ++pos && suffix([tt, t, consume()]) :
-      tt === '(' ? ++pos && suffix(call([t, ...until(')')])) :
-      tt === '[' ? ++pos && suffix(call(['__index', t, ...until(']')])) :
-      tt == '=>' ? ++pos && [tt, t, parse_block()] :
-      t)(read())
-    return (t => suffix(
+    const suffix = t => {
+      const close = tokens[pos] || ''
+      const next = read()
+      return close === '(' ? ++pos && suffix(call([t, ...until(')')])) :
+        next === ',' ? suffix([t, ...many(t => t === ',' && ++pos && consume())]) :
+        next === '.' ? ++pos && suffix([next, t, consume()]) :
+        next === '[' ? ++pos && suffix(call(['__index', t, ...until(']')])) :
+        next == '=>' ? ++pos && [next, t, parse_block()] :
+        t
+    }
+    const t = consume()
+    return suffix(
       t === '!' ? [t, parse_unit()] :
       t === '-' ? [t, parse_unit()] :
       t === '[' ? call(['list', ...until(']')]) :
       t === '(' ? squash(until(')')) :
       t === ':' ? parse_block() :
-      t))(consume())
+      t)
   }
   const parse_exp = () => {
     const lhs = parse_unit()
@@ -113,6 +115,8 @@ if (require.main === module) {
   // function call
   test('(f 1)', 'f 1')
   test('(f 1)', 'f(1)')
+  test('(f (g 1))', 'f g(1)')
+  test('(f g 1)', 'f g (1)')
   test('(__call f)', 'f()')
   test('(f (+ 1 2) 3)', 'f(1 + 2 3)')
 

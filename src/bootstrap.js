@@ -6,7 +6,8 @@ const fs = require('fs')
 const moa = fs.readFileSync(__dirname + '/moa.moa', 'utf8')
 const log = o => (console.dir(typeof o === 'function' ? o.toString() : o, {depth: null}), o)
 const fail = m => { throw Error(m) }
-const js = evaluate(parse(moa + '\ncompile_to_js ' + JSON.stringify(moa)), {moa, fail, log})
+const node = parse(moa + '\ncompile_to_js ' + JSON.stringify(moa))
+const js = evaluate(node, {moa, fail, log})
 
 const code = `#!node
 // this will be replaced native code after llvm ir backend implemented
