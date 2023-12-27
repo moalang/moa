@@ -47,9 +47,9 @@ const parse = source => {
       const close = tokens[pos] || ''
       const next = read()
       return close === '(' ? ++pos && suffix(call([t, ...until(')')])) :
+        close === '[' ? ++pos && suffix(call(['__index', t, ...until(']')])) :
         next === ',' ? suffix([t, ...many(t => t === ',' && ++pos && consume())]) :
         next === '.' ? ++pos && suffix([next, t, consume()]) :
-        next === '[' ? ++pos && suffix(call(['__index', t, ...until(']')])) :
         next == '=>' ? ++pos && [next, t, parse_block()] :
         t
     }
@@ -130,6 +130,7 @@ if (require.main === module) {
 
   // index access
   test('(__index x 1)', 'x[1]')
+  test('(x (list 1))', 'x [1]')
   test('(__index x 1 2)', 'x[1 2]')
   test('(. (__index x a) b)', 'x[a].b')
 
