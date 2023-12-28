@@ -14,19 +14,19 @@ syn match Number / [0-9]\+\(\.[0-9]\+\)\?/
 syn keyword Boolean true false
 
 " Statement
-syn keyword Function def
-syn keyword Statement continue break return yield
-syn keyword StorageClass let var
-syn keyword Structure class union
-syn keyword Conditional if else guard match
-syn keyword Repeat for while
-syn keyword Exception throw try catch
-syn keyword Keyword module use
-syn keyword Keyword bool true false int float string bytes opt list set dict tuple class some none num
-syn keyword Keyword ref array i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 interface implement decimal assert
+syn keyword Define      let var def struct union
+syn keyword Conditional iif if else match
+syn keyword Boolean     true false nil
+syn keyword Type        void any bool int float string tuple list set dict option ref array
+syn keyword Type        i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 num bytes interface implement decimal assert
+syn keyword keyword     test use module
+syn keyword Repeat      for while
+syn keyword keyword     return continue break yield
+syn keyword PreProc     catch
 syn match Operator /[+\-\*/|&]=\=/
 syn match Operator /[<>]=\=/
 syn match Operator /[=!]=/
+syn match Operator /[=!]==/
 syn match Operator /[=;,:]/
 syn match Operator "<-"
 syn match Operator "->"

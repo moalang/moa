@@ -22,12 +22,14 @@ op2:
 | ("**" | "++" | "&&" | "||") "="?
 | ">>" | "<<"
 id: [A-Za-z_][A-Za-z0-9_]*
-reserved1: let var def class iif if else return match for while continue break return throw catch test use module
-reserved2: void any bool int float string tuple struct list set dict option ref
-reserved3: true false some none
-reserved4: time log http cache orm sql
-reserved5: yield
-reserved6: i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 num bytes union interface implement === !==
+reserved1: let var def struct union
+reserved2: iif if else match
+reserved3: return catch yield for while continue break
+reserved4: true false nil
+reserved5: void any bool int float string tuple struct list set dict option ref array
+reserved6: test use module
+reserved7: i8 i16 i32 i64 u8 u16 u32 u64 f32 f64
+reserved8: num bytes interface implement decimal assert
 ```
 
 
