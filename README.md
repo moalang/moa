@@ -5,15 +5,14 @@ Build robust web application rapidly
 
 Embedded components
 - HTTP server
-- Transactional object database
+- Transactional database
+- WebSocket
 - Logging
-- Web interface library
-- Bidirectional RPC
-- Time machine debugger
-- Development dashboard
-- Deployment tool
-- Development dashboard
-- Monitoring dashboard for production
+
+Developer tools
+- REPL
+- Debugger
+- Profiler
 
 
 
