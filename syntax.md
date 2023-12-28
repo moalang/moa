@@ -23,7 +23,7 @@ op2:
 | ">>" | "<<"
 id: [A-Za-z_][A-Za-z0-9_]*
 reserved1: let var def class iif if else return match for while continue break return throw catch test use module
-reserved2: any bool int float string tuple struct list set dict option ref
+reserved2: void any bool int float string tuple struct list set dict option ref
 reserved3: true false some none
 reserved4: time log http cache orm sql
 reserved5: yield

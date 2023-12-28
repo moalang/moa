@@ -1,94 +1,59 @@
 # The Moa Programming Language
-Build robust web application rapidly
-- Embedded components to enhance development experience
+Moa is a general purpose programming language for simple and robust software.
 - An open-source programming language
-
-Embedded components
-- HTTP server
-- Transactional database
-- WebSocket
-- Logging
+- Simple grammer
 
 Developer tools
 - REPL
-- Debugger
-- Profiler
+- Compiler
+- Integration for C, JavaScript
 
 
 
 # Getting started
 
-1. Install moa
+1. Installation for Mac and Linux
 ```
-$ mkdir -p ~/moa/bin
-$ curl https://github.com/moa/bin/moa > ~/moa/bin/moa
-$ export PATH=$PATH:~/moa/bin
+/bin/bash -c "$(curl -fsS https://github.com/moalang/moa/install.sh)"
 ```
 
-2. At the command prompt, create a new Moa program
+2. Launch REPL
 ```
-$ echo 'main io = io.puts "Hello, Moa"' > main.moa
-```
-
-3. Run the program
-```
-$ moa run
-Hello, Moa
+$ moa
+Moa 0.0.1
+> 1 + 2
+3
 ```
 
-4. Compile the program to executable file
 ```
+$ echo 'def add a b: a + b' > main.moa
+$ moa
+Moa 0.0.1
+> add 2 3
+5
+```
+
+3. Compile the program
+```
+$ echo 'def main io: io.puts "Hello world"' > main.moa
 $ moa build
 $ ./a.out
-Hello, Moa
-```
-
-5. ToDo web application example
-- index.mhtml
-- main.moa
-
-```
-# index.mhtml
-<!doctype html>
-<html>
-<head>
-  <title>Access counter</title>
-</head>
-<body>
-  <iframe src=/api/counter></iframe>
-</body>
-</html>
+Hello world
 ```
 
 ```
-# main.moa
-schema = access_counter:int
-
-main io =
-  req <- io.http.listen
-  db <- io.db schema
-  n = db.access_counter += 1
-  req.ok n.string
+$ moa build linux amd64 # a.out for linux amd64 CPU
+$ moa build js          # moa.js
+$ moa build c           # moa.c
 ```
 
-6. Deploy to Linux server
+4. Manual for moa command
 ```
-$ OS=linux ARCH=amd64 moa build
-$ scp a.out username@hostname:/path/to/a.out
-$ ssh username@hostname /path/to/a.out upgrade # launch deployed server and then gracefully stop old one if running
-```
-
-
-
-7. Manual for moa command
-Moa is a tool for managing Moa source code.
-
 Usage:
   moa <command> [arguments]
 
 The commands are:
-  moa               # launch repl
-  moa build         # compile to an optimized executable file
-  moa run           # run Moa program
-  moa test [regexp] # run tests
-  moa version       # print Moa version
+  moa                    # launch REPL
+  moa build [option] ... # compile
+  moa test [regexp] ...  # run tests
+```
