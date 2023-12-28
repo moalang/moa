@@ -22,11 +22,12 @@ op2:
 | ("**" | "++" | "&&" | "||") "="?
 | ">>" | "<<"
 id: [A-Za-z_][A-Za-z0-9_]*
-reserved1: let var def class iif if else guard return match for while continue break yield return throw catch test use module
+reserved1: let var def class iif if else return match for while continue break return throw catch test use module
 reserved2: any bool int float string tuple struct list set dict option ref
 reserved3: true false some none
 reserved4: time log http cache orm sql
-reserved5: i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 num bytes union interface implement === !==
+reserved5: yield
+reserved6: i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 num bytes union interface implement === !==
 ```
 
 
