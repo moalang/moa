@@ -14,7 +14,8 @@ Developer tools
 
 1. Installation for Mac and Linux
 ```
-/bin/bash -c "$(curl -fsS https://github.com/moalang/moa/install.sh)"
+bash -c "$(curl -fsS https://github.com/moalang/moa/install.sh)"
+exec $SHELL
 ```
 
 2. Launch REPL
@@ -37,12 +38,12 @@ Moa 0.0.1
 ```
 $ echo 'def main io: io.puts "Hello world"' > main.moa
 $ moa build
-$ ./a.out
+$ ./a
 Hello world
 ```
 
 ```
-$ moa build linux amd64 # a.out for linux amd64 CPU
+$ moa build linux amd64 # a for linux amd64 CPU
 $ moa build js          # moa.js
 $ moa build c           # moa.c
 ```
