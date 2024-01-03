@@ -99,7 +99,8 @@ const execute = (node, env) => {
     iif(a.slice(2))
   const pack = ([x, ...xs]) => (x => x instanceof Return ? x : xs.length ? pack(xs) : x)(run(x))
   const rescue = (e, a) =>
-    e instanceof SoftError ? (a[0] === 'fn' ? run(a)(e) : run(a)) : (() => { throw e })()
+    e instanceof SoftError ? (a[0] === 'fn' ? run(a)(e) : run(a)) :
+    (() => { throw e })()
   const apply = a =>
     a.length === 1 ? run(a[0]) :
     a[0] === 'if' ? pack([run(a.slice(1, -1)) && run(a.at(-1)), _void]) :
