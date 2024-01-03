@@ -86,6 +86,7 @@ const execute = (node, env) => {
     [x, insert(x, new Enum(x))]))
   const run_switch = (target, a) =>
     a.length === 0 ? fail('Unmatching', target) :
+    a[0] === '__pack' ? run_switch(target, a.slice(1)) :
     a[0][0] === 'fn' ? run_capture(target, a[0].slice(1), a.slice(1)) :
     a[0][0] === '_' ? run(a[0][1]) :
     comparable(target) === comparable(run(a[0][0])) ? run(a[0][1]) :
@@ -107,7 +108,7 @@ const execute = (node, env) => {
     a[0] === 'iif' ? iif(a.slice(1)) :
     a[0] === 'catch' ? attempt(() => run(a[1]), e => rescue(e, a[2])) :
     a[0] === 'return' ? new Return(run(a.slice(1))) :
-    a[0] === 'switch' ? run_switch(run(a[1]), a[2].slice(1)) :
+    a[0] === 'switch' ? run_switch(run(a.slice(1, -1)), a.at(-1)) :
     a[0] === 'fn' ? make_func(a[1], a.slice(2)) :
     a[0] === 'let' ? insert(a[1], run(a.slice(2))) :
     a[0] === 'var' ? insert(a[1], run(a.slice(2))) :
@@ -215,6 +216,7 @@ if (require.main === module) {
   test(2, '1\n2')
   test(_void, 'if true: 1')
   test(_void, 'if true: return')
+  test(1, 'def f n: n\nif true: return f 1')
   test(1, 'if true: return 1\nthrow 2')
   test(1, 'switch "a":\n"a": 1\n"b": 2\n_: 3')
   test(2, 'switch "b":\n"a": 1\n"b": 2\n_: 3')
@@ -222,6 +224,7 @@ if (require.main === module) {
   test(Error('Unmatching c'), 'switch "c":\n"a": 1\n"b": 2')
   test(1, 'enum a:\n  b\n  c int\nswitch b:\nb: 1\nc n => n')
   test(2, 'enum a:\n  b\n  c int\nswitch c(2):\nb: 1\nc(n) => n')
+  test(2, 'enum a:\n  b\n  c int\nswitch c 2:\nb: 1\nc(n) => n')
   //[ ] for while continue break
 
   // test
