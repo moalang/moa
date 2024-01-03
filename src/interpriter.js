@@ -3,6 +3,7 @@
 const { parse } = require('./parser.js')
 class List extends Array { }
 class Tuple extends Array { }
+class SoftError extends Error {}
 class Return { constructor(ret) { this.ret = ret } }
 class Time { constructor(year, month, day, hour, minute, second) { Object.assign(this, {year, month, day, hour, minute, second}) } }
 class Duration { constructor(count, unit) { this.count = count; this.unit = unit } }
@@ -62,7 +63,7 @@ const embedded = {
   tuple: (...a) => new Tuple().concat(a),
   ref: ref => ({ref}),
   fn: (...a) => console.dir(a),
-  throw: (...a) => { throw new Error(a.map(string).join(' ')) },
+  throw: (...a) => { throw new SoftError(a.map(string).join(' ')) },
   __call: f => f(),
   __index: index,
 }
@@ -97,10 +98,13 @@ const execute = (node, env) => {
     run(a[0]) ? run(a[1]) :
     iif(a.slice(2))
   const pack = ([x, ...xs]) => (x => x instanceof Return ? x : xs.length ? pack(xs) : x)(run(x))
+  const rescue = (e, a) =>
+    e instanceof SoftError ? (a[0] === 'fn' ? run(a)(e) : run(a)) : (() => { throw e })()
   const apply = a =>
     a.length === 1 ? run(a[0]) :
     a[0] === 'if' ? pack([run(a.slice(1, -1)) && run(a.at(-1)), _void]) :
     a[0] === 'iif' ? iif(a.slice(1)) :
+    a[0] === 'catch' ? attempt(() => run(a[1]), e => rescue(e, a[2])) :
     a[0] === 'return' ? new Return(run(a.slice(1))) :
     a[0] === 'switch' ? run_switch(run(a[1]), a[2].slice(1)) :
     a[0] === 'fn' ? make_func(a[1], a.slice(2)) :
@@ -263,6 +267,9 @@ if (require.main === module) {
   test(Error('OutOfIndex 0'), '[][0]')
   test(Error('OutOfIndex -2'), '[0][-2]')
   test(Error('a 1'), 'throw "a" 1')
+  test('a', 'catch throw("a") e => e.message')
+  test(1, 'catch throw("a"): 1')
+  test(Error('ZeroDivision'), 'catch 1/0: 1')
   //test(2, 'throw(1) @ 2')
   //test(Error('ZeroDivision'), '1 / 0 @ 2')
   //test(2, '1 / 0 @zdiv 2')
