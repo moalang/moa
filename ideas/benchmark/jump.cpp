@@ -1,7 +1,9 @@
-#include <setjmp.h>
-#include <time.h>
 #include <iostream>
+#include <setjmp.h>
+#include <unistd.h>
+#include <signal.h>
 
+volatile int flag = 1;
 jmp_buf jump_buffer;
 
 int g() {
@@ -13,17 +15,19 @@ int f() {
   return g();
 }
 
+void shutdown(int signum) {
+  flag = 0;
+}
+
 int main() {
-  auto t1 = clock();
-  int i = 0;
-  while (true) {
-    i++;
+  signal(SIGALRM, shutdown);
+  alarm(1);
+  long long i = 0;
+  while (flag) {
     if (setjmp(jump_buffer) == 0) {
       f();
     } else {
-      if ((double)(clock() - t1) / CLOCKS_PER_SEC >= 1) {
-        break;
-      }
+      i++;
     }
   }
   std::cout << i << std::endl;

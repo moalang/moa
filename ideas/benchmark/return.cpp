@@ -1,7 +1,8 @@
 #include <iostream>
-#include <time.h>
+#include <unistd.h>
+#include <signal.h>
 
-class Error {};
+volatile int flag = 1;
 
 int g() {
   return 1;
@@ -11,15 +12,17 @@ int f() {
   return g();
 }
 
+void shutdown(int signum) {
+  flag = 0;
+}
+
 int main() {
-  auto t1 = clock();
-  int i = 0;
-  while (true) {
-    i++;
+  signal(SIGALRM, shutdown);
+  alarm(1);
+  long long i = 0;
+  while (flag) {
     f();
-    if ((double)(clock() - t1) / CLOCKS_PER_SEC >= 1) {
-      break;
-    }
+    i++;
   }
   std::cout << i << std::endl;
   return 0;
