@@ -1,14 +1,13 @@
 # Do
-- Minimize the number of elements in code to help understanding
-- Keep conceptual integrity based on minimal primitives
-- Support both functional and imperative programming
+- Make programs shorter
+- Allow by default
 
 # Do not
 - Inheritance
 
 # Todo
-- [x] Interpriter
-- [ ] Design simple flow control
+- [x] Design how to infer any type for "if" and "while" -> void
+- [ ] Syntax to catch exception
 - [ ] Type inference
 - [ ] Compiler to JavaScript
 - [ ] Compiler to executable file via LLVM

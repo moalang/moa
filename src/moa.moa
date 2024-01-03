@@ -13,7 +13,9 @@ def compile_to_js source:
 # list.slice
 # list.dict
 def parse input:
-  guard true: []
+  if true:
+    return []
+
   let source input.trim()
   guard source.size === 0: []
   # operator | parenthesis | string | number | id | comment and spaces
@@ -116,7 +118,8 @@ def infer root:
       guard try_unify(a b): a
       error "type miss match"
     def apply a b:
-      guard a.size == 0: error "internal applying error"
+      guard a.size == 0:
+        error "internal applying error"
       guard b.size == 0:
         params = squash_params a
         guard params.size == 1: params[0]
@@ -166,7 +169,8 @@ def infer root:
     "false" tbool)
 
 test t:
-  guard true: []
+  if true:
+    return []
 
   def show_token t:
     guard t.text == "" && t.args == []: "()"

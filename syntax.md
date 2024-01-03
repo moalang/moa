@@ -2,46 +2,49 @@
 ```
 top: line+
 line: exp+ (":" block)?
-block: (("\n  " line)+ | exp+)
-exp: op1? unit (op2 exp)?
-unit: bottom (prop | call)*
+block: (("\n  " line)+ | line)
+exp:
+| (id | "(" id+ ")") "=>" block # a => a
+| op1? atom (op2 exp)?
+atom: bottom (prop | call | index | copy)*
 prop: "." (id | [0-9]+)
 call: "(" exp* ")"
+index: "[" exp+ "]"
+copy: "{" (id ("=" atom)?)* "}"
 bottom:
 | "(" exp ")"               # 1 * (2 + 3)
+| "{" (id ("=" atom)?)* "}" # {x y z=0}
 | "[" exp* "]"              # [1 2 3]
-| "{" (id ("=" unit)?)* "}" # {x y z=0}
-| [0-9]+ ("." [0-9]+)?      # 1.2
-| '"' [^"]* '"'             # "hi"
-| id ("," id)* "=>" block   # a,b => a + b
+| "-"? [0-9]+ ("." [0-9]+)? # -1.2
+| '"' [^"]* '"'             # "string"
 | id
-op1: [!-]
-op2:
-| [+-*/%<>|&^~=,]
-| [+-*/%<>|&^~=!] "="
-| ("**" | "++" | "&&" | "||") "="?
-| ">>" | "<<"
+op1: [!-] | "..."
+op2: [+-*/%<>|&^~=!]+ | ","
 id: [A-Za-z_][A-Za-z0-9_]*
-reserved1: let var def struct union
-reserved2: iif if else match
-reserved3: return catch yield for while continue break
-reserved4: true false nil
-reserved5: void any bool int float string tuple struct list set dict option ref array
-reserved6: test use module
-reserved7: i8 i16 i32 i64 u8 u16 u32 u64 f32 f64
-reserved8: num bytes interface implement decimal assert
 ```
 
+Keyword
+```
+   constant: true false
+       type: void bool int float string time duration tuple array list dict ref fn any
+declaration: let var def struct enum
+     branch: iif if else switch
+       flow: return throw catch
+       loop: for while continue break
+    special: _ moa test log math rand db
+  namespace: use module
+     binary: bytes i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
+   reserved: num decimal interface implement
+```
 
-
-# Symbols
+Symbols
 ```
 _                part of id
 .                field access
 ...              variadic function
 "                string
 #                comment
-( )              priority
+( )              priority or tuple
 [ ]              list
 { }              struct
 ! -              singular operator
@@ -50,9 +53,9 @@ _                part of id
 | & ^ ~ << >>    bit operator
 < <= > >= == !=  comparing operator
 =                update a variable
-,                tuple
+,                separation of arguments
 :                block
-?                optional type or argument
+? undefined
 \ undefined
 ' undefined
 $ undefined
@@ -62,23 +65,33 @@ $ undefined
 ```
 
 
-
 # Idea
-- Numbers
+
+- Number
 ```
-"0x" [0-9a-fA-F_]+           # 0xff           -> 255
-"0o" [0-7_]+                 # 0o11           -> 9
-"0b" [0-1_]+                 # 0b11           -> 3
-[0-9][0-9_]+ ("." [0-9_]+)?  # 10_000.1_002   -> 10000.1002
+"-"? "0x" [0-9a-fA-F_]+                                        # 0xff         -> 255
+"-"? "0o" [0-7_]+                                              # 0o11         -> 9
+"-"? "0b" [0-1_]+                                              # 0b11         -> 3
+"-"? [0-9][0-9_]+ ("." [0-9_]+)?                               # 10_000.1_002 -> 10000.1002
+"-"? ([0-9]+ ("zb" | "pb" | "tb" | "gb" | "mb" | "kb" | "b"))+ # 2kb1b == 2049
+```
+
+- Duration
+```
+"-"? ([0-9]+ ("d" | "h" | "m" | "s" | "ms" | "us"))+ # 1h30m, 365d or duration(hour=1 minute=30)
 ```
 
 - Variadic function
 ```
-def f a=1: a         # default value
-def f a? : a.or(1)   # zero or one
-def f a* : a.max     # zero or more
-def f a+ : a.max     # one or more
-def f a,+: a.max.1   # two, four or more : a is list[tuple[t u]]
+def f a=1: a          # default value
+def f ...a: a.max.1   # zero or more to list[t]
+def f ...a,: a.max.1  # zero or more to list[tuple[t u]]
+```
+
+- Pass through
+```
+def show ...a: print ...a
+def show ...: print ...
 ```
 
 - Named argument
@@ -95,31 +108,80 @@ def f {a b=0}: a  # f(a=1), f(a=1 b=2) or f(b=2 a=1)
 1 + 2.0 # float
 ```
 
-- Pass through
-```
-def show ...a: print ...a
-def show ...: print ...
-```
-
 - Pattern matching
 ```
-"match " exp ":" ("\n  " pattern (if exp)? ":" exp)+
-pattern: rule ("|" pattern)*  # a | b             : or
-rule:
-| '"' [^"]* '"'               # "s"               : string
-| [0-9]+ ("." [0-9]+)?        # 1.2               : number
-| "true" | "false"            # true              : bool
-| "[" rule* "]"               # [1 a]             : list
-| "{" capture+ "}"            # {x y.int z=0 w=a} : struct
-|  rule "," rule              # 1, a              : tuple
-| capture                     # x.int             : capture for union
-capture: id ("." id)* ("=" rule)?
-id: [A-Za-z_][0-9A-Za-z_]*
+switch: "switch" exp ":" ("\n  " const | pattern)
+const: exp ("or" exp)* ":" block
+pattern: matcher ("if" exp) "=>" block
+matcher:
+| '"' [^"]* '"'                # string
+| "-"? [0-9]+ ("." [0-9]+)?    # number
+| "[" matcher* "]"             # list
+| "{" capture+ "}"             # struct
+| capture
+capture:
+| id "." type "(" pattern* ")" # type
+| id "=" matcher               # field of struct or argument of type
+| id
 ```
+
+```
+enum tree t:
+    leaf
+    node t tree(t) tree(t)
+def validate t:
+    switch t:
+        leaf: true
+        _.node(m _.leaf _.leaf) => true
+        _.node(m l.node _.leaf) => l.0 <= m
+        _.node(m _.leaf r.leaf) => m <= r.0
+        _.node(m l.node r.node) => l.0 <= m <= r.0 && validate(l) && validate(r)
+
+enum tree t:
+    leaf
+    node:
+        value t
+        left tree t
+        right tree t
+def validate t:
+    switch t:
+        leaf: true
+        {value left.leaf right.leaf} => true
+        {value left.node right.leaf} => left.value <= value && validate(left)
+        {value left.leaf right.node} => value <= right.value && validate(right)
+        {value left.node right.node} => left.value <= value <= right.value && validate(left) && validate(right)
+```
+
 
 - typed argument
 ```
 def f a.int .int      : a     # int int
 def f a b.float       : a / b # float float float
 def f t.num => a.t b.t: a + b # t.num => t t t
+def f a.ref: a += 1           # a = ref 1; f a; a == 2
+```
+
+- Core syntax
+```
+top: list | atom
+list: "(" top* ")"
+atom: id | num | string | op
+id: [_A-Za-z][0-9_A-Za-z]*
+num: "-"? [0-9] ("." [0-9])?
+string: '"' [^"]* '"'
+op: [-+*/%|&<>!=^~]+ | ":="
+```
+
+- Syntax sugar
+```
+a b        # 50%: (a b)
+a.b        # 60%: (. a b)
+a.b c d    # 55%: ((. a b) c d)
+a.b(c d)   # 77%: ((. a b) c d)
+a + b      # 60%: (+ a b)
+a: b       # 50%: (a (b))
+a b: c d   # 62%: (a b (c d))
+a:         # 52%: (a (b (c d)))
+  b
+  c d
 ```

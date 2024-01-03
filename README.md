@@ -43,7 +43,7 @@ Hello world
 ```
 
 ```
-$ moa build linux amd64 # a for linux amd64 CPU
+$ moa build linux amd64 # a
 $ moa build js          # moa.js
 $ moa build c           # moa.c
 ```
@@ -56,5 +56,6 @@ Usage:
 The commands are:
   moa                    # launch REPL
   moa build [option] ... # compile
-  moa test [regexp] ...  # run tests
+  moa test [path] ...    # run tests
+  moa format [path] ...  # format code
 ```
