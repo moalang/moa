@@ -92,10 +92,15 @@ const execute = (node, env) => {
   const run_capture = (target, cond, remain) =>
     target instanceof Enum && target.tag === cond[0][0] ? execute(cond[1], {...env, ...{[cond[0][1]]: {value: target.content}}}) :
     run_switch(target, remain)
+  const iif = a => a.length === 0 ? fail('Invalid iif') :
+    a.length === 1 ? run(a[0]) :
+    run(a[0]) ? run(a[1]) :
+    iif(a.slice(2))
   const pack = ([x, ...xs]) => (x => x instanceof Return ? x : xs.length ? pack(xs) : x)(run(x))
   const apply = a =>
     a.length === 1 ? run(a[0]) :
     a[0] === 'if' ? pack([run(a.slice(1, -1)) && run(a.at(-1)), _void]) :
+    a[0] === 'iif' ? iif(a.slice(1)) :
     a[0] === 'return' ? new Return(run(a.slice(1))) :
     a[0] === 'switch' ? run_switch(run(a[1]), a[2].slice(1)) :
     a[0] === 'fn' ? make_func(a[1], a.slice(2)) :
@@ -182,6 +187,12 @@ if (require.main === module) {
   test(2, '[1 2][-1]')
   test({}, 'dict()')
   test({a: 1}, 'dict("a" 1)')
+
+  // branch
+  test(1, 'iif true 1 2')
+  test(2, 'iif false 1 2')
+  test(2, 'iif false 1 true 2 3')
+  test(3, 'iif false 1 false 2 3')
 
   // define
   test(1, 'let a 1\na')

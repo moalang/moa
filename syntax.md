@@ -114,14 +114,14 @@ switch: "switch" exp ":" ("\n  " const | pattern)
 const: exp ("or" exp)* ":" block
 pattern: matcher ("if" exp) "=>" block
 matcher:
-| '"' [^"]* '"'                # string
-| "-"? [0-9]+ ("." [0-9]+)?    # number
-| "[" matcher* "]"             # list
-| "{" capture+ "}"             # struct
+| '"' [^"]* '"'                 # string
+| "-"? [0-9]+ ("." [0-9]+)?     # number
+| "[" matcher* ("..." id?)? "]" # list
+| "{" capture+ "}"              # struct
 | capture
 capture:
-| id "." type "(" pattern* ")" # type
-| id "=" matcher               # field of struct or argument of type
+| id "." type "(" pattern* ")"  # type
+| id "=" matcher
 | id
 ```
 
