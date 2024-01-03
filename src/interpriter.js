@@ -5,6 +5,8 @@ class List extends Array { }
 class Tuple extends Array { }
 class SoftError extends Error {}
 class Return { constructor(ret) { this.ret = ret } }
+class Continue { }
+class Break { }
 class Time { constructor(year, month, day, hour, minute, second) { Object.assign(this, {year, month, day, hour, minute, second}) } }
 class Duration { constructor(count, unit) { this.count = count; this.unit = unit } }
 class Enum { constructor(tag, content) { this.tag = tag; this.content = content } }
@@ -64,6 +66,8 @@ const embedded = {
   ref: ref => ({ref}),
   fn: (...a) => console.dir(a),
   throw: (...a) => { throw new SoftError(a.map(string).join(' ')) },
+  continue: new Continue(),
+  break: new Break(),
   __call: f => f(),
   __index: index,
 }
@@ -84,6 +88,7 @@ const execute = (node, env) => {
   const def_enum = a => Object.fromEntries(a.map(x => Array.isArray(x) ?
     [x[0], insert(x[0], v => new Enum(x[0], v))] :
     [x, insert(x, new Enum(x))]))
+  const run_while = (cond, exp) => run(cond) && !(run(exp) instanceof Break) ? run_while(cond, exp) : _void
   const run_switch = (target, a) =>
     a.length === 0 ? fail('Unmatching', target) :
     a[0] === '__pack' ? run_switch(target, a.slice(1)) :
@@ -94,11 +99,16 @@ const execute = (node, env) => {
   const run_capture = (target, cond, remain) =>
     target instanceof Enum && target.tag === cond[0][0] ? execute(cond[1], {...env, ...{[cond[0][1]]: {value: target.content}}}) :
     run_switch(target, remain)
-  const iif = a => a.length === 0 ? fail('Invalid iif') :
+  const iif = a => a.length === 0 ? fail('Undetermined') :
+    a.length === 1 && a[0][0] === '__pack' ? iif(a[0].slice(1).flatMap(x => [x.slice(0, -1), x.at(-1)])) :
     a.length === 1 ? run(a[0]) :
     run(a[0]) ? run(a[1]) :
     iif(a.slice(2))
-  const pack = ([x, ...xs]) => (x => x instanceof Return ? x : xs.length ? pack(xs) : x)(run(x))
+  const pack = ([x, ...xs]) => (x =>
+    x instanceof Return ? x :
+    x instanceof Continue ? x :
+    x instanceof Break ? x :
+    xs.length ? pack(xs) : x)(run(x))
   const rescue = (e, a) =>
     e instanceof SoftError ? (a[0] === 'fn' ? run(a)(e) : run(a)) :
     (() => { throw e })()
@@ -109,6 +119,7 @@ const execute = (node, env) => {
     a[0] === 'catch' ? attempt(() => run(a[1]), e => rescue(e, a[2])) :
     a[0] === 'return' ? new Return(run(a.slice(1))) :
     a[0] === 'switch' ? run_switch(run(a.slice(1, -1)), a.at(-1)) :
+    a[0] === 'while' ? run_while(a.slice(1, -1), a.at(-1)) :
     a[0] === 'fn' ? make_func(a[1], a.slice(2)) :
     a[0] === 'let' ? insert(a[1], run(a.slice(2))) :
     a[0] === 'var' ? insert(a[1], run(a.slice(2))) :
@@ -199,6 +210,7 @@ if (require.main === module) {
   test(2, 'iif false 1 2')
   test(2, 'iif false 1 true 2 3')
   test(3, 'iif false 1 false 2 3')
+  test(2, 'def f x: x\niif:\n  f false: 1\n  f true: 2')
 
   // define
   test(1, 'let a 1\na')
@@ -225,7 +237,10 @@ if (require.main === module) {
   test(1, 'enum a:\n  b\n  c int\nswitch b:\nb: 1\nc n => n')
   test(2, 'enum a:\n  b\n  c int\nswitch c(2):\nb: 1\nc(n) => n')
   test(2, 'enum a:\n  b\n  c int\nswitch c 2:\nb: 1\nc(n) => n')
-  //[ ] for while continue break
+  test(3, 'let n 1\nwhile n < 3: n += 1\nn')
+  test(1, 'let n 1\nwhile true:\n  if true: break\n  n+=1\nn')
+  test(3, 'let n 1\nwhile n < 3:\n  n += 1\n  if true: continue\n  n+=5\nn')
+  test(7, 'let n 1\nwhile n < 3:\n  n += 1\n  if false: continue\n  n+=5\nn')
 
   // test
   test(true, 'test t: t.eq 1 1')
@@ -274,11 +289,6 @@ if (require.main === module) {
   test('a', 'catch throw("a") e => e.message')
   test(1, 'catch throw("a"): 1')
   test(Error('ZeroDivision'), 'catch 1/0: 1')
-  //test(2, 'throw(1) @ 2')
-  //test(Error('ZeroDivision'), '1 / 0 @ 2')
-  //test(2, '1 / 0 @zdiv 2')
-  //test(0, '[][0] @e.ooi => e.index')
-  //[ ] catch
 
   // compile error
   test(Error('Existed z'), 'let z 1\nlet z 2')

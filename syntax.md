@@ -52,6 +52,7 @@ _                part of id
 + - * / % **     number operator
 | & ^ ~ << >>    bit operator
 < <= > >= == !=  comparing operator
+->               right hand assign operator
 =                update a variable
 ,                separation of arguments
 :                block

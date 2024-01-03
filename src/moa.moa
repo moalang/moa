@@ -17,24 +17,33 @@ def parse input:
     return []
 
   let source input.trim()
-  guard source.size === 0: []
+  if source.size == 0:
+    return []
+
   # operator | parenthesis | string | number | id | comment and spaces
   let regexp r'([!+\-*/%<>:!=^|&]+|[()\[\]{}]|r?"[^]*?(?<!\\)"|-?[0-9]+(?:\.[0-9]+)|[0-9A-Za-z_]+|(?:#[^\n]*|[ \n])+)'
   let tokens source.split(regexp).filter(s => s.size > 0)
 
   var pos 0
   def read:
-    guard pos >= tokens.size: ""
-    guard t.match(r"^[ #]"): tokens[pos += 1]
-    tokens[pos]
-  def _loop a f: pos < tokens.size ? (v => v ? loop(a.concat([v]), f) : a)(f(read())) :a
+    iif:
+      pos >= tokens.size: ""
+      t.match r"^[ #]"  : tokens[pos += 1]
+      _                 : tokens[pos]
   def loop a f:
     let t read()
-    guard t == "": a
+    if t == "":
+      return a
     let v = f(t)
-    guard v == "": a
+    if v == "":
+      return a
     loop a ++ [v] f
   def many f: loop([], f)
+  def many_ f:
+    a [] :: while read():t != "" f(t):v != "":
+    a [] :: while read()#t != "" f(t)#v != "":
+    a [] :: while read() -> v != "" && f(t) -> v != "":
+      a.push v
   def until s:
     many t =>
       if t.has("\n"):

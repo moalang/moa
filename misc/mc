@@ -9,7 +9,7 @@ const items = process.argv.slice(2).map(path => {
   tokens.map(t => d[t] = (d[t] || 0) + 1)
   const number_format = n => ('    ' + n).substr(-4)
   const line_format = s => s.replace(/\n/g, '\\n')
-  const frequency = Object.entries(d).sort((a, b) => b[1] - a[1]).slice(0, 30).map(([k, v]) => `  ${number_format(v)}\t${line_format(k)}`).join('\n')
+  const frequency = Object.entries(d).sort((a, b) => b[1] - a[1] || b[0] - a[0]).slice(0, 30).map(([k, v]) => `  ${number_format(v)}\t${line_format(k)}`).join('\n')
   return {path, frequency, tokens: tokens.length}
 })
 const best = Math.min(...items.map(o => o.tokens))

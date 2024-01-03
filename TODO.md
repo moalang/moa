@@ -7,7 +7,7 @@
 
 # Todo
 - [x] Design how to infer any type for "if" and "while" -> void
-- [ ] Syntax to catch exception -> a @ b, a @b c, a @b: c d, a @b.c => d
+- [x] Syntax to catch exception -> a @ b, a @b c, a @b: c d, a @b.c => d
 - [ ] Type inference
 - [ ] Compiler to JavaScript
 - [ ] Compiler to executable file via LLVM
