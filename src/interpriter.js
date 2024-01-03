@@ -258,14 +258,20 @@ if (require.main === module) {
   test([[1], [2]], '[[1]] ++ [[2]]')
   test({a: 1, b: 3, c: 4}, 'dict("a" 1 "b" 2) ++ dict("b" 3 "c" 4)')
 
-  // error
-  test(Error('Existed z'), 'let z 1\nlet z 2')
-  test(Error('ZeroDivision'), '3 / 0')
-  test(Error('Missing z'), 'z := 1')
+  // runtime error
+  test(Error('ZeroDivision'), '1 / 0')
   test(Error('OutOfIndex 0'), '[][0]')
   test(Error('OutOfIndex -2'), '[0][-2]')
-  test(Error('fail 1'), 'throw "fail" 1')
+  test(Error('a 1'), 'throw "a" 1')
+  //test(2, 'throw(1) @ 2')
+  //test(Error('ZeroDivision'), '1 / 0 @ 2')
+  //test(2, '1 / 0 @zdiv 2')
+  //test(0, '[][0] @e.ooi => e.index')
   //[ ] catch
+
+  // compile error
+  test(Error('Existed z'), 'let z 1\nlet z 2')
+  test(Error('Missing z'), 'z := 1')
 
   // edge case
   test(1, 'var a 0\ndef f:\n  def g: a += 1\n  g()\nf()\na')
