@@ -1,100 +1,208 @@
 def compile_to_js source:
   "const main = io => io.write(`Hello world`)"
 
+struct token:
+  text   string
+  offset int
+  indent int
+  lineno int
+  length int
+
+struct type:
+  tname  string
+  params list type
+
 enum ast:
-  node:
-    source string
-    text string
-    pos int
-  apply list[ast]
+  node token
+  call ast
+  apply list ast
 
-def parse input:
-  let source input.trim()
-  if source.size == 0:
-    return []
-
+def tokenize source:
   # operator | parenthesis | string | number | id | comment and spaces
   let regexp r'([!+\-*/%<>:!=^|&]+|[()\[\]{}]|r?"[^]*?(?<!\\)"|-?[0-9]+(?:\.[0-9]+)|[0-9A-Za-z_]+|(?:#[^\n]*|[ \n])+)'
-  let tokens source.split(regexp).filter(s => s.size > 0)
+  var offset 0
+  var indent 0
+  var lineno 1
+  source.trim().split(regexp).filter(s => s.size > 0).map(text =>
+    if text.has "\n":
+      indent = text.split("\n")[-1].size
+      lineno += text.split("\n").size - 1
+    let t token text offset indent lineno text.size
+    offset += text.size
+    t).filter(t => !t.text.match(r"[ \t\r\n#]"))
+test tester "tokenize":
+  def eq expect source:
+    tester.eq expect tokenize(source)
+  eq [token("a" 0 0 1 1)] "a"
+  eq [token("a" 0 0 1 1) token("b" 4 2 2 1) token("c" 6 2 2 1)] "a\n  b c"
 
+def parse tokens:
   var pos 0
-  def read:
-    iif:
-      pos >= tokens.size: ""
-      t.match r"^[ #]"  : tokens[pos += 1]
-      _                 : tokens[pos]
-
   def consume:
-    t = read()
-    if t == "":
-      fail "out of index" pos tokens
+    if pos >= tokens.size:
+      throw "eof"
+    let t tokens[pos]
     pos += 1
     t
-
-  # def many f: while read() -> s && f(s) -> t && t
   def many f:
-    def loop a f:
-      let t read()
-      if t == "":
-        return a
-      let v = f(t)
-      if v == "":
-        return a
-      loop a ++ [v] f
-    loop([] f)
-
+    let a []
+    while pos < tokens.size:
+      let v catch f() break
+      a.push v
+    a
   def until s:
-    many t =>
-      if t.has "\n":
+    many () =>
+      if tokens[pos].text.has "\n":
         pos += 1
-      iif read() === s:
-        pos += 1; none
-        parse_exp()
-
-  def indent t:
-    iif t.has("\n") t.split("\n")[-1].size fail("not break line" t)
-  def call a:
-    iif a.size === 1 ["__call", ...a] a
-  def squash a:
-    iif a.size === 1 a[0] a
-  def pack a:
-    iif a.size === 1 a[0] a.size > 1 ["__pack", ...a] a
-
-  def parse_unit:
-    def suffix t:
-      let tt = read()
-      switch tt:
-        ",": suffix([t, ...many(t => t === "," && ++pos && consume())])
-        ".": ++pos && suffix([tt, t, consume()])
-        "(": ++pos && suffix(call([t, ...until(")")]))
-        "[": ++pos && suffix(call(["__index", t, ...until("]")]))
-        "=>": ++pos && [tt, t, parse_block()]
-    let t consume()
-    let tt switch t:
-      "!": [t parse_unit()]
-      "-": [t parse_unit()]
-      "[": call ["list"] ++ until("]")
-      "(": squash until(")")
-      ":": parse_block()
-      _  : t
-    suffix tt
+      if tokens[pos].text == s:
+        pos += 1
+        throw "end"
+      parse_exp()
+  def alias t:
+    let v switch t.text:
+      "=>": token "fn" t t.offset t.indent t.lineno t.length
+      "[": token "list" t t.offset t.indent t.lineno t.length
+      _   : t
+    node v
   def parse_exp:
-    let lhs parse_unit()
-    def op2 op:
-      iif op.match(r"^[+\-*/%|&:]?=$") [op lhs parse_line()] [op lhs parse_exp()]
-    iif read().match(r"^:?[!+\-*/%<>!=^|&]") op2(consume()) lhs
-  def parse_line:
-    squash many(t =>
-      !t.has("\n") && t != ")" && t != "]" && parse_exp())
-  def parse_lines n:
-    pack many(t =>
-      if t.has("\n") && indent(t) === n:
-        pos += 1
-      parse_line())
-  def parse_block:
-    let t = read()
-    iif t.has("\n") parse_lines(indent(t)) parse_line()
-  parse_lines 0
+    let lhs parse_atom()
+    if pos >= tokens.size:
+      return lhs
+    let next tokens[pos]
+    if next.text.match(r"^[+\-*/%|&<>!=]"):
+      pos += 1
+      return apply [alias(next) lhs parse_exp()]
+    return lhs
+  def parse_atom:
+    let op1 "! -".split(" ")
+    let t consume()
+    if t.text == "[":
+      let a until "]"
+      return iif a.size == 0 call(alias(t)) apply([alias(t)] ++ a)
+    def suffix item:
+      if pos >= tokens.size:
+        return item
+      let tt tokens[pos]
+      switch tt.text:
+        ".":
+          pos += 1
+          apply([node(tt) item parse_atom()])
+        _: item
+    suffix iif(op1.has(t.text) apply([node(t) parse_atom()]) node(t))
+  return many parse_exp
+
+test t "parser":
+  def eq expect source:
+    def stringify x:
+      switch x:
+        x.node => x.text
+        x.call => "(__call " ++ stringify(x) ++ ")"
+        x.apply => "(" ++ x.map(stringify).join(" ") ++ ")"
+    t.eq expect parse(tokenize(source)).map(stringify).join("\n")
+
+  # primitives
+  eq "1" "1"
+  eq "(- 1)" "-1"
+  eq "1.0" "1.0"
+  eq "id" "id"
+  eq "\"h\\\"i\"" "\"h\\\"i\""
+  eq "\"\\\\\"" "\"\\\\\""
+  eq "r\"\\t\"" "r\"\\t\""
+  eq "(fn a b)" "a => b"
+
+  # container
+  eq "(__call list)" "[]"
+  eq "(list 1)" "[1]"
+  eq "(list 1 2)" "[1 2]"
+
+  # property access
+  eq "(. a b)" "a.b"
+
+  # single operator
+  eq "(! a)" "!a"
+  return
+  eq "((! a) b)" "!a b"
+
+  # binary operators
+  eq "(+ a b)" "a + b"
+  eq "((+ a b) c)" "a + b c"
+
+  # parentheses
+  eq "1" "(1)"
+  eq "(f 1)" "(f 1)"
+  eq "(+ 1 (+ 2 3))" "1 + 2 + 3"
+  eq "(+ (+ 1 2) 3)" "(1 + 2) + 3"
+
+  # function call
+  eq "(f 1)" "f 1"
+  eq "(f 1)" "f(1)"
+  eq "(f (g 1))" "f g(1)"
+  eq "(f g 1)" "f g (1)"
+  eq "(__call f)" "f()"
+  eq "(f (+ 1 2) 3)" "f(1 + 2 3)"
+
+  # method call
+  eq "(. f m)" "f.m"
+  eq "(. f 1)" "f.1"
+  eq "(__call (. f m))" "f.m()"
+  eq "((. f m) a)" "f.m(a)"
+  eq "((. f m) a b)" "f.m(a b)"
+  eq "((. ((. a f) 1) g) 2)" "a.f(1).g(2)"
+
+  # index access
+  eq "(__index x 1)" "x[1]"
+  eq "(x (list 1))" "x [1]"
+  eq "(__index x 1 2)" "x[1 2]"
+  eq "(. (__index x a) b)" "x[a].b"
+
+  # indent
+  eq "(a b)" "a:\n  b"
+  eq "(a (b c))" "a:\n  b:\n    c"
+  eq "(a (b (__pack c d)))" "a:\n  b:\n    c\n    d"
+  eq "(a (__pack (b c) d))" "a:\n  b:\n    c\n  d"
+  eq "(__pack (a (b c)) d)" "a:\n  b:\n    c\nd"
+  eq "(__pack (a (__pack b (c d) e)) f)" "a:\n  b\n  c:\n    d\n  e\nf"
+
+  # statement
+  eq "(__pack a b)" "a\nb"
+  eq "(__pack (a b) c)" "a b\nc"
+  eq "(__pack a (b c))" "a\nb c"
+
+  # assign
+  eq "(= a (b c))" "a = b c"
+  eq "(+= a (b c))" "a += b c"
+  eq "(:= a (b c))" "a := b c"
+
+  # comment
+  eq "(= a 1)" "#comment\na = 1 # comment\n#comment"
+  eq "(a (__pack b c))" "a:\n  #comment\n  b\n  #comment\n  c\n  # comment"
+
+  # combinations
+  eq "(! (a b))" "!a(b)"
+  eq "(&& true (! false))" "true && !false"
+  eq "(+ (a b) c)" "a(b) + c"
+  eq "(. (__index a b) c)" "a[b].c"
+  eq "((. (__index a b) c) d)" "a[b].c(d)"
+  eq "(. (__call list) a)" "[].a"
+  eq "((. a b) c)" "a.b c"
+  eq "(. (__call list) size)" "[].size"
+  eq "((. (list 1) m) a)" "[1].m a"
+  eq "((. (list 1) m) a)" "[1].m(a)"
+  eq "((. (list 1) m) (fn x (>= x 1)))" "[1].m(x => x >= 1)"
+  eq "(fn p (+ (. p x) (. p y)))" "p => p.x + p.y"
+  eq "(fn (a b) c)" "a,b => c"
+  eq "(fn (a b c) d)" "a,b,c => d"
+  eq "(fn a (b c))" "a => b c"
+  eq "(fn a (+ 1 2))" "a => 1 + 2"
+  eq "(fn a 1)" "a =>\n  1"
+  eq "(fn a (__pack 1 2))" "a =>\n  1\n  2"
+
+  # edge case
+  eq "1" "1\n"
+  eq "()" ""
+  eq "()" "\n"
+  eq "(f a b)" "f(a\nb\n)"
+
 
 def infer root:
   struct type:
@@ -188,9 +296,6 @@ def infer root:
     "list" tlist
     "true" tbool
     "false" tbool)
-
-test t "parser":
-  t.eq 1 1
 
 test t:
   return

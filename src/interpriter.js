@@ -83,10 +83,13 @@ const methods = {
   },
   list: {
     a: a => a.length,
-    has: a => t => a.includes(t),
+    has: a => x => a.includes(x),
     map: a => f => a.map(x => f(x)),
+    mapi: a => f => a.map((x, i) => f(x, i)),
     filter: a => f => a.filter(x => f(x)),
     slice: a => (n, m) => a.slice(n, m),
+    join: a => s => a.map(string).join(s),
+    push: a => x => a.push(x),
   }
 }
 const _void = undefined
@@ -113,7 +116,7 @@ const execute = (node, env) => {
     !type ? new Enum(name) :
     Array.isArray(type) ? (...a) => new Enum(name, Object.fromEntries(unpack(type).map(([t,_], i) => [t, a[i]]))) :
     v => new Enum(name, v)
-  const run_while = (cond, exp) => run(cond) && !(run(exp) instanceof Break) ? run_while(cond, exp) : _void
+  const run_while = (cond, body) => run(cond) && !(execute(body, {...env}) instanceof Break) ? run_while(cond, body) : _void
   const run_switch = (target, a) =>
     a.length === 0 ? fail('Unmatching', target) :
     a[0][0] === 'fn' ? run_capture(target, a[0].slice(1), a.slice(1)) :
@@ -156,12 +159,15 @@ const execute = (node, env) => {
     a[0] === '__pack' ? pack(a.slice(1)) :
     a[0] === '&&' ? run(a[1]) && run(a[2]) :
     a[0] === '||' ? run(a[1]) || run(a[2]) :
-    a[0] === ':=' ? update(a[1], run(a.slice(2))) :
+    a[0] === '=' ? update(a[1], run(a.slice(2))) :
     a[0] === '.' ? prop(run(a[1]), a[2]) :
     a[0].toString().match(/^[+\-*/%|&]+=$/) ? update(a[1], apply([a[0].slice(0, -1), ...a.slice(1)])) :
     a.length >= 2 ? run(a[0])(...a.slice(1).map(run)) :
     fail('apply', a)
   const to_array = o => Array.isArray(o) ? o : [o]
+  const unquote = c => c === 'n' ? '\n' :
+    c == 't' ? '\t' :
+    c
   const atom = s =>
     typeof s !== 'string' ? s : // already evaluated
     s === 'true' ? true :
@@ -169,7 +175,8 @@ const execute = (node, env) => {
     s === 'return' ? new Return(_void) :
     s.startsWith('r"') ? new RegExp(s.slice(2, -1), 'g') :
     s.startsWith("r'") ? new RegExp(s.slice(2, -1), 'g') :
-    s.startsWith('"') ? JSON.parse(s.replace(/\n/g, '\\n').replace(/\t/g, '\\t')) :
+    //s.startsWith('"') ? JSON.parse(s.replace(/\n/g, '\\n').replace(/\t/g, '\\t')) :
+      s.startsWith('"') ? s.slice(1, -1).replace(/\\./g, s => unquote(s[1])) :
     (m = s.match(/^(-?[0-9]+)(d|h|m|s|ms|us)/)) ? new Duration(parseFloat(m[1]), m[2]) :
     s.match(/^-?[0-9]/) ? parseFloat(s) :
     s in embedded ? embedded[s] : lookup(s)
@@ -194,7 +201,7 @@ if (require.main === module) {
     }
   }
   const test = (expect, src) => eq(expect, src)
-  test(2, 'enum a:\n  b\n  c int\nswitch c(2):\nb: 1\nc(n) => n')
+  test(3, 'let n 1\nwhile n < 3:\n  let m 1\n  n += m\nn')
 
   // primitives
   test(1, '1')
@@ -203,6 +210,7 @@ if (require.main === module) {
   test(false, 'false')
   test('hi', '"hi"')
   test('h"i', '"h\\"i"')
+  test('h"i', "\"h\\\"i\"")
   test('\\', '"\\\\"')
   test('\t', '"\\t"')
   test('\\t', '"\\\\t"')
@@ -257,6 +265,7 @@ if (require.main === module) {
   test(_void, 'if true: return')
   test(1, 'def f n: n\nif true: return f 1')
   test(1, 'if true: return 1\nthrow 2')
+  test(2, 'if false: return 1\n2')
   test(1, 'switch "a":\n"a": 1\n"b": 2\n_: 3')
   test(2, 'switch "b":\n"a": 1\n"b": 2\n_: 3')
   test(3, 'switch "c":\n"a": 1\n"b": 2\n_: 3')
@@ -265,10 +274,12 @@ if (require.main === module) {
   test(2, 'enum a:\n  b\n  c int\nswitch c(2):\nb: 1\nc(n) => n')
   test(2, 'enum a:\n  b\n  c int\nswitch c 2:\nb: 1\nc(n) => n')
   test(3, 'enum a:\n  b:\n    v int\n    x int\nswitch b 1 2:\no.b => o.v + o.x')
+  test(1, 'enum a:\n  b c d\nswitch b 1: b(n) => n')
   test(3, 'let n 1\nwhile n < 3: n += 1\nn')
   test(1, 'let n 1\nwhile true:\n  if true: break\n  n+=1\nn')
   test(3, 'let n 1\nwhile n < 3:\n  n += 1\n  if true: continue\n  n+=5\nn')
   test(7, 'let n 1\nwhile n < 3:\n  n += 1\n  if false: continue\n  n+=5\nn')
+  test(3, 'let n 1\nwhile n < 3:\n  let m 1\n  n += m\nn')
 
   // test
   test(true, 'test t: t.eq 1 1')
@@ -294,7 +305,7 @@ if (require.main === module) {
   test(1, '3 % 2')
   test(27, '3 ** 3')
   test(3, 'var a 1\na += 2\na')
-  test(2, 'var a 1\na := 2\na')
+  test(2, 'var a 1\na = 2\na')
   test(true , 'struct s:\n  a string\n  b int\ns("hi" 1) == s("hi" 1)')
   test(false, 'struct s:\n  a string\n  b int\ns("hi" 1) == s("hi" 2)')
   test(true , 'struct s:\n  a string\n  b int\ns("hi" 1) <= s("hi" 1)')
@@ -302,8 +313,8 @@ if (require.main === module) {
   test(true , 'struct s:\n  a string\n  b int\ns("hi" 1) < s("hi" 2)')
   test(true , 'struct s:\n  a string\n  b int\ns("hi" 9) < s("hi" 10)')
   test(false, 'struct s:\n  a string\n  b int\ns("hi" 10)< s("hi" 9)')
-  test(2, 'struct c:\n  a int\nvar x c 1\nx.a := 2')
-  test(2, 'struct c:\n  a int\nvar x c 1\nx.a := 2\nx.a')
+  test(2, 'struct c:\n  a int\nvar x c 1\nx.a = 2')
+  test(2, 'struct c:\n  a int\nvar x c 1\nx.a = 2\nx.a')
   test('ab', '"a" ++ "b"')
   test([1, 2], '[1] ++ [2]')
   test([[1], [2]], '[[1]] ++ [[2]]')
@@ -320,7 +331,7 @@ if (require.main === module) {
 
   // compile error
   test(Error('Existed z'), 'let z 1\nlet z 2')
-  test(Error('Missing z'), 'z := 1')
+  test(Error('Missing z'), 'z = 1')
 
   // reserved
   reserved.map(word => test(Error('Reserved ' + word), `let ${word} 1`))
@@ -333,10 +344,12 @@ if (require.main === module) {
   test(0, '"".size')
   test(true, '"a".match(r"a")')
   test([2], '[1].map x => x + 1')
+  test([1, 2], '[1 1].mapi x,i => x + i')
   test([1], '[1 2].filter x => x == 1')
   test(0, '[].size')
   test([2], '[1 2].slice 1')
   test([2], '[1 2 3].slice 1 (-1)')
+  test('1 2', '[1 2].join " "')
 
   // edge case
   test(1, 'var a 0\ndef f:\n  def g: a += 1\n  g()\nf()\na')

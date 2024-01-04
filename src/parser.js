@@ -71,6 +71,7 @@ if (require.main === module) {
   test('id', 'id')
   test('"hi"', '"hi"')
   test('"h\\"i"', '"h\\"i"')
+  test('"h\\"i"', "\"h\\\"i\"")
   test('"\\\\""', '"\\\\""')
   test('r"\\t"', 'r"\\t"')
   test("r'\\t'", "r'\\t'")
