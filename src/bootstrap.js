@@ -15,6 +15,6 @@ const log = o => (console.dir(o, {depth: null}), o)
 ${js}
 main({argv: process.argv.slice(2), write: (...a) => console.log(...a)})
 `
-fs.writeFileSync('/tmp/moa.out', code, 'utf8')
-fs.chmodSync('/tmp/moa.out', '0755')
-exec('node /tmp/moa.out', (err, stdout, stderr) => console.log(stdout, stderr, err || ''))
+fs.writeFileSync('/tmp/moa', code, 'utf8')
+fs.chmodSync('/tmp/moa', '0755')
+exec('node /tmp/moa', (err, stdout, stderr) => console.log(stdout, stderr, err || ''))

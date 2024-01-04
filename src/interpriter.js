@@ -1,7 +1,9 @@
 // Eval internal expression
 
 const { parse } = require('./parser.js')
-class List extends Array { }
+class List extends Array {
+  get size() { return this.length }
+}
 class Tuple extends Array { }
 class SoftError extends Error {}
 class Return { constructor(ret) { this.ret = ret } }
@@ -71,39 +73,63 @@ const embedded = {
   __call: f => f(),
   __index: index,
 }
+const methods = {
+  string: {
+    size: s => s.length,
+    trim: s => () => s.trim(),
+    split: s => t => new List().concat(s.split(t)),
+    has: s => t => s.includes(t),
+    match: s => r => Boolean(s.match(r)),
+  },
+  list: {
+    a: a => a.length,
+    has: a => t => a.includes(t),
+    map: a => f => a.map(x => f(x)),
+    filter: a => f => a.filter(x => f(x)),
+    slice: a => (n, m) => a.slice(n, m),
+  }
+}
 const _void = undefined
 const reserved = 'num decimal interface implementnum else void any moa test log math rand db use module bytes i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64'.split(' ')
 const evaluate = (node, obj) => execute(node, Object.fromEntries(Object.entries(obj).map(([key, value]) => [key, {value}])))
 const execute = (node, env) => {
   const run = node => Array.isArray(node) ? apply(node) : atom(node)
-  const prop = (obj, key) => key in obj ? obj[key] : fail('Missing', key, 'of', Object.keys(obj))
+  const prop = (obj, key) =>
+    typeof obj === 'string' && key in methods.string ? methods.string[key](obj) :
+    obj instanceof List && key in methods.list ? methods.list[key](obj) :
+    typeof obj === 'object' && key in obj ? obj[key] :
+    fail('Missing', key, 'of', typeof obj === 'object' ? Object.keys(obj) : typeof obj)
   const lookup = key => key in env ? env[key].value : fail('Missing', key, 'in', Object.keys(env))
   const insert = (key, value) => reserved.includes(key) ? fail('Reserved', key) :
-    key in env ? fail('Existed', key) : env[key] = {value}
+    key in env ? fail('Existed', key) : (env[key] = {value}, value)
   const update = (key, value) =>
     Array.isArray(key) && key[0] === '.' && key[1] in env ? env[key[1]].value[key[2]] = value :
     key in env ? env[key].value = value : fail('Missing', key)
   const make_func = (keys, body) => (...values) => execute(body, {...env, ...Object.fromEntries(to_array(keys).map((key, i) => [key, {value: values[i]}]))})
-  const def_struct = a => (keys => (...values) => Object.fromEntries(keys.map((key, i) => [key, values[i]])))(a[0] === '__pack' ? a.slice(1).map(([name, type]) => name) : [a[0]])
-  const def_enum = a => Object.fromEntries(a.map(x => Array.isArray(x) ?
-    [x[0], insert(x[0], v => new Enum(x[0], v))] :
-    [x, insert(x, new Enum(x))]))
+  const def_struct = keys => (...values) => Object.fromEntries(keys.map(([key], i) => [key, values[i]]))
+  const def_enum = a => Object.fromEntries(a.map(([name, type]) =>
+    [name, insert(name, enum_content(name, type))]))
+  const enum_content = (name, type) =>
+    !type ? new Enum(name) :
+    Array.isArray(type) ? (...a) => new Enum(name, Object.fromEntries(unpack(type).map(([t,_], i) => [t, a[i]]))) :
+    v => new Enum(name, v)
   const run_while = (cond, exp) => run(cond) && !(run(exp) instanceof Break) ? run_while(cond, exp) : _void
   const run_switch = (target, a) =>
     a.length === 0 ? fail('Unmatching', target) :
-    a[0] === '__pack' ? run_switch(target, a.slice(1)) :
     a[0][0] === 'fn' ? run_capture(target, a[0].slice(1), a.slice(1)) :
     a[0][0] === '_' ? run(a[0][1]) :
     comparable(target) === comparable(run(a[0][0])) ? run(a[0][1]) :
     run_switch(target, a.slice(1))
-  const run_capture = (target, cond, remain) =>
-    target instanceof Enum && target.tag === cond[0][0] ? execute(cond[1], {...env, ...{[cond[0][1]]: {value: target.content}}}) :
+  const run_capture = (target, [cond, body], remain) =>
+    cond[0] === '.' && target.tag === cond[2] ? execute(body, {...env, ...{[cond[1]]: {value: target.content}}}) :
+    cond.length === 2 && target.tag === cond[0] ? execute(body, {...env, ...{[cond[1]]: {value: target.content}}}) :
     run_switch(target, remain)
   const iif = a => a.length === 0 ? fail('Undetermined') :
     a.length === 1 && a[0][0] === '__pack' ? iif(a[0].slice(1).flatMap(x => [x.slice(0, -1), x.at(-1)])) :
     a.length === 1 ? run(a[0]) :
     run(a[0]) ? run(a[1]) :
     iif(a.slice(2))
+  const unpack = a => a[0] == '__pack' ? a.slice(1) : [a]
   const pack = ([x, ...xs]) => (x =>
     x instanceof Return ? x :
     x instanceof Continue ? x :
@@ -118,22 +144,22 @@ const execute = (node, env) => {
     a[0] === 'iif' ? iif(a.slice(1)) :
     a[0] === 'catch' ? attempt(() => run(a[1]), e => rescue(e, a[2])) :
     a[0] === 'return' ? new Return(run(a.slice(1))) :
-    a[0] === 'switch' ? run_switch(run(a.slice(1, -1)), a.at(-1)) :
+    a[0] === 'switch' ? run_switch(run(a.slice(1, -1)), unpack(a.at(-1))) :
     a[0] === 'while' ? run_while(a.slice(1, -1), a.at(-1)) :
     a[0] === 'fn' ? make_func(a[1], a.slice(2)) :
     a[0] === 'let' ? insert(a[1], run(a.slice(2))) :
     a[0] === 'var' ? insert(a[1], run(a.slice(2))) :
     a[0] === 'def' ? insert(a[1], make_func(a.slice(2, -1), index(a, -1))) :
-    a[0] === 'test' ? make_func(a[1], a[2])({eq: (a, b) => comparable(a) === comparable(b) || fail('ne', literal(a), literal(b))}) :
-    a[0] === 'struct' ? insert(a[1], def_struct(a[2])) :
-    a[0] === 'enum' ? insert(a[1], def_enum(a[2].slice(1))) :
+    a[0] === 'test' ? make_func(a[1], a.at(-1))({eq: (a, b) => comparable(a) === comparable(b) || fail('ne', literal(a), literal(b))}) :
+    a[0] === 'struct' ? insert(a[1], def_struct(unpack(a[2]))) :
+    a[0] === 'enum' ? insert(a[1], def_enum(unpack(a[2]))) :
     a[0] === '__pack' ? pack(a.slice(1)) :
     a[0] === '&&' ? run(a[1]) && run(a[2]) :
     a[0] === '||' ? run(a[1]) || run(a[2]) :
     a[0] === ':=' ? update(a[1], run(a.slice(2))) :
     a[0] === '.' ? prop(run(a[1]), a[2]) :
     a[0].toString().match(/^[+\-*/%|&]+=$/) ? update(a[1], apply([a[0].slice(0, -1), ...a.slice(1)])) :
-    a.length > 1 ? run(a[0])(...a.slice(1).map(run)) :
+    a.length >= 2 ? run(a[0])(...a.slice(1).map(run)) :
     fail('apply', a)
   const to_array = o => Array.isArray(o) ? o : [o]
   const atom = s =>
@@ -168,6 +194,7 @@ if (require.main === module) {
     }
   }
   const test = (expect, src) => eq(expect, src)
+  test(2, 'enum a:\n  b\n  c int\nswitch c(2):\nb: 1\nc(n) => n')
 
   // primitives
   test(1, '1')
@@ -237,6 +264,7 @@ if (require.main === module) {
   test(1, 'enum a:\n  b\n  c int\nswitch b:\nb: 1\nc n => n')
   test(2, 'enum a:\n  b\n  c int\nswitch c(2):\nb: 1\nc(n) => n')
   test(2, 'enum a:\n  b\n  c int\nswitch c 2:\nb: 1\nc(n) => n')
+  test(3, 'enum a:\n  b:\n    v int\n    x int\nswitch b 1 2:\no.b => o.v + o.x')
   test(3, 'let n 1\nwhile n < 3: n += 1\nn')
   test(1, 'let n 1\nwhile true:\n  if true: break\n  n+=1\nn')
   test(3, 'let n 1\nwhile n < 3:\n  n += 1\n  if true: continue\n  n+=5\nn')
@@ -294,11 +322,25 @@ if (require.main === module) {
   test(Error('Existed z'), 'let z 1\nlet z 2')
   test(Error('Missing z'), 'z := 1')
 
-  // edge case
-  test(1, 'var a 0\ndef f:\n  def g: a += 1\n  g()\nf()\na')
-
   // reserved
   reserved.map(word => test(Error('Reserved ' + word), `let ${word} 1`))
+
+  // methods
+  test('a', '" a ".trim()')
+  test(['a', 'b'], '"a b".split(" ")')
+  test(true, '"a".has "a"')
+  test(true, '[1].has 1')
+  test(0, '"".size')
+  test(true, '"a".match(r"a")')
+  test([2], '[1].map x => x + 1')
+  test([1], '[1 2].filter x => x == 1')
+  test(0, '[].size')
+  test([2], '[1 2].slice 1')
+  test([2], '[1 2 3].slice 1 (-1)')
+
+  // edge case
+  test(1, 'var a 0\ndef f:\n  def g: a += 1\n  g()\nf()\na')
+  test(1, 'let a switch 0:\n  0: 1\n  1: 2')
 
   puts('ok')
 }

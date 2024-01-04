@@ -21,7 +21,7 @@ const parse = source => {
   const many = f => loop([], f)
   const until = s => many(t => (t.includes('\n') && ++pos, read() === s ? (++pos, null) : parse_exp()))
   const consume = () => (t => ++pos && t)(read() || fail('out of index', pos, tokens))
-  const indent = t => t.includes('\n') ? t.split('\n').slice(-1)[0].length : fail('not break line', t)
+  const indent = t => t.includes('\n') ? t.split('\n').at(-1).length : fail('not break line', t)
   const call = a => a.length === 1 ? ['__call', ...a] : a
   const squash = a => a.length === 1 ? a[0] : a
   const pack = a => a.length === 1 ? a[0] : a.length > 1 ? ['__pack', ...a] : a
@@ -30,12 +30,12 @@ const parse = source => {
     const suffix = t => {
       const close = tokens[pos] || ''
       const next = read()
-      return close === '(' ? ++pos && suffix(call([t, ...until(')')])) :
-        close === '[' ? ++pos && suffix(call(['__index', t, ...until(']')])) :
-        next === ',' ? suffix([t, ...many(t => t === ',' && ++pos && consume())]) :
-        next === '.' ? ++pos && suffix([next, t, consume()]) :
-        next == '=>' ? ++pos && ['fn', t, parse_block()] :
-        t
+      return close === '('  ? ++pos && suffix(call([t, ...until(')')])) :
+             close === '['  ? ++pos && suffix(call(['__index', t, ...until(']')])) :
+             next  === ','  ? suffix([t, ...many(t => t === ',' && ++pos && consume())]) :
+             next  === '.'  ? ++pos && suffix([next, t, consume()]) :
+             next  === '=>' ? ++pos && ['fn', t, parse_block()] :
+             t
     }
     const t = consume()
     return suffix(

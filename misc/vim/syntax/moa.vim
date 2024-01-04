@@ -14,9 +14,9 @@ syn match Number / [0-9]\+\(\.[0-9]\+\)\?/
 syn keyword Boolean true false
 
 " Statement
-syn keyword Define      let var def struct union
-syn keyword Conditional iif if else match
-syn keyword Boolean     true false nil
+syn keyword Define      let var def struct enum
+syn keyword Conditional iif if else switch
+syn keyword Boolean     true false
 syn keyword Type        void any bool int float string tuple list set dict option ref array
 syn keyword Type        i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 num bytes interface implement decimal assert
 syn keyword keyword     test use module

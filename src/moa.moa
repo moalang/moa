@@ -1,21 +1,14 @@
 def compile_to_js source:
   "const main = io => io.write(`Hello world`)"
 
-# string.trim
-# string.split
-# string.size
-# string.match
-# string.has
-# regexp.split
-# list.map
-# list.filter
-# list.size
-# list.slice
-# list.dict
-def parse input:
-  if true:
-    return []
+enum ast:
+  node:
+    source string
+    text string
+    pos int
+  apply list[ast]
 
+def parse input:
   let source input.trim()
   if source.size == 0:
     return []
@@ -30,66 +23,84 @@ def parse input:
       pos >= tokens.size: ""
       t.match r"^[ #]"  : tokens[pos += 1]
       _                 : tokens[pos]
-  def loop a f:
-    let t read()
+
+  def consume:
+    t = read()
     if t == "":
-      return a
-    let v = f(t)
-    if v == "":
-      return a
-    loop a ++ [v] f
-  def many f: loop([], f)
-  def many_ f:
-    a [] :: while read():t != "" f(t):v != "":
-    a [] :: while read()#t != "" f(t)#v != "":
-    a [] :: while read() -> v != "" && f(t) -> v != "":
-      a.push v
+      fail "out of index" pos tokens
+    pos += 1
+    t
+
+  # def many f: while read() -> s && f(s) -> t && t
+  def many f:
+    def loop a f:
+      let t read()
+      if t == "":
+        return a
+      let v = f(t)
+      if v == "":
+        return a
+      loop a ++ [v] f
+    loop([] f)
+
   def until s:
     many t =>
-      if t.has("\n"):
+      if t.has "\n":
         pos += 1
       iif read() === s:
         pos += 1; none
         parse_exp()
 
-  def consume: (t => ++pos && t)(read() || fail('out of index', pos, tokens))
-  def consume:
-    t = read()
-    pos += 1
-    t
-
-  def indent t: t.includes("\n") ? t.split("\n").slice(-1)[0].size : fail("not break line", t)
-  def call a: a.size === 1 ? ["__call", ...a] : a
-  def squash a: a.size === 1 ? a[0] : a
-  def pack a: a.size === 1 ? a[0] : a.size > 1 ? ["__pack", ...a] : a
+  def indent t:
+    iif t.has("\n") t.split("\n")[-1].size fail("not break line" t)
+  def call a:
+    iif a.size === 1 ["__call", ...a] a
+  def squash a:
+    iif a.size === 1 a[0] a
+  def pack a:
+    iif a.size === 1 a[0] a.size > 1 ["__pack", ...a] a
 
   def parse_unit:
     def suffix t:
       let tt = read()
-      tt === "," ? suffix([t, ...many(t => t === "," && ++pos && consume())]) :
-      tt === "." ? ++pos && suffix([tt, t, consume()]) :
-      tt === "(" ? ++pos && suffix(call([t, ...until(")")])) :
-      tt === "[" ? ++pos && suffix(call(["__index", t, ...until("]")])) :
-      tt == "=>" ? ++pos && [tt, t, parse_block()] :
+      switch tt:
+        ",": suffix([t, ...many(t => t === "," && ++pos && consume())])
+        ".": ++pos && suffix([tt, t, consume()])
+        "(": ++pos && suffix(call([t, ...until(")")]))
+        "[": ++pos && suffix(call(["__index", t, ...until("]")]))
+        "=>": ++pos && [tt, t, parse_block()]
     let t consume()
-    suffix(
-      t === "!" ? [t, parse_unit()] :
-      t === "-" ? [t, parse_unit()] :
-      t === "[" ? call(["list", ...until("]")]) :
-      t === "(" ? squash(until(")")) :
-      t === ":" ? parse_block() :
-      t)
+    let tt switch t:
+      "!": [t parse_unit()]
+      "-": [t parse_unit()]
+      "[": call ["list"] ++ until("]")
+      "(": squash until(")")
+      ":": parse_block()
+      _  : t
+    suffix tt
   def parse_exp:
     let lhs parse_unit()
-    let op2 op => op.match(r"^[+\-*/%|&:]?=$") ? [op, lhs, parse_line()] : [op, lhs, parse_exp()]
-    read().match(r"^:?[!+\-*/%<>!=^|&]") ? op2(consume()) : lhs
-  def parse_line: (a => a.length && a)(squash(many(t => !t.includes("\n") && t !== ")" && t !== "]" && parse_exp())))
-  def parse_lines n: pack(many(t => (t.includes("\n") && indent(t) === n && ++pos, parse_line())))
-  def parse_block: (t => t.includes("\n") ? parse_lines(indent(t)) : parse_line())(read())
+    def op2 op:
+      iif op.match(r"^[+\-*/%|&:]?=$") [op lhs parse_line()] [op lhs parse_exp()]
+    iif read().match(r"^:?[!+\-*/%<>!=^|&]") op2(consume()) lhs
+  def parse_line:
+    squash many(t =>
+      !t.has("\n") && t != ")" && t != "]" && parse_exp())
+  def parse_lines n:
+    pack many(t =>
+      if t.has("\n") && indent(t) === n:
+        pos += 1
+      parse_line())
+  def parse_block:
+    let t = read()
+    iif t.has("\n") parse_lines(indent(t)) parse_line()
   parse_lines 0
 
 def infer root:
-  id = 0
+  struct type:
+    name string
+    types list type
+  var id 0
   def new_var:
     type (id+=1).string []
   def new_more t:
@@ -111,7 +122,8 @@ def infer root:
       t.params = squash_params t.params
       t
     def squash_params a:
-      guard a.size >= 2 && a[0].name == "__more": squash_params a.slice(1)
+      if a.size >= 2 && a[0].name == "__more":
+        return squash_params a.slice(1)
       a
     def try_unify a b:
       def copy a b:
@@ -177,31 +189,35 @@ def infer root:
     "true" tbool
     "false" tbool)
 
-test t:
-  if true:
-    return []
+test t "parser":
+  t.eq 1 1
 
+test t:
+  return
   def show_token t:
-    guard t.text == "" && t.args == []: "()"
-    guard t.text == "__apply": show_token(t.args[0]) ++ "(" ++ t.args.slice(1).map(show_token).join(" ") ++ ")"
-    guard t.text == "__statement": t.args.map(show_token).join("; ")
-    guard t.text == "=": show_token(t.args[0]) ++ " = " ++ t.args.slice(1).map(show_token).join(" ")
-    guard t.text == "->": "(() => " ++ show_token(t.args[-1]) ++ ")"
-    guard t.text == "=>": "(" ++ t.args.slice(0 -1).map(show_token).join(" ") ++ " => " ++ show_token(t.args[-1]) ++ ")"
-    guard t.args.size == 0: t.text
-    t.text ++ "(" ++ t.args.map(show_token).join(" ") ++ ")"
+    if t.args.size == 0:
+      return iif t.text == "" "()" t.text
+    switch t.text:
+      "__apply"    : show_token(t.args[0]) ++ "(" ++ t.args.slice(1).map(show_token).join(" ") ++ ")"
+      "__statement": t.args.map(show_token).join("; ")
+      "="          : show_token(t.args[0]) ++ " = " ++ t.args.slice(1).map(show_token).join(" ")
+      "->"         : "(() => " ++ show_token(t.args[-1]) ++ ")"
+      "=>"         : "(" ++ t.args.slice(0 -1).map(show_token).join(" ") ++ " => " ++ show_token(t.args[-1]) ++ ")"
+      _            : t.text ++ "(" ++ t.args.map(show_token).join(" ") ++ ")"
 
   def show_type t:
     def stringify t:
-      guard t.params.size == 0: t.name
-      guard t.name == "": "(" ++ t.params.map(stringify).join(" ") ++ ")"
+      if t.params.size == 0:
+        return t.name
+      if t.name == "":
+        return "(" ++ t.params.map(stringify).join(" ") ++ ")"
       t.name ++ "[" ++ t.params.map(stringify).join(" ") ++ "]"
     def simplify t:
       g = dict()
       t.replace r"[0-9]+" p =>
         guard g.has(p): g.get(p)
         g[p] = g.size.string
-    simplify(stringify(t))
+    simplify stringify(t)
 
   def test_parser expectation source:
     t.eq expectation show_token(parse(source)) source
