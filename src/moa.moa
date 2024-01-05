@@ -2,11 +2,12 @@ def compile_to_js source:
   "const main = io => io.write(`Hello world`)"
 
 struct token:
-  text   string
-  offset int
-  indent int
-  lineno int
-  length int
+  text     string
+  isolated bool
+  offset   int
+  indent   int
+  lineno   int
+  length   int
 
 struct type:
   tname  string
@@ -23,18 +24,20 @@ def tokenize source:
   var offset 0
   var indent 0
   var lineno 1
+  var isolated true
   source.trim().split(regexp).filter(s => s.size > 0).map(text =>
     if text.has "\n":
       indent = text.split("\n")[-1].size
       lineno += text.split("\n").size - 1
-    let t token text offset indent lineno text.size
+    let t token text isolated offset indent lineno text.size
     offset += text.size
+    isolated = text.match(r"[ \t\r\n#]")
     t).filter(t => !t.text.match(r"[ \t\r\n#]"))
 test tester "tokenize":
   def eq expect source:
     tester.eq expect tokenize(source)
-  eq [token("a" 0 0 1 1)] "a"
-  eq [token("a" 0 0 1 1) token("b" 4 2 2 1) token("c" 6 2 2 1)] "a\n  b c"
+  eq [token("a" true 0 0 1 1)] "a"
+  eq [token("a" true 0 0 1 1) token("b" true 4 2 2 1) token("c" true 6 2 2 1)] "a\n  b c"
 
 def parse tokens:
   var pos 0
@@ -50,26 +53,31 @@ def parse tokens:
       let v catch f() break
       a.push v
     a
-  def until s:
+  def until_close:
     many () =>
       if tokens[pos].text.has "\n":
         pos += 1
-      if tokens[pos].text == s:
+      let t tokens[pos].text
+      if (t == ")") || (t == "]"):
         pos += 1
         throw "end"
       parse_exp()
   def alias t:
     let v switch t.text:
       "=>": token "fn" t t.offset t.indent t.lineno t.length
-      "[": token "list" t t.offset t.indent t.lineno t.length
+      "[": token iif(t.isolated "list" "__index") t t.offset t.indent t.lineno t.length
       _   : t
     node v
+  def wrap_call t a:
+    return iif a.size == 0 call(t) apply([t] ++ a)
+  def wrap_apply a:
+    iif a.size == 0 throw("empty") a.size == 1 a[0] apply(a)
   def parse_exp:
     let lhs parse_atom()
     if pos >= tokens.size:
       return lhs
     let next tokens[pos]
-    if next.text.match(r"^[+\-*/%|&<>!=]"):
+    if next.text.match(r"^[+\-*/%|&<>!=^~]"):
       pos += 1
       return apply [alias(next) lhs parse_exp()]
     return lhs
@@ -77,28 +85,39 @@ def parse tokens:
     let op1 "! -".split(" ")
     let t consume()
     if t.text == "[":
-      let a until "]"
-      return iif a.size == 0 call(alias(t)) apply([alias(t)] ++ a)
+      return wrap_call(alias(t) until_close())
+    if t.text == "(":
+      return wrap_apply(until_close())
     def suffix item:
       if pos >= tokens.size:
         return item
-      let tt tokens[pos]
-      switch tt.text:
+      let next tokens[pos]
+      let prev tokens[pos - 1]
+      switch next.text:
         ".":
+          let prop_node node(tokens[pos+=1])
           pos += 1
-          apply([node(tt) item parse_atom()])
+          suffix apply([node(next) item prop_node])
+        "(" if !next.isolated:
+          pos += 1
+          suffix wrap_call(item until_close())
+        "[" if !next.isolated:
+          pos += 1
+          suffix apply([alias(next) item] ++ until_close())
         _: item
     suffix iif(op1.has(t.text) apply([node(t) parse_atom()]) node(t))
-  return many parse_exp
+  def parse_line indent:
+    wrap_apply many(() => iif tokens[pos].indent == indent parse_exp() throw("eof"))
+  return parse_line(0)
 
 test t "parser":
+  def stringify x:
+    switch x:
+      x.node => x.text
+      x.call => "(__call " ++ stringify(x) ++ ")"
+      x.apply => "(" ++ x.map(stringify).join(" ") ++ ")"
   def eq expect source:
-    def stringify x:
-      switch x:
-        x.node => x.text
-        x.call => "(__call " ++ stringify(x) ++ ")"
-        x.apply => "(" ++ x.map(stringify).join(" ") ++ ")"
-    t.eq expect parse(tokenize(source)).map(stringify).join("\n")
+    t.eq expect stringify(parse(tokenize(source)))
 
   # primitives
   eq "1" "1"
@@ -120,7 +139,6 @@ test t "parser":
 
   # single operator
   eq "(! a)" "!a"
-  return
   eq "((! a) b)" "!a b"
 
   # binary operators
@@ -155,6 +173,7 @@ test t "parser":
   eq "(__index x 1 2)" "x[1 2]"
   eq "(. (__index x a) b)" "x[a].b"
 
+  return # TODO
   # indent
   eq "(a b)" "a:\n  b"
   eq "(a (b c))" "a:\n  b:\n    c"

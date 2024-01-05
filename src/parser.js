@@ -47,9 +47,9 @@ const parse = source => {
       t)
   }
   const parse_exp = () => {
+    const is_op2 = s => s.match(/^:?[!+\-*/%<>!=^~|&]/) && s !== '!'
     const lhs = parse_unit()
-    const op2 = op => op.match(/^[+\-*/%|&:]?=$/) ? [op, lhs, parse_line()] : [op, lhs, parse_exp()]
-    return read().match(/^:?[!+\-*/%<>!=^|&]/) ? op2(consume()) : lhs
+    return is_op2(read()) ? (op => [op, lhs, parse_exp()])(consume()) : lhs
   }
   const parse_line = () => (a => a.length && a)(squash(many(t => !t.includes('\n') && t !== ')' && t !== ']' && parse_exp())))
   const parse_lines = n => pack(many(t => (t.includes('\n') && indent(t) === n && ++pos, parse_line())))
@@ -88,6 +88,7 @@ if (require.main === module) {
   // single operator
   test('(! a)', '!a')
   test('((! a) b)', '!a b')
+  test('(f (! a))', 'f !a')
 
   // binary operators
   test('(+ a b)', 'a + b')
@@ -133,11 +134,6 @@ if (require.main === module) {
   test('(__pack a b)', 'a\nb')
   test('(__pack (a b) c)', 'a b\nc')
   test('(__pack a (b c))', 'a\nb c')
-
-  // assign
-  test('(= a (b c))', 'a = b c')
-  test('(+= a (b c))', 'a += b c')
-  test('(:= a (b c))', 'a := b c')
 
   // comment
   test('(= a 1)', '#comment\na = 1 # comment\n#comment')

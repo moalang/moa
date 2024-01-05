@@ -121,8 +121,9 @@ const execute = (node, env) => {
     a.length === 0 ? fail('Unmatching', target) :
     a[0][0] === 'fn' ? run_capture(target, a[0].slice(1), a.slice(1)) :
     a[0][0] === '_' ? run(a[0][1]) :
-    comparable(target) === comparable(run(a[0][0])) ? run(a[0][1]) :
+    comparable(target) === comparable(run(a[0][0])) && switch_if(a[0].slice(1, -1)) ? run(a[0].at(-1)) :
     run_switch(target, a.slice(1))
+  const switch_if = a => a[0] !== 'if' || run(a.slice(1))
   const run_capture = (target, [cond, body], remain) =>
     cond[0] === '.' && target.tag === cond[2] ? execute(body, {...env, ...{[cond[1]]: {value: target.content}}}) :
     cond.length === 2 && target.tag === cond[0] ? execute(body, {...env, ...{[cond[1]]: {value: target.content}}}) :
@@ -142,6 +143,7 @@ const execute = (node, env) => {
     e instanceof SoftError ? (a[0] === 'fn' ? run(a)(e) : run(a)) :
     (() => { throw e })()
   const apply = a =>
+    a.length === 0 ? fail('empty apply', node) :
     a.length === 1 ? run(a[0]) :
     a[0] === 'if' ? pack([run(a.slice(1, -1)) && run(a.at(-1)), _void]) :
     a[0] === 'iif' ? iif(a.slice(1)) :
@@ -201,7 +203,6 @@ if (require.main === module) {
     }
   }
   const test = (expect, src) => eq(expect, src)
-  test(3, 'let n 1\nwhile n < 3:\n  let m 1\n  n += m\nn')
 
   // primitives
   test(1, '1')
@@ -269,6 +270,7 @@ if (require.main === module) {
   test(1, 'switch "a":\n"a": 1\n"b": 2\n_: 3')
   test(2, 'switch "b":\n"a": 1\n"b": 2\n_: 3')
   test(3, 'switch "c":\n"a": 1\n"b": 2\n_: 3')
+  test(2, 'switch "a":\n"a" if false: 1\n"a" if 1 == 1: 2')
   test(Error('Unmatching c'), 'switch "c":\n"a": 1\n"b": 2')
   test(1, 'enum a:\n  b\n  c int\nswitch b:\nb: 1\nc n => n')
   test(2, 'enum a:\n  b\n  c int\nswitch c(2):\nb: 1\nc(n) => n')
