@@ -22,7 +22,7 @@ const literal = o =>
   Array.isArray(o) ? `[${o.map(literal).join(' ')}]` :
   JSON.stringify(o)
 const log = o => { console.dir(o, {depth: null}); return o }
-const fail = (...a) => { throw new Error(a.map(string).join(' ')) }
+const fail = (...a) => { throw new Error(a.filter(x => x !== undefined).map(string).join(' ')) }
 const put = (...a) => { process.stdout.write(a.map(string).join(' ')); return a[0] }
 const puts = (...a) => { console.log(a.map(string).join(' ')); return a[0] }
 const attempt = (f, g) => { try { return f() } catch (e) { return g(e) } }
@@ -155,7 +155,7 @@ const execute = (node, env) => {
     a[0] === 'let' ? insert(a[1], run(a.slice(2))) :
     a[0] === 'var' ? insert(a[1], run(a.slice(2))) :
     a[0] === 'def' ? insert(a[1], make_func(a.slice(2, -1), index(a, -1))) :
-    a[0] === 'test' ? make_func(a[1], a.at(-1))({eq: (a, b) => comparable(a) === comparable(b) || fail('ne', literal(a), literal(b))}) :
+    a[0] === 'test' ? make_func(a[1], a.at(-1))({eq: (a, b, c) => comparable(a) === comparable(b) || fail('ne', literal(a), literal(b), c)}) :
     a[0] === 'struct' ? insert(a[1], def_struct(unpack(a[2]))) :
     a[0] === 'enum' ? insert(a[1], def_enum(unpack(a[2]))) :
     a[0] === '__pack' ? pack(a.slice(1)) :

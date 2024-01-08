@@ -15,8 +15,8 @@ struct type:
 
 enum ast:
   node token
-  call ast
   apply list ast
+  statement list ast
 
 def tokenize source:
   # operator | parenthesis | string | number | id | comment and spaces
@@ -50,28 +50,34 @@ def parse tokens:
   def many f:
     let a []
     while pos < tokens.size:
+      let text tokens[pos].text
+      if (text == ")") || (text == "]"):
+        break
       let v catch f() break
       a.push v
     a
-  def until_close:
-    many () =>
+  def until s:
+    let a []
+    while pos < tokens.size:
       if tokens[pos].text.has "\n":
         pos += 1
       let t tokens[pos].text
-      if (t == ")") || (t == "]"):
+      if t == s:
         pos += 1
-        throw "end"
-      parse_exp()
+        break
+      let v catch parse_exp() break
+      a.push v
+    a
   def alias t:
     let v switch t.text:
-      "=>": token "fn" t t.offset t.indent t.lineno t.length
-      "[": token iif(t.isolated "list" "__index") t t.offset t.indent t.lineno t.length
+      "=>": token "fn" t.isolated t.offset t.indent t.lineno t.length
+      "[": token iif(t.isolated "list" "__index") t.isolated t.offset t.indent t.lineno t.length
       _   : t
     node v
-  def wrap_call t a:
-    return iif a.size == 0 call(t) apply([t] ++ a)
   def wrap_apply a:
-    iif a.size == 0 throw("empty") a.size == 1 a[0] apply(a)
+    iif a.size == 0 throw("empty apply") a.size == 1 a[0] apply(a)
+  def wrap_statement a:
+    iif a.size == 0 statement([]) a.size == 1 a[0] statement(a)
   def parse_exp:
     let lhs parse_atom()
     if pos >= tokens.size:
@@ -81,43 +87,63 @@ def parse tokens:
       pos += 1
       return apply [alias(next) lhs parse_exp()]
     return lhs
+  def parse_block:
+    let indent tokens[pos].indent
+    return wrap_statement(many(() => iif(
+      tokens[pos].indent == indent
+      parse_line(tokens[pos].lineno)
+      throw("eol"))))
   def parse_atom:
-    let op1 "! -".split(" ")
-    let t consume()
-    if t.text == "[":
-      return wrap_call(alias(t) until_close())
-    if t.text == "(":
-      return wrap_apply(until_close())
     def suffix item:
       if pos >= tokens.size:
         return item
       let next tokens[pos]
-      let prev tokens[pos - 1]
       switch next.text:
         ".":
           let prop_node node(tokens[pos+=1])
           pos += 1
           suffix apply([node(next) item prop_node])
+        ",":
+          let remain many () =>
+            if tokens[pos].text != ",":
+              throw("eoc")
+            let n node(tokens[pos+=1])
+            pos += 1
+            n
+          suffix apply([node(next) item] ++ remain)
+        "=>":
+          pos += 1
+          apply([alias(next) item parse_block()])
         "(" if !next.isolated:
           pos += 1
-          suffix wrap_call(item until_close())
+          suffix apply([item] ++ until(")"))
         "[" if !next.isolated:
           pos += 1
-          suffix apply([alias(next) item] ++ until_close())
+          suffix apply([alias(next) item] ++ until("]"))
         _: item
+
+    let op1 "! -".split(" ")
+    let t consume()
+    if t.text == "[":
+      return suffix apply([alias(t)] ++ until("]"))
+    if t.text == "(":
+      return suffix wrap_apply(until(")"))
+    if t.text == ":":
+      return parse_block()
     suffix iif(op1.has(t.text) apply([node(t) parse_atom()]) node(t))
-  def parse_line indent:
-    wrap_apply many(() => iif tokens[pos].indent == indent parse_exp() throw("eof"))
-  return parse_line(0)
+  def parse_line lineno:
+    wrap_apply many(() => iif tokens[pos].lineno == lineno parse_exp() throw("eof"))
+
+  wrap_statement(many(() => parse_line(tokens[pos].lineno)))
 
 test t "parser":
   def stringify x:
     switch x:
       x.node => x.text
-      x.call => "(__call " ++ stringify(x) ++ ")"
       x.apply => "(" ++ x.map(stringify).join(" ") ++ ")"
+      x.statement => iif x.size == 0 "()" "(__pack " ++ x.map(stringify).join(" ") ++ ")"
   def eq expect source:
-    t.eq expect stringify(parse(tokenize(source)))
+    t.eq expect stringify(parse(tokenize(source))) tokenize(source)
 
   # primitives
   eq "1" "1"
@@ -130,7 +156,7 @@ test t "parser":
   eq "(fn a b)" "a => b"
 
   # container
-  eq "(__call list)" "[]"
+  eq "(list)" "[]"
   eq "(list 1)" "[1]"
   eq "(list 1 2)" "[1 2]"
 
@@ -156,13 +182,13 @@ test t "parser":
   eq "(f 1)" "f(1)"
   eq "(f (g 1))" "f g(1)"
   eq "(f g 1)" "f g (1)"
-  eq "(__call f)" "f()"
+  eq "(f)" "f()"
   eq "(f (+ 1 2) 3)" "f(1 + 2 3)"
 
   # method call
   eq "(. f m)" "f.m"
   eq "(. f 1)" "f.1"
-  eq "(__call (. f m))" "f.m()"
+  eq "((. f m))" "f.m()"
   eq "((. f m) a)" "f.m(a)"
   eq "((. f m) a b)" "f.m(a b)"
   eq "((. ((. a f) 1) g) 2)" "a.f(1).g(2)"
@@ -173,7 +199,6 @@ test t "parser":
   eq "(__index x 1 2)" "x[1 2]"
   eq "(. (__index x a) b)" "x[a].b"
 
-  return # TODO
   # indent
   eq "(a b)" "a:\n  b"
   eq "(a (b c))" "a:\n  b:\n    c"
@@ -187,11 +212,6 @@ test t "parser":
   eq "(__pack (a b) c)" "a b\nc"
   eq "(__pack a (b c))" "a\nb c"
 
-  # assign
-  eq "(= a (b c))" "a = b c"
-  eq "(+= a (b c))" "a += b c"
-  eq "(:= a (b c))" "a := b c"
-
   # comment
   eq "(= a 1)" "#comment\na = 1 # comment\n#comment"
   eq "(a (__pack b c))" "a:\n  #comment\n  b\n  #comment\n  c\n  # comment"
@@ -202,15 +222,15 @@ test t "parser":
   eq "(+ (a b) c)" "a(b) + c"
   eq "(. (__index a b) c)" "a[b].c"
   eq "((. (__index a b) c) d)" "a[b].c(d)"
-  eq "(. (__call list) a)" "[].a"
+  eq "(. (list) a)" "[].a"
   eq "((. a b) c)" "a.b c"
-  eq "(. (__call list) size)" "[].size"
+  eq "(. (list) size)" "[].size"
   eq "((. (list 1) m) a)" "[1].m a"
   eq "((. (list 1) m) a)" "[1].m(a)"
   eq "((. (list 1) m) (fn x (>= x 1)))" "[1].m(x => x >= 1)"
   eq "(fn p (+ (. p x) (. p y)))" "p => p.x + p.y"
-  eq "(fn (a b) c)" "a,b => c"
-  eq "(fn (a b c) d)" "a,b,c => d"
+  eq "(fn (, a b) c)" "a,b => c"
+  eq "(fn (, a b c) d)" "a,b,c => d"
   eq "(fn a (b c))" "a => b c"
   eq "(fn a (+ 1 2))" "a => 1 + 2"
   eq "(fn a 1)" "a =>\n  1"
