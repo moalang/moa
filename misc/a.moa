@@ -1,0 +1,91 @@
+# idea
+# - capture
+# - yield
+struct token:
+  text string
+  pos  int
+
+enum ast:
+  node token
+  call list st
+  stmt list st
+
+def string o:
+  iif:
+    typeof o === "string": o
+    Array.isArray(o)     : `(${o.map(string).join(" ")})` :
+    JSON.stringify(o)
+def put ...a: log(a.map(string).join(" ")); a[0]
+def puts ...a: log(a.map(string).join(" ")); a[0]
+def log o: log.inspect(o); o
+def fail m ...a: throw m + ": " + a.map(string).join(" ")
+def parse source:
+  if source.trim().length === 0:
+    return []
+
+  let regexp "" #/([!+\-*/%<>:!=^|&]+|[()\[\]{}]|r?"[^]*?(?<!\\)"|r?"[^]*?(?<!\\)"|-?[0-9]+(?:\.[0-9]+)|[0-9A-Za-z_]+|(?:#[^\n]*|[ \n])+)/ // operator | parenthesis | string | number | id | comment and spaces
+  let tokens source.trim().split(regexp).filter(s => s.length)
+
+  let nil token("" 0)
+  var pos 0
+  def read:
+    let t tokens[pos] || ""
+    iif t.match r"^[ #]":
+      tokens[++pos] || ""
+      t
+  def many f:
+    while pos < tokens.length && f(read())@v && yield v
+  def many1 f:
+    let a many(f)
+    iif a.size > 0 a nil
+  def until s:
+    many t =>
+      if t.includes("\n"):
+        pos += 1
+      iif read() === s:
+        ++pos; nil
+        parse_exp()
+  def consume:
+    let t read() || fail("out of index" pos tokens)
+    pos += 1
+    t
+  def indent t:
+    iif t.includes "\n":
+      t.split("\n").at(-1).length
+      fail "not break line" t
+  def squash a:
+    iif a.length === 1: node a[0]
+      call a
+  def parse_unit:
+    def suffix t:
+      let close tokens[pos] || ""
+      let next read()
+      iif:
+        close === "(" : ++pos && suffix call([t ...until(")")])
+        close === "[" : ++pos && suffix call(["__index" t ...until("]")])
+        next  === "," : suffix [t ...many(t => t === "," && ++pos && consume())]
+        next  === "." : ++pos && suffix [next t consume()]
+        next  === "=>": ++pos && ["fn" t parse_block()]
+        t
+    let t consume()
+    suffix iif:
+      t === "!": [t parse_unit()]
+      t === "-": [t parse_unit()]
+      t === "[": call ["list" ...until("]")]
+      t === "(": squash until(")")
+      t === ":": parse_block()
+      t
+  def parse_exp:
+    let is_op2 read().match("") && s !== "!" #s.match(/^:?[!+\-*/%<>!=^~|&]/) && s !== "!"
+    iif is_op2 [consume() parse_unit() parse_exp()] parse_unit()
+  def parse_line:
+    squash . many1 t => iif !t.includes("\n") && t !== ")" && t !== "]": parse_exp()
+      nil
+  def parse_lines n:
+    stmt . many1 t => iif t.includes("\n") && indent(t) === n: pos += 1; parse_line()
+      nil
+  def parse_block:
+    let t read()
+    iif t.includes "\n": parse_lines indent(t)
+      parse_line()
+  parse_lines 0
