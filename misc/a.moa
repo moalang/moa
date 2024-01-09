@@ -1,6 +1,3 @@
-# idea
-# - capture
-# - yield
 struct token:
   text string
   pos  int
@@ -30,21 +27,28 @@ def parse source:
   var pos 0
   def read:
     let t tokens[pos] || ""
-    iif t.match r"^[ #]":
+    iif t.match(r"^[ #]"):
       tokens[++pos] || ""
       t
   def many f:
-    while pos < tokens.length && f(read())@v && yield v
+    #while pos < tokens.length && f(read())@v && yield v
+    let a []
+    while pos < tokens.length:
+      let v f(read())
+      if v:
+        a.push(v)
+      break
+    a
   def many1 f:
     let a many(f)
     iif a.size > 0 a nil
   def until s:
-    many t =>
+    many(t =>
       if t.includes("\n"):
         pos += 1
       iif read() === s:
         ++pos; nil
-        parse_exp()
+        parse_exp())
   def consume:
     let t read() || fail("out of index" pos tokens)
     pos += 1
@@ -54,38 +58,38 @@ def parse source:
       t.split("\n").at(-1).length
       fail "not break line" t
   def squash a:
-    iif a.length === 1: node a[0]
-      call a
+    iif a.length === 1: node(a[0])
+      call(a)
   def parse_unit:
     def suffix t:
       let close tokens[pos] || ""
       let next read()
       iif:
-        close === "(" : ++pos && suffix call([t ...until(")")])
-        close === "[" : ++pos && suffix call(["__index" t ...until("]")])
-        next  === "," : suffix [t ...many(t => t === "," && ++pos && consume())]
-        next  === "." : ++pos && suffix [next t consume()]
+        close === "(" : ++pos && suffix(call([t ...until(")")]))
+        close === "[" : ++pos && suffix(call(["__index" t ...until("]")]))
+        next  === "," : suffix([t ...many(t => t === "," && ++pos && consume())])
+        next  === "." : ++pos && suffix([next t consume()])
         next  === "=>": ++pos && ["fn" t parse_block()]
         t
     let t consume()
     suffix iif:
       t === "!": [t parse_unit()]
       t === "-": [t parse_unit()]
-      t === "[": call ["list" ...until("]")]
-      t === "(": squash until(")")
+      t === "[": call(["list" ...until("]")])
+      t === "(": squash(until(")"))
       t === ":": parse_block()
       t
   def parse_exp:
     let is_op2 read().match("") && s !== "!" #s.match(/^:?[!+\-*/%<>!=^~|&]/) && s !== "!"
     iif is_op2 [consume() parse_unit() parse_exp()] parse_unit()
   def parse_line:
-    squash . many1 t => iif !t.includes("\n") && t !== ")" && t !== "]": parse_exp()
-      nil
+    squash(many1(t => iif !t.includes("\n") && t !== ")" && t !== "]": parse_exp()
+      nil))
   def parse_lines n:
-    stmt . many1 t => iif t.includes("\n") && indent(t) === n: pos += 1; parse_line()
-      nil
+    stmt(many1(t => iif t.includes("\n") && indent(t) === n: pos += 1; parse_line()
+      nil))
   def parse_block:
     let t read()
-    iif t.includes "\n": parse_lines indent(t)
+    iif t.includes("\n"): parse_lines indent(t)
       parse_line()
   parse_lines 0
