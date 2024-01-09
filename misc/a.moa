@@ -22,33 +22,30 @@ def parse source:
 
   let regexp "" #/([!+\-*/%<>:!=^|&]+|[()\[\]{}]|r?"[^]*?(?<!\\)"|r?"[^]*?(?<!\\)"|-?[0-9]+(?:\.[0-9]+)|[0-9A-Za-z_]+|(?:#[^\n]*|[ \n])+)/ // operator | parenthesis | string | number | id | comment and spaces
   let tokens source.trim().split(regexp).filter(s => s.length)
+  tokens.append(token("" 0))
 
-  let nil token("" 0)
   var pos 0
+  def peek:
+    tokens[pos].text
   def read:
-    iif pos >= tokens.size: ""
-      tokens[pos].match(r"^[ #]"): tokens[pos+=1] || ""
-      tokens[pos]
+    iif peek().match(r"^[ #]"): tokens[pos+=1].text
+      peek()
   def many f g:
     while pos < tokens.length && f(read()): yield g()
     #let a []
-    #while pos < tokens.length:
-    #  let v f(read())
-    #  if v:
-    #    a.push(v)
-    #  break
+    #while pos < tokens.length && f(read()):
+    #  a.push(g())
     #a
   def until s:
     def check t:
-      if t.includes("\n"):
-        pos += 1
-      iif read() == s:
+      pos += t.has("\n").int
+      if read() == s:
         pos += 1
         return false
       true
     many(check parse_exp)
   def consume:
-    let t read() || fail("out of index" pos tokens)
+    let t read() ||| fail("out of index" pos tokens)
     pos += 1
     t
   def indent t:
@@ -60,7 +57,7 @@ def parse source:
       call(a)
   def parse_unit:
     def suffix t:
-      let close tokens[pos] || ""
+      let close peek()
       let next read()
       iif:
         close == "(" : ++pos; suffix(call([t ...until(")")]))
@@ -82,9 +79,9 @@ def parse source:
   def parse_line:
     squash(many(t => !t.includes("\n") && t !== ")" && t !== "]" parse_exp))
   def parse_lines n:
-    stmt(many(t => t.includes("\n") && indent(t) == n && bool(pos += 1) parse_line))
+    stmt(many(t => t.has("\n") && indent(t) == n && bool(pos+=1) parse_line))
   def parse_block:
     let t read()
-    iif t.includes("\n"): parse_lines(indent(t))
+    iif t.has("\n"): parse_lines(indent(t))
       parse_line()
   parse_lines 0
