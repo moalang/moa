@@ -18,7 +18,7 @@ bottom:
 | "-"? [0-9]+ ("." [0-9]+)? # -1.2
 | '"' [^"]* '"'             # "string"
 | id
-op1: [!-] | "..."
+op1: [!-] | ".."
 op2: [+-*/%<>|&^~=!]+ | ","
 id: [A-Za-z_][A-Za-z0-9_]*
 ```
@@ -41,7 +41,7 @@ Symbols
 ```
 _                part of id
 .                field access
-...              variadic function
+..               variadic function
 "                string
 #                comment
 ( )              priority or tuple
@@ -70,29 +70,29 @@ $ undefined
 
 - Number
 ```
-"-"? "0x" [0-9a-fA-F_]+                                        # 0xff         -> 255
-"-"? "0o" [0-7_]+                                              # 0o11         -> 9
-"-"? "0b" [0-1_]+                                              # 0b11         -> 3
-"-"? [0-9][0-9_]+ ("." [0-9_]+)?                               # 10_000.1_002 -> 10000.1002
-"-"? ([0-9]+ ("zb" | "pb" | "tb" | "gb" | "mb" | "kb" | "b"))+ # 2kb1b == 2049
+"-"? [0-9]+ "e" [0-9]+              # 1e3          -> 100
+"-"? "0x" [0-9a-fA-F_]+             # 0xff         -> 255
+"-"? "0o" [0-7_]+                   # 0o11         -> 9
+"-"? "0b" [0-1_]+                   # 0b11         -> 3
+"-"? [0-9][0-9_]+ ("." [0-9_]+)?    # 10_000.1_002 -> 10000.1002
+"-"? ([0-9]+ ([zptgmk] "b" | "b"))+ # 2kb1b        -> 2049
 ```
 
 - Duration
 ```
-"-"? ([0-9]+ ("d" | "h" | "m" | "s" | "ms" | "us"))+ # 1h30m, 365d or duration(hour=1 minute=30)
+"-"? ([0-9]+ ("d" | "h" | "m" | "s" | "ms" | "us"))+ # 1h2m3s -> duration(hour=1 minute=30 second=3)
 ```
 
 - Variadic function
 ```
-def f a=1: a          # default value
-def f ...a: a.max.1   # zero or more to list[t]
-def f ...a,: a.max.1  # zero or more to list[tuple[t u]]
+def f a=1: a          # f() or f(1)
+def f ..a: a.max.1    # f(), f(1) or f(1 2)
+def f ..a,: a.max.1   # f(), f(1 "a"), f(1 "a" 2 "b")
 ```
 
 - Pass through
 ```
-def show ...a: print ...a
-def show ...: print ...
+def show ..a: print ..a
 ```
 
 - Named argument
@@ -117,7 +117,7 @@ pattern: matcher ("if" exp) "=>" block
 matcher:
 | '"' [^"]* '"'                 # string
 | "-"? [0-9]+ ("." [0-9]+)?     # number
-| "[" matcher* ("..." id?)? "]" # list
+| "[" matcher* (".." id?)? "]"  # list
 | "{" capture+ "}"              # struct
 | capture
 capture:

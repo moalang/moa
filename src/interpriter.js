@@ -128,11 +128,14 @@ const execute = (node, env) => {
     cond[0] === '.' && target.tag === cond[2] ? execute(body, {...env, ...{[cond[1]]: {value: target.content}}}) :
     cond.length === 2 && target.tag === cond[0] ? execute(body, {...env, ...{[cond[1]]: {value: target.content}}}) :
     run_switch(target, remain)
-  const iif = a => a.length === 0 ? fail('Undetermined') :
-    a.length === 1 && a[0][0] === '__pack' ? iif(a[0].slice(1).flatMap(x => [x.slice(0, -1), x.at(-1)])) :
+  const iif = a =>
+    a.length === 1 && a[0][0] === '__pack' ? iif_remain(a[0].slice(1).flatMap(x => x)) :
+    a.length === 2 ? (run(a[0]) ? run(a[1][1]) : run(a[1][2])) :
+    iif_remain(a)
+  const iif_remain = a => a.length === 0 ? fail('Undetermined') :
     a.length === 1 ? run(a[0]) :
     run(a[0]) ? run(a[1]) :
-    iif(a.slice(2))
+    iif_remain(a.slice(2))
   const unpack = a => a[0] == '__pack' ? a.slice(1) : [a]
   const pack = ([x, ...xs]) => (x =>
     x instanceof Return ? x :
@@ -142,6 +145,7 @@ const execute = (node, env) => {
   const rescue = (e, a) =>
     e instanceof SoftError ? (a[0] === 'fn' ? run(a)(e) : run(a)) :
     (() => { throw e })()
+  const call = a => (([f, ...args]) => typeof f === 'function' ? f(...args) : fail('not a function', f, a))(a.map(run))
   const apply = a =>
     a.length === 0 ? fail('empty apply', node) :
     a.length === 1 ? run(a[0]) :
@@ -164,7 +168,7 @@ const execute = (node, env) => {
     a[0] === '=' ? update(a[1], run(a.slice(2))) :
     a[0] === '.' ? prop(run(a[1]), a[2]) :
     a[0].toString().match(/^[+\-*/%|&]+=$/) ? update(a[1], apply([a[0].slice(0, -1), ...a.slice(1)])) :
-    a.length >= 2 ? run(a[0])(...a.slice(1).map(run)) :
+    a.length >= 2 ? call(a) :
     fail('apply', a)
   const to_array = o => Array.isArray(o) ? o : [o]
   const unquote = c => c === 'n' ? '\n' :
@@ -246,7 +250,10 @@ if (require.main === module) {
   test(2, 'iif false 1 2')
   test(2, 'iif false 1 true 2 3')
   test(3, 'iif false 1 false 2 3')
-  test(2, 'def f x: x\niif:\n  f false: 1\n  f true: 2')
+  test(3, 'iif:\n  false: 1\n  false: 2\n  3')
+  test(1, 'iif true:\n  1\n  2')
+  test(2, 'iif false:\n  1\n  2')
+  test(1, 'iif 1 < 2:\n  1\n  2')
 
   // define
   test(1, 'let a 1\na')
@@ -267,15 +274,15 @@ if (require.main === module) {
   test(1, 'def f n: n\nif true: return f 1')
   test(1, 'if true: return 1\nthrow 2')
   test(2, 'if false: return 1\n2')
-  test(1, 'switch "a":\n"a": 1\n"b": 2\n_: 3')
-  test(2, 'switch "b":\n"a": 1\n"b": 2\n_: 3')
-  test(3, 'switch "c":\n"a": 1\n"b": 2\n_: 3')
-  test(2, 'switch "a":\n"a" if false: 1\n"a" if 1 == 1: 2')
-  test(Error('Unmatching c'), 'switch "c":\n"a": 1\n"b": 2')
-  test(1, 'enum a:\n  b\n  c int\nswitch b:\nb: 1\nc n => n')
-  test(2, 'enum a:\n  b\n  c int\nswitch c(2):\nb: 1\nc(n) => n')
-  test(2, 'enum a:\n  b\n  c int\nswitch c 2:\nb: 1\nc(n) => n')
-  test(3, 'enum a:\n  b:\n    v int\n    x int\nswitch b 1 2:\no.b => o.v + o.x')
+  test(1, 'switch "a":\n  "a": 1\n  "b": 2\n  _: 3')
+  test(2, 'switch "b":\n  "a": 1\n  "b": 2\n  _: 3')
+  test(3, 'switch "c":\n  "a": 1\n  "b": 2\n  _: 3')
+  test(2, 'switch "a":\n  "a" if false: 1\n  "a" if 1 == 1: 2')
+  test(Error('Unmatching c'), 'switch "c":\n  "a": 1\n  "b": 2')
+  test(1, 'enum a:\n  b\n  c int\nswitch b:\n  b: 1\n  c n => n')
+  test(2, 'enum a:\n  b\n  c int\nswitch c(2):\n  b: 1\n  c(n) => n')
+  test(2, 'enum a:\n  b\n  c int\nswitch c 2:\n  b: 1\n  c(n) => n')
+  test(3, 'enum a:\n  b:\n    v int\n    x int\nswitch b 1 2:\n  o.b => o.v + o.x')
   test(1, 'enum a:\n  b c d\nswitch b 1: b(n) => n')
   test(3, 'let n 1\nwhile n < 3: n += 1\nn')
   test(1, 'let n 1\nwhile true:\n  if true: break\n  n+=1\nn')

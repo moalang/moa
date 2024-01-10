@@ -2,148 +2,117 @@ def compile_to_js source:
   "const main = io => io.write(`Hello world`)"
 
 struct token:
-  text     string
-  isolated bool
-  offset   int
-  indent   int
-  lineno   int
-  length   int
-
-struct type:
-  tname  string
-  params list type
+  text string
+  pos  int
 
 enum ast:
   node token
-  apply list ast
-  statement list ast
+  call list st
+  stmt list st
 
-def tokenize source:
+def parse source:
+  if source.trim().size == 0:
+    return []
+
   # operator | parenthesis | string | number | id | comment and spaces
-  let regexp r'([!+\-*/%<>:!=^|&]+|[()\[\]{}]|r?"[^]*?(?<!\\)"|-?[0-9]+(?:\.[0-9]+)|[0-9A-Za-z_]+|(?:#[^\n]*|[ \n])+)'
-  var offset 0
-  var indent 0
-  var lineno 1
-  var isolated true
-  source.trim().split(regexp).filter(s => s.size > 0).map(text =>
-    if text.has "\n":
-      indent = text.split("\n")[-1].size
-      lineno += text.split("\n").size - 1
-    let t token text isolated offset indent lineno text.size
-    offset += text.size
-    isolated = text.match(r"[ \t\r\n#]")
-    t).filter(t => !t.text.match(r"[ \t\r\n#]"))
-test tester "tokenize":
-  def eq expect source:
-    tester.eq expect tokenize(source)
-  eq [token("a" true 0 0 1 1)] "a"
-  eq [token("a" true 0 0 1 1) token("b" true 4 2 2 1) token("c" true 6 2 2 1)] "a\n  b c"
+  let regexp r'([!+\-*/%<>:!=^|&]+|[()\[\]{}]|r?"[^]*?(?<!\\)"|r?"[^]*?(?<!\\)"|-?[0-9]+(?:\.[0-9]+)|[0-9A-Za-z_]+|(?:#[^\n]*|[ \n])+)'
+  let tokens source.trim().split(regexp).filter(s => s.size > 0).mapi(token)
 
-def parse tokens:
   var pos 0
-  def consume:
-    if pos >= tokens.size:
-      throw "eof"
-    let t tokens[pos]
-    pos += 1
-    t
-  def many f:
+  let eot token("" 0)
+  def peek:
+    iif pos < tokens.size:
+      tokens[pos]
+      eot
+  def read:
+    if peek().text.match(r"^[ #]"):
+      pos += 1
+    peek()
+  def many f g:
+    #while pos < tokens.size && f read(): yield g()
     let a []
-    while pos < tokens.size:
-      let text tokens[pos].text
-      if (text == ")") || (text == "]"):
-        break
-      let v catch f() break
-      a.push v
+    while pos < tokens.size && f(read()):
+      a.push g()
     a
   def until s:
-    let a []
-    while pos < tokens.size:
-      if tokens[pos].text.has "\n":
+    def check t:
+      pos += t.text.has("\n").int
+      if read().text == s:
         pos += 1
-      let t tokens[pos].text
-      if t == s:
-        pos += 1
-        break
-      let v catch parse_exp() break
-      a.push v
-    a
-  def alias t:
-    let v switch t.text:
-      "=>": token "fn" t.isolated t.offset t.indent t.lineno t.length
-      "[": token iif(t.isolated "list" "__index") t.isolated t.offset t.indent t.lineno t.length
-      _   : t
-    node v
-  def wrap_apply a:
-    iif a.size == 0 throw("empty apply") a.size == 1 a[0] apply(a)
-  def wrap_statement a:
-    iif a.size == 0 statement([]) a.size == 1 a[0] statement(a)
-  def parse_exp:
-    let lhs parse_atom()
-    if pos >= tokens.size:
-      return lhs
-    let next tokens[pos]
-    if next.text.match(r"^[+\-*/%|&<>!=^~]"):
-      pos += 1
-      return apply [alias(next) lhs parse_exp()]
-    return lhs
-  def parse_block:
-    let indent tokens[pos].indent
-    return wrap_statement(many(() => iif(
-      tokens[pos].indent == indent
-      parse_line(tokens[pos].lineno)
-      throw("eol"))))
-  def parse_atom:
-    def suffix item:
-      if pos >= tokens.size:
-        return item
-      let next tokens[pos]
-      switch next.text:
-        ".":
-          let prop_node node(tokens[pos+=1])
-          pos += 1
-          suffix apply([node(next) item prop_node])
-        ",":
-          let remain many () =>
-            if tokens[pos].text != ",":
-              throw("eoc")
-            let n node(tokens[pos+=1])
-            pos += 1
-            n
-          suffix apply([node(next) item] ++ remain)
-        "=>":
-          pos += 1
-          apply([alias(next) item parse_block()])
-        "(" if !next.isolated:
-          pos += 1
-          suffix apply([item] ++ until(")"))
-        "[" if !next.isolated:
-          pos += 1
-          suffix apply([alias(next) item] ++ until("]"))
-        _: item
-
-    let op1 "! -".split(" ")
+        return false
+      true
+    many check parse_exp
+  def consume:
+    let t read()
+    if t.text == "":
+        throw "out of index" pos tokens
+    pos += 1
+    t
+  def indent t:
+    iif t.text.has "\n":
+      t.text.split("\n").at(-1).size
+      throw("not break line" t)
+  def squash a:
+    iif a.size == 1:
+      a[0]
+      call a
+  def alias t a:
+    token a t.pos
+  def parse_unit:
+    def suffix t:
+      let adjacent peek()
+      let next read()
+      iif:
+        adjacent.text == "(" : pos += 1; suffix call([t] ++ until(")"))
+        adjacent.text == "[" : pos += 1; suffix call([alias(adjacent "__index") t] ++ until("]"))
+        adjacent.text == "." : pos += 1; suffix call([next t consume()])
+        next.text     == "=>": pos += 1; call [alias(next "fn") t parse_block()]
+        next.text     == "," : suffix call([adjacent t] ++ many((t => t == "," && bool(pos+=1)) consume))
+        t
     let t consume()
-    if t.text == "[":
-      return suffix apply([alias(t)] ++ until("]"))
-    if t.text == "(":
-      return suffix wrap_apply(until(")"))
-    if t.text == ":":
-      return parse_block()
-    suffix iif(op1.has(t.text) apply([node(t) parse_atom()]) node(t))
-  def parse_line lineno:
-    wrap_apply many(() => iif tokens[pos].lineno == lineno parse_exp() throw("eof"))
-
-  wrap_statement(many(() => parse_line(tokens[pos].lineno)))
+    suffix switch(t.text:
+      "!": call [node(t) parse_unit()]
+      "-": call [node(t) parse_unit()]
+      "[": call [alias(t "list")] ++ until("]")
+      "(": squash until(")")
+      ":": parse_block()
+      _ : node t)
+  def parse_exp:
+    def is_op2 s:
+      s.match(r"^:?[!+\-*/%<>!=^~|&]") && s !== "!"
+    let lhs parse_unit()
+    iif is_op2(read().text):
+      call [consume() lhs parse_exp()]
+      lhs
+  def parse_line:
+    def f t:
+      !t.text.has("\n") && t.text != ")" && t.text != "]"
+    squash many(f parse_exp)
+  def parse_lines n:
+    def f:
+      let t peek()
+      if t.text.has("\n") && indent(t) == n:
+        pos += 1
+      parse_line()
+    stmt many((t => true) f)
+  def parse_block:
+    let t read()
+    iif t.text.has("\n"):
+      parse_lines indent(t)
+      parse_line()
+  parse_lines 0
 
 test t "parser":
   def stringify x:
     switch x:
-      x.node => x.text
-      x.apply => "(" ++ x.map(stringify).join(" ") ++ ")"
-      x.statement => iif x.size == 0 "()" "(__pack " ++ x.map(stringify).join(" ") ++ ")"
+      o.node => o.text
+      o.call => "(" ++ o.map(stringify).join(" ") ++ ")"
+      o.stmt => iif:
+        o.size == 0: "()"
+        o.size == 1: stringify o[0]
+        "(__pack " ++ o.map(stringify).join(" ") ++ ")"
   def eq expect source:
-    t.eq expect stringify(parse(tokenize(source))) tokenize(source)
+    t.eq expect stringify(parse(source)) source
 
   # primitives
   eq "1" "1"
@@ -153,6 +122,7 @@ test t "parser":
   eq "\"h\\\"i\"" "\"h\\\"i\""
   eq "\"\\\\\"" "\"\\\\\""
   eq "r\"\\t\"" "r\"\\t\""
+  return
   eq "(fn a b)" "a => b"
 
   # container

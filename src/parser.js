@@ -25,7 +25,6 @@ const parse = source => {
   const call = a => a.length === 1 ? ['__call', ...a] : a
   const squash = a => a.length === 1 ? a[0] : a
   const pack = a => a.length === 1 ? a[0] : a.length > 1 ? ['__pack', ...a] : a
-
   const parse_unit = () => {
     const suffix = t => {
       const close = tokens[pos] || ''
@@ -47,9 +46,14 @@ const parse = source => {
       t)
   }
   const parse_exp = () => {
-    const is_op2 = s => s.match(/^:?[!+\-*/%<>!=^~|&]/) && s !== '!'
     const lhs = parse_unit()
-    return is_op2(read()) ? (op => [op, lhs, parse_exp()])(consume()) : lhs
+    const is_op2 = s => typeof s === 'string' && s.match(/^:?[!+\-*/%<>!=^~|&]/) && s !== '!'
+    const op2s = '< &&'.split(' ')
+    const priority = op => op2s.findIndex(x => x === op)
+    const sort = (op, lhs, rhs) =>
+      Array.isArray(rhs) && is_op2(rhs[0]) && priority(op) < priority(rhs[0]) ? [rhs[0], [op, lhs, rhs[1]], rhs[2]] :
+      [op, lhs, rhs]
+    return is_op2(read()) ? (op => sort(op, lhs, parse_exp()))(consume()) : lhs
   }
   const parse_line = () => (a => a.length && a)(squash(many(t => !t.includes('\n') && t !== ')' && t !== ']' && parse_exp())))
   const parse_lines = n => pack(many(t => (t.includes('\n') && indent(t) === n && ++pos, parse_line())))
@@ -134,6 +138,10 @@ if (require.main === module) {
   test('(__pack a b)', 'a\nb')
   test('(__pack (a b) c)', 'a b\nc')
   test('(__pack a (b c))', 'a\nb c')
+
+  // priority of operators
+  test('(&& (< a b) c)', 'a < b && c')
+  test('(&& (__call f) c)', 'f() && c')
 
   // comment
   test('(= a 1)', '#comment\na = 1 # comment\n#comment')

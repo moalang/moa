@@ -7,81 +7,94 @@ enum ast:
   call list st
   stmt list st
 
-def string o:
-  iif:
-    typeof o == "string": o
-    Array.isArray(o)    : `(${o.map(string).join(" ")})` :
-    JSON.stringify(o)
-def put ...a: log(a.map(string).join(" ")); a[0]
-def puts ...a: log(a.map(string).join(" ")); a[0]
-def log o: log.inspect(o); o
-def fail m ...a: throw m ++ ": " ++ a.map(string).join(" ")
 def parse source:
-  if source.trim().length == 0:
+  if source.trim().size == 0:
     return []
 
-  let regexp "" #/([!+\-*/%<>:!=^|&]+|[()\[\]{}]|r?"[^]*?(?<!\\)"|r?"[^]*?(?<!\\)"|-?[0-9]+(?:\.[0-9]+)|[0-9A-Za-z_]+|(?:#[^\n]*|[ \n])+)/ // operator | parenthesis | string | number | id | comment and spaces
-  let tokens source.trim().split(regexp).filter(s => s.length)
-  tokens.append(token("" 0))
+  # operator | parenthesis | string | number | id | comment and spaces
+  let regexp r'([!+\-*/%<>:!=^|&]+|[()\[\]{}]|r?"[^]*?(?<!\\)"|r?"[^]*?(?<!\\)"|-?[0-9]+(?:\.[0-9]+)|[0-9A-Za-z_]+|(?:#[^\n]*|[ \n])+)'
+  let tokens source.trim().split(regexp).filter(s => s.size > 0).mapi(token)
 
   var pos 0
+  let eot token("" 0)
   def peek:
-    tokens[pos].text
+    iif pos < tokens.size:
+      tokens[pos]
+      eot
   def read:
-    iif peek().match(r"^[ #]"): tokens[pos+=1].text
-      peek()
+    if peek().text.match(r"^[ #]"):
+      pos += 1
+    peek()
   def many f g:
-    while pos < tokens.length && f(read()): yield g()
-    #let a []
-    #while pos < tokens.length && f(read()):
-    #  a.push(g())
-    #a
+    #while pos < tokens.size && f read(): yield g()
+    let a []
+    while pos < tokens.size && f(read()):
+      a.push g()
+    a
   def until s:
     def check t:
-      pos += t.has("\n").int
-      if read() == s:
+      pos += t.text.has("\n").int
+      if read().text == s:
         pos += 1
         return false
       true
-    many(check parse_exp)
+    many check parse_exp
   def consume:
-    let t read() ||| fail("out of index" pos tokens)
+    let t read()
+    if t.text == "":
+        throw "out of index" pos tokens
     pos += 1
     t
   def indent t:
-    iif t.has("\n"::
-      t.split("\n").at(-1).length
-      fail "not break line" t
+    iif t.text.has "\n":
+      t.text.split("\n").at(-1).size
+      throw("not break line" t)
   def squash a:
-    iif a.length == 1: node(a[0])
-      call(a)
+    iif a.size == 1:
+      a[0]
+      call a
+  def alias t a:
+    token a t.pos
   def parse_unit:
     def suffix t:
-      let close peek()
+      let adjacent peek()
       let next read()
       iif:
-        close == "(" : ++pos; suffix(call([t ...until(")")]))
-        close == "[" : ++pos; suffix(call(["__index" t ...until("]")]))
-        close == "," : suffix([t ...many(t => t == "," && bool(pos+=1) consume)])
-        close == "." : ++pos; suffix([next t consume()])
-        next  == "=>": ++pos; ["fn" t parse_block()]
+        adjacent.text == "(" : pos += 1; suffix call([t] ++ until(")"))
+        adjacent.text == "[" : pos += 1; suffix call([alias(adjacent "__index") t] ++ until("]"))
+        adjacent.text == "." : pos += 1; suffix call([next t consume()])
+        next.text     == "=>": pos += 1; call [alias(next "fn") t parse_block()]
+        next.text     == "," : suffix call([adjacent t] ++ many((t => t == "," && bool(pos+=1)) consume))
         t
-    suffix switch consume() t =>
-      "!": [t parse_unit()]
-      "-": [t parse_unit()]
-      "[": call(["list"] ++ ...until("]"))
-      "(": squash(until(")"))
+    let t consume()
+    suffix switch(t.text:
+      "!": call [node(t) parse_unit()]
+      "-": call [node(t) parse_unit()]
+      "[": call [alias(t "list")] ++ until("]")
+      "(": squash until(")")
       ":": parse_block()
-       _ : t
+      _ : node t)
   def parse_exp:
-    let is_op2 read().match(r"^:?[!+\-*/%<>!=^~|&]") && s !== "!"
-    iif is_op2 call([consume() parse_unit() parse_exp()]) parse_unit()
+    def is_op2 s:
+      s.match(r"^:?[!+\-*/%<>!=^~|&]") && s !== "!"
+    let lhs parse_unit()
+    iif is_op2(read().text):
+      call [consume() lhs parse_exp()]
+      lhs
   def parse_line:
-    squash(many(t => !t.includes("\n") && t !== ")" && t !== "]" parse_exp))
+    def f t:
+      !t.text.has("\n") && t.text != ")" && t.text != "]"
+    squash many(f parse_exp)
   def parse_lines n:
-    stmt(many(t => t.has("\n") && indent(t) == n && bool(pos+=1) parse_line))
+    def f:
+      let t peek()
+      if t.text.has("\n") && indent(t) == n:
+        pos += 1
+      parse_line()
+    stmt many((t => true) f)
   def parse_block:
     let t read()
-    iif t.has("\n"): parse_lines(indent(t))
+    iif t.text.has("\n"):
+      parse_lines indent(t)
       parse_line()
   parse_lines 0
