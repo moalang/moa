@@ -65,7 +65,7 @@ def parse source:
       iif:
         adjacent.text == "(" : pos += 1; suffix call([t] ++ until(")"))
         adjacent.text == "[" : pos += 1; suffix call([alias(adjacent "__index") t] ++ until("]"))
-        adjacent.text == "." : pos += 1; suffix call([next t consume()])
+        adjacent.text == "." : pos += 1; suffix call([node(next) t node(consume())])
         next.text     == "=>": pos += 1; call [alias(next "fn") t parse_block()]
         next.text     == "," : suffix call([adjacent t] ++ many((t => t == "," && bool(pos+=1)) consume))
         t
@@ -79,10 +79,10 @@ def parse source:
       _ : node t)
   def parse_exp:
     def is_op2 s:
-      s.match(r"^:?[!+\-*/%<>!=^~|&]") && s !== "!"
+      s.match(r"^:?[!+\-*/%<>!=^~|&]") && s != "!"
     let lhs parse_unit()
     iif is_op2(read().text):
-      call [consume() lhs parse_exp()]
+      call [node(consume()) lhs parse_exp()]
       lhs
   def parse_line:
     def f t:
@@ -123,7 +123,6 @@ test t "parser":
   eq "\"\\\\\"" "\"\\\\\""
   eq "r\"\\t\"" "r\"\\t\""
   eq "(fn a b)" "a => b"
-  return
 
   # container
   eq "(list)" "[]"
@@ -172,6 +171,7 @@ test t "parser":
   # indent
   eq "(a b)" "a:\n  b"
   eq "(a (b c))" "a:\n  b:\n    c"
+  return
   eq "(a (b (__pack c d)))" "a:\n  b:\n    c\n    d"
   eq "(a (__pack (b c) d))" "a:\n  b:\n    c\n  d"
   eq "(__pack (a (b c)) d)" "a:\n  b:\n    c\nd"

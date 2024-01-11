@@ -12,6 +12,7 @@ class Break { }
 class Time { constructor(year, month, day, hour, minute, second) { Object.assign(this, {year, month, day, hour, minute, second}) } }
 class Duration { constructor(count, unit) { this.count = count; this.unit = unit } }
 class Enum { constructor(tag, content) { this.tag = tag; this.content = content } }
+
 const string = o => typeof o === 'string' ? o : literal(o)
 const literal = o =>
   o instanceof RegExp ? o.toString() :
@@ -101,6 +102,7 @@ const execute = (node, env) => {
     typeof obj === 'string' && key in methods.string ? methods.string[key](obj) :
     obj instanceof List && key in methods.list ? methods.list[key](obj) :
     typeof obj === 'object' && key in obj ? obj[key] :
+    typeof obj === 'boolean' && key === 'int' ? Number(obj) :
     fail('Missing', key, 'of', typeof obj === 'object' ? Object.keys(obj) : typeof obj)
   const lookup = key => key in env ? env[key].value : fail('Missing', key, 'in', Object.keys(env))
   const insert = (key, value) => reserved.includes(key) ? fail('Reserved', key) :
@@ -359,6 +361,8 @@ if (require.main === module) {
   test([2], '[1 2].slice 1')
   test([2], '[1 2 3].slice 1 (-1)')
   test('1 2', '[1 2].join " "')
+  test(1, 'true.int')
+  test(0, 'false.int')
 
   // edge case
   test(1, 'var a 0\ndef f:\n  def g: a += 1\n  g()\nf()\na')
