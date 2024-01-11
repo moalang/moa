@@ -97,11 +97,12 @@ const _void = undefined
 const reserved = 'num decimal interface implementnum else void any moa test log math rand db use module bytes i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64'.split(' ')
 const evaluate = (node, obj) => execute(node, Object.fromEntries(Object.entries(obj).map(([key, value]) => [key, {value}])))
 const execute = (node, env) => {
+  const bind = (obj, target) => typeof target === 'function' ? target.bind(obj) : target
   const run = node => Array.isArray(node) ? apply(node) : atom(node)
   const prop = (obj, key) =>
     typeof obj === 'string' && key in methods.string ? methods.string[key](obj) :
     obj instanceof List && key in methods.list ? methods.list[key](obj) :
-    typeof obj === 'object' && key in obj ? obj[key] :
+    typeof obj === 'object' && key in obj ? bind(obj, obj[key]) :
     typeof obj === 'boolean' && key === 'int' ? Number(obj) :
     fail('Missing', key, 'of', typeof obj === 'object' ? Object.keys(obj) : typeof obj)
   const lookup = key => key in env ? env[key].value : fail('Missing', key, 'in', Object.keys(env))
@@ -131,7 +132,7 @@ const execute = (node, env) => {
     cond.length === 2 && target.tag === cond[0] ? execute(body, {...env, ...{[cond[1]]: {value: target.content}}}) :
     run_case(target, remain)
   const iif = a =>
-    a.length === 1 && a[0][0] === '__pack' ? iif_remain(a[0].slice(1).flatMap(x => x)) :
+    a.length === 1 && a[0][0] === '__pack' ? iif_remain(a[0].slice(1, -1).flatMap(x => x).concat([a[0].at(-1)])) :
     a.length === 2 ? (run(a[0]) ? run(a[1][1]) : run(a[1][2])) :
     iif_remain(a)
   const iif_remain = a => a.length === 0 ? fail('Undetermined') :
@@ -196,12 +197,14 @@ module.exports = { evaluate }
 if (require.main === module) {
   const eq = (expect, src) => {
     const actual = attempt(() => evaluate(parse(src), {}), e => e)
-    if (comparable(expect) === comparable(actual)) {
+    const a = comparable(actual)
+    const e = comparable(expect)
+    if (a === e) {
       put('.')
     } else {
       puts()
-      puts(`Expect: ${string(expect)}`)
-      puts(`Actual: ${string(actual)}`)
+      puts(`Expect: ${a}`)
+      puts(`Actual: ${e}`)
       puts(`Source: ${JSON.stringify(src)}`)
       put('Nodes : ')
       log(parse(src))
@@ -256,6 +259,7 @@ if (require.main === module) {
   test(1, 'iif true:\n  1\n  2')
   test(2, 'iif false:\n  1\n  2')
   test(1, 'iif 1 < 2:\n  1\n  2')
+  test(5, 'iif:\n  false: 1\n  2 + 3')
 
   // define
   test(1, 'let a 1\na')
@@ -361,6 +365,7 @@ if (require.main === module) {
   test([2], '[1 2].slice 1')
   test([2], '[1 2 3].slice 1 (-1)')
   test('1 2', '[1 2].join " "')
+  test(2, '[1 2].at 1')
   test(1, 'true.int')
   test(0, 'false.int')
 

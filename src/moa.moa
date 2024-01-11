@@ -171,8 +171,8 @@ test t "parser":
   # indent
   eq "(a b)" "a:\n  b"
   eq "(a (b c))" "a:\n  b:\n    c"
-  return
   eq "(a (b (__pack c d)))" "a:\n  b:\n    c\n    d"
+  return
   eq "(a (__pack (b c) d))" "a:\n  b:\n    c\n  d"
   eq "(__pack (a (b c)) d)" "a:\n  b:\n    c\nd"
   eq "(__pack (a (__pack b (c d) e)) f)" "a:\n  b\n  c:\n    d\n  e\nf"
