@@ -67,7 +67,7 @@ def parse source:
         next.text     == "," : suffix call([adjacent t] ++ many((t => t == "," && bool(pos+=1)) consume))
         t
     let t consume()
-    suffix switch(t.text:
+    suffix case(t.text:
       "!": call [node(t) parse_unit()]
       "-": call [node(t) parse_unit()]
       "[": call [alias(t "list")] ++ until("]")

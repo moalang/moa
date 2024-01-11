@@ -57,7 +57,7 @@ def parse source:
       a[0]
       call a
   def alias t a:
-    token a t.pos
+    node token(a t.pos)
   def parse_unit:
     def suffix t:
       let adjacent peek()
@@ -70,7 +70,7 @@ def parse source:
         next.text     == "," : suffix call([adjacent t] ++ many((t => t == "," && bool(pos+=1)) consume))
         t
     let t consume()
-    suffix switch(t.text:
+    suffix case(t.text:
       "!": call [node(t) parse_unit()]
       "-": call [node(t) parse_unit()]
       "[": call [alias(t "list")] ++ until("]")
@@ -104,7 +104,7 @@ def parse source:
 
 test t "parser":
   def stringify x:
-    switch x:
+    case x:
       o.node => o.text
       o.call => "(" ++ o.map(stringify).join(" ") ++ ")"
       o.stmt => iif:
@@ -122,8 +122,8 @@ test t "parser":
   eq "\"h\\\"i\"" "\"h\\\"i\""
   eq "\"\\\\\"" "\"\\\\\""
   eq "r\"\\t\"" "r\"\\t\""
-  return
   eq "(fn a b)" "a => b"
+  return
 
   # container
   eq "(list)" "[]"

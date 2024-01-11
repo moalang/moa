@@ -117,17 +117,17 @@ const execute = (node, env) => {
     Array.isArray(type) ? (...a) => new Enum(name, Object.fromEntries(unpack(type).map(([t,_], i) => [t, a[i]]))) :
     v => new Enum(name, v)
   const run_while = (cond, body) => run(cond) && !(execute(body, {...env}) instanceof Break) ? run_while(cond, body) : _void
-  const run_switch = (target, a) =>
+  const run_case = (target, a) =>
     a.length === 0 ? fail('Unmatching', target) :
     a[0][0] === 'fn' ? run_capture(target, a[0].slice(1), a.slice(1)) :
     a[0][0] === '_' ? run(a[0][1]) :
-    comparable(target) === comparable(run(a[0][0])) && switch_if(a[0].slice(1, -1)) ? run(a[0].at(-1)) :
-    run_switch(target, a.slice(1))
-  const switch_if = a => a[0] !== 'if' || run(a.slice(1))
+    comparable(target) === comparable(run(a[0][0])) && case_if(a[0].slice(1, -1)) ? run(a[0].at(-1)) :
+    run_case(target, a.slice(1))
+  const case_if = a => a[0] !== 'if' || run(a.slice(1))
   const run_capture = (target, [cond, body], remain) =>
     cond[0] === '.' && target.tag === cond[2] ? execute(body, {...env, ...{[cond[1]]: {value: target.content}}}) :
     cond.length === 2 && target.tag === cond[0] ? execute(body, {...env, ...{[cond[1]]: {value: target.content}}}) :
-    run_switch(target, remain)
+    run_case(target, remain)
   const iif = a =>
     a.length === 1 && a[0][0] === '__pack' ? iif_remain(a[0].slice(1).flatMap(x => x)) :
     a.length === 2 ? (run(a[0]) ? run(a[1][1]) : run(a[1][2])) :
@@ -153,7 +153,7 @@ const execute = (node, env) => {
     a[0] === 'iif' ? iif(a.slice(1)) :
     a[0] === 'catch' ? attempt(() => run(a[1]), e => rescue(e, a[2])) :
     a[0] === 'return' ? new Return(run(a.slice(1))) :
-    a[0] === 'switch' ? run_switch(run(a.slice(1, -1)), unpack(a.at(-1))) :
+    a[0] === 'case' ? run_case(run(a.slice(1, -1)), unpack(a.at(-1))) :
     a[0] === 'while' ? run_while(a.slice(1, -1), a.at(-1)) :
     a[0] === 'fn' ? make_func(a[1], a.slice(2)) :
     a[0] === 'let' ? insert(a[1], run(a.slice(2))) :
@@ -274,16 +274,16 @@ if (require.main === module) {
   test(1, 'def f n: n\nif true: return f 1')
   test(1, 'if true: return 1\nthrow 2')
   test(2, 'if false: return 1\n2')
-  test(1, 'switch "a":\n  "a": 1\n  "b": 2\n  _: 3')
-  test(2, 'switch "b":\n  "a": 1\n  "b": 2\n  _: 3')
-  test(3, 'switch "c":\n  "a": 1\n  "b": 2\n  _: 3')
-  test(2, 'switch "a":\n  "a" if false: 1\n  "a" if 1 == 1: 2')
-  test(Error('Unmatching c'), 'switch "c":\n  "a": 1\n  "b": 2')
-  test(1, 'enum a:\n  b\n  c int\nswitch b:\n  b: 1\n  c n => n')
-  test(2, 'enum a:\n  b\n  c int\nswitch c(2):\n  b: 1\n  c(n) => n')
-  test(2, 'enum a:\n  b\n  c int\nswitch c 2:\n  b: 1\n  c(n) => n')
-  test(3, 'enum a:\n  b:\n    v int\n    x int\nswitch b 1 2:\n  o.b => o.v + o.x')
-  test(1, 'enum a:\n  b c d\nswitch b 1: b(n) => n')
+  test(1, 'case "a":\n  "a": 1\n  "b": 2\n  _: 3')
+  test(2, 'case "b":\n  "a": 1\n  "b": 2\n  _: 3')
+  test(3, 'case "c":\n  "a": 1\n  "b": 2\n  _: 3')
+  test(2, 'case "a":\n  "a" if false: 1\n  "a" if 1 == 1: 2')
+  test(Error('Unmatching c'), 'case "c":\n  "a": 1\n  "b": 2')
+  test(1, 'enum a:\n  b\n  c int\ncase b:\n  b: 1\n  c n => n')
+  test(2, 'enum a:\n  b\n  c int\ncase c(2):\n  b: 1\n  c(n) => n')
+  test(2, 'enum a:\n  b\n  c int\ncase c 2:\n  b: 1\n  c(n) => n')
+  test(3, 'enum a:\n  b:\n    v int\n    x int\ncase b 1 2:\n  o.b => o.v + o.x')
+  test(1, 'enum a:\n  b c d\ncase b 1: b(n) => n')
   test(3, 'let n 1\nwhile n < 3: n += 1\nn')
   test(1, 'let n 1\nwhile true:\n  if true: break\n  n+=1\nn')
   test(3, 'let n 1\nwhile n < 3:\n  n += 1\n  if true: continue\n  n+=5\nn')
@@ -362,7 +362,7 @@ if (require.main === module) {
 
   // edge case
   test(1, 'var a 0\ndef f:\n  def g: a += 1\n  g()\nf()\na')
-  test(1, 'let a switch 0:\n  0: 1\n  1: 2')
+  test(1, 'let a case 0:\n  0: 1\n  1: 2')
 
   puts('ok')
 }

@@ -55,7 +55,19 @@ const parse = source => {
       [op, lhs, rhs]
     return is_op2(read()) ? (op => sort(op, lhs, parse_exp()))(consume()) : lhs
   }
-  const parse_line = () => (a => a.length && a)(squash(many(t => !t.includes('\n') && t !== ')' && t !== ']' && parse_exp())))
+  const is_stop = t => t.includes('\n') || t === ')' || t === ']' || t === ';'
+  const parse_line = () => {
+    const a = squash(many(t => !is_stop(t) && parse_exp()))
+    if (read() === ";") {
+      const remain = []
+      while (read() === ";" && ++pos) {
+        remain.push(squash(many(t => !is_stop(t) && parse_exp())))
+      }
+      return pack([a, ...remain])
+    } else {
+      return a.length && a
+    }
+  }
   const parse_lines = n => pack(many(t => (t.includes('\n') && indent(t) === n && ++pos, parse_line())))
   const parse_block = () => (t => t.includes('\n') ? parse_lines(indent(t)) : parse_line())(read())
   return parse_lines(0)
@@ -138,6 +150,9 @@ if (require.main === module) {
   test('(__pack a b)', 'a\nb')
   test('(__pack (a b) c)', 'a b\nc')
   test('(__pack a (b c))', 'a\nb c')
+  test('(__pack a b)', 'a;b')
+  test('(__pack (a b) (c d) (e f))', 'a b; c d; e f')
+  test('(a (__pack b c))', 'a: b; c')
 
   // priority of operators
   test('(&& (< a b) c)', 'a < b && c')
