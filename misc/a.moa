@@ -9,7 +9,7 @@ enum ast:
 
 def parse source:
   if source.trim().size == 0:
-    return []
+    return stmt []
 
   # operator | parenthesis | string | number | id | comment and spaces
   let regexp r'([!+\-*/%<>:!=^|&]+|[()\[\]{}]|r?"[^]*?(?<!\\)"|r?"[^]*?(?<!\\)"|-?[0-9]+(?:\.[0-9]+)|[0-9A-Za-z_]+|(?:#[^\n]*|[ \n])+)'
@@ -29,7 +29,11 @@ def parse source:
     #while pos < tokens.size && f read(): yield g()
     let a []
     while pos < tokens.size && f(read()):
-      a.push g()
+      let prev pos
+      let item g()
+      if prev == pos:
+        break
+      a.push item
     a
   def until s:
     def check t:
@@ -46,15 +50,13 @@ def parse source:
     pos += 1
     t
   def indent t:
-    iif t.text.has "\n":
-      t.text.split("\n").at(-1).size
-      throw("not break line" t)
+    t.text.split("\n").at(-1).size
   def squash a:
     iif a.size == 1:
       a[0]
       call a
   def alias t a:
-    token a t.pos
+    node token(a t.pos)
   def parse_unit:
     def suffix t:
       let adjacent peek()
@@ -62,9 +64,9 @@ def parse source:
       iif:
         adjacent.text == "(" : pos += 1; suffix call([t] ++ until(")"))
         adjacent.text == "[" : pos += 1; suffix call([alias(adjacent "__index") t] ++ until("]"))
-        adjacent.text == "." : pos += 1; suffix call([next t consume()])
+        adjacent.text == "." : pos += 1; suffix call([node(next) t node(consume())])
         next.text     == "=>": pos += 1; call [alias(next "fn") t parse_block()]
-        next.text     == "," : suffix call([adjacent t] ++ many((t => t == "," && bool(pos+=1)) consume))
+        next.text     == "," : suffix call([node(consume()) t node(consume())])
         t
     let t consume()
     suffix case(t.text:
@@ -76,10 +78,10 @@ def parse source:
       _ : node t)
   def parse_exp:
     def is_op2 s:
-      s.match(r"^:?[!+\-*/%<>!=^~|&]") && s !== "!"
+      s.match(r"^:?[!+\-*/%<>!=^~|&]") && s != "!"
     let lhs parse_unit()
     iif is_op2(read().text):
-      call [consume() lhs parse_exp()]
+      call [node(consume()) lhs parse_exp()]
       lhs
   def parse_line:
     def f t:

@@ -58,15 +58,11 @@ const parse = source => {
   const is_stop = t => t.includes('\n') || t === ')' || t === ']' || t === ';'
   const parse_line = () => {
     const a = squash(many(t => !is_stop(t) && parse_exp()))
-    if (read() === ";") {
-      const remain = []
-      while (read() === ";" && ++pos) {
-        remain.push(squash(many(t => !is_stop(t) && parse_exp())))
-      }
-      return pack([a, ...remain])
-    } else {
-      return a.length && a
+    const remain = []
+    while (read() === ";" && ++pos) {
+      remain.push(squash(many(t => !is_stop(t) && parse_exp())))
     }
+    return remain.length ? pack([a, ...remain]) : a.length && a
   }
   const parse_lines = n => pack(many(t => (t.includes('\n') && indent(t) === n && ++pos, parse_line())))
   const parse_block = () => (t => t.includes('\n') ? parse_lines(indent(t)) : parse_line())(read())
