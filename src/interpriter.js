@@ -28,10 +28,12 @@ const put = (...a) => { process.stdout.write(a.map(string).join(' ')); return a[
 const puts = (...a) => { console.log(a.map(string).join(' ')); return a[0] }
 const attempt = (f, g) => { try { return f() } catch (e) { return g(e) } }
 const range = (n, m) => [...Array(n)].map((_, i) => i + (m || 0))
-const index = (a, i) =>
+const index = (o, i) => Array.isArray(o) ? index_array(o, i) : index_dict(o, i)
+const index_array = (a, i) =>
   i >= 0 && i < a.length ? a[i] :
   i < 0 && a.length + i >= 0 && a.length + i < a.length ? a[a.length + i] :
   fail('OutOfIndex', i)
+const index_dict = (d, k) => d.has(k) ? d.get(k) : fail('KeyNotFound', i)
 const comparable = x =>
   x === undefined ? '' :
   x instanceof Error ? literal(x) :
@@ -60,6 +62,7 @@ const embedded = {
   '++': (l, r) => l instanceof Map ? new Map([...l, ...r]) : l.concat(r),
   list: (...a) => new List().concat(a),
   dict: (...a) => new Map(range(a.length / 2).map(i => [a[i*2], a[i*2+1]])),
+  set: (...a) => new Set(a),
   bool: o => Boolean(o),
   int: s => parseInt(s),
   float: s => parseFloat(s),
@@ -67,7 +70,6 @@ const embedded = {
   duration: (...a) => new Duration(...a),
   tuple: (...a) => new Tuple().concat(a),
   ref: ref => ({ref}),
-  fn: (...a) => console.dir(a),
   throw: (...a) => { throw new SoftError(a.map(string).join(' ')) },
   continue: new Continue(),
   break: new Break(),
@@ -81,6 +83,7 @@ const methods = {
     split: s => t => new List().concat(s.split(t)),
     has: s => t => s.includes(t),
     match: s => r => Boolean(s.match(r)),
+    replace: s => (r, f) => s.replace(r, f),
   },
   list: {
     a: a => a.length,
@@ -91,6 +94,12 @@ const methods = {
     slice: a => (n, m) => a.slice(n, m),
     join: a => s => a.map(string).join(s),
     push: a => x => a.push(x),
+  },
+  number: {
+    string: n => n.toString(),
+  },
+  boolean: {
+    int: b => Number(b),
   }
 }
 const _void = undefined
@@ -100,10 +109,9 @@ const execute = (node, env) => {
   const bind = (obj, target) => typeof target === 'function' ? target.bind(obj) : target
   const run = node => Array.isArray(node) ? apply(node) : atom(node)
   const prop = (obj, key) =>
-    typeof obj === 'string' && key in methods.string ? methods.string[key](obj) :
     obj instanceof List && key in methods.list ? methods.list[key](obj) :
     typeof obj === 'object' && key in obj ? bind(obj, obj[key]) :
-    typeof obj === 'boolean' && key === 'int' ? Number(obj) :
+    key in methods[typeof obj] ? methods[typeof obj][key](obj) :
     fail('Missing', key, 'of', typeof obj === 'object' ? Object.keys(obj) : typeof obj)
   const lookup = key => key in env ? env[key].value : fail('Missing', key, 'in', Object.keys(env))
   const insert = (key, value) => reserved.includes(key) ? fail('Reserved', key) :
@@ -122,7 +130,8 @@ const execute = (node, env) => {
   const run_while = (cond, body) => run(cond) && !(execute(body, {...env}) instanceof Break) ? run_while(cond, body) : _void
   const run_case = (target, a) =>
     a.length === 0 ? fail('Unmatching', target) :
-    a[0][0] === 'fn' ? run_capture(target, a[0].slice(1), a.slice(1)) :
+    a[0][0].startsWith('r"') && target.match(run(a[0][0])) ? run(a[0][1]) :
+    a[0][0] === '=>' ? run_capture(target, a[0].slice(1), a.slice(1)) :
     a[0][0] === '_' ? run(a[0][1]) :
     comparable(target) === comparable(run(a[0][0])) && case_if(a[0].slice(1, -1)) ? run(a[0].at(-1)) :
     run_case(target, a.slice(1))
@@ -146,7 +155,7 @@ const execute = (node, env) => {
     x instanceof Break ? x :
     xs.length ? pack(xs) : x)(run(x))
   const rescue = (e, a) =>
-    e instanceof SoftError ? (a[0] === 'fn' ? run(a)(e) : run(a)) :
+    e instanceof SoftError ? (a[0] === '=>' ? run(a)(e) : run(a)) :
     (() => { throw e })()
   const call = a => (([f, ...args]) => typeof f === 'function' ? f(...args) : fail('not a function', f, a))(a.map(run))
   const apply = a =>
@@ -158,7 +167,7 @@ const execute = (node, env) => {
     a[0] === 'return' ? new Return(run(a.slice(1))) :
     a[0] === 'case' ? run_case(run(a.slice(1, -1)), unpack(a.at(-1))) :
     a[0] === 'while' ? run_while(a.slice(1, -1), a.at(-1)) :
-    a[0] === 'fn' ? make_func(a[1], a.slice(2)) :
+    a[0] === '=>' ? make_func(a[1], a.slice(2)) :
     a[0] === 'let' ? insert(a[1], run(a.slice(2))) :
     a[0] === 'var' ? insert(a[1], run(a.slice(2))) :
     a[0] === 'def' ? insert(a[1], make_func(a.slice(2, -1), index(a, -1))) :
@@ -241,7 +250,6 @@ if (require.main === module) {
   test(new Duration(3, 'd'), '3d')
   test(new Tuple(1, 2), 'tuple(1 2)')
   test({ref: 1}, 'ref(1)')
-  test(1, 'fn(x: x)(1)')
 
   // containers
   test([], '[]')
@@ -251,6 +259,8 @@ if (require.main === module) {
   test(2, '[1 2][-1]')
   test({}, 'dict()')
   test({a: 1}, 'dict("a" 1)')
+  test(1, 'dict("a" 1)["a"]')
+  test(new Set(), 'set()')
 
   // branch
   test(1, 'iif true 1 2')
@@ -286,6 +296,7 @@ if (require.main === module) {
   test(2, 'case "b":\n  "a": 1\n  "b": 2\n  _: 3')
   test(3, 'case "c":\n  "a": 1\n  "b": 2\n  _: 3')
   test(2, 'case "a":\n  "a" if false: 1\n  "a" if 1 == 1: 2')
+  test(1, 'case "a":\n  r"a": 1\n  "a": 2')
   test(Error('Unmatching c'), 'case "c":\n  "a": 1\n  "b": 2')
   test(1, 'enum a:\n  b\n  c int\ncase b:\n  b: 1\n  c n => n')
   test(2, 'enum a:\n  b\n  c int\ncase c(2):\n  b: 1\n  c(n) => n')
@@ -370,6 +381,7 @@ if (require.main === module) {
   test(2, '[1 2].at 1')
   test(1, 'true.int')
   test(0, 'false.int')
+  test('1', '1.string')
 
   // edge case
   test(1, 'var a 0\ndef f:\n  def g: a += 1\n  g()\nf()\na')

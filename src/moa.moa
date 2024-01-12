@@ -1,25 +1,34 @@
 def compile_to_js source:
   "const main = io => io.write(`Hello world`)"
 
+struct type:
+  name   string
+  params list type
+
 struct token:
   text string
   pos  int
-
-enum ast:
-  node token
-  call list st
-  stmt list st
+  args list token
+  type type
 
 def parse source:
+  let eot token "" 0 []
+  let tundef type "" []
+
+  def stmt a:
+    token "__stmt" 0 a
+
+  def call a:
+    token "__call" 0 a
+
   if source.trim().size == 0:
     return stmt []
 
   # operator | parenthesis | string | number | id | comment and spaces
   let regexp r'([!+\-*/%<>:!=^|&]+|[()\[\]{}]|r?"[^]*?(?<!\\)"|r?"[^]*?(?<!\\)"|-?[0-9]+(?:\.[0-9]+)|[0-9A-Za-z_]+|(?:#[^\n]*|[ \n])+)'
-  let tokens source.trim().split(regexp).filter(s => s.size > 0).mapi(token)
+  let tokens source.trim().split(regexp).filter(s => s.size > 0).mapi(t,i => token t i [] tundef)
 
   var pos 0
-  let eot token("" 0)
   def peek:
     iif pos < tokens.size:
       tokens[pos]
@@ -59,7 +68,7 @@ def parse source:
       a[0]
       call a
   def alias t a:
-    node token(a t.pos)
+    token a t.pos t.args
   def parse_unit:
     def suffix t:
       let adjacent peek()
@@ -67,24 +76,24 @@ def parse source:
       iif:
         adjacent.text == "(" : pos += 1; suffix call([t] ++ until(")"))
         adjacent.text == "[" : pos += 1; suffix call([alias(adjacent "__index") t] ++ until("]"))
-        adjacent.text == "." : pos += 1; suffix call([node(next) t node(consume())])
-        next.text     == "=>": pos += 1; call [alias(next "fn") t parse_block()]
-        next.text     == "," : suffix call([node(consume()) t node(consume())])
+        adjacent.text == "." : pos += 1; suffix call([next t consume()])
+        next.text     == "=>": pos += 1; call [next t parse_block()]
+        next.text     == "," : suffix call([consume() t consume()])
         t
     let t consume()
     suffix case(t.text:
-      "!": call [node(t) parse_unit()]
-      "-": call [node(t) parse_unit()]
+      "!": call [t parse_unit()]
+      "-": call [t parse_unit()]
       "[": call [alias(t "list")] ++ until("]")
       "(": squash until(")")
       ":": parse_block()
-      _ : node t)
+      _ : t)
   def parse_exp:
     def is_op2 s:
       s.match(r"^:?[!+\-*/%<>!=^~|&]") && s != "!"
     let lhs parse_unit()
     iif is_op2(read().text):
-      call [node(consume()) lhs parse_exp()]
+      call [consume() lhs parse_exp()]
       lhs
   def parse_line:
     def f t:
@@ -105,16 +114,16 @@ def parse source:
   parse_lines 0
 
 test t "parser":
-  def stringify x:
-    case x:
-      o.node => o.text
-      o.call => "(" ++ o.map(stringify).join(" ") ++ ")"
-      o.stmt => iif:
-        o.size == 0: "()"
-        o.size == 1: stringify o[0]
-        "(__pack " ++ o.map(stringify).join(" ") ++ ")"
+  def show x:
+    case x.text:
+      "__call": "(" ++ x.args.map(show).join(" ") ++ ")"
+      "__stmt": iif:
+        x.args.size == 0: "()"
+        x.args.size == 1: show x.args[0]
+        "(__pack " ++ x.args.map(show).join(" ") ++ ")"
+      _: x.text
   def eq expect source:
-    let actual stringify(parse(source))
+    let actual show(parse(source))
     if expect != actual:
       log " Expet:" expect
       log "Actual:" actual
@@ -129,7 +138,7 @@ test t "parser":
   eq "\"h\\\"i\"" "\"h\\\"i\""
   eq "\"\\\\\"" "\"\\\\\""
   eq "r\"\\t\"" "r\"\\t\""
-  eq "(fn a b)" "a => b"
+  eq "(=> a b)" "a => b"
 
   # container
   eq "(list)" "[]"
@@ -203,14 +212,14 @@ test t "parser":
   eq "(. (list) size)" "[].size"
   eq "((. (list 1) m) a)" "[1].m a"
   eq "((. (list 1) m) a)" "[1].m(a)"
-  eq "((. (list 1) m) (fn x (>= x 1)))" "[1].m(x => x >= 1)"
-  eq "(fn p (+ (. p x) (. p y)))" "p => p.x + p.y"
-  eq "(fn (, a b) c)" "a,b => c"
-  eq "(fn (, (, a b) c) d)" "a,b,c => d"
-  eq "(fn a (b c))" "a => b c"
-  eq "(fn a (+ 1 2))" "a => 1 + 2"
-  eq "(fn a 1)" "a =>\n  1"
-  eq "(fn a (__pack 1 2))" "a =>\n  1\n  2"
+  eq "((. (list 1) m) (=> x (>= x 1)))" "[1].m(x => x >= 1)"
+  eq "(=> p (+ (. p x) (. p y)))" "p => p.x + p.y"
+  eq "(=> (, a b) c)" "a,b => c"
+  eq "(=> (, (, a b) c) d)" "a,b,c => d"
+  eq "(=> a (b c))" "a => b c"
+  eq "(=> a (+ 1 2))" "a => 1 + 2"
+  eq "(=> a 1)" "a =>\n  1"
+  eq "(=> a (__pack 1 2))" "a =>\n  1\n  2"
 
   # edge case
   eq "1" "1\n"
@@ -220,88 +229,45 @@ test t "parser":
 
 
 def infer root:
-  struct type:
-    name string
-    types list type
   var id 0
-  def new_var:
+  def tvar:
     type (id+=1).string []
-  def new_more t:
+  def tmore t:
     type "__more" [t]
   def tfunc types:
     type "" types
-  tv1 = new_var()
-  tbool = type "bool" []
-  tint = type "int" []
-  tfloat = type "float" []
-  tstring = type "string" []
-  tlist = tfunc [new_more(tv1) type("list" [tv1])]
-  tprop = dict("list" dict(
+  let tv1     tvar()
+  let tbool   type "bool" []
+  let tint    type "int" []
+  let tfloat  type "float" []
+  let tstring type "string" []
+  let tlist   tfunc [tmore(tv1) type("list" [tv1])]
+  let tprop   dict("list" dict(
     "size" _ => tint
     "map" t => tfunc([tfunc([t.params[0] tv1]) type("list" [tv1])])
     ))
-  def analyze node ng tenv:
-    def squash_type t:
-      t.params = squash_params t.params
+  def squash t:
+    iif t.name == "" && t.params[0].name == "__more":
+      t.params[1]
       t
-    def squash_params a:
-      if a.size >= 2 && a[0].name == "__more":
-        return squash_params a.slice(1)
-      a
-    def try_unify a b:
-      def copy a b:
-        b.name := a.name
-        b.params := a.params
-        true
-      guard a.name.match(r"^[0-9]"): copy b a
-      guard b.name.match(r"^[0-9]"): copy a b
-      guard a.name == "__more": try_unify a.params[0] b
-      guard b.name == "__more": try_unify a b.params[0]
-      a == b
-    def unify a b:
-      guard try_unify(a b): a
-      error "type miss match"
-    def apply a b:
-      guard a.size == 0:
-        error "internal applying error"
-      guard b.size == 0:
-        params = squash_params a
-        guard params.size == 1: params[0]
-        error "wrong number of arguments"
-      guard try_unify(a[0] b[0]):
-        guard a[0].name == "__more":
-          apply a b.slice(1)
-        apply a.slice(1) b.slice(1)
-      guard a[0].name == "__more":
-        apply a.slice(1) b.slice(1)
-      error "type miss match"
-    def inf node:
-      def inf_text s:
-        guard s.match(r"^[0-9]+\.[0-9]+$"): tfloat
-        guard s.match(r"^[0-9]+$"): tint
-        guard s.match(r"^[A-Za-z_]"): tenv[s]
-        guard s.starts("\""): tstring
-        error s
-      guard node.args.size == 0: inf_text node.text
-      guard node.text == "__apply":
-        ts = node.args.map(inf)
-        apply ts[0].params ts.slice(1)
-      guard node.text == "=>":
-        argst = node.args.slice(0 -1).map(t => t.text, new_var())
-        new_tenv = tenv ++ argst.dict()
-        new_ng = ng ++ set(argst.map(at => at.0))
-        tfunc argst.map(at => at.1) ++ [analyze(node.args[-1] new_ng new_tenv).type]
-      guard node.text == "->":
-        tfunc node.args.map(inf)
-      guard node.text == ".":
-        t = inf node.args[0]
-        tprop[t.name][node.args[1].text](t)
-      guard node.text == "=": tenv[node.args[0].text] := inf(node.args[1])
-      guard node.text == "__statement": node.args.map(inf)[-1]
-      guard node.text == "__index": inf(node.args[0]).params[0]
-      apply tenv[node.text].params node.args.map(inf)
-    node.type := inf(node)
-    node
+  def call a ng tenv:
+    let head a[0]
+    case head.text:
+      "=>":
+        let t tvar()
+        let ret analyze a[2] ng tenv ++ dict(a[1].text t)
+        tfunc [t ret]
+      _: squash(tenv[head.text])
+  def analyze node ng tenv:
+    node.type = case(node.text:
+      "__stmt"           : node.args.map(x => analyze x ng tenv).at(-1)
+      "__call"           : call node.args ng tenv
+      r"^true|false$"    : tbool
+      r"^[0-9]+\.[0-9]+$": tfloat
+      r"^[0-9]+$"        : tint
+      r"^[A-Za-z_]$"     : tenv[node.text]
+      r"\""              : tstring
+      _                  : throw node)
   analyze root set() dict(
     "!" tfunc([tbool tbool])
     "+" tfunc([tint tint tint])
@@ -313,180 +279,68 @@ def infer root:
     "false" tbool)
 
 test t:
+  def show t:
+    t.name ++ iif(t.params.size == 0 "" "[" ++ t.params.map(show).join(" ") ++ "]")
+  def simplify s:
+    var d dict()
+    var i 0
+    s.replace r"[0-9]+" n => iif d.has(n):
+      d[n]
+      d.set(n i); i += 1; i - 1
+  def eq expect source:
+    let node parse source
+    t.eq expect simplify(show(infer(node))) source
+
+  # primitives
+  eq "bool" "true"
+  eq "bool" "false"
+  eq "int" "1"
+  eq "float" "1.1"
+  eq "string" "\"s\""
+  eq "[0 0]" "x => x"
+
+  # container
+  eq "list[0]" "[]"
   return
-  def show_token t:
-    if t.args.size == 0:
-      return iif t.text == "" "()" t.text
-    switch t.text:
-      "__apply"    : show_token(t.args[0]) ++ "(" ++ t.args.slice(1).map(show_token).join(" ") ++ ")"
-      "__statement": t.args.map(show_token).join("; ")
-      "="          : show_token(t.args[0]) ++ " = " ++ t.args.slice(1).map(show_token).join(" ")
-      "->"         : "(() => " ++ show_token(t.args[-1]) ++ ")"
-      "=>"         : "(" ++ t.args.slice(0 -1).map(show_token).join(" ") ++ " => " ++ show_token(t.args[-1]) ++ ")"
-      _            : t.text ++ "(" ++ t.args.map(show_token).join(" ") ++ ")"
-
-  def show_type t:
-    def stringify t:
-      if t.params.size == 0:
-        return t.name
-      if t.name == "":
-        return "(" ++ t.params.map(stringify).join(" ") ++ ")"
-      t.name ++ "[" ++ t.params.map(stringify).join(" ") ++ "]"
-    def simplify t:
-      g = dict()
-      t.replace r"[0-9]+" p =>
-        guard g.has(p): g.get(p)
-        g[p] = g.size.string
-    simplify stringify(t)
-
-  def test_parser expectation source:
-    t.eq expectation show_token(parse(source)) source
-
-  # primitives
-  test_parser "1" "1"
-  test_parser "1.1" "1.1"
-  test_parser "id" "id"
-  test_parser "\"hi\"" "\"hi\""
-  test_parser "\"\\t\"" "\"\\t\""
-  test_parser "true" "true"
-  test_parser "tuple(a b)" "a,b"
-  test_parser "tuple(a b c)" "a,b,c"
-  test_parser "(a => a)" "a => a"
-  # container
-  test_parser "list()" "[]"
-  test_parser "list(1 2)" "[1 2]"
+  eq "list[int]" "[1]"
   # property access
-  test_parser ".(a b)" "a.b"
-  test_parser ".(a b)(c)" "a.b c"
-  test_parser ".(list() a)" "[].a"
-  test_parser "(p => +(.(p x) .(p y)))" "p => p.x + p.y"
+  eq "int" "[].size"
   # single operator
-  test_parser "!(true)" "!true"
+  eq "bool" "!true"
   # binary operators
-  test_parser "+(1 2)" "1 + 2"
-  test_parser "+(1 +(2 3))" "1 + 2 + 3"
-  test_parser "+(*(1 2) 3)" "1 * 2 + 3"
-  test_parser "!=(1 1)" "1 != 1"
-  test_parser "+=(a 1)" "a += 1"
-  test_parser "+=(a +(1 2))" "a += 1 + 2"
-  # parentheses
-  test_parser "1" "(1)"
-  test_parser "+(+(1 2) 3)" "(1 + 2) + 3"
-  test_parser "*(1 +(2 3))" "1 * (2 + 3)"
-  test_parser "*(+(1 2) 3)" "(1 + 2) * 3"
+  eq "int" "1 + 2"
   # definition
-  test_parser "a = 1" "a = 1"
-  test_parser "(() => 1)" "() => 1"
-  test_parser "f = (a => a)" "def f a: a"
-  test_parser "a = +(1 2)" "a = 1 + 2"
-  test_parser "f = (a => a)" "def f a:\n  a"
-  test_parser "f = (a => a; b)" "def f a:\n  a\n  b"
-  test_parser "f = (a => b = 1; +(a b))" "def f a:\n  b = 1\n  a + b"
+  eq "int" "a = 1"
+  eq "[0 0]" "a = x => x"
+  eq "(int)" "f = () => 1"
+  eq "[0 0]" "def f a: a"
   # function call
-  test_parser "f()" "f()"
-  test_parser "f(1)" "f(1)"
-  test_parser "f(+(1 2))" "f(1 + 2)"
+  eq "int" "f = () => 1\nf()"
   # method call
-  test_parser ".(f m)" "f.m"
-  test_parser ".(f 1)" "f.1"
-  test_parser ".(f m)()" "f.m()"
-  test_parser ".(f m)(a)" "f.m(a)"
-  test_parser ".(f m)(a b)" "f.m(a b)"
+  eq "list[int]" "[1].map(x => x + 1)"
   # index access
-  test_parser "__index(x 1)" "x[1]"
-  test_parser "__index(x 1 2)" "x[1 2]"
+  eq "int" "[1][0]"
   # steps
-  test_parser "a; b" "a\nb"
-  test_parser "a(b); c" "a b\nc"
-  test_parser "a; b(c)" "a\nb c"
-  # block
-  test_parser "a(b)"      "a: b"
-  test_parser "a(b(c))"   "a: b c"
-  test_parser "a(b c)"    "a b: c"
-  test_parser "a(b c(d))" "a b: c d"
-  # indent
-  test_parser "a(b)"            "a:\n  b"
-  test_parser "a(b); c"         "a:\n  b\nc"
-  test_parser "a(b; c)"         "a:\n  b\n  c"
-  test_parser "a(b(c))"         "a:\n  b:\n    c"
-  test_parser "a(b c)"          "a b:\n  c"
-  test_parser "a(b c(d))"       "a b:\n  c d"
-  test_parser "a(b c; d)"       "a b:\n  c\n  d"
-  test_parser "a(b c(d); e)"    "a b:\n  c d\n  e"
-  test_parser "a(b c(d e))"     "a b:\n  c d:\n  e"
-  test_parser "a(b c(d e(f)))"  "a b:\n  c d:\n  e f"
-  # comment
-  test_parser "a = 1" "#comment\na = 1 # comment\n#comment"
-  test_parser "a(b; c)" "a:\n  #comment\n  b\n  #comment\n  c\n  # comment"
+  eq "int" "true\n1"
   # combinations
-  test_parser "!(a(b))" "!a(b)"
-  test_parser "+(a(b) c)" "a(b) + c"
-  test_parser ".(__index(a b) c)" "a[b].c"
-  test_parser ".(__index(a b) c)(d)" "a[b].c(d)"
-  # edge case
-  test_parser "1" "1\n"
-  test_parser "" " "
-  test_parser "" "\n"
-
-  def test_show expectation ty:
-    t.eq expectation show_type(ty)
-  ta = type "a" []
-  test_show "a" ta
-  test_show "(a a)" type("" [ta ta])
-  test_show "t[a a]" type("t" [ta ta])
-
-  def test_infer expectation source:
-    node = parse source
-    t.eq expectation show_type(infer(node).type) source ++ " -> " + show_token(node)
-
-  # primitives
-  test_infer "bool" "true"
-  test_infer "bool" "false"
-  test_infer "int" "1"
-  test_infer "float" "1.1"
-  test_infer "string" "\"s\""
-  test_infer "(0 0)" "x => x"
-  # container
-  test_infer "list[0]" "[]"
-  test_infer "list[int]" "[1]"
-  # property access
-  test_infer "int" "[].size"
-  # single operator
-  test_infer "bool" "!true"
-  # binary operators
-  test_infer "int" "1 + 2"
-  # definition
-  test_infer "int" "a = 1"
-  test_infer "(0 0)" "a = x => x"
-  test_infer "(int)" "f = () => 1"
-  test_infer "(0 0)" "def f a: a"
-  # function call
-  test_infer "int" "f = () => 1\nf()"
-  # method call
-  test_infer "list[int]" "[1].map(x => x + 1)"
-  # index access
-  test_infer "int" "[1][0]"
-  # steps
-  test_infer "int" "true\n1"
-  # combinations
-  test_infer "int" "def f x: x + 1\ndef g x: x + 2\nf(1) + g(1)"
-  #test_infer "_ f g x = g (f x)" "((1 2) (2 3) 1 3)"
-  #test_infer "_ x y z = x z (y z)" "((1 2 3) (1 2) 1 3)"
-  #test_infer "_ b x = if (x b) x (= _ x b)" "(1 (1 bool) (1 1))"
-  #test_infer "_ x = if true x (if x true false)" "(bool bool)"
-  #test_infer "_ x y = if x x y" "(bool bool bool)"
-  #test_infer "_ n = (_ x = (x (_ y = y))) (_ f = f n)" "(1 1)"
-  #test_infer "_ x y = x y" "((1 2) 1 2)"
-  #test_infer "_ x y = x (y x)" "((1 2) ((1 2) 1) 2)"
-  #test_infer "_ h t f x = f h (t f x)" "(1 ((1 2 3) 4 2) (1 2 3) 4 3)"
-  #test_infer "_ x y = x (y x) (y x)" "((1 1 2) ((1 1 2) 1) 2)"
-  #test_infer "id x = x\nf y = id (y id)" "(((1 1) 2) 2)"
-  #test_infer "f x = x\ng = if (f true) (f 1) (f 2)" "int"
-  #test_infer "f x = 3\ng = (f true) + (f 4)" "int"
-  #test_infer "f x = x\ng y = y\nh b = if b (f g) (g f)" "(bool (1 1))"
-  #test_infer "g1 x = x f\ng2 x = x f\nh b f z = if b (g1 z g2) (g2 z g1)" "(bool 1 (1 ((1 2) 2) 3) 3)"
+  eq "int" "def f x: x + 1\ndef g x: x + 2\nf(1) + g(1)"
+  #eq "_ f g x = g (f x)" "((1 2) (2 3) 1 3)"
+  #eq "_ x y z = x z (y z)" "((1 2 3) (1 2) 1 3)"
+  #eq "_ b x = if (x b) x (= _ x b)" "(1 (1 bool) (1 1))"
+  #eq "_ x = if true x (if x true false)" "(bool bool)"
+  #eq "_ x y = if x x y" "(bool bool bool)"
+  #eq "_ n = (_ x = (x (_ y = y))) (_ f = f n)" "(1 1)"
+  #eq "_ x y = x y" "((1 2) 1 2)"
+  #eq "_ x y = x (y x)" "((1 2) ((1 2) 1) 2)"
+  #eq "_ h t f x = f h (t f x)" "(1 ((1 2 3) 4 2) (1 2 3) 4 3)"
+  #eq "_ x y = x (y x) (y x)" "((1 1 2) ((1 1 2) 1) 2)"
+  #eq "id x = x\nf y = id (y id)" "(((1 1) 2) 2)"
+  #eq "f x = x\ng = if (f true) (f 1) (f 2)" "int"
+  #eq "f x = 3\ng = (f true) + (f 4)" "int"
+  #eq "f x = x\ng y = y\nh b = if b (f g) (g f)" "(bool (1 1))"
+  #eq "g1 x = x f\ng2 x = x f\nh b f z = if b (g1 z g2) (g2 z g1)" "(bool 1 (1 ((1 2) 2) 3) 3)"
   ## recursive
-  #test_infer "f x = (f x)" "(1 2)"
+  #eq "f x = (f x)" "(1 2)"
   # type errors
   #reject("(+ 1 true)")
 

@@ -1,22 +1,25 @@
 struct token:
   text string
   pos  int
-
-enum ast:
-  node token
-  call list st
-  stmt list st
+  args list token
 
 def parse source:
+  let eot token "" 0 []
+
+  def stmt a:
+    token "__stmt" 0 a
+
+  def call a:
+    token "__call" 0 a
+
   if source.trim().size == 0:
     return stmt []
 
   # operator | parenthesis | string | number | id | comment and spaces
   let regexp r'([!+\-*/%<>:!=^|&]+|[()\[\]{}]|r?"[^]*?(?<!\\)"|r?"[^]*?(?<!\\)"|-?[0-9]+(?:\.[0-9]+)|[0-9A-Za-z_]+|(?:#[^\n]*|[ \n])+)'
-  let tokens source.trim().split(regexp).filter(s => s.size > 0).mapi(token)
+  let tokens source.trim().split(regexp).filter(s => s.size > 0).mapi(t,i => token t i [])
 
   var pos 0
-  let eot token("" 0)
   def peek:
     iif pos < tokens.size:
       tokens[pos]
@@ -56,7 +59,7 @@ def parse source:
       a[0]
       call a
   def alias t a:
-    node token(a t.pos)
+    token a t.pos t.args
   def parse_unit:
     def suffix t:
       let adjacent peek()
@@ -64,24 +67,24 @@ def parse source:
       iif:
         adjacent.text == "(" : pos += 1; suffix call([t] ++ until(")"))
         adjacent.text == "[" : pos += 1; suffix call([alias(adjacent "__index") t] ++ until("]"))
-        adjacent.text == "." : pos += 1; suffix call([node(next) t node(consume())])
+        adjacent.text == "." : pos += 1; suffix call([next t consume()])
         next.text     == "=>": pos += 1; call [alias(next "fn") t parse_block()]
-        next.text     == "," : suffix call([node(consume()) t node(consume())])
+        next.text     == "," : suffix call([consume() t consume()])
         t
     let t consume()
     suffix case(t.text:
-      "!": call [node(t) parse_unit()]
-      "-": call [node(t) parse_unit()]
+      "!": call [t parse_unit()]
+      "-": call [t parse_unit()]
       "[": call [alias(t "list")] ++ until("]")
       "(": squash until(")")
       ":": parse_block()
-      _ : node t)
+      _ : t)
   def parse_exp:
     def is_op2 s:
       s.match(r"^:?[!+\-*/%<>!=^~|&]") && s != "!"
     let lhs parse_unit()
     iif is_op2(read().text):
-      call [node(consume()) lhs parse_exp()]
+      call [consume() lhs parse_exp()]
       lhs
   def parse_line:
     def f t:

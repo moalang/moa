@@ -33,7 +33,7 @@ const parse = source => {
              close === '['  ? ++pos && suffix(call(['__index', t, ...until(']')])) :
              next  === ','  ? suffix([t, ...many(t => t === ',' && ++pos && consume())]) :
              next  === '.'  ? ++pos && suffix([next, t, consume()]) :
-             next  === '=>' ? ++pos && ['fn', t, parse_block()] :
+             next  === '=>' ? ++pos && [next, t, parse_block()] :
              t
     }
     const t = consume()
@@ -87,7 +87,7 @@ if (require.main === module) {
   test('"\\\\""', '"\\\\""')
   test('r"\\t"', 'r"\\t"')
   test("r'\\t'", "r'\\t'")
-  test('(fn a b)', 'a => b')
+  test('(=> a b)', 'a => b')
 
   // container
   test('(__call list)', '[]')
@@ -169,14 +169,14 @@ if (require.main === module) {
   test('(. (__call list) size)', '[].size')
   test('((. (list 1) m) a)', '[1].m a')
   test('((. (list 1) m) a)', '[1].m(a)')
-  test('((. (list 1) m) (fn x (>= x 1)))', '[1].m(x => x >= 1)')
-  test('(fn p (+ (. p x) (. p y)))', 'p => p.x + p.y')
-  test('(fn (a b) c)', 'a,b => c')
-  test('(fn (a b c) d)', 'a,b,c => d')
-  test('(fn a (b c))', 'a => b c')
-  test('(fn a (+ 1 2))', 'a => 1 + 2')
-  test('(fn a 1)', 'a =>\n  1')
-  test('(fn a (__pack 1 2))', 'a =>\n  1\n  2')
+  test('((. (list 1) m) (=> x (>= x 1)))', '[1].m(x => x >= 1)')
+  test('(=> p (+ (. p x) (. p y)))', 'p => p.x + p.y')
+  test('(=> (a b) c)', 'a,b => c')
+  test('(=> (a b c) d)', 'a,b,c => d')
+  test('(=> a (b c))', 'a => b c')
+  test('(=> a (+ 1 2))', 'a => 1 + 2')
+  test('(=> a 1)', 'a =>\n  1')
+  test('(=> a (__pack 1 2))', 'a =>\n  1\n  2')
 
   // edge case
   test('1', '1\n')
