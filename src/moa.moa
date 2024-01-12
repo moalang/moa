@@ -12,7 +12,7 @@ enum ast:
 
 def parse source:
   if source.trim().size == 0:
-    return []
+    return stmt []
 
   # operator | parenthesis | string | number | id | comment and spaces
   let regexp r'([!+\-*/%<>:!=^|&]+|[()\[\]{}]|r?"[^]*?(?<!\\)"|r?"[^]*?(?<!\\)"|-?[0-9]+(?:\.[0-9]+)|[0-9A-Za-z_]+|(?:#[^\n]*|[ \n])+)'
@@ -32,7 +32,11 @@ def parse source:
     #while pos < tokens.size && f read(): yield g()
     let a []
     while pos < tokens.size && f(read()):
-      a.push g()
+      let prev pos
+      let item g()
+      if prev == pos:
+        break
+      a.push item
     a
   def until s:
     def check t:
@@ -49,9 +53,7 @@ def parse source:
     pos += 1
     t
   def indent t:
-    iif t.text.has "\n":
-      t.text.split("\n").at(-1).size
-      throw("not break line" t)
+    t.text.split("\n").at(-1).size
   def squash a:
     iif a.size == 1:
       a[0]
@@ -67,7 +69,7 @@ def parse source:
         adjacent.text == "[" : pos += 1; suffix call([alias(adjacent "__index") t] ++ until("]"))
         adjacent.text == "." : pos += 1; suffix call([node(next) t node(consume())])
         next.text     == "=>": pos += 1; call [alias(next "fn") t parse_block()]
-        next.text     == "," : suffix call([adjacent t] ++ many((t => t == "," && bool(pos+=1)) consume))
+        next.text     == "," : suffix call([node(consume()) t node(consume())])
         t
     let t consume()
     suffix case(t.text:
@@ -112,7 +114,12 @@ test t "parser":
         o.size == 1: stringify o[0]
         "(__pack " ++ o.map(stringify).join(" ") ++ ")"
   def eq expect source:
-    t.eq expect stringify(parse(source)) source
+    let actual stringify(parse(source))
+    if expect != actual:
+      log " Expet:" expect
+      log "Actual:" actual
+      log "Source:" source
+    t.eq expect actual
 
   # primitives
   eq "1" "1"
@@ -172,7 +179,6 @@ test t "parser":
   eq "(a b)" "a:\n  b"
   eq "(a (b c))" "a:\n  b:\n    c"
   eq "(a (b (__pack c d)))" "a:\n  b:\n    c\n    d"
-  return
   eq "(a (__pack (b c) d))" "a:\n  b:\n    c\n  d"
   eq "(__pack (a (b c)) d)" "a:\n  b:\n    c\nd"
   eq "(__pack (a (__pack b (c d) e)) f)" "a:\n  b\n  c:\n    d\n  e\nf"
@@ -200,7 +206,7 @@ test t "parser":
   eq "((. (list 1) m) (fn x (>= x 1)))" "[1].m(x => x >= 1)"
   eq "(fn p (+ (. p x) (. p y)))" "p => p.x + p.y"
   eq "(fn (, a b) c)" "a,b => c"
-  eq "(fn (, a b c) d)" "a,b,c => d"
+  eq "(fn (, (, a b) c) d)" "a,b,c => d"
   eq "(fn a (b c))" "a => b c"
   eq "(fn a (+ 1 2))" "a => 1 + 2"
   eq "(fn a 1)" "a =>\n  1"

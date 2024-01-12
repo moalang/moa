@@ -4,7 +4,7 @@ const { evaluate } = require('./interpriter.js')
 const fs = require('fs')
 
 const moa = fs.readFileSync(__dirname + '/moa.moa', 'utf8')
-const log = o => (console.dir(typeof o === 'function' ? o.toString() : o, {depth: null}), o)
+const log = (...a) => (console.dir(a, {depth: null}), a[0])
 const fail = m => { throw Error(m) }
 const node = parse(moa + '\ncompile_to_js ' + JSON.stringify(moa))
 const js = evaluate(node, {moa, fail, log})

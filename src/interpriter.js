@@ -152,7 +152,7 @@ const execute = (node, env) => {
   const apply = a =>
     a.length === 0 ? fail('empty apply', node) :
     a.length === 1 ? run(a[0]) :
-    a[0] === 'if' ? pack([run(a.slice(1, -1)) && run(a.at(-1)), _void]) :
+    a[0] === 'if' ? run(a.slice(1, -1)) && run(a.at(-1)) :
     a[0] === 'iif' ? iif(a.slice(1)) :
     a[0] === 'catch' ? attempt(() => run(a[1]), e => rescue(e, a[2])) :
     a[0] === 'return' ? new Return(run(a.slice(1))) :
@@ -162,7 +162,7 @@ const execute = (node, env) => {
     a[0] === 'let' ? insert(a[1], run(a.slice(2))) :
     a[0] === 'var' ? insert(a[1], run(a.slice(2))) :
     a[0] === 'def' ? insert(a[1], make_func(a.slice(2, -1), index(a, -1))) :
-    a[0] === 'test' ? make_func(a[1], a.at(-1))({eq: (a, b, c) => comparable(a) === comparable(b) || fail('ne', literal(a), literal(b), c)}) :
+    a[0] === 'test' ? make_func(a[1], a.at(-1))({eq: (a, b) => comparable(a) === comparable(b) || (fail('ne', literal(a), literal(b)))}) :
     a[0] === 'struct' ? insert(a[1], def_struct(unpack(a[2]))) :
     a[0] === 'enum' ? insert(a[1], def_enum(unpack(a[2]))) :
     a[0] === '__pack' ? pack(a.slice(1)) :
@@ -184,8 +184,7 @@ const execute = (node, env) => {
     s === 'return' ? new Return(_void) :
     s.startsWith('r"') ? new RegExp(s.slice(2, -1), 'g') :
     s.startsWith("r'") ? new RegExp(s.slice(2, -1), 'g') :
-    //s.startsWith('"') ? JSON.parse(s.replace(/\n/g, '\\n').replace(/\t/g, '\\t')) :
-      s.startsWith('"') ? s.slice(1, -1).replace(/\\./g, s => unquote(s[1])) :
+    s.startsWith('"') ? s.slice(1, -1).replace(/\\./g, s => unquote(s[1])) :
     (m = s.match(/^(-?[0-9]+)(d|h|m|s|ms|us)/)) ? new Duration(parseFloat(m[1]), m[2]) :
     s.match(/^-?[0-9]/) ? parseFloat(s) :
     s in embedded ? embedded[s] : lookup(s)
@@ -197,17 +196,20 @@ module.exports = { evaluate }
 if (require.main === module) {
   const eq = (expect, src) => {
     const actual = attempt(() => evaluate(parse(src), {}), e => e)
-    const a = comparable(actual)
     const e = comparable(expect)
-    if (a === e) {
+    const a = comparable(actual)
+    if (e === a) {
       put('.')
     } else {
       puts()
-      puts(`Expect: ${a}`)
-      puts(`Actual: ${e}`)
+      puts(`Expect: ${e}`)
+      puts(`Actual: ${a}`)
       puts(`Source: ${JSON.stringify(src)}`)
       put('Nodes : ')
       log(parse(src))
+      if (actual instanceof Error) {
+        puts(actual.stack)
+      }
       throw Error('Test failed')
     }
   }
@@ -275,8 +277,8 @@ if (require.main === module) {
 
   // statement
   test(2, '1\n2')
-  test(_void, 'if true: 1')
-  test(_void, 'if true: return')
+  test(1, 'if true: return 1\n2')
+  test(2, 'if false: return 1\n2')
   test(1, 'def f n: n\nif true: return f 1')
   test(1, 'if true: return 1\nthrow 2')
   test(2, 'if false: return 1\n2')
@@ -372,6 +374,7 @@ if (require.main === module) {
   // edge case
   test(1, 'var a 0\ndef f:\n  def g: a += 1\n  g()\nf()\na')
   test(1, 'let a case 0:\n  0: 1\n  1: 2')
+  test(1, 'def f a b: a\nif true:\n  f "c" 1\n1')
 
   puts('ok')
 }
