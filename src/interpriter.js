@@ -28,12 +28,10 @@ const put = (...a) => { process.stdout.write(a.map(string).join(' ')); return a[
 const puts = (...a) => { console.log(a.map(string).join(' ')); return a[0] }
 const attempt = (f, g) => { try { return f() } catch (e) { return g(e) } }
 const range = (n, m) => [...Array(n)].map((_, i) => i + (m || 0))
-const index = (o, i) => Array.isArray(o) ? index_array(o, i) : index_dict(o, i)
-const index_array = (a, i) =>
+const index = (a, i) =>
   i >= 0 && i < a.length ? a[i] :
   i < 0 && a.length + i >= 0 && a.length + i < a.length ? a[a.length + i] :
   fail('OutOfIndex', i)
-const index_dict = (d, k) => d.has(k) ? d.get(k) : fail('KeyNotFound', i)
 const comparable = x =>
   x === undefined ? '' :
   x instanceof Error ? literal(x) :
@@ -61,7 +59,9 @@ const embedded = {
   '!=': (l, r) => comparable(l) !== comparable(r),
   '++': (l, r) => l instanceof Map ? new Map([...l, ...r]) : l.concat(r),
   list: (...a) => new List().concat(a),
-  dict: (...a) => new Map(range(a.length / 2).map(i => [a[i*2], a[i*2+1]])),
+  dict: (...a) => a.length === 1 ?
+    new Map(a[0]) :
+    new Map(range(a.length / 2).map(i => [a[i*2], a[i*2+1]])),
   set: (...a) => new Set(a),
   bool: o => Boolean(o),
   int: s => parseInt(s),
@@ -95,6 +95,11 @@ const methods = {
     join: a => s => a.map(string).join(s),
     push: a => x => a.push(x),
   },
+  dict: {
+    get: d => k => d.has(k) ? d.get(k) : fail('KeyNotFound', k),
+    set: d => (k,v) => d.set(k, v),
+    has: d => k => d.has(k),
+  },
   number: {
     string: n => n.toString(),
   },
@@ -110,6 +115,7 @@ const execute = (node, env) => {
   const run = node => Array.isArray(node) ? apply(node) : atom(node)
   const prop = (obj, key) =>
     obj instanceof List && key in methods.list ? methods.list[key](obj) :
+    obj instanceof Map && key in methods.dict ? methods.dict[key](obj) :
     typeof obj === 'object' && key in obj ? bind(obj, obj[key]) :
     key in methods[typeof obj] ? methods[typeof obj][key](obj) :
     fail('Missing', key, 'of', typeof obj === 'object' ? Object.keys(obj) : typeof obj)
@@ -259,7 +265,8 @@ if (require.main === module) {
   test(2, '[1 2][-1]')
   test({}, 'dict()')
   test({a: 1}, 'dict("a" 1)')
-  test(1, 'dict("a" 1)["a"]')
+  test({a: 1}, 'dict([tuple("a" 1)])')
+  test(new Error('KeyNotFound a'), 'dict().get("a")')
   test(new Set(), 'set()')
 
   // branch
