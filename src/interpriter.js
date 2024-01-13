@@ -5,7 +5,12 @@ class List extends Array {
   get size() { return this.length }
 }
 class Tuple extends Array { }
-class SoftError extends Error {}
+class SoftError extends Error {
+  constructor(a) {
+    super(a.join(' '))
+    this.id = a[0]
+  }
+}
 class Return { constructor(ret) { this.ret = ret } }
 class Continue { }
 class Break { }
@@ -70,7 +75,7 @@ const embedded = {
   duration: (...a) => new Duration(...a),
   tuple: (...a) => new Tuple().concat(a),
   ref: ref => ({ref}),
-  throw: (...a) => { throw new SoftError(a.map(string).join(' ')) },
+  throw: (...a) => { throw new SoftError(a.map(string)) },
   continue: new Continue(),
   break: new Break(),
   __call: f => f(),
@@ -117,7 +122,7 @@ const execute = (node, env) => {
     obj instanceof List && key in methods.list ? methods.list[key](obj) :
     obj instanceof Map && key in methods.dict ? methods.dict[key](obj) :
     typeof obj === 'object' && key in obj ? bind(obj, obj[key]) :
-    key in methods[typeof obj] ? methods[typeof obj][key](obj) :
+    typeof obj !== 'object' && key in methods[typeof obj] ? methods[typeof obj][key](obj) :
     fail('Property', key, 'of', typeof obj === 'object' ? Object.keys(obj) : typeof obj)
   const lookup = key => key in env ? env[key].value : fail('Missing', key, 'in', Object.keys(env))
   const insert = (key, value) => reserved.includes(key) ? fail('Reserved', key) :
