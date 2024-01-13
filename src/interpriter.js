@@ -105,8 +105,12 @@ const methods = {
   },
   dict: {
     get: d => k => d.has(k) ? d.get(k) : fail('KeyNotFound', k),
-    set: d => (k,v) => d.set(k, v),
+    set: d => (k,v) => (d.set(k, v), v),
     has: d => k => d.has(k),
+  },
+  set: {
+    set: s => k => (b => (s.set(k), b))(s.has(k)),
+    has: s => k => s.has(k),
   },
   number: {
     string: n => n.toString(),
@@ -253,6 +257,7 @@ if (require.main === module) {
   test(/[a-z]\t/g, 'r"[a-z]\\t"')
   test(1, '(a => a)(1)')
   test(3, '(a,b => a + b)(1 2)')
+  test(6, '(a,b,c => a + b + c)(1 2 3)')
   test('s', '(a => a)("s")')
 
   // types

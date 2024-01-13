@@ -71,6 +71,10 @@ def parse source:
   def alias t a:
     token a t.pos t.args t.type
   def parse_unit:
+    def check_next_arg t:
+      iif t.text == ",":
+        pos += 1; true
+        false
     def suffix t:
       let adjacent peek()
       let next read()
@@ -79,7 +83,8 @@ def parse source:
         adjacent.text == "[" : pos += 1; suffix call([alias(adjacent "__index") t] ++ until("]"))
         adjacent.text == "." : pos += 1; suffix call([next t consume()])
         next.text     == "=>": pos += 1; call [next t parse_block()]
-        next.text     == "," : suffix call([consume() t consume()])
+        #next.text     == "," : suffix call([consume() t consume()])
+        next.text     == "," : let remain many(check_next_arg consume); suffix call([next t] ++ remain)
         t
     let t consume()
     suffix case(t.text:
@@ -216,7 +221,7 @@ test t "parser":
   eq "((. (list 1) m) (=> x (>= x 1)))" "[1].m(x => x >= 1)"
   eq "(=> p (+ (. p x) (. p y)))" "p => p.x + p.y"
   eq "(=> (, a b) c)" "a,b => c"
-  eq "(=> (, (, a b) c) d)" "a,b,c => d"
+  eq "(=> (, a b c) d)" "a,b,c => d"
   eq "(=> a (b c))" "a => b c"
   eq "(=> a (+ 1 2))" "a => 1 + 2"
   eq "(=> a 1)" "a =>\n  1"
@@ -262,9 +267,6 @@ def infer root:
     a.name = "__ref_" ++ a.name
     a.params = [b]
     a
-  def copy a b:
-    a.name = b.name
-    a.params = b.params
   def fresh ng t:
     let memory dict()
     def rec t:
@@ -273,11 +275,10 @@ def infer root:
         is_tvar(t): iif:
           ng.has(t.name): t
           memory.has(t.name): memory.get(t.name)
-          let tn tnew(); memory.set(t.name tn); tn
+          memory.set(t.name tnew())
         type t.name t.params.map(rec)
     rec(t)
-
-  def squash t:
+  def no_more t:
     iif t.name == "" && t.params[0].name == "__more":
       t.params[1]
       t
@@ -311,14 +312,16 @@ def infer root:
     let head nodes[0]
     case head.text:
       "=>":
-        # TODO: accept two ore more arguments
-        let t tnew()
-        let ret analyze nodes[2] ng ++ set(t.name) tenv ++ dict(nodes[1].text t)
-        tfunc [t ret]
+        let anodes iif nodes[1].text == "__call":
+          nodes[1].args.slice(1)
+          [nodes[1]]
+        let args anodes.map(node => tuple(node.text tnew()))
+        let new_ng ng ++ args.map(x => x.1.name)
+        let new_tenv tenv ++ dict(args)
+        let ret analyze nodes.at(-1) new_ng new_tenv
+        tfunc args.map(arg => arg.1) ++ [ret]
       ".":
         let target analyze nodes[1] ng tenv
-        if is_tvar target:
-          thorw "NotSupportedYet"
         tprops.get(target.name).get(nodes[2].text)(target)
       "let":
         let t analyze nodes[2] ng tenv
@@ -345,18 +348,16 @@ def infer root:
           let ret tnew()
           unify tfunc(a ++ [ret]) f
           ng.add(ret.name)
-        squash apply(prune(f).params a)
+        no_more apply(prune(f).params a)
   def analyze node ng tenv:
-    iif node.type != tundef:
-      node.type
-      node.type = case(node.text:
-        "__stmt"           : node.args.map(x => analyze x ng tenv).at(-1)
-        "__call"           : call node.args ng tenv
-        r"^true|false$"    : tbool
-        r"^[0-9]+\.[0-9]+$": tfloat
-        r"^[0-9]+$"        : tint
-        r"\""              : tstring
-        _                  : fresh ng tenv.get(node.text))
+    node.type = case(node.text:
+      "__stmt"           : node.args.map(x => analyze x ng tenv).at(-1)
+      "__call"           : call node.args ng tenv
+      r"^true|false$"    : tbool
+      r"^[0-9]+\.[0-9]+$": tfloat
+      r"^[0-9]+$"        : tint
+      r"\""              : tstring
+      _                  : fresh ng tenv.get(node.text))
   analyze root set() dict(
     "!" tfunc([tbool tbool])
     "+" tfunc([tint tint tint])
@@ -367,7 +368,6 @@ def infer root:
     "list" tlist
     "true" tbool
     "false" tbool)
-  root.type
 
 test t:
   def show t:
@@ -376,10 +376,10 @@ test t:
       t.name ++ iif(t.params.size == 0 "" "(" ++ t.params.map(show).join(" ") ++ ")")
   def simplify s:
     var d dict()
-    var i 0
+    var i (-1)
     s.replace r"[0-9]+" n => iif d.has(n):
       d.get(n)
-      d.set(n i); i += 1; i - 1
+      d.set(n i+=1)
   def eq expect source:
     let node parse source
     t.eq expect simplify(show(infer(node))) source
@@ -394,6 +394,8 @@ test t:
   eq "float" "1.1"
   eq "string" "\"s\""
   eq "(0 0)" "x => x"
+  eq "(0 1 1)" "x,y => y"
+  eq "(0 1 2 2)" "x,y,z => z"
 
   # container
   eq "list(0)" "[]"
