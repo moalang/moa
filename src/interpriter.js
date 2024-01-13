@@ -118,7 +118,7 @@ const execute = (node, env) => {
     obj instanceof Map && key in methods.dict ? methods.dict[key](obj) :
     typeof obj === 'object' && key in obj ? bind(obj, obj[key]) :
     key in methods[typeof obj] ? methods[typeof obj][key](obj) :
-    fail('Missing', key, 'of', typeof obj === 'object' ? Object.keys(obj) : typeof obj)
+    fail('Property', key, 'of', typeof obj === 'object' ? Object.keys(obj) : typeof obj)
   const lookup = key => key in env ? env[key].value : fail('Missing', key, 'in', Object.keys(env))
   const insert = (key, value) => reserved.includes(key) ? fail('Reserved', key) :
     key in env ? fail('Existed', key) : (env[key] = {value}, value)
