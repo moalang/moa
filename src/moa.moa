@@ -286,13 +286,12 @@ def infer root:
     b = prune(b)
     let va is_tvar a
     let vb is_tvar b
-    let r iif:
+    iif:
       va && vb: tref a b
       va: tref a b
       vb: tref b a
       a.name == b.name && a.params.size == b.params.size: a.params.mapi(ap,i => unify(ap b.params[i])); a
       throw "InvalidType" a b
-    r
   def apply f a:
     iif:
       f.size == 0 && a.size > 0:
@@ -388,9 +387,6 @@ test t:
     let s catch show(infer(parse(source))) e => e.id
     t.eq "InvalidType" s
 
-  eq "(bool 1 (1 ((1 2) 2) 3) 3)"     "def h b f z:\n  def g1 x: x f\n  def g2 x: x f\n  iif b g1(z g2) g2(z g1)"
-  return
-
   # primitives
   eq "bool" "true"
   eq "bool" "false"
@@ -443,11 +439,11 @@ test t:
   eq "(((0 0) 1) 1)"                  "def id x: x\ndef f y: id y(id)\nf"
   eq "(bool (0 0))"                   "def f x: x\ndef g y: y\ndef h b: iif b f(g) g(f)"
   eq "(bool 1 (1 ((1 2) 2) 3) 3)"     "def h b f z:\n  def g1 x: x f\n  def g2 x: x f\n  iif b g1(z g2) g2(z g1)"
-  #eq "(bool 1 (1 ((1 2) 2) 3) 3)"     "def g1 x = x f; def g2 x = x f; def h b f z = iif b (g1 z g2) (g2 z g1)"
-
 
   # implicit curry
   #eq "((0 1) (1 2) 0 2)"              "def f g x: g (f x)"
+  #eq "(bool 1 (1 ((1 2) 2) 3) 3)"     "def _ b f z:\n  def g1 x: x f\n  def g2 x: x f\n  iif b g1(z g2) g2(z g1)"
+
 
   # implicity for all
   #eq "int"                            "def f x: x\ndef _: iif f(true) f(1) f(2)"
