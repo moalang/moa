@@ -62,7 +62,10 @@ const embedded = {
   '>=': (l, r) => comparable(l) >= comparable(r),
   '==': (l, r) => comparable(l) === comparable(r),
   '!=': (l, r) => comparable(l) !== comparable(r),
-  '++': (l, r) => l instanceof Map ? new Map([...l, ...r]) : l.concat(r),
+  '++': (l, r) =>
+    l instanceof Map ? new Map([...l, ...r]) :
+    l instanceof Set ? new Set([...l, ...r]) :
+    l.concat(r),
   list: (...a) => new List().concat(a),
   dict: (...a) => a.length === 1 ?
     new Map(a[0]) :
@@ -359,6 +362,7 @@ if (require.main === module) {
   test([1, 2], '[1] ++ [2]')
   test([[1], [2]], '[[1]] ++ [[2]]')
   test({a: 1, b: 3, c: 4}, 'dict("a" 1 "b" 2) ++ dict("b" 3 "c" 4)')
+  test(new Set([1, 2]), 'set(1) ++ set(2)')
 
   // runtime error
   test(Error('ZeroDivision'), '1 / 0')

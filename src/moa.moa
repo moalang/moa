@@ -251,20 +251,31 @@ def infer root:
     t.name.match(r"[0-9]")
   def prune t:
     t.params = t.params.map(prune)
-    iif t.name == "__ref":
-      t.params[0]
+    iif t.name.match(r"^__ref"):
+      prune t.params[0]
       t
   def tref a b:
     if !is_tvar(a):
       thorw "BugTRef"
     if a == b:
       return a
-    a.name = "__ref"
+    a.name = "__ref_" ++ a.name
     a.params = [b]
     a
   def copy a b:
     a.name = b.name
     a.params = b.params
+  def fresh ng t:
+    let memory dict()
+    def rec t:
+      t = prune(t)
+      iif:
+        is_tvar(t): iif:
+          ng.has(t.name): t
+          memory.has(t.name): memory.get(t.name)
+          let tn tnew(); memory.set(t.name tn); tn
+        type t.name t.params.map(rec)
+    rec(t)
 
   def squash t:
     iif t.name == "" && t.params[0].name == "__more":
@@ -275,12 +286,13 @@ def infer root:
     b = prune(b)
     let va is_tvar a
     let vb is_tvar b
-    iif:
+    let r iif:
       va && vb: tref a b
       va: tref a b
       vb: tref b a
       a.name == b.name && a.params.size == b.params.size: a.params.mapi(ap,i => unify(ap b.params[i])); a
       throw "InvalidType" a b
+    r
   def apply f a:
     iif:
       f.size == 0 && a.size > 0:
@@ -295,13 +307,14 @@ def infer root:
         unify f[0].params[0] a[0]
         apply f a.slice(1)
       unify f[0] a[0]; apply f.slice(1) a.slice(1)
+
   def call nodes ng tenv:
     let head nodes[0]
     case head.text:
       "=>":
         # TODO: accept two ore more arguments
         let t tnew()
-        let ret analyze nodes[2] ng tenv ++ dict(nodes[1].text t)
+        let ret analyze nodes[2] ng ++ set(t.name) tenv ++ dict(nodes[1].text t)
         tfunc [t ret]
       ".":
         let target analyze nodes[1] ng tenv
@@ -315,8 +328,10 @@ def infer root:
       "def":
         let fname nodes[1].text
         let args nodes.slice(2 (-1)).map(node => tuple(node.text tnew()))
-        let ret analyze nodes.at(-1) ng tenv ++ dict(args) ++ dict(fname tnew())
-        let f tfunc [ret] ++ args.map(arg => arg.1)
+        let new_ng ng ++ args.map(x => x.1.name)
+        let new_tenv tenv ++ dict(args) ++ dict(fname tnew())
+        let ret analyze nodes.at(-1) new_ng new_tenv
+        let f tfunc args.map(arg => arg.1) ++ [ret]
         tenv.set fname f
         f
       "__index":
@@ -328,30 +343,36 @@ def infer root:
         let f analyze head ng tenv
         let a nodes.slice(1).map(node => analyze(node ng tenv))
         if is_tvar(f):
-          unify tfunc(a ++ [tnew()]) f
+          let ret tnew()
+          unify tfunc(a ++ [ret]) f
+          ng.add(ret.name)
         squash apply(prune(f).params a)
   def analyze node ng tenv:
-    node.type = case(node.text:
-      "__stmt"           : node.args.map(x => analyze x ng tenv).at(-1)
-      "__call"           : call node.args ng tenv
-      r"^true|false$"    : tbool
-      r"^[0-9]+\.[0-9]+$": tfloat
-      r"^[0-9]+$"        : tint
-      r"\""              : tstring
-      _                  : tenv.get node.text)
+    iif node.type != tundef:
+      node.type
+      node.type = case(node.text:
+        "__stmt"           : node.args.map(x => analyze x ng tenv).at(-1)
+        "__call"           : call node.args ng tenv
+        r"^true|false$"    : tbool
+        r"^[0-9]+\.[0-9]+$": tfloat
+        r"^[0-9]+$"        : tint
+        r"\""              : tstring
+        _                  : fresh ng tenv.get(node.text))
   analyze root set() dict(
     "!" tfunc([tbool tbool])
     "+" tfunc([tint tint tint])
     "-" tfunc([tint tint tint])
     "*" tfunc([tint tint tint])
     "/" tfunc([tint tint tint])
+    "iif" tfunc([tbool tv1 tv1 tv1])
     "list" tlist
     "true" tbool
     "false" tbool)
+  root.type
 
 test t:
   def show t:
-    iif t.name == "__ref":
+    iif t.name.match(r"^__ref"):
       show t.params[0]
       t.name ++ iif(t.params.size == 0 "" "(" ++ t.params.map(show).join(" ") ++ ")")
   def simplify s:
@@ -366,6 +387,9 @@ test t:
   def reject source:
     let s catch show(infer(parse(source))) e => e.id
     t.eq "InvalidType" s
+
+  eq "(bool 1 (1 ((1 2) 2) 3) 3)"     "def h b f z:\n  def g1 x: x f\n  def g2 x: x f\n  iif b g1(z g2) g2(z g1)"
+  return
 
   # primitives
   eq "bool" "true"
@@ -406,22 +430,28 @@ test t:
   eq "int" "true\n1"
 
   # combinations
-  eq "int" "def f x: x + 1\ndef g x: x + 2\nf(1) + g(1)"
-  #eq "_ f g x = g (f x)" "((1 2) (2 3) 1 3)"
-  #eq "_ x y z = x z (y z)" "((1 2 3) (1 2) 1 3)"
-  #eq "_ b x = if (x b) x (= _ x b)" "(1 (1 bool) (1 1))"
-  #eq "_ x = if true x (if x true false)" "(bool bool)"
-  #eq "_ x y = if x x y" "(bool bool bool)"
-  #eq "_ n = (_ x = (x (_ y = y))) (_ f = f n)" "(1 1)"
-  #eq "_ x y = x y" "((1 2) 1 2)"
-  #eq "_ x y = x (y x)" "((1 2) ((1 2) 1) 2)"
-  #eq "_ h t f x = f h (t f x)" "(1 ((1 2 3) 4 2) (1 2 3) 4 3)"
-  #eq "_ x y = x (y x) (y x)" "((1 1 2) ((1 1 2) 1) 2)"
-  #eq "id x = x\nf y = id (y id)" "(((1 1) 2) 2)"
-  #eq "f x = x\ng = if (f true) (f 1) (f 2)" "int"
-  #eq "f x = 3\ng = (f true) + (f 4)" "int"
-  #eq "f x = x\ng y = y\nh b = if b (f g) (g f)" "(bool (1 1))"
-  #eq "g1 x = x f\ng2 x = x f\nh b f z = if b (g1 z g2) (g2 z g1)" "(bool 1 (1 ((1 2) 2) 3) 3)"
+  eq "int"                            "def f x: x + 1\ndef g x: x + 2\nf(1) + g(1)"
+  eq "((0 1 2) (0 1) 0 2)"            "def _ x y z: x z (y z)"
+  eq "(bool (bool bool) (bool bool))" "def _ b x: iif x(b) x (x => b)"
+  eq "(bool bool)"                    "def _ x: iif true x (iif x true false)"
+  eq "(bool bool bool)"               "def _ x y: iif x x y"
+  eq "(0 0)"                          "def _ n: (x => (x (y => y))) (f => f n)"
+  eq "((0 1) 0 1)"                    "def _ x y: x y"
+  eq "((0 1) ((0 1) 0) 1)"            "def _ x y: x (y x)"
+  eq "(0 ((0 1 2) 3 1) (0 1 2) 3 2)"  "def _ h t f x: f h (t f x)"
+  eq "((0 0 1) ((0 0 1) 0) 1)"        "def _ x y: x (y x) (y x)"
+  eq "(((0 0) 1) 1)"                  "def id x: x\ndef f y: id y(id)\nf"
+  eq "(bool (0 0))"                   "def f x: x\ndef g y: y\ndef h b: iif b f(g) g(f)"
+  eq "(bool 1 (1 ((1 2) 2) 3) 3)"     "def h b f z:\n  def g1 x: x f\n  def g2 x: x f\n  iif b g1(z g2) g2(z g1)"
+  #eq "(bool 1 (1 ((1 2) 2) 3) 3)"     "def g1 x = x f; def g2 x = x f; def h b f z = iif b (g1 z g2) (g2 z g1)"
+
+
+  # implicit curry
+  #eq "((0 1) (1 2) 0 2)"              "def f g x: g (f x)"
+
+  # implicity for all
+  #eq "int"                            "def f x: x\ndef _: iif f(true) f(1) f(2)"
+  #eq "int"                            "def f x = 3; def g = (f true) + (f 4)"
 
   # recursive
   eq "(0 1)" "def f x: f x"
