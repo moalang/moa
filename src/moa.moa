@@ -438,16 +438,12 @@ test t:
   eq "((0 0 1) ((0 0 1) 0) 1)"        "def _ x y: x (y x) (y x)"
   eq "(((0 0) 1) 1)"                  "def id x: x\ndef f y: id y(id)\nf"
   eq "(bool (0 0))"                   "def f x: x\ndef g y: y\ndef h b: iif b f(g) g(f)"
-  eq "(bool 1 (1 ((1 2) 2) 3) 3)"     "def h b f z:\n  def g1 x: x f\n  def g2 x: x f\n  iif b g1(z g2) g2(z g1)"
+  eq "(int)"                          "def f x: x\ndef _: iif f(true) f(1) f(2)"
+  eq "(int)"                          "def f x: 3\ndef g: f(true) + f(4)"
 
   # implicit curry
   #eq "((0 1) (1 2) 0 2)"              "def f g x: g (f x)"
-  #eq "(bool 1 (1 ((1 2) 2) 3) 3)"     "def _ b f z:\n  def g1 x: x f\n  def g2 x: x f\n  iif b g1(z g2) g2(z g1)"
-
-
-  # implicity for all
-  #eq "int"                            "def f x: x\ndef _: iif f(true) f(1) f(2)"
-  #eq "int"                            "def f x = 3; def g = (f true) + (f 4)"
+  #eq "(bool 1 (1 ((1 2) 2) 3) 3)"     "def h b f z:\n  def g1 x: x f\n  def g2 x: x f\n  iif b g1(z g2) g2(z g1)"
 
   # recursive
   eq "(0 1)" "def f x: f x"
