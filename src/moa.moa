@@ -39,7 +39,6 @@ def parse source:
       pos += 1
     peek()
   def many f g:
-    #while pos < tokens.size && f read(): yield g()
     let a []
     while pos < tokens.size && f(read()):
       let prev pos
@@ -83,7 +82,6 @@ def parse source:
         adjacent.text == "[" : pos += 1; suffix call([alias(adjacent "__index") t] ++ until("]"))
         adjacent.text == "." : pos += 1; suffix call([next t consume()])
         next.text     == "=>": pos += 1; call [next t parse_block()]
-        #next.text     == "," : suffix call([consume() t consume()])
         next.text     == "," : let remain many(check_next_arg consume); suffix call([next t] ++ remain)
         t
     let t consume()
@@ -242,16 +240,6 @@ def infer root:
     type "__more" [t]
   def tfunc types:
     type "" types
-  let tv1     tnew()
-  let tbool   type "bool" []
-  let tint    type "int" []
-  let tfloat  type "float" []
-  let tstring type "string" []
-  let tlist   tfunc [tmore(tv1) type("list" [tv1])]
-  let tprops  dict("list" dict(
-    "size" _ => tint
-    "map" t => tfunc([tfunc([t.params[0] tv1]) type("list" [tv1])])
-    ))
   def is_tvar t:
     t.name.match(r"[0-9]")
   def prune t:
@@ -282,6 +270,13 @@ def infer root:
     iif t.name == "" && t.params[0].name == "__more":
       t.params[1]
       t
+  def lambda nodes node ng tenv:
+    let args nodes.map(node => tuple(node.text tnew()))
+    let new_ng ng ++ args.map(x => x.1.name)
+    let new_tenv tenv ++ dict(args)
+    let ret analyze node new_ng new_tenv
+    tfunc args.map(arg => arg.1) ++ [ret]
+
   def unify a b:
     a = prune(a)
     b = prune(b)
@@ -307,7 +302,6 @@ def infer root:
         unify f[0].params[0] a[0]
         apply f a.slice(1)
       unify f[0] a[0]; apply f.slice(1) a.slice(1)
-
   def call nodes ng tenv:
     let head nodes[0]
     case head.text:
@@ -315,11 +309,7 @@ def infer root:
         let anodes iif nodes[1].text == "__call":
           nodes[1].args.slice(1)
           [nodes[1]]
-        let args anodes.map(node => tuple(node.text tnew()))
-        let new_ng ng ++ args.map(x => x.1.name)
-        let new_tenv tenv ++ dict(args)
-        let ret analyze nodes.at(-1) new_ng new_tenv
-        tfunc args.map(arg => arg.1) ++ [ret]
+        lambda anodes nodes.at(-1) ng tenv
       ".":
         let target analyze nodes[1] ng tenv
         tprops.get(target.name).get(nodes[2].text)(target)
@@ -329,11 +319,8 @@ def infer root:
         t
       "def":
         let fname nodes[1].text
-        let args nodes.slice(2 (-1)).map(node => tuple(node.text tnew()))
-        let new_ng ng ++ args.map(x => x.1.name)
-        let new_tenv tenv ++ dict(args) ++ dict(fname tnew())
-        let ret analyze nodes.at(-1) new_ng new_tenv
-        let f tfunc args.map(arg => arg.1) ++ [ret]
+        let ft tnew()
+        let f lambda nodes.slice(2 (-1)) nodes.at(-1) ng ++ set(ft.name) tenv ++ dict(fname ft)
         tenv.set fname f
         f
       "__index":
@@ -358,6 +345,17 @@ def infer root:
       r"^[0-9]+$"        : tint
       r"\""              : tstring
       _                  : fresh ng tenv.get(node.text))
+
+  let tv1     tnew()
+  let tbool   type "bool" []
+  let tint    type "int" []
+  let tfloat  type "float" []
+  let tstring type "string" []
+  let tlist   tfunc [tmore(tv1) type("list" [tv1])]
+  let tprops  dict("list" dict(
+    "size" _ => tint
+    "map" t => tfunc([tfunc([t.params[0] tv1]) type("list" [tv1])])
+    ))
   analyze root set() dict(
     "!" tfunc([tbool tbool])
     "+" tfunc([tint tint tint])
