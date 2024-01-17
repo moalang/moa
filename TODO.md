@@ -9,8 +9,7 @@
 - [x] Design how to infer any type for "if" and "while" -> void
 - [x] Syntax to catch exception -> a @ b, a @b c, a @b: c d, a @b.c => d
 - [x] Type inference
-- [ ] Compiler to JavaScript
-- [ ] Compiler to executable file via LLVM
+- [ ] Compiler to executable file via Go
 - [ ] HTTP server
 - [ ] Transactional database
 - [ ] Debugger

@@ -119,6 +119,17 @@ const methods = {
     int: b => Number(b),
   }
 }
+const fs = require('node:fs')
+const { execSync } = require('child_process')
+const tester = ({
+  eq: (a, b) => comparable(a) === comparable(b) || (fail('ne', literal(a), literal(b))),
+  go: (expect, src) => {
+    const go = "package main\n" + src + "\n"
+    fs.writeFileSync('/tmp/moa.go', go, {encoding: 'utf-8'})
+    const actual = execSync('command go run /tmp/moa.go', {encoding: 'utf-8'})
+    return expect === actual || fail('ne', expect, actual)
+  },
+})
 const _void = undefined
 const reserved = 'num decimal interface implementnum else void any moa test log math rand db use module bytes i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64'.split(' ')
 const evaluate = (node, obj) => execute(node, Object.fromEntries(Object.entries(obj).map(([key, value]) => [key, {value}])))
@@ -189,7 +200,7 @@ const execute = (node, env) => {
     a[0] === 'let' ? insert(a[1], run(a.slice(2))) :
     a[0] === 'var' ? insert(a[1], run(a.slice(2))) :
     a[0] === 'def' ? insert(a[1], make_func(a.slice(2, -1), index(a, -1))) :
-    a[0] === 'test' ? make_func(a[1], a.at(-1))({eq: (a, b) => comparable(a) === comparable(b) || (fail('ne', literal(a), literal(b)))}) :
+    a[0] === 'test' ? make_func(a[1], a.at(-1))(tester) :
     a[0] === 'struct' ? insert(a[1], def_struct(unpack(a[2]))) :
     a[0] === 'enum' ? insert(a[1], def_enum(unpack(a[2]))) :
     a[0] === '__pack' ? pack(a.slice(1)) :
@@ -333,6 +344,7 @@ if (require.main === module) {
   test(true, 'test t: t.eq 1 1')
   test(Error('ne 1 2'), 'test t: t.eq 1 2')
   test(Error('ne "a" "b"'), 'test t: t.eq "a" "b"')
+  test(true, 'test t: t.go "go" "import \\"fmt\\"\\nfunc main() { fmt.Printf(\\"go\\") }"')
 
   // operators
   test(false, '!true')
