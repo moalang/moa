@@ -1,5 +1,7 @@
 echo "Installer is under development..."
 
+# TODO: download files into ~/moa/
+
 OS="$(uname)" # Linux, Darwin
 ARCH="$(uname -m)" # arm64, x86_64, aarch64
 case "${SHELL}" in

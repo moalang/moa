@@ -314,6 +314,26 @@ def infer root:
         let t analyze nodes[2] ng tenv
         tenv.set nodes[1].text t
         t
+      "struct":
+        let targs nodes.slice(2 (-1)).map(t => tuple(t.text tnew()))
+        var generics dict(targs)
+        let body nodes.at(-1)
+        def swap_generic t:
+          iif generics.has(t) generics.get(t).name t
+        def to_prop line:
+          let a line.args
+          let t type(swap_generic(a[1].text) a.slice(2).map(t => swap_generic(t.text)))
+          tuple a[0].text t
+        let props case body.text:
+          "__stmt": body.args.map(to_prop)
+          "__call": [to_prop(body)]
+          _: throw "BugStruct"
+        let t type nodes[1].text targs.map(ta => ta.1)
+        let name nodes[1].text
+        let f tfunc(props.map(p => p.1) ++ [t])
+        tenv.set name f
+        tprops = tprops ++ dict(name dict(props))
+        f
       "def":
         let fname nodes[1].text
         let ft tnew()
@@ -349,7 +369,7 @@ def infer root:
   let tfloat  type "float" []
   let tstring type "string" []
   let tlist   tfunc [tmore(tv1) type("list" [tv1])]
-  let tprops  dict("list" dict(
+  var tprops  dict("list" dict(
     "size" _ => tint
     "map" t => tfunc([tfunc([t.params[0] tv1]) type("list" [tv1])])
     ))
@@ -409,6 +429,12 @@ test t:
   eq "int" "let a 1"
   eq "(int)" "def a: 1"
   eq "(0 0)" "def a b: b"
+  eq "(int a)" "struct a: b int"
+  eq "a" "struct a: b int\na(1)"
+  eq "(0 a(0))" "struct a t: b t"
+  eq "a(int)" "struct a t: b t\na(1)"
+  eq "(int 0 a(0))" "struct a t:\n  b int\n  c t"
+  eq "a(float)" "struct a t:\n  b int\n  c t\na(1 1.0)"
 
   # function call
   eq "int" "def f: 1\nf()"
@@ -449,4 +475,6 @@ test t:
   reject "1 + true"
 
 def compile_to_go source:
+  #let node infer(parse(source))
+  #log node
   "package main\nfunc main() { println(123) }"
