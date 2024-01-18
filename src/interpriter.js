@@ -98,6 +98,8 @@ const methods = {
     has: a => x => a.includes(x),
     map: a => f => a.map(x => f(x)),
     mapi: a => f => a.map((x, i) => f(x, i)),
+    map0: a => f => a.map(x => (x[0] = f(x[0]), x)),
+    map1: a => f => a.map(x => (x[1] = f(x[1]), x)),
     filter: a => f => a.filter(x => f(x)),
     slice: a => (n, m) => a.slice(n, m),
     join: a => s => a.map(string).join(s),
@@ -108,6 +110,7 @@ const methods = {
     set: d => (k,v) => (d.set(k, v), v),
     has: d => k => d.has(k),
     find: d => f => (x => x ? new Tuple().concat(x) : fail('NotFound', d))([...d.entries()].find(([k,v]) => f(k, v))),
+    //vmap: d => f => { for (const [k, v] of d) { d.set(k, f(v)); }; return d },
   },
   set: {
     set: s => k => (b => (s.set(k), b))(s.has(k)),
@@ -292,6 +295,7 @@ if (require.main === module) {
   test({a: 1}, 'dict("a" 1)')
   test({a: 1}, 'dict([tuple("a" 1)])')
   test(1, 'dict("a" 1).find(k,v => k == "a").1')
+  //test({a: 2}, 'dict("a" 1).vmap(v => v + 1)')
   test(new Error('KeyNotFound a'), 'dict().get("a")')
   test(new Set(), 'set()')
 
@@ -408,6 +412,8 @@ if (require.main === module) {
   test(true, '"a".match(r"a")')
   test([2], '[1].map x => x + 1')
   test([1, 2], '[1 1].mapi x,i => x + i')
+  test([new Tuple().concat([0, 3])], '[tuple(1 3)].map0 x => x - 1')
+  test([new Tuple().concat([1, 2])], '[tuple(1 3)].map1 x => x - 1')
   test([1], '[1 2].filter x => x == 1')
   test(0, '[].size')
   test([2], '[1 2].slice 1')
