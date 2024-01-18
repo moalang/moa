@@ -231,12 +231,28 @@ test t "parser":
 
 def infer root:
   var id 0
+  let tvoid type "void" []
   def tnew:
     type (id+=1).string []
   def tmore t:
     type "__more" [t]
   def tfunc types:
     type "" types
+  let tv1     tnew()
+  let tbool   type "bool" []
+  let tint    type "int" []
+  let tfloat  type "float" []
+  let tstring type "string" []
+  let tlist   tfunc [tmore(tv1) type("list" [tv1])]
+  var tprops  dict(
+    "list" dict(
+      "size" _ => tint
+      "map" t => tfunc([tfunc([t.params[0] tv1]) type("list" [tv1])])
+      )
+    "string" dict(
+      "trim" _ => tstring
+      ))
+
   def is_tvar t:
     t.name.match(r"[0-9]")
   def prune t:
@@ -309,7 +325,10 @@ def infer root:
         lambda anodes nodes.at(-1) ng tenv
       ".":
         let target analyze nodes[1] ng tenv
-        tprops.get(target.name).get(nodes[2].text)(target)
+        let tname iif is_tvar(target) tprops.find(k,v => v.has(nodes[2].text)).0 target.name
+        if is_tvar(target):
+          unify tenv.get(tname) target
+        tprops.get(tname).get(nodes[2].text)(target)
       "let":
         let t analyze nodes[2] ng tenv
         tenv.set nodes[1].text t
@@ -321,9 +340,9 @@ def infer root:
         def swap_generic t:
           iif generics.has(t) generics.get(t).name t
         def to_prop line:
-          let a line.args
-          let t type(swap_generic(a[1].text) a.slice(2).map(t => swap_generic(t.text)))
-          tuple a[0].text t
+          let a line.args.slice(1).map(t => swap_generic(t.text))
+          let t type(a[0] a.slice(1).map(s => type(s [])))
+          tuple line.args[0].text t
         let props case body.text:
           "__stmt": body.args.map(to_prop)
           "__call": [to_prop(body)]
@@ -363,24 +382,18 @@ def infer root:
       r"\""              : tstring
       _                  : fresh ng tenv.get(node.text))
 
-  let tv1     tnew()
-  let tbool   type "bool" []
-  let tint    type "int" []
-  let tfloat  type "float" []
-  let tstring type "string" []
-  let tlist   tfunc [tmore(tv1) type("list" [tv1])]
-  var tprops  dict("list" dict(
-    "size" _ => tint
-    "map" t => tfunc([tfunc([t.params[0] tv1]) type("list" [tv1])])
-    ))
   analyze root set() dict(
     "!" tfunc([tbool tbool])
     "+" tfunc([tint tint tint])
     "-" tfunc([tint tint tint])
     "*" tfunc([tint tint tint])
     "/" tfunc([tint tint tint])
+    "==" tfunc([tv1 tv1 tbool])
+    "!=" tfunc([tv1 tv1 tbool])
+    "if" tfunc([tbool tv1 tvoid])
     "iif" tfunc([tbool tv1 tv1 tv1])
     "list" tlist
+    "string" tstring
     "true" tbool
     "false" tbool)
 
@@ -418,6 +431,7 @@ test t:
 
   # property access
   eq "int" "[].size"
+  eq "(string string)" "def a b: b.trim"
 
   # single operator
   eq "bool" "!true"
@@ -429,12 +443,16 @@ test t:
   eq "int" "let a 1"
   eq "(int)" "def a: 1"
   eq "(0 0)" "def a b: b"
+
+  # struct
   eq "(int a)" "struct a: b int"
   eq "a" "struct a: b int\na(1)"
   eq "(0 a(0))" "struct a t: b t"
   eq "a(int)" "struct a t: b t\na(1)"
   eq "(int 0 a(0))" "struct a t:\n  b int\n  c t"
   eq "a(float)" "struct a t:\n  b int\n  c t\na(1 1.0)"
+  eq "(list(int) a)" "struct a: b list int"
+  eq "(list(a) a)" "struct a: a list a"
 
   # function call
   eq "int" "def f: 1\nf()"
@@ -444,6 +462,9 @@ test t:
 
   # index access
   eq "int" "[1][0]"
+
+  # block
+  eq "void" "if true: 1"
 
   # steps
   eq "int" "true\n1"
@@ -476,5 +497,6 @@ test t:
 
 def compile_to_go source:
   #let node infer(parse(source))
+  let node (parse(source))
   #log node
   "package main\nfunc main() { println(123) }"

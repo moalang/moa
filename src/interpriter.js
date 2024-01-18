@@ -107,6 +107,7 @@ const methods = {
     get: d => k => d.has(k) ? d.get(k) : fail('KeyNotFound', k),
     set: d => (k,v) => (d.set(k, v), v),
     has: d => k => d.has(k),
+    find: d => f => (x => x ? new Tuple().concat(x) : fail('NotFound', d))([...d.entries()].find(([k,v]) => f(k, v))),
   },
   set: {
     set: s => k => (b => (s.set(k), b))(s.has(k)),
@@ -290,6 +291,7 @@ if (require.main === module) {
   test({}, 'dict()')
   test({a: 1}, 'dict("a" 1)')
   test({a: 1}, 'dict([tuple("a" 1)])')
+  test(1, 'dict("a" 1).find(k,v => k == "a").1')
   test(new Error('KeyNotFound a'), 'dict().get("a")')
   test(new Set(), 'set()')
 
