@@ -1,3 +1,4 @@
+'use strict'
 // Convert Moa code to internal expression which looks like LISP
 
 const string = o =>

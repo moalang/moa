@@ -1,3 +1,4 @@
+'use strict'
 // Eval internal expression
 
 const { parse } = require('./parser.js')
@@ -7,8 +8,9 @@ class List extends Array {
 class Tuple extends Array { }
 class SoftError extends Error {
   constructor(a) {
-    super(a.join(' '))
-    this.id = a[0]
+    super(a.map(string).join(' '))
+    this.id = string(a[0])
+    this.detail = a
   }
 }
 class Return { constructor(ret) { this.ret = ret } }
@@ -78,7 +80,7 @@ const embedded = {
   duration: (...a) => new Duration(...a),
   tuple: (...a) => new Tuple().concat(a),
   ref: ref => ({ref}),
-  throw: (...a) => { throw new SoftError(a.map(string)) },
+  throw: (...a) => { throw new SoftError(a) },
   continue: new Continue(),
   break: new Break(),
   __call: f => f(),
@@ -145,7 +147,7 @@ const execute = (node, env) => {
     obj instanceof Map && key in methods.dict ? methods.dict[key](obj) :
     typeof obj === 'object' && key in obj ? bind(obj, obj[key]) :
     typeof obj !== 'object' && key in methods[typeof obj] ? methods[typeof obj][key](obj) :
-    fail('Property', key, 'of', typeof obj === 'object' ? Object.keys(obj) : typeof obj)
+    fail('NoProperty', key, 'of', obj)
   const lookup = key => key in env ? env[key].value : fail('Missing', key, 'in', Object.keys(env))
   const insert = (key, value) => reserved.includes(key) ? fail('Reserved', key) :
     key in env ? fail('Existed', key) : (env[key] = {value}, value)
@@ -219,6 +221,7 @@ const execute = (node, env) => {
   const unquote = c => c === 'n' ? '\n' :
     c == 't' ? '\t' :
     c
+  var m
   const atom = s =>
     typeof s !== 'string' ? s : // already evaluated
     s === 'true' ? true :

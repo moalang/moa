@@ -6,9 +6,8 @@
 - Inheritance
 
 # Todo
-- [x] Design how to infer any type for "if" and "while" -> void
-- [x] Syntax to catch exception -> a @ b, a @b c, a @b: c d, a @b.c => d
-- [x] Type inference
+- [ ] Type inference: move props into type struct
+- [ ] Type inference: allow duplicated name of property in different types
 - [ ] Compiler to executable file via Go
 - [ ] HTTP server
 - [ ] Transactional database

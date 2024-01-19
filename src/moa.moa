@@ -2,15 +2,11 @@ struct type:
   name   string
   params list type
 
-struct type2:
-  name   string
-  params list type2
-
 struct token:
   text string
   pos  int
   args list token
-  type type2
+  type type
 
 let tundef type "" []
 
@@ -27,8 +23,9 @@ def parse source:
     return stmt []
 
   # operator | parenthesis | string | number | id | comment and spaces
-  let regexp r'([!+\-*/%<>:!=^|&]+|[()\[\]{}]|r?"[^]*?(?<!\\)"|r?"[^]*?(?<!\\)"|-?[0-9]+(?:\.[0-9]+)|[0-9A-Za-z_]+|(?:#[^\n]*|[ \n])+)'
-  let tokens source.trim().split(regexp).filter(s => s.size > 0).mapi(t,i => token t i [] tundef)
+  let regexp r"([!+\-*/%<>:!=^|&]+|[()\[\]{}]|r?\"[^]*?(?<!\\)\"|-?[0-9]+(?:\.[0-9]+)|[0-9A-Za-z_]+|(?:#[^\n]*|[ \n])+)"
+  var n 0
+  let tokens source.trim().split(regexp).filter(s => s.size > 0).mapi(t,i => token t (n+=t.size) [] tundef)
 
   var pos 0
   def peek:
@@ -64,7 +61,7 @@ def parse source:
     t
   def indent t:
     t.text.split("\n").at(-1).size
-  def squash a:
+  def try_call a:
     iif a.size == 1:
       a[0]
       call a
@@ -90,7 +87,7 @@ def parse source:
       "!": call [t parse_unit()]
       "-": call [t parse_unit()]
       "[": call [alias(t "list")] ++ until("]")
-      "(": squash until(")")
+      "(": try_call until(")")
       ":": parse_block()
       _ : t)
   def parse_exp:
@@ -101,9 +98,15 @@ def parse source:
       call [consume() lhs parse_exp()]
       lhs
   def parse_line:
-    def f t:
+    def check t:
       !t.text.has("\n") && t.text != ")" && t.text != "]"
-    squash many(f parse_exp)
+    def format a:
+      let head iif a.size == 0 "" a[0].text
+      try_call case(head:
+        "let": [a[0] a[1] try_call(a.slice(2))]
+        "return" if a.size >= 2: [a[0] try_call(a.slice(1))]
+        _: a)
+    format many(check parse_exp)
   def parse_lines n:
     def f:
       let t peek()
@@ -226,6 +229,10 @@ test t "parser":
   eq "(=> a 1)" "a =>\n  1"
   eq "(=> a (__pack 1 2))" "a =>\n  1\n  2"
 
+  # special
+  eq "(let a (b c))" "let a b c"
+  eq "(return (a b))" "return a b"
+
   # edge case
   eq "1" "1\n"
   eq "()" ""
@@ -252,10 +259,12 @@ def infer root:
     "list" dict(
       "size" _ => tint
       "map" t => tfunc([tfunc([t.params[0] tv1]) type("list" [tv1])])
+      "filter" t => tfunc([tfunc([t.params[0] tbool]) t])
       )
     "string" dict(
       "trim" _ => tfunc [tstring]
       "size" _ => tint
+      "split" _ => tfunc [tstring type("list" [tstring])]
       ))
 
   def is_tvar t:
@@ -312,13 +321,13 @@ def infer root:
         throw "ArgumentsNotEnough" f a
       f.size == 0 && a.size == 0:
         throw "BugToApply"
-      f.size == 1 && a.size == 0:
-        f[0]
       f[0].name == "__more" && a.size == 0:
         apply f.slice(1) a
       f[0].name == "__more":
         unify f[0].params[0] a[0]
         apply f a.slice(1)
+      f.size == 1 && a.size == 0:
+        f[0]
       unify f[0] a[0]; apply f.slice(1) a.slice(1)
   def call nodes ng tenv:
     let head nodes[0]
@@ -330,14 +339,22 @@ def infer root:
         lambda anodes nodes.at(-1) ng tenv
       ".":
         let target analyze nodes[1] ng tenv
+
         let tname iif is_tvar(target) tprops.find(k,v => v.has(nodes[2].text)).0 target.name
         if is_tvar(target):
           unify tenv.get(tname) target
         tprops.get(tname).get(nodes[2].text)(target)
       "let":
-        let t analyze nodes[2] ng tenv
+        # TODO: deny modify for let binding
+        let t iif nodes.size == 3:
+          analyze nodes[2] ng tenv
+          call nodes.slice(2) ng tenv
         tenv.set nodes[1].text t
-        t
+      "var":
+        let t iif nodes.size == 3:
+          analyze nodes[2] ng tenv
+          call nodes.slice(2) ng tenv
+        tenv.set nodes[1].text t
       "struct":
         let targs nodes.slice(2 (-1)).map(t => tuple(t.text tnew()))
         var generics dict(targs)
@@ -395,15 +412,20 @@ def infer root:
     "/" tfunc([tint tint tint])
     "==" tfunc([tv1 tv1 tbool])
     "!=" tfunc([tv1 tv1 tbool])
+    ">" tfunc([tv1 tv1 tbool])
+    ">=" tfunc([tv1 tv1 tbool])
+    "<" tfunc([tv1 tv1 tbool])
+    "<=" tfunc([tv1 tv1 tbool])
     "return" tfunc([tv1 tv1])
     "if" tfunc([tbool tv1 tvoid])
     "iif" tfunc([tbool tv1 tv1 tv1])
+    "log" tfunc([tv1 tv1])
     "list" tlist
     "string" tstring
     "true" tbool
     "false" tbool)
 
-test t:
+test t "type inference":
   def show t:
     iif t.name.match(r"^__ref"):
       show t.params[0]
@@ -421,6 +443,10 @@ test t:
     let s catch show(infer(parse(source))) e => e.id
     t.eq "InvalidType" s
 
+  # generic property
+  eq "int" "a => a.size"
+  return
+
   # primitives
   eq "bool" "true"
   eq "bool" "false"
@@ -435,10 +461,13 @@ test t:
   eq "list(0)" "[]"
   eq "list(int)" "[1]"
 
-  # property access
+  # property
   eq "int" "[].size"
   eq "int" "\"\".size"
   eq "(string string)" "def a b: b.trim()"
+
+  # generic property
+  eq "int" "def a: a.size\na([])"
 
   # single operator
   eq "bool" "!true"
@@ -447,9 +476,9 @@ test t:
   eq "int" "1 + 2"
 
   # definition
-  eq "int" "let a 1"
   eq "(int)" "def a: 1"
   eq "(0 0)" "def a b: b"
+  eq "int" "def a b: b\nlet c a 1"
 
   # struct
   eq "(int a)" "struct a: b int"
