@@ -15,7 +15,6 @@ const parse = source => {
   }
   const regexp = /([!+\-*/%<>:!=^|&]+|[()\[\]{}]|r?"[^]*?(?<!\\)"|r?'[^]*?(?<!\\)'|-?[0-9]+(?:\.[0-9]+)|[0-9A-Za-z_]+|(?:#[^\n]*|[ \n])+)/ // operator | parenthesis | string | number | id | comment and spaces
   const tokens = source.trim().split(regexp).filter(s => s.length)
-
   var pos = 0
   const read = () => (t => t.match(/^[ #]/) ? tokens[++pos] || '' : t)(tokens[pos] || '')
   const loop = (a, f) => pos < tokens.length ? (v => v ? loop(a.concat([v]), f) : a)(f(read())) :a
@@ -56,8 +55,9 @@ const parse = source => {
       [op, lhs, rhs]
     return is_op2(read()) ? (op => sort(op, lhs, parse_exp()))(consume()) : lhs
   }
-  const is_stop = t => t.includes('\n') || t === ')' || t === ']' || t === ';'
+  const parse_block = () => (t => t.includes('\n') ? parse_lines(indent(t)) : parse_line())(read())
   const parse_line = () => {
+    const is_stop = t => t.includes('\n') || t === ')' || t === ']' || t === ';'
     const a = squash(many(t => !is_stop(t) && parse_exp()))
     const remain = []
     while (read() === ";" && ++pos) {
@@ -66,7 +66,6 @@ const parse = source => {
     return remain.length ? pack([a, ...remain]) : a.length && a
   }
   const parse_lines = n => pack(many(t => (t.includes('\n') && indent(t) === n && ++pos, parse_line())))
-  const parse_block = () => (t => t.includes('\n') ? parse_lines(indent(t)) : parse_line())(read())
   return parse_lines(0)
 }
 
