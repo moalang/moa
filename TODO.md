@@ -6,11 +6,12 @@
 - Inheritance
 
 # Todo
-- [ ] Type inference: move props into type struct
-- [ ] Type inference: allow duplicated name of property in different types
-- [ ] Compiler to executable file via Go
+- [ ] Show stacktrace when error happen in interpriter
+- [ ] Split type environment and constructor of type
+- [ ] Record polymorphism: support kind?
+- [ ] Compile Moa to executable file via Go
 - [ ] HTTP server
-- [ ] Transactional database
+- [ ] Transactional database: read and write lock, append only log on desk, undo log on memory
 - [ ] Debugger
 - [ ] Reactive UI framework
 - [ ] Bidirectional remote procedure call

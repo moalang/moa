@@ -28,7 +28,7 @@ Keyword
    constant: true false
        type: void bool int float string time duration tuple array list dict ref fn any
 declaration: let var def struct enum
-     branch: iif if else switch
+     branch: iif if else case
        flow: return throw catch
        loop: for while continue break
     special: _ moa test log math rand db
@@ -111,7 +111,7 @@ def f {a b=0}: a  # f(a=1), f(a=1 b=2) or f(b=2 a=1)
 
 - Pattern matching
 ```
-switch: "switch" exp ":" ("\n  " const | pattern)
+case: "case" exp ":" ("\n  " const | pattern)
 const: exp ("or" exp)* ":" block
 pattern: matcher ("if" exp) "=>" block
 matcher:
@@ -131,7 +131,7 @@ enum tree t:
     leaf
     node t tree(t) tree(t)
 def validate t:
-    switch t:
+    case t:
         leaf: true
         _.node(m _.leaf _.leaf) => true
         _.node(m l.node _.leaf) => l.0 <= m
@@ -145,7 +145,7 @@ enum tree t:
         left tree t
         right tree t
 def validate t:
-    switch t:
+    case t:
         leaf: true
         {value left.leaf right.leaf} => true
         {value left.node right.leaf} => left.value <= value && validate(left)
