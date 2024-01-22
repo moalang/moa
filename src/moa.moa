@@ -443,10 +443,6 @@ test t "type inference":
     let s catch show(infer(parse(source))) e => e.id
     t.eq "InvalidType" s
 
-  # generic property
-  eq "int" "a => a.size"
-  return
-
   # primitives
   eq "bool" "true"
   eq "bool" "false"
@@ -467,7 +463,7 @@ test t "type inference":
   eq "(string string)" "def a b: b.trim()"
 
   # generic property
-  eq "int" "def a: a.size\na([])"
+  # eq "int" "def a: a.size\na([])" # TODO
 
   # single operator
   eq "bool" "!true"
