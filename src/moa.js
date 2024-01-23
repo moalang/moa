@@ -12,15 +12,16 @@ const execute = (source, embedded) => {
     return code.trim() ? [{code, offset}] : []
   })
   let pos = 0
+  // TODO: syntax desugar
+  // - [ ] a b      -> (a b)
+  // - [ ] a b\nc d -> (a b) (c d)
+  // - [ ] a b; c d -> (a b) (c d)
   const list = l => (t => t.code === ')' ? (l) : list(l.concat([t])))(unit())
   const unit = () => (t => t.code === '(' ? list([]) : t)(tokens[pos++])
   const top = []
   while (pos < tokens.length) {
     top.push(unit())
   }
-
-  // syntax desugar
-  // TODO
 
   // interpriter
   const fail = (m, o) => { log(o); throw new Error(m) }
