@@ -1,6 +1,8 @@
-const log = (...a) => (console.log(...a), a[0])
+'use strict'
+const print = (...a) => (console.log(...a), a[0])
+const log = (...a) => (console.error(...a), a[0])
 
-const run = source => {
+const execute = (source, embedded) => {
   // parser
   let offset = 0
   const simplify = o => Array.isArray(o) ?  o.map(simplify) : o.code
@@ -17,49 +19,49 @@ const run = source => {
     top.push(unit())
   }
 
+  // syntax desugar
+  // TODO
+
   // interpriter
-  const fail = (m, o) => { console.dir(o, {depth: null}); throw new Error(m) }
+  const fail = (m, o) => { log(o); throw new Error(m) }
+  const run = (env, target) =>
+    Array.isArray(target) ? run(env, target[0])(env, target.slice(1)) :
+    target.code === 'true' ? true :
+    target.code === 'false' ? false :
+    target.code.match(/^[0-9]/) ? parseFloat(target.code) :
+    target.code.match(/^["'`]/) ? c.slice(1, -1) :
+    target.code in env ? env[target.code] :
+    fail('Missing', {target, ids: [...Object.keys(env)]})
   const dict = (a, b) => Object.fromEntries(a.map((x,i) => [x,b[i]]))
-  const macro = {
-    'def': (env, name, a, exp) => env[name.code] = (...b) => evaluate(exp, {...env, ...dict(a.map(x => x.code), b)}),
-    'var': (env, name, exp) => env[name.code] = evaluate(exp, env),
-    '+=': (env, l, r) => env[l.code] = evaluate(l, env) + evaluate(r, env),
-    '-=': (env, l, r) => env[l.code] = evaluate(l, env) - evaluate(r, env),
-    '*=': (env, l, r) => env[l.code] = evaluate(l, env) * evaluate(r, env),
-    '/=': (env, l, r) => env[l.code] = evaluate(l, env) / evaluate(r, env),
-    '%=': (env, l, r) => env[l.code] = evaluate(l, env) % evaluate(r, env),
-  }
-  const evaluate = (target, env) => {
-    const run = x => evaluate(x, env)
-    if (Array.isArray(target)) {
-      const head = target[0].code
-      return head in macro ? macro[head](env, ...target.slice(1)) :
-        run(target[0])(...target.slice(1).map(run))
-    } else {
-      const c = target.code
-      return c === 'true' ? true :
-        c === 'false' ? false :
-        c.match(/^[0-9]/) ? parseFloat(c) :
-        c.match(/^["'`]/) ? c.slice(1, -1) :
-        c in env ? env[c] :
-        fail('Missing', {target, ids: [...Object.keys(env)]})
-    }
-  }
-  const embedded = {
-    '+': (l, r) => l + r,
-    '-': (l, r) => l - r,
-    '*': (l, r) => l * r,
-    '/': (l, r) => l / r,
-    '%': (l, r) => l % r,
-    log: (...a) => log(...a),
-  }
+  Object.assign(embedded, {
+    def: (env, [name, a, body]) => env[name.code] = (e, b) =>
+      run({...e, ...dict(a.map(x => x.code), b.map(exp => run(e, exp)))}, body),
+    var: (env, [name, exp]) => env[name.code] = run(env, exp),
+    let: (env, [name, exp]) => env[name.code] = run(env, exp),
+    struct: (env, [name, fields]) => env[name.code] = (e, a) =>
+      dict(fields.map(f => f[0].code), a.map(exp => run(e, exp))),
+    log: (env, a) => log(...a.map(exp => run(env, exp))),
+    print: (env, a) => print(...a.map(exp => run(env, exp))),
+    '.': (env, [obj, name]) => run(env, obj)[name.code],
+  }); // semi-corron is needed here
+  [
+    ['+', (l, r) => l + r],
+    ['-', (l, r) => l - r],
+    ['*', (l, r) => l * r],
+    ['/', (l, r) => l / r],
+    ['%', (l, r) => l % r],
+    ['||', (l, r) => l || r],
+    ['&&', (l, r) => l && r],
+  ].map(([op, opf]) => {
+    embedded[op] = (env, [head, ...a]) => a.reduce((acc, x) => opf(acc, run(env, x)) , run(env, head)),
+    embedded[op + '='] = (env, [l, r]) => env[l.code] = opf(run(env, l), run(env, r))
+  })
   try {
-    top.map(node => evaluate(node, embedded))
+    return top.map(node => run(embedded, node)).at(-1)
   } catch (e) {
-    log(e.message + e.stack.split('\n')[2].match(/(:\d+):\d/)[1])
+    log(e.stack)
     process.exit(1)
   }
-  return 'console.log(123)'
 }
 
 const repl = () => {
@@ -68,12 +70,13 @@ const repl = () => {
     output: process.stdout,
   })
   process.stdout.write('> ')
+  const env = {}
   rl.on('line', line => {
     if ('exit quit q'.split(' ').includes(line)) {
       log('Bye \u{1F44B}')
       rl.close()
     } else {
-      eval(line)
+      log(execute(line, env))
       process.stdout.write('> ')
     }
   })
@@ -81,7 +84,7 @@ const repl = () => {
 
 const fs = require('fs')
 if (process.stdin.isRaw === undefined) {
-  run(fs.readFileSync('/dev/stdin', 'utf8'))
+  execute(fs.readFileSync('/dev/stdin', 'utf8'), {})
 } else {
   repl()
 }

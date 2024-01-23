@@ -4,13 +4,16 @@ watch:
 
 test:
 	clear
-	echo "(log (+ 1 2))" | node src/moa.js | grep -sx 3
-	echo "(log (- 3 2))" | node src/moa.js | grep -sx 1
-	echo "(log (* 2 3))" | node src/moa.js | grep -sx 6
-	echo "(log (/ 4 2))" | node src/moa.js | grep -sx 2
-	echo "(log (% 5 2))" | node src/moa.js | grep -sx 1
-	echo "(def add (a b) (+ a b)) (log (add 1 2))" | node src/moa.js | grep -sx 3
-	echo "(var a 1) (+= a 2) (log a)" | node src/moa.js | grep -sx 3
+	echo "(print (+ 1 2 3))" | node src/moa.js | grep -x 6
+	echo "(print (- 3 2))" | node src/moa.js | grep -x 1
+	echo "(print (* 2 3))" | node src/moa.js | grep -x 6
+	echo "(print (/ 4 2))" | node src/moa.js | grep -x 2
+	echo "(print (% 5 2))" | node src/moa.js | grep -x 1
+	echo "(print (|| false false))" | node src/moa.js | grep -x false
+	echo "(print (&& true true))" | node src/moa.js | grep -x true
+	echo "(def add (a b) (+ a b)) (print (add 1 2))" | node src/moa.js | grep -x 3
+	echo "(var a 1) (+= a 2) (print a)" | node src/moa.js | grep -x 3
+	echo "(struct a ((b int))) (print (. (a 1) b))" | node src/moa.js | grep -x 1
 
 mc:
 	node misc/mc src/*
