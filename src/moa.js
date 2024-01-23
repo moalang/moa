@@ -13,10 +13,12 @@ const execute = (source, embedded) => {
   })
   let pos = 0
   // TODO: syntax desugar
-  // - [ ] a b      -> (a b)
-  // - [ ] a b\nc d -> (a b) (c d)
-  // - [ ] a b; c d -> (a b) (c d)
-  const list = l => (t => t.code === ')' ? (l) : list(l.concat([t])))(unit())
+  // - [ ] a + b     -> (+ a b)
+  // - [ ] a + b * c -> (+ a (* b c))
+  // - [ ] a b       -> (a b)
+  // - [ ] a b\nc d  -> (a b) (c d)
+  // - [ ] a b; c d  -> (a b) (c d)
+  const list = a => (t => t.code === ')' ? a : list(a.concat([t])))(unit())
   const unit = () => (t => t.code === '(' ? list([]) : t)(tokens[pos++])
   const top = []
   while (pos < tokens.length) {
