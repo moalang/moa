@@ -52,14 +52,19 @@ const execute = (source, embedded) => {
     return xs.length === 3 && stack.length === 1 ? stack[0] : stack
   }
   const list = () => reorder(until(unit, t => t.code !== ')'))
-  const unit = t => t.code === '(' ? list() : t
+  const unit = t => t.code === '(' ? list() :
+    t.code === '{' ? [t].concat(until(top, t => t.code !== '}')) :
+    t
   const line = l => {
     const a = many(unit, t => t.lineno === l && t.code !== ';' && t.code !== '}')
-    return a.length === 1 ? a[0] : reorder(a)
+    if (pos < tokens.length && tokens[pos].code === ';') {
+      ++pos
+    }
+    return a.length === 0 ? fail('EmptyLine', tokens.slice(pos)) :
+      a.length === 1 ? a[0] : reorder(a)
   }
   const top = t => t.code === '(' ? list() :
-    t.code === '{' ? [t].concat(until(top, t => t.code !== '}')) :
-    t.code === ';' ? line(t.lineno) :
+    t.code === '}' ? fail("@") :
     (--pos, line(t.lineno))
   const nodes = many(top)
 
