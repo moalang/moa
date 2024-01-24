@@ -3,7 +3,7 @@ const util = require('util')
 const print = (...a) => (console.log(...a), a[0])
 const log = (...a) => (console.error(...a.map(o => util.inspect(o, false, null, true))), a[0])
 const attempt = f => { try { return f() } catch (e) { return e } }
-const until = (f, g) => { const a = []; while (f()) { a.push(g()) }; return a }
+const loop = (f, g) => { const a = []; while (f()) { a.push(g()) }; return a }
 
 const execute = (source, embedded) => {
   // parser
@@ -15,6 +15,7 @@ const execute = (source, embedded) => {
     return code.trim() ? [{code, lineno, offset}] : []
   })
   let pos = 0
+  const many = (f, g) => loop(() => pos < tokens.length && (!g || g(tokens[pos])), () => f(tokens[pos]))
   // TODO: syntax desugar
   // - [x] a + b     -> (+ a b)
   // - [x] a + b * c -> (+ a (* b c))
@@ -51,13 +52,13 @@ const execute = (source, embedded) => {
   const list = a => (t => t.code === ')' ? a : list(a.concat([t])))(unit())
   const unit = () => (t => t.code === '(' ? reorder(list([])) : t)(tokens[pos++])
   const line = l => {
-    const a = until(() => pos < tokens.length && tokens[pos].lineno === l && tokens[pos].code !== ';', unit)
+    const a = many(unit, t => t.lineno === l && t.code !== ';')
     return a.length === 1 ? a[0] : reorder(a)
   }
-  const top = () => (t => t.code === '(' ? unit() :
+  const top = t => t.code === '(' ? unit(t) :
     t.code === ';' ? (++pos, line(t.lineno)) :
-    line(t.lineno))(tokens[pos])
-  const nodes = until(() => pos < tokens.length, top)
+    line(t.lineno)
+  const nodes = many(top)
 
   // interpriter
   const fail = (m, o) => { log(o); throw new Error(m) }
