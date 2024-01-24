@@ -10,7 +10,7 @@ const execute = (source, embedded) => {
   // parser
   let offset = 0
   let lineno = 1
-  const tokens = source.split(/([();]|\s+)/).flatMap(code => {
+  const tokens = source.split(/([(){};]|\s+)/).flatMap(code => {
     offset += code.length
     lineno += code.split('\n').length - 1
     return code.trim() ? [{code, lineno, offset}] : []
@@ -24,8 +24,8 @@ const execute = (source, embedded) => {
   // - [x] a b       -> (a b)
   // - [x] a b\nc d  -> (a b) (c d)
   // - [x] a b; c d  -> (a b) (c d)
-  // - [ ] {a}       -> {a}
-  // - [ ] {a; b c}  -> {a (b c)}
+  // - [x] {a}       -> {a}
+  // - [x] {a; b c}  -> {a (b c)}
   // - [ ] a()       -> (a)
   // - [ ] a(b)      -> (a b)
   // - [ ] a.b()     -> ((. a b))
@@ -54,10 +54,11 @@ const execute = (source, embedded) => {
   const list = () => reorder(until(unit, t => t.code !== ')'))
   const unit = t => t.code === '(' ? list() : t
   const line = l => {
-    const a = many(unit, t => t.lineno === l && t.code !== ';')
+    const a = many(unit, t => t.lineno === l && t.code !== ';' && t.code !== '}')
     return a.length === 1 ? a[0] : reorder(a)
   }
   const top = t => t.code === '(' ? list() :
+    t.code === '{' ? [t].concat(until(top, t => t.code !== '}')) :
     t.code === ';' ? line(t.lineno) :
     (--pos, line(t.lineno))
   const nodes = many(top)
@@ -83,6 +84,7 @@ const execute = (source, embedded) => {
     log: (env, a) => log(...a.map(exp => run(env, exp))),
     print: (env, a) => print(...a.map(exp => run(env, exp))),
     '.': (env, [obj, name]) => run(env, obj)[name.code],
+    '{': (env, lines) => lines.map(line => run(env, line)).at(-1),
   }); // semi-corron is needed here
   [
     ['+', (l, r) => l + r],

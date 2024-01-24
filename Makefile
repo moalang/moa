@@ -18,11 +18,14 @@ test:
 	echo "(var a 1) (+= a 2) (print a)" | node src/moa.js | grep -x 3
 	echo "(struct a ((b int))) (print (. (a 1) b))" | node src/moa.js | grep -x 1
 	# syntax sugar
-	echo "(def add (a b) a + b) (print (add 1 2))" | node src/moa.js | grep -x 3
-	echo "(print 1 + 2 * 3)" | node src/moa.js | grep -x 7
 	echo "print 1 + 2" | node src/moa.js | grep -x 3
+	echo "print 1 + 2 * 3" | node src/moa.js | grep -x 7
 	echo "var a 1; a += 2; print a" | node src/moa.js | grep -x 3
 	echo "1; print 2" | node src/moa.js | grep -x 2
+	echo "{1; print 2}" | node src/moa.js | grep -x 2
+	echo "{{1; print 2}}" | node src/moa.js | grep -x 2
+	echo "def add (a b) a + b; print (add 1 2)" | node src/moa.js | grep -x 3
+	echo "def inc (a) {a+=1; a+=2} print (inc 1)" | node src/moa.js | grep -x 4
 
 mc:
 	node misc/mc src/*
