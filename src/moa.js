@@ -9,11 +9,11 @@ const fail = (m, o) => { log(o); throw new Error(m) }
 const execute = (source, embedded) => {
   // parser
   let offset = 0
-  let lineno = 1
+  let lineid = 1
   const tokens = source.split(/([(){};]|\s+)/).flatMap(code => {
     offset += code.length
-    lineno += code.split('\n').length - 1
-    return code.trim() ? [{code, lineno, offset}] : []
+    lineid += code.split('\n').length - 1 + (code === ';' ? 1 : 0)
+    return code !== ';' && code.trim() ? [{code, lineid, offset}] : []
   })
   let pos = 0
   const many = (f, g) => loop(() => pos < tokens.length && (!g || g(tokens[pos])), () => f(tokens[pos++]))
@@ -56,16 +56,10 @@ const execute = (source, embedded) => {
     t.code === '{' ? [t].concat(until(top, t => t.code !== '}')) :
     t
   const line = l => {
-    const a = many(unit, t => t.lineno === l && t.code !== ';' && t.code !== '}')
-    if (pos < tokens.length && tokens[pos].code === ';') {
-      ++pos
-    }
-    return a.length === 0 ? fail('EmptyLine', tokens.slice(pos)) :
-      a.length === 1 ? a[0] : reorder(a)
+    const a = many(unit, t => t.lineid === l && t.code !== '}')
+    return a.length === 1 ? a[0] : reorder(a)
   }
-  const top = t => t.code === '(' ? list() :
-    t.code === '}' ? fail("@") :
-    (--pos, line(t.lineno))
+  const top = t => t.code === '(' ? list() : (--pos, line(t.lineid))
   const nodes = many(top)
 
   // interpriter
