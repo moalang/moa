@@ -1,6 +1,9 @@
 'use strict'
 const util = require('util')
-const print = (...a) => (console.log(...a), a[0])
+const show = o => Array.isArray(o) ? '(list' + o.map(show).map(x => ' ' + x).join('') + ')' :
+  o instanceof Map ? '(dict' + [...o].flatMap(a => a.map(show)).map(x => ' ' + x).join('') + ')' :
+  o.toString()
+const print = (...a) => (console.log(...a.map(show)), a[0])
 const log = (...a) => (console.error(...a.map(o => util.inspect(o, false, null, true))), a[0])
 const attempt = f => { try { return f() } catch (e) { return e } }
 const loop = (f, g) => { const a = []; while (f()) { a.push(g()) }; return a }
@@ -10,7 +13,7 @@ const execute = (source, embedded) => {
   // parser
   let offset = 0
   let lineid = 1
-  const tokens = source.split(/([(){};]|(?:#[^\n]*|\s+))/).flatMap(code => {
+  const tokens = source.split(/([(){};.]|"[^]*?(?<!\\)"|(?:#[^\n]*|\s+))/).flatMap(code => {
     offset += code.length
     lineid += code.split('\n').length - 1 + (code === ';' ? 1 : 0)
     const enabled = code !== ';' && !/^\s*#/.test(code) && code.trim()
@@ -19,18 +22,6 @@ const execute = (source, embedded) => {
   let pos = 0
   const many = (f, g) => loop(() => pos < tokens.length && (!g || g(tokens[pos])), () => f(tokens[pos++]))
   const until = (f, g) => (a => (++pos, a))(many(f, g))
-  // TODO: syntax desugar
-  // - [x] a + b     -> (+ a b)
-  // - [x] a + b * c -> (+ a (* b c))
-  // - [x] a b       -> (a b)
-  // - [x] a b\nc d  -> (a b) (c d)
-  // - [x] a b; c d  -> (a b) (c d)
-  // - [x] {a}       -> {a}
-  // - [x] {a; b c}  -> {a (b c)}
-  // - [ ] a()       -> (a)
-  // - [ ] a(b)      -> (a b)
-  // - [ ] a.b()     -> ((. a b))
-  // - [ ] a.b(c)    -> ((. a b) c)
   const op2s = '|| && == != < <= > >= + - * / % ^ **'.split(' ') // low...high, other operators are lowest
   const priority = t => op2s.findIndex(op => op === t.code)
   const isOp2 = t => t && /^[+\-*\/%<>!=~.]/.test(t.code)
@@ -70,20 +61,30 @@ const execute = (source, embedded) => {
     target.code === 'true' ? true :
     target.code === 'false' ? false :
     target.code.match(/^[0-9]/) ? parseFloat(target.code) :
-    target.code.match(/^["'`]/) ? c.slice(1, -1) :
+    target.code.match(/^["'`]/) ? target.code.slice(1, -1) :
     target.code in env ? env[target.code] :
     fail('Missing', {target, ids: [...Object.keys(env)]})
-  const dict = (a, b) => Object.fromEntries(a.map((x,i) => [x,b[i]]))
+  const props = {
+    'String size': o => o.length,
+    'Array size': o => o.length,
+  }
+  const prop = (obj, name) => {
+    const p = props[`${obj.constructor.name} ${name}`]
+    return p ? p(obj) : typeof obj === 'object' && name in obj ? obj[name] : fail('NoProperty', {obj, name})
+  }
+  const map = (a, b) => Object.fromEntries(a.map((x,i) => [x,b[i]]))
   Object.assign(embedded, {
     def: (env, [name, a, body]) => env[name.code] = (e, b) =>
-      run({...e, ...dict(a.map(x => x.code), b.map(exp => run(e, exp)))}, body),
+      run({...e, ...map(a.map(x => x.code), b.map(exp => run(e, exp)))}, body),
     var: (env, [name, exp]) => env[name.code] = run(env, exp),
     let: (env, [name, exp]) => env[name.code] = run(env, exp),
     struct: (env, [name, fields]) => env[name.code] = (e, a) =>
-      dict(fields.map(f => f[0].code), a.map(exp => run(e, exp))),
+      map(fields.map(f => f[0].code), a.map(exp => run(e, exp))),
     log: (env, a) => log(...a.map(exp => run(env, exp))),
     print: (env, a) => print(...a.map(exp => run(env, exp))),
-    '.': (env, [obj, name]) => run(env, obj)[name.code],
+    list: (env, a) => a.map(exp => run(env, exp)),
+    dict: (env, a) => (a => new Map([...new Array(a.length/2)].map((_, i) => [a[i*2], a[i*2+1]])))(a.map(x => run(env, x))),
+    '.': (env, [obj, name]) => prop(run(env, obj), name.code),
     '{': (env, lines) => lines.map(line => run(env, line)).at(-1),
   }); // semi-corron is needed here
   [
@@ -95,6 +96,7 @@ const execute = (source, embedded) => {
     ['||', (l, r) => l || r],
     ['&&', (l, r) => l && r],
     ['**', (l, r) => l ** r],
+    ['++', (l, r) => l instanceof Map ? new Map([...l, ...r]) : l.concat(r)],
   ].map(([op, opf]) => {
     embedded[op] = (env, [head, ...a]) => a.reduce((acc, x) => opf(acc, run(env, x)) , run(env, head)),
     embedded[op + '='] = (env, [l, r]) => env[l.code] = opf(run(env, l), run(env, r))
