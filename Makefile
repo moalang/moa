@@ -20,6 +20,8 @@ test:
 	# syntax sugar
 	echo "(def add (a b) a + b) (print (add 1 2))" | node src/moa.js | grep -x 3
 	echo "(print 1 + 2 * 3)" | node src/moa.js | grep -x 7
+	echo "print 1 + 2" | node src/moa.js | grep -x 3
+	echo "var a 1; a += 2; print a" | node src/moa.js | grep -x 3
 
 mc:
 	node misc/mc src/*
