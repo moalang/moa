@@ -26,6 +26,7 @@ test:
 	echo "{{1; print 2}}" | node src/moa.js | grep -qx 2
 	echo "def add (a b) a + b; print (add 1 2)" | node src/moa.js | grep -qx 3
 	echo "def inc (a) {a += 1; a += 2}; print (inc 1)" | node src/moa.js | grep -qx 4
+	echo "def inc (a) {a += 1; a += 2}\nprint (inc 1)" | node src/moa.js | grep -qx 4
 	@echo ok
 
 mc:
