@@ -18,6 +18,12 @@ const execute = (source, embedded) => {
   // - [x] a b       -> (a b)
   // - [ ] a b\nc d  -> (a b) (c d)
   // - [ ] a b; c d  -> (a b) (c d)
+  // - [ ] {a}       -> {a}
+  // - [ ] {a; b c}  -> {a (b c)}
+  // - [ ] a()       -> (a)
+  // - [ ] a(b)      -> (a b)
+  // - [ ] a.b()     -> ((. a b))
+  // - [ ] a.b(c)    -> ((. a b) c)
   const op2s = '|| && == != < <= > >= + - * / % ^ **'.split(' ') // low...high, other operators are lowest
   const priority = t => op2s.findIndex(op => op === t.code)
   const isOp2 = t => t && /^[+\-*\/%<>!=~.]/.test(t.code)
