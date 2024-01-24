@@ -4,6 +4,7 @@ const print = (...a) => (console.log(...a), a[0])
 const log = (...a) => (console.error(...a.map(o => util.inspect(o, false, null, true))), a[0])
 const attempt = f => { try { return f() } catch (e) { return e } }
 const loop = (f, g) => { const a = []; while (f()) { a.push(g()) }; return a }
+const fail = (m, o) => { log(o); throw new Error(m) }
 
 const execute = (source, embedded) => {
   // parser
@@ -15,7 +16,8 @@ const execute = (source, embedded) => {
     return code.trim() ? [{code, lineno, offset}] : []
   })
   let pos = 0
-  const many = (f, g) => loop(() => pos < tokens.length && (!g || g(tokens[pos])), () => f(tokens[pos]))
+  const many = (f, g) => loop(() => pos < tokens.length && (!g || g(tokens[pos])), () => f(tokens[pos++]))
+  const until = (f, g) => (a => (++pos, a))(many(f, g))
   // TODO: syntax desugar
   // - [x] a + b     -> (+ a b)
   // - [x] a + b * c -> (+ a (* b c))
@@ -49,19 +51,18 @@ const execute = (source, embedded) => {
     }
     return xs.length === 3 && stack.length === 1 ? stack[0] : stack
   }
-  const list = a => (t => t.code === ')' ? a : list(a.concat([t])))(unit())
-  const unit = () => (t => t.code === '(' ? reorder(list([])) : t)(tokens[pos++])
+  const list = () => reorder(until(unit, t => t.code !== ')'))
+  const unit = t => t.code === '(' ? list() : t
   const line = l => {
     const a = many(unit, t => t.lineno === l && t.code !== ';')
     return a.length === 1 ? a[0] : reorder(a)
   }
-  const top = t => t.code === '(' ? unit(t) :
-    t.code === ';' ? (++pos, line(t.lineno)) :
-    line(t.lineno)
+  const top = t => t.code === '(' ? list() :
+    t.code === ';' ? line(t.lineno) :
+    (--pos, line(t.lineno))
   const nodes = many(top)
 
   // interpriter
-  const fail = (m, o) => { log(o); throw new Error(m) }
   const call = (env, f, a) => typeof f === 'function' ? f(env, a) : fail('NotFunction', {f, a})
   const run = (env, target) =>
     Array.isArray(target) ? call(env, run(env, target[0]), target.slice(1)) :
