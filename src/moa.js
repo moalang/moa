@@ -20,7 +20,7 @@ const execute = (source, embedded) => {
   // - [x] a + b * c -> (+ a (* b c))
   // - [x] a b       -> (a b)
   // - [x] a b\nc d  -> (a b) (c d)
-  // - [ ] a b; c d  -> (a b) (c d)
+  // - [x] a b; c d  -> (a b) (c d)
   // - [ ] {a}       -> {a}
   // - [ ] {a; b c}  -> {a (b c)}
   // - [ ] a()       -> (a)
@@ -30,14 +30,30 @@ const execute = (source, embedded) => {
   const op2s = '|| && == != < <= > >= + - * / % ^ **'.split(' ') // low...high, other operators are lowest
   const priority = t => op2s.findIndex(op => op === t.code)
   const isOp2 = t => t && /^[+\-*\/%<>!=~.]/.test(t.code)
-  const reorder = (a, b) => a.length <= 2 ? b.concat(a) :
-    !isOp2(a[1]) ? reorder(a.slice(1), b.concat(a.slice(0, 1))) :
-    Array.isArray(a[0]) && isOp2(a[0][0]) && priority(a[1]) > priority(a[0][0]) ?
-    reorder([[a[0][0], a[0][1], [a[1], a[0][2], a[2]]]].concat(a.slice(3)), b) :
-    reorder([[a[1], a[0], a[2]]].concat(a.slice(3)), b)
+  const reorder = xs => {
+    const stack = []
+    for (let i=0; i<xs.length; i++) {
+      const x = xs[i]
+      if (isOp2(x) && stack.length) {
+        const prev = stack.at(-1)
+        if (isOp2(prev[0]) && priority(prev[0]) < priority(x)) {
+          const [op, lhs, rhs] = prev
+          stack[stack.length - 1] = [op, lhs, [x, rhs, xs[++i]]]
+        } else {
+          stack[stack.length - 1] = [x, prev, xs[++i]]
+        }
+      } else {
+        stack.push(x)
+      }
+    }
+    return xs.length === 3 && stack.length === 1 ? stack[0] : stack
+  }
   const list = a => (t => t.code === ')' ? a : list(a.concat([t])))(unit())
-  const unit = () => (t => t.code === '(' ? reorder(list([]), []) : t)(tokens[pos++])
-  const line = l => reorder(until(() => pos < tokens.length && tokens[pos].lineno === l && tokens[pos].code !== ';', unit), [])
+  const unit = () => (t => t.code === '(' ? reorder(list([])) : t)(tokens[pos++])
+  const line = l => {
+    const a = until(() => pos < tokens.length && tokens[pos].lineno === l && tokens[pos].code !== ';', unit)
+    return a.length === 1 ? a[0] : reorder(a)
+  }
   const top = () => (t => t.code === '(' ? unit() :
     t.code === ';' ? (++pos, line(t.lineno)) :
     line(t.lineno))(tokens[pos])
