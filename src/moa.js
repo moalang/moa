@@ -10,10 +10,11 @@ const execute = (source, embedded) => {
   // parser
   let offset = 0
   let lineid = 1
-  const tokens = source.split(/([(){};]|\s+)/).flatMap(code => {
+  const tokens = source.split(/([(){};]|(?:#[^\n]*|\s+))/).flatMap(code => {
     offset += code.length
     lineid += code.split('\n').length - 1 + (code === ';' ? 1 : 0)
-    return code !== ';' && code.trim() ? [{code, lineid, offset}] : []
+    const enabled = code !== ';' && !/^\s*#/.test(code) && code.trim()
+    return enabled ? [{code, lineid, offset}] : []
   })
   let pos = 0
   const many = (f, g) => loop(() => pos < tokens.length && (!g || g(tokens[pos])), () => f(tokens[pos++]))

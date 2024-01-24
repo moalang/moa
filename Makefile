@@ -1,10 +1,10 @@
 watch:
 	-make test
-	-fswatch -0 -o -l 2 src/*.* | xargs -I {} -n1 -0 make test
+	-fswatch -0 -o -l 2 Makefile src/*.* | xargs -I {} -n1 -0 make test
 
 test:
 	clear
-	# feature
+# feature
 	echo "(print 1)" | node src/moa.js | grep -qx 1
 	echo "(print (+ 1 2 3))" | node src/moa.js | grep -qx 6
 	echo "(print (- 3 2))" | node src/moa.js | grep -qx 1
@@ -18,6 +18,9 @@ test:
 	echo "(def add (a b) (+ a b)) (print (add 1 2))" | node src/moa.js | grep -qx 3
 	echo "(var a 1) (+= a 2) (print a)" | node src/moa.js | grep -qx 3
 	echo "(struct a ((b int))) (print (. (a 1) b))" | node src/moa.js | grep -qx 1
+# comment
+	echo "(var a 1)\n#b\n(print a)" | node src/moa.js | grep -qx 1
+	echo "(var a 1) \n #b \n(print a)" | node src/moa.js | grep -qx 1
 # syntax sugar
 # a b       -> (a b)
 	echo "print 1" | node src/moa.js | grep -qx 1
