@@ -6,10 +6,7 @@
 - Inheritance
 
 # Todo
-- [ ] Show stacktrace when error happen in interpriter
-- [ ] Split type environment and constructor of type
-- [ ] Record polymorphism: support kind?
-- [ ] Compile Moa to executable file via Go
+- [ ] Foundation: int, string, list, dict and operators
 - [ ] HTTP server
 - [ ] Transactional database: read and write lock, append only log on desk, undo log on memory
 - [ ] Debugger
@@ -24,7 +21,6 @@
 
 # Pending
 - [ ] Create new syntax for name of capture variable in enum matching as ===
-- [ ] Consider to split "guard" to "if" and "return"
 - [ ] Bcrypt
 - Consider to add events type for UI
 
