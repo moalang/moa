@@ -87,21 +87,20 @@ const execute = (source, embedded) => {
     dict: lambda((...a) => new Map([...new Array(a.length/2)].map((_, i) => [a[i*2], a[i*2+1]]))),
     '.': (env, [obj, name]) => prop(run(env, obj), name.code),
     '{': (env, lines) => lines.map(line => run(env, line)).at(-1),
-  }); // semi-corron is needed here
-  [
-    ['+', (l, r) => l + r],
-    ['-', (l, r) => l - r],
-    ['*', (l, r) => l * r],
-    ['/', (l, r) => l / r],
-    ['%', (l, r) => l % r],
-    ['||', (l, r) => l || r],
-    ['&&', (l, r) => l && r],
-    ['**', (l, r) => l ** r],
-    ['++', (l, r) => l instanceof Map ? new Map([...l, ...r]) : l.concat(r)],
-  ].map(([op, opf]) => {
+  })
+  const defineOp2 = (op, opf) => {
     embedded[op] = (env, [head, ...a]) => a.reduce((acc, x) => opf(acc, run(env, x)) , run(env, head)),
     embedded[op + '='] = (env, [l, r]) => env[l.code] = opf(run(env, l), run(env, r))
-  })
+  }
+  defineOp2('+', (l, r) => l + r)
+  defineOp2('-', (l, r) => l - r)
+  defineOp2('*', (l, r) => l * r)
+  defineOp2('/', (l, r) => l / r)
+  defineOp2('%', (l, r) => l % r)
+  defineOp2('||', (l, r) => l || r)
+  defineOp2('&&', (l, r) => l && r)
+  defineOp2('**', (l, r) => l ** r)
+  defineOp2('++', (l, r) => l instanceof Map ? new Map([...l, ...r]) : l.concat(r))
   return nodes.map(node => run(embedded, node)).at(-1)
 }
 
