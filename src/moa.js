@@ -73,6 +73,7 @@ const execute = (source, embedded) => {
     return p ? p(obj) : typeof obj === 'object' && name in obj ? obj[name] : fail('NoProperty', {obj, name})
   }
   const map = (a, b) => Object.fromEntries(a.map((x,i) => [x,b[i]]))
+  const lambda = f => (env, a) => f(...a.map(x => run(env, x)))
   Object.assign(embedded, {
     def: (env, [name, a, body]) => env[name.code] = (e, b) =>
       run({...e, ...map(a.map(x => x.code), b.map(exp => run(e, exp)))}, body),
@@ -80,10 +81,10 @@ const execute = (source, embedded) => {
     let: (env, [name, exp]) => env[name.code] = run(env, exp),
     struct: (env, [name, fields]) => env[name.code] = (e, a) =>
       map(fields.map(f => f[0].code), a.map(exp => run(e, exp))),
-    log: (env, a) => log(...a.map(exp => run(env, exp))),
-    print: (env, a) => print(...a.map(exp => run(env, exp))),
-    list: (env, a) => a.map(exp => run(env, exp)),
-    dict: (env, a) => (a => new Map([...new Array(a.length/2)].map((_, i) => [a[i*2], a[i*2+1]])))(a.map(x => run(env, x))),
+    log: lambda(log),
+    print: lambda(print),
+    list: lambda((...a) => a),
+    dict: lambda((...a) => new Map([...new Array(a.length/2)].map((_, i) => [a[i*2], a[i*2+1]]))),
     '.': (env, [obj, name]) => prop(run(env, obj), name.code),
     '{': (env, lines) => lines.map(line => run(env, line)).at(-1),
   }); // semi-corron is needed here
