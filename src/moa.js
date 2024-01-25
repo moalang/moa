@@ -13,7 +13,7 @@ const execute = (source, embedded) => {
   // parser
   let offset = 0
   let lineid = 1
-  const tokens = source.split(/([(){};.]|"[^]*?(?<!\\)"|(?:#[^\n]*|\s+))/).flatMap(code => {
+  const tokens = source.split(/([+\-*\/%|&<>!=]+|[(){};.]|"[^]*?(?<!\\)"|(?:#[^\n]*|\s+))/).flatMap(code => {
     offset += code.length
     lineid += code.split('\n').length - 1 + (code === ';' ? 1 : 0)
     const enabled = code !== ';' && !/^\s*#/.test(code) && code.trim()
@@ -29,7 +29,9 @@ const execute = (source, embedded) => {
     const stack = []
     for (let i=0; i<xs.length; i++) {
       const x = xs[i]
-      if (isOp2(x) && stack.length) {
+      if (x.code === '!') {
+        stack.push([x, xs[++i]])
+      } else if (isOp2(x) && stack.length) {
         const prev = stack.at(-1)
         if (isOp2(prev[0]) && priority(prev[0]) < priority(x)) {
           const [op, lhs, rhs] = prev
@@ -101,6 +103,25 @@ const execute = (source, embedded) => {
   defineOp2('&&', (l, r) => l && r)
   defineOp2('**', (l, r) => l ** r)
   defineOp2('++', (l, r) => l instanceof Map ? new Map([...l, ...r]) : l.concat(r))
+  const comparable = x =>
+    x === undefined ? 'undefined' :
+    x === null ? 'null' :
+    x.constructor.name + ':' + (
+      x instanceof Error ? e.message :
+      Array.isArray(x) ? x.map(comparable).join(' ') :
+      x instanceof Map ? [...x.keys()].sort().map(key => comparable(key + ':' + x.get(key))).join(' ') :
+      typeof x === 'object' ? Object.keys(x).sort().map(key => key + ':' + comparable(x[key])).join(' ') :
+      typeof x === 'number' ? (Array(16).join('0') + x).slice(-16) :
+      typeof x === 'string' ? x :
+      typeof x === 'boolean' ? x.toString() :
+      fail('UnComparable', x))
+  embedded['!'] = lambda(x => !x)
+  embedded['=='] = lambda((l,r) => comparable(l) === comparable(r))
+  embedded['!='] = lambda((l,r) => comparable(l) !== comparable(r))
+  embedded['>']  = lambda((l,r) => comparable(l) >   comparable(r))
+  embedded['>='] = lambda((l,r) => comparable(l) >=  comparable(r))
+  embedded['<']  = lambda((l,r) => comparable(l) <   comparable(r))
+  embedded['<='] = lambda((l,r) => comparable(l) <=  comparable(r))
   return nodes.map(node => run(embedded, node)).at(-1)
 }
 

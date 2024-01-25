@@ -6,7 +6,8 @@
 - Inheritance
 
 # Todo
-- [ ] Foundation: int, string, list, dict and operators
+- [x] Foundation: int, string, list, dict and operators
+- [ ] Methods: int, string, list, dict
 - [ ] HTTP server
 - [ ] Transactional database: read and write lock, append only log on desk, undo log on memory
 - [ ] Debugger

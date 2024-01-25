@@ -1,13 +1,13 @@
 # reserved
-[ ] _                  :: tuple[]
+[ ] _                  :: void
 [ ] true, false        :: bool
 [ ] string a           :: a string
 [ ] bytes a            :: a bytes
 [ ] bool a             :: a bool
-[ ] error a b          :: a b
+[ ] throw a b          :: a b
 [ ] match a b          :: a matcher[a b]+ b
-[ ] <,<=,==,!==,>,>= a :: a a bool
-[ ] num                # int, float
+[ ] < <= == !== > >= a :: a a bool
+[ ] num                :: int | float
 
 # opt a
 [ ] and b    :: opt[a] (a b) opt[b]
@@ -46,8 +46,6 @@
 [ ] time        :: opt[time]
 [ ] int         :: opt[int]
 [ ] float       :: opt[float]
-[ ] bcrypt      :: string
-[ ] eq_bcrypted :: string bool
 
 # bytes
 [ ] ++              :: bytes bytes bytes
@@ -60,7 +58,6 @@
 [ ] utf8,utf16,hex  :: string
 [ ] tr              :: string string # b.tr("A-Za-z0-9+/") is same as base64
 [ ] hash            :: int
-[ ] shash           :: string bytes @error
 [ ] hmac            :: bytes bytes string? bytes @error
 
 # lambda[a b ...]
@@ -162,6 +159,10 @@
         status  :: int
         headers :: list[tuple[string string]]
         body    :: bytes
+
+# bcrypt
+[ ] encrypt :: string
+[ ] eq      :: string string bool
 
 
 # interface
