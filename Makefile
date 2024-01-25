@@ -13,7 +13,7 @@ test:
 	echo '(print (list 1))'                         | node src/moa.js | grep -qx '(list 1)'
 	echo '(print (dict 1 2))'                       | node src/moa.js | grep -qx '(dict 1 2)'
 	echo '(print 1)'                                | node src/moa.js | grep -qx 1
-	echo '(print !true)'                            | node src/moa.js | grep -qx false
+	echo '(print (! true))'                         | node src/moa.js | grep -qx false
 	echo '(print (+ 1 2 3))'                        | node src/moa.js | grep -qx 6
 	echo '(print (- 3 2))'                          | node src/moa.js | grep -qx 1
 	echo '(print (* 2 3))'                          | node src/moa.js | grep -qx 6
@@ -39,12 +39,14 @@ test:
 # syntax sugar
 # a b       -> (a b)
 	echo 'print 1' | node src/moa.js | grep -qx 1
+	echo 'print !true'               | node src/moa.js | grep -qx false
 # a + b     -> (+ a b)
 	echo 'print 1 + 2' | node src/moa.js | grep -qx 3
 # a+b     -> (+ a b)
 	echo 'print 1+2' | node src/moa.js | grep -qx 3
 # a + b * c -> (+ a (* b c))
-	echo 'print 1 + 2 * 3' | node src/moa.js | grep -qx 7
+	echo 'print 1 + 2 * 3'      | node src/moa.js | grep -qx 7
+	echo 'print 1 + 2 == 7 - 4' | node src/moa.js | grep -qx true
 # a b\nc d  -> (a b) (c d)
 	echo 'let a 1\nprint a' | node src/moa.js | grep -qx 1
 # a b; c d  -> (a b) (c d)

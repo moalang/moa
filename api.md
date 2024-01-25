@@ -1,13 +1,9 @@
 # reserved
-[ ] _                  :: void
-[ ] true, false        :: bool
-[ ] string a           :: a string
-[ ] bytes a            :: a bytes
-[ ] bool a             :: a bool
-[ ] throw a b          :: a b
-[ ] match a b          :: a matcher[a b]+ b
-[ ] < <= == !== > >= a :: a a bool
-[ ] num                :: int | float
+[ ] _            :: write only variable?
+[ ] true, false  :: bool
+[ ] none a       :: opt[a]
+[ ] throw a b    :: a b
+[ ] catch a      :: (error a) a
 
 # opt a
 [ ] and b    :: opt[a] (a b) opt[b]
@@ -15,119 +11,129 @@
 [ ] default  :: a
 
 # num a
-[ ] + - * ** / % | & ^ :: a a a
-[ ] abs, neg :: a
-[ ] format :: string string
+[-] + - * ** / % | & ^ :: a a a
+[-] abs, neg :: a
 
 # int.num
-[ ] char   :: string
-[ ] time   :: time
-[ ] times  :: list[int]
-[ ] to     :: int list[int]
+[-] char   :: string
 
 # float.num
-[ ] floor  :: int
-[ ] ceil   :: int
-[ ] round  :: int
+[-] floor  :: int
+[-] ceil   :: int
+[-] round  :: int
 
 # string
-[ ] ++          :: string string string
-[ ] size        :: int
-[ ] slice       :: int int? string
-[ ] split       :: string int? list[string]
-[ ] index       :: string int
-[ ] replace     :: string string int? string
-[ ] reverse     :: string
-[ ] has         :: string bool
-[ ] starts      :: string bool
-[ ] ends        :: string bool
-[ ] rsplit      :: string int? list[string]
-[ ] rreplace    :: string (list[string] string) int? string
-[ ] time        :: opt[time]
-[ ] int         :: opt[int]
-[ ] float       :: opt[float]
+[-] ++      :: string string string
+[-] size    :: int
+[ ] slice   :: int int? string
+[ ] split   :: string int? list[string]
+[ ] index   :: string int
+[ ] replace :: string string int? string
+[ ] reverse :: string
 
-# bytes
-[ ] ++              :: bytes bytes bytes
-[ ] le              :: bytes         # switch to litle endian mode
-[ ] i8,i16,i32,i64  :: int opt[int]
-[ ] u8,u16,u32,u64  :: int opt[int]
-[ ] f32,f64         :: int opt[int]
-[ ] size            :: int
-[ ] slice           :: int int? bytes
-[ ] utf8,utf16,hex  :: string
-[ ] tr              :: string string # b.tr("A-Za-z0-9+/") is same as base64
-[ ] hash            :: int
-[ ] hmac            :: bytes bytes string? bytes @error
+# regexp
+[ ] test    :: string bool
+[ ] match   :: string list[string]
+[ ] split   :: string int? list[string]
+[ ] replace :: string (list[string] string) int? string
 
 # lambda[a b ...]
 
 # list[a]
-[ ] ++ a    :: list[a] list[a]
-[ ] size    :: int
-[ ] first   :: opt[a]
+[-] ++ a    :: list[a] list[a]
+[-] size    :: int
 [ ] get     :: int opt[a]
+[ ] set     :: int a bool
 [ ] []      :: int a @error
 [ ] []=     :: int a a @error
-[ ] map b   :: (a b) list[b]
-[ ] fmap b  :: (a list[b]) list[b]
-[ ] keep    :: (a bool) list[a]
-[ ] all     :: (a bool) bool
-[ ] any     :: (a bool) bool
+[-] map b   :: (a b) list[b]
+[-] fmap b  :: (a list[b]) list[b]
+[-] keep    :: (a bool) list[a]
+[-] all     :: (a bool) bool
+[-] any     :: (a bool) bool
 [ ] slice   :: int int? list[a]
 [ ] sort b  :: (a b)? list[a]
 [ ] count b :: (a b)? dict[b int]
 [ ] group b :: (a b)? dict[b list[a]]
 [ ] reverse :: list[a]
 [ ] zip b   :: list[b] list[tuple[a b]]
-[ ] fold b  :: (a b b) b
+[ ] fold b  :: (a b b) b? b
 [ ] find    :: (a bool) opt[a]
-[ ] has     :: a bool
-[ ] min     :: a
-[ ] max     :: a
+[-] join    :: string string
+[-] has     :: a bool
+[-] min     :: a
+[-] max     :: a
 
 # dict[k v]
-[ ] size   :: int
+[-] size   :: int
 [ ] get    :: k opt[v]
-[ ] set    :: k v bool
-[ ] has    :: k bool
-[ ] keys   :: list[k]
-[ ] values :: list[v]
-[ ] list   :: list[tuple[k v]]
+[-] set    :: k v bool
+[-] has    :: k bool
+[-] keys   :: list[k]
+[-] values :: list[v]
+[-] list   :: list[tuple[k v]]
 
 # set[a]
-[ ] size :: int
-[ ] -    :: set[a] set[a]
-[ ] |    :: set[a] set[a]
-[ ] &    :: set[a] set[a]
-[ ] ^    :: set[a] set[a]
-[ ] has  :: a bool
+[-] size :: int
+[-] -    :: set[a] set[a]
+[-] |    :: set[a] set[a]
+[-] &    :: set[a] set[a]
+[-] ^    :: set[a] set[a]
+[-] has  :: a bool
+[-] list :: list[a]
 
 # tuple[a b ...]
-[ ] 0 :: a
-[ ] 1 :: b
+[-] 0 :: a
+[-] 1 :: b
 ...
 
 # time
-[ ] year, month, day, hour, min, sec, wday, yday, offset, int :: int
-[ ] format :: string string
-[ ] zone   :: string
-[ ] +      :: int time time
-[ ] +      :: time int time
-[ ] -      :: time time int
+[-] year, month, day, hour, min, sec, wday, yday, offset, int :: int
+[-] format :: string string
+[-] zone   :: string
+[-] utc    :: time
+[-] tick   :: int time
+
+# buffer
+[ ] size             :: int
+[ ] utf8,utf16,utf32 :: opt[string]
+[ ] i8,i16,i32,i64   :: int opt[int]
+[ ] u8,u16,u32,u64   :: int opt[int]
+[ ] f32,f64          :: int opt[float]
+[ ] slice            :: int int? buffer
 
 # ---( standard module )-------------------------------
 
 # io
-[ ] argv :: list[string]
-[ ] put  :: string _ @error
-[ ] puts :: string _ @error
-[ ] gets :: string
+[-] argv  :: list[string]
+[-] put   :: string _ @error
+[-] puts  :: string _ @error
+[-] gets  :: string
 [ ] stdin :: bytes
+[-] now   :: time
+[-] rand  :: float
+
+# log
+[-] info a  :: a ... a
+[-] warn a  :: a ... a
+[-] error a :: a ... a
+[-] stat a  :: a ... a
+[-] tag     :: a ... a
+[-] time    :: a ... a
+
+# steram
+[ ] le               :: stream
+[ ] be               :: stream
+[ ] i8,i16,i32,i64   :: int @error
+[ ] u8,u16,u32,u64   :: int @error
+[ ] f32,f64          :: int @error
+[ ] slice            :: int int? buffer @error
+[ ] utf8,utf16,utf32 :: string @error
+[ ] write a          :: a int @error
+
 
 # ---( pending )---------------------------------------
 # io
-[ ] now  :: time
 [ ] path string:
 [ ]   path   :: string
 [ ]   join   :: string path

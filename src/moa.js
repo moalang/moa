@@ -26,6 +26,9 @@ const execute = (source, embedded) => {
   const priority = t => op2s.findIndex(op => op === t.code)
   const isOp2 = t => t && /^[+\-*\/%<>!=~.]/.test(t.code)
   const reorder = xs => {
+    if (xs.length === 1) {
+      return xs
+    }
     const stack = []
     for (let i=0; i<xs.length; i++) {
       const x = xs[i]
@@ -43,7 +46,7 @@ const execute = (source, embedded) => {
         stack.push(x)
       }
     }
-    return xs.length === 3 && stack.length === 1 ? stack[0] : stack
+    return xs.length <= 3 && stack.length === 1 ? stack[0] : stack
   }
   const list = () => reorder(until(unit, t => t.code !== ')'))
   const unit = t => t.code === '(' ? list() :
