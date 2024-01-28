@@ -1,6 +1,6 @@
 # reserved
 [ ] _            :: write only variable?
-[ ] true, false  :: bool
+[x] true, false  :: bool
 [ ] none a       :: opt[a]
 [ ] throw a b    :: a b
 [ ] catch a      :: (error a) a
@@ -44,8 +44,8 @@
 [-] size    :: int
 [ ] get     :: int opt[a]
 [ ] set     :: int a bool
-[ ] []      :: int a @error
-[ ] []=     :: int a a @error
+[-] []      :: int a @error
+[-] []=     :: int a a @error
 [-] map b   :: (a b) list[b]
 [-] fmap b  :: (a list[b]) list[b]
 [-] keep    :: (a bool) list[a]
@@ -74,13 +74,15 @@
 [-] list   :: list[tuple[k v]]
 
 # set[a]
-[-] size :: int
-[-] -    :: set[a] set[a]
-[-] |    :: set[a] set[a]
-[-] &    :: set[a] set[a]
-[-] ^    :: set[a] set[a]
-[-] has  :: a bool
-[-] list :: list[a]
+[-] size   :: int
+[-] -      :: set[a] set[a]
+[-] |      :: set[a] set[a]
+[-] &      :: set[a] set[a]
+[-] ^      :: set[a] set[a]
+[-] has    :: a bool
+[-] add    :: a bool
+[-] remove :: a bool
+[-] list   :: list[a]
 
 # tuple[a b ...]
 [-] 0 :: a
@@ -94,24 +96,16 @@
 [-] utc    :: time
 [-] tick   :: int time
 
-# buffer
-[ ] size             :: int
-[ ] utf8,utf16,utf32 :: opt[string]
-[ ] i8,i16,i32,i64   :: int opt[int]
-[ ] u8,u16,u32,u64   :: int opt[int]
-[ ] f32,f64          :: int opt[float]
-[ ] slice            :: int int? buffer
-
-# ---( standard module )-------------------------------
-
 # io
 [-] argv  :: list[string]
 [-] put   :: string _ @error
 [-] puts  :: string _ @error
 [-] gets  :: string
-[ ] stdin :: bytes
+[ ] stdin :: stream
 [-] now   :: time
 [-] rand  :: float
+
+# ---( standard module )-------------------------------
 
 # log
 [-] info a  :: a ... a
@@ -128,9 +122,16 @@
 [ ] u8,u16,u32,u64   :: int @error
 [ ] f32,f64          :: int @error
 [ ] slice            :: int int? buffer @error
-[ ] utf8,utf16,utf32 :: string @error
 [ ] write a          :: a int @error
+[ ] utf8,utf16,utf32 :: string @error
 
+# buffer
+[ ] size             :: int
+[ ] utf8,utf16,utf32 :: opt[string]
+[ ] i8,i16,i32,i64   :: int opt[int]
+[ ] u8,u16,u32,u64   :: int opt[int]
+[ ] f32,f64          :: int opt[float]
+[ ] slice            :: int int? buffer
 
 # ---( pending )---------------------------------------
 # io
