@@ -1,6 +1,6 @@
 'use strict'
 class Tuple extends Array {}
-const util = require('util')
+const util = require('node:util')
 const show = o =>
   o instanceof Tuple ? '(tuple' + o.map(show).map(x => ' ' + x).join('') + ')' :
   o instanceof Array ? '(list' + o.map(show).map(x => ' ' + x).join('') + ')' :
@@ -182,8 +182,8 @@ const repl = () => {
   })
 }
 
-const fs = require('fs')
 if (process.stdin.isRaw === undefined) {
+  const fs = require('node:fs')
   execute(fs.readFileSync('/dev/stdin', 'utf8'), {})
 } else {
   repl()

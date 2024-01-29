@@ -122,5 +122,8 @@ test:
 	echo 'def a (b c) b + c; log (a 1 2)'         | node src/moa.js 2>&1 | grep -qx 3
 	@echo ok
 
+repl:
+	node src/moa.js
+
 wc:
 	wc src/moa.js
