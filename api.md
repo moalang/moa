@@ -96,17 +96,6 @@
 [-] utc    :: time
 [-] tick   :: int time
 
-# io
-[-] argv  :: list[string]
-[-] put   :: string _ @error
-[-] puts  :: string _ @error
-[-] gets  :: string
-[ ] stdin :: stream
-[-] now   :: time
-[-] rand  :: float
-
-# ---( standard module )-------------------------------
-
 # log
 [-] info a  :: a ... a
 [-] warn a  :: a ... a
@@ -114,6 +103,17 @@
 [-] stat a  :: a ... a
 [-] tag     :: a ... a
 [-] time    :: a ... a
+
+# io
+[ ] print  :: a void
+[-] argv   :: list[string]
+[-] now    :: time
+[-] rand   :: float
+[ ] stdin  :: stream
+[ ] stdout :: stream
+[ ] stderr :: stream
+
+# ---( standard module )-------------------------------
 
 # steram
 [ ] le               :: stream

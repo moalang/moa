@@ -3,8 +3,7 @@ const util = require('util')
 const show = o => Array.isArray(o) ? '(list' + o.map(show).map(x => ' ' + x).join('') + ')' :
   o instanceof Map ? '(dict' + [...o].flatMap(a => a.map(show)).map(x => ' ' + x).join('') + ')' :
   o.toString()
-const print = (...a) => (console.log(...a.map(show)), a[0])
-const log = (...a) => (console.error(...a.map(o => util.inspect(o, false, null, true))), a[0])
+const log = (...a) => (console.error(...a.map(show)), a[0])
 const attempt = f => { try { return f() } catch (e) { return e } }
 const loop = (f, g) => { const a = []; while (f()) { a.push(g()) }; return a }
 const fail = (m, o) => { log(o); throw new Error(m) }
@@ -87,7 +86,6 @@ const execute = (source, embedded) => {
     struct: (env, [name, fields]) => env[name.code] = (e, a) =>
       map(fields.map(f => f[0].code), a.map(exp => run(e, exp))),
     log: lambda(log),
-    print: lambda(print),
     list: lambda((...a) => a),
     dict: lambda((...a) => new Map([...new Array(a.length/2)].map((_, i) => [a[i*2], a[i*2+1]]))),
     '.': (env, [obj, name]) => prop(run(env, obj), name.code),
