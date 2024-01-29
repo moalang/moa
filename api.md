@@ -15,21 +15,21 @@
 [x] abs, neg :: a
 
 # int.num
-[-] char   :: string
+[x] char   :: string
 
 # float.num
-[-] floor  :: int
-[-] ceil   :: int
-[-] round  :: int
+[x] floor  :: int
+[x] ceil   :: int
+[x] round  :: int
 
 # string
-[-] ++      :: string string string
-[-] size    :: int
-[ ] slice   :: int int? string
-[ ] split   :: string int? list[string]
-[ ] index   :: string int
-[ ] replace :: string string int? string
-[ ] reverse :: string
+[x] ++      :: string string string
+[x] size    :: int
+[x] reverse :: string
+[x] slice   :: int int? string
+[x] split   :: string int? list[string]
+[ ] index   :: string opt[int]
+[x] replace :: string string string
 
 # regexp
 [ ] test    :: string bool
@@ -40,8 +40,8 @@
 # lambda[a b ...]
 
 # list[a]
-[-] ++ a    :: list[a] list[a]
-[-] size    :: int
+[x] ++ a    :: list[a] list[a]
+[x] size    :: int
 [ ] get     :: int opt[a]
 [ ] set     :: int a bool
 [-] []      :: int a @error

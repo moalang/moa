@@ -12,7 +12,8 @@ const execute = (source, embedded) => {
   // parser
   let offset = 0
   let lineid = 1
-  const tokens = source.split(/([+\-*\/%|&<>!=]+|[(){};.]|"[^]*?(?<!\\)"|(?:#[^\n]*|\s+))/).flatMap(code => {
+  // operator | symbols | number | string | white space
+  const tokens = source.split(/([+\-*\/%|&<>!=]+|[(){};.]|[0-9]+(?:\.[0-9]+)?|"[^]*?(?<!\\)"|(?:#[^\n]*|\s+))/).flatMap(code => {
     offset += code.length
     lineid += code.split('\n').length - 1 + (code === ';' ? 1 : 0)
     const enabled = code !== ';' && !/^\s*#/.test(code) && code.trim()
@@ -69,10 +70,18 @@ const execute = (source, embedded) => {
     target.code in env ? env[target.code] :
     fail('Missing', {target, ids: [...Object.keys(env)]})
   const props = {
-    'String size': o => o.length,
+    'String size': s => s.length,
+    'String slice': s => (env, a) => s.slice(...a.map(x => run(env, x))),
+    'String split': s => (env, a) => s.split(...a.map(x => run(env, x))),
+    'String reverse': s => s.split('').reverse().join(''),
+    'String replace': s => (env, a) => s.replaceAll(...a.map(x => run(env, x))),
     'Array size': o => o.length,
     'Number abs': n => Math.abs(n),
     'Number neg': n => -n,
+    'Number char': n => String.fromCharCode(n),
+    'Number floor': n => Math.floor(n),
+    'Number ceil': n => Math.ceil(n),
+    'Number round': n => Math.round(n),
   }
   const prop = (obj, name) => {
     const p = props[`${obj.constructor.name} ${name}`]
