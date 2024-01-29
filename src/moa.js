@@ -3,7 +3,7 @@ const util = require('util')
 const show = o => Array.isArray(o) ? '(list' + o.map(show).map(x => ' ' + x).join('') + ')' :
   o instanceof Map ? '(dict' + [...o].flatMap(a => a.map(show)).map(x => ' ' + x).join('') + ')' :
   o.toString()
-const log = (...a) => (console.error(...a.map(show)), a[0])
+const log = (...a) => (console.error(...a.map(o => util.inspect(o, false, null, true))), a[0])
 const attempt = f => { try { return f() } catch (e) { return e } }
 const loop = (f, g) => { const a = []; while (f()) { a.push(g()) }; return a }
 const fail = (m, o) => { log(o); throw new Error(m) }
@@ -71,6 +71,8 @@ const execute = (source, embedded) => {
   const props = {
     'String size': o => o.length,
     'Array size': o => o.length,
+    'Number abs': n => Math.abs(n),
+    'Number neg': n => -n,
   }
   const prop = (obj, name) => {
     const p = props[`${obj.constructor.name} ${name}`]
@@ -85,7 +87,7 @@ const execute = (source, embedded) => {
     let: (env, [name, exp]) => env[name.code] = run(env, exp),
     struct: (env, [name, fields]) => env[name.code] = (e, a) =>
       map(fields.map(f => f[0].code), a.map(exp => run(e, exp))),
-    log: lambda(log),
+    log: lambda((...a) => (console.error(...a.map(show)), a[0])),
     list: lambda((...a) => a),
     dict: lambda((...a) => new Map([...new Array(a.length/2)].map((_, i) => [a[i*2], a[i*2+1]]))),
     '.': (env, [obj, name]) => prop(run(env, obj), name.code),
@@ -96,14 +98,18 @@ const execute = (source, embedded) => {
     embedded[op + '='] = (env, [l, r]) => env[l.code] = opf(run(env, l), run(env, r))
   }
   defineOp2('+', (l, r) => l + r)
-  defineOp2('-', (l, r) => l - r)
   defineOp2('*', (l, r) => l * r)
   defineOp2('/', (l, r) => l / r)
   defineOp2('%', (l, r) => l % r)
+  defineOp2('|', (l, r) => l | r)
+  defineOp2('&', (l, r) => l & r)
+  defineOp2('^', (l, r) => l ^ r)
   defineOp2('||', (l, r) => l || r)
   defineOp2('&&', (l, r) => l && r)
   defineOp2('**', (l, r) => l ** r)
   defineOp2('++', (l, r) => l instanceof Map ? new Map([...l, ...r]) : l.concat(r))
+  embedded['-'] = (env, a) => a.length === 1 ? -run(env, a[0]) : a.map(x => run(env, x)).reduce((acc,n) => acc === undefined ? n : acc - n)
+  embedded['-='] = (env, [l, r]) => env[l.code] = run(env, l) - run(env, r)
   const comparable = x =>
     x === undefined ? 'undefined' :
     x === null ? 'null' :

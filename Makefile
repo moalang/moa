@@ -6,6 +6,9 @@ test:
 	clear
 # feature
 	echo '(log "hello world")'                    | node src/moa.js 2>&1 | grep -qx 'hello world'
+	echo '(log (-1))'                             | node src/moa.js 2>&1 | grep -qx -- -1
+	echo '(log (-1).abs)'                         | node src/moa.js 2>&1 | grep -qx 1
+	echo '(log 1.neg)'                            | node src/moa.js 2>&1 | grep -qx -- -1
 	echo '(def a (b c) (+ b c)) (log (a 1 2))'    | node src/moa.js 2>&1 | grep -qx 3
 	echo '(var a 1) (+= a 2) (log a)'             | node src/moa.js 2>&1 | grep -qx 3
 	echo '(struct a ((b int))) (log (. (a 1) b))' | node src/moa.js 2>&1 | grep -qx 1
@@ -19,6 +22,9 @@ test:
 	echo '(log (* 2 3))'                          | node src/moa.js 2>&1 | grep -qx 6
 	echo '(log (/ 4 2))'                          | node src/moa.js 2>&1 | grep -qx 2
 	echo '(log (% 5 2))'                          | node src/moa.js 2>&1 | grep -qx 1
+	echo '(log (| 1 2))'                          | node src/moa.js 2>&1 | grep -qx 3
+	echo '(log (& 3 2))'                          | node src/moa.js 2>&1 | grep -qx 2
+	echo '(log (^ 3 2))'                          | node src/moa.js 2>&1 | grep -qx 1
 	echo '(log (** 2 3))'                         | node src/moa.js 2>&1 | grep -qx 8
 	echo '(log (|| false false))'                 | node src/moa.js 2>&1 | grep -qx false
 	echo '(log (&& true true))'                   | node src/moa.js 2>&1 | grep -qx true

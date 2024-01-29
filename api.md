@@ -11,8 +11,8 @@
 [ ] default  :: a
 
 # num a
-[-] + - * ** / % | & ^ :: a a a
-[-] abs, neg :: a
+[x] + - * ** / % | & ^ :: a a a
+[x] abs, neg :: a
 
 # int.num
 [-] char   :: string
