@@ -1,6 +1,6 @@
 watch:
-	-make test
-	-fswatch -0 -o -l 2 Makefile src | xargs -I {} -n1 -0 make test
+	-time make test
+	-fswatch -0 -o -l 2 Makefile src | xargs -I {} -n1 -0 time make test
 
 test:
 	clear
@@ -122,5 +122,5 @@ test:
 	echo 'def a (b c) b + c; log (a 1 2)'         | node src/moa.js 2>&1 | grep -qx 3
 	@echo ok
 
-mc:
-	node misc/mc src/*
+wc:
+	wc src/moa.js
