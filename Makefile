@@ -88,38 +88,38 @@ test:
 # struct
 	echo '(struct a ((b int))) (log (. (a 1) b))' | node src/moa.js 2>&1 | grep -qx 1
 # comment
-	echo '(var a 1)\n#b\n(log a)'    | node src/moa.js 2>&1 | grep -qx 1
-	echo '(var a 1) \n #b \n(log a)' | node src/moa.js 2>&1 | grep -qx 1
+	echo '(var a 1)\n#b\n(log a)'                 | node src/moa.js 2>&1 | grep -qx 1
+	echo '(var a 1) \n #b \n(log a)'              | node src/moa.js 2>&1 | grep -qx 1
 # syntax sugar
 # a b       -> (a b)
-	echo 'log 1' | node src/moa.js 2>&1 | grep -qx 1
-	echo 'log !true'               | node src/moa.js 2>&1 | grep -qx false
+	echo 'log 1'                                  | node src/moa.js 2>&1 | grep -qx 1
+	echo 'log !true'                              | node src/moa.js 2>&1 | grep -qx false
 # a + b     -> (+ a b)
-	echo 'log 1 + 2' | node src/moa.js 2>&1 | grep -qx 3
+	echo 'log 1 + 2'                              | node src/moa.js 2>&1 | grep -qx 3
 # a+b     -> (+ a b)
-	echo 'log 1+2' | node src/moa.js 2>&1 | grep -qx 3
+	echo 'log 1+2'                                | node src/moa.js 2>&1 | grep -qx 3
 # a + b * c -> (+ a (* b c))
-	echo 'log 1 + 2 * 3'      | node src/moa.js 2>&1 | grep -qx 7
-	echo 'log 1 + 2 == 7 - 4' | node src/moa.js 2>&1 | grep -qx true
+	echo 'log 1 + 2 * 3'                          | node src/moa.js 2>&1 | grep -qx 7
+	echo 'log 1 + 2 == 7 - 4'                     | node src/moa.js 2>&1 | grep -qx true
 # a b\nc d  -> (a b) (c d)
-	echo 'let a 1\nlog a' | node src/moa.js 2>&1 | grep -qx 1
+	echo 'let a 1\nlog a'                         | node src/moa.js 2>&1 | grep -qx 1
 # a b; c d  -> (a b) (c d)
-	echo 'let a 1;log a' | node src/moa.js 2>&1 | grep -qx 1
+	echo 'let a 1;log a'                          | node src/moa.js 2>&1 | grep -qx 1
 # {a}       -> {a}
-	echo '{log 1}' | node src/moa.js 2>&1 | grep -qx 1
+	echo '{log 1}'                                | node src/moa.js 2>&1 | grep -qx 1
 # {a; b c}  -> {a (b c)}
-	echo '{let a 1; log a}' | node src/moa.js 2>&1 | grep -qx 1
+	echo '{let a 1; log a}'                       | node src/moa.js 2>&1 | grep -qx 1
 # a()       -> (a)
 # a(b)      -> (a b)
 # a.b()     -> ((. a b))
 # a.b(c)    -> ((. a b) c)
 # edge cases
-	echo '1; log 2'                              | node src/moa.js 2>&1 | grep -qx 2
-	echo '{1; log 2}'                            | node src/moa.js 2>&1 | grep -qx 2
-	echo '{{1; log 2}}'                          | node src/moa.js 2>&1 | grep -qx 2
-	echo 'def a (b) {b += 1; b += 2}; log (a 1)' | node src/moa.js 2>&1 | grep -qx 4
-	echo 'def a (b) {b += 1; b += 2}\nlog (a 1)' | node src/moa.js 2>&1 | grep -qx 4
-	echo 'def a (b c) b + c; log (a 1 2)'        | node src/moa.js 2>&1 | grep -qx 3
+	echo '1; log 2'                               | node src/moa.js 2>&1 | grep -qx 2
+	echo '{1; log 2}'                             | node src/moa.js 2>&1 | grep -qx 2
+	echo '{{1; log 2}}'                           | node src/moa.js 2>&1 | grep -qx 2
+	echo 'def a (b) {b += 1; b += 2}; log (a 1)'  | node src/moa.js 2>&1 | grep -qx 4
+	echo 'def a (b) {b += 1; b += 2}\nlog (a 1)'  | node src/moa.js 2>&1 | grep -qx 4
+	echo 'def a (b c) b + c; log (a 1 2)'         | node src/moa.js 2>&1 | grep -qx 3
 	@echo ok
 
 mc:
