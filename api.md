@@ -65,7 +65,7 @@
 [-] max     :: a
 
 # dict[k v]
-[-] size   :: int
+[x] size   :: int
 [ ] get    :: k opt[v]
 [-] set    :: k v bool
 [-] has    :: k bool
@@ -74,15 +74,15 @@
 [-] list   :: list[tuple[k v]]
 
 # set[a]
-[-] size   :: int
-[-] -      :: set[a] set[a]
-[-] |      :: set[a] set[a]
-[-] &      :: set[a] set[a]
-[-] ^      :: set[a] set[a]
-[-] has    :: a bool
-[-] add    :: a bool
-[-] remove :: a bool
-[-] list   :: list[a]
+[x] size   :: int
+[x] -      :: set[a] set[a]
+[x] |      :: set[a] set[a]
+[x] &      :: set[a] set[a]
+[x] ^      :: set[a] set[a]
+[x] has    :: a bool
+[x] add    :: a bool
+[x] rid    :: a bool
+[x] list   :: list[a]
 
 # tuple[a b ...]
 [-] 0 :: a
@@ -97,15 +97,9 @@
 [-] tick   :: int time
 
 # log
-[-] info a  :: a ... a
-[-] warn a  :: a ... a
-[-] error a :: a ... a
-[-] stat a  :: a ... a
-[-] tag     :: a ... a
-[-] time    :: a ... a
+[x] _ :: a ... a
 
 # io
-[ ] print  :: a void
 [-] argv   :: list[string]
 [-] now    :: time
 [-] rand   :: float

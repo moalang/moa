@@ -52,6 +52,20 @@ test:
 	echo '(log (++ "a" "b")'                      | node src/moa.js 2>&1 | grep -qx ab
 	echo '(log (++ (list 1) (list 2))'            | node src/moa.js 2>&1 | grep -qx '(list 1 2)'
 	echo '(log (. (list 1) size))'                | node src/moa.js 2>&1 | grep -qx 1
+# set
+	echo '(log (set))'                            | node src/moa.js 2>&1 | grep -qx '(set)'
+	echo '(log (set 1 1))'                        | node src/moa.js 2>&1 | grep -qx '(set 1)'
+	echo '(log (. (set 1) size))'                 | node src/moa.js 2>&1 | grep -qx 1
+	echo '(log ((. (set 1) has) 1))'              | node src/moa.js 2>&1 | grep -qx true
+	echo '(log ((. (set 1) add) 1))'              | node src/moa.js 2>&1 | grep -qx false
+	echo '(log ((. (set 1) add) 2))'              | node src/moa.js 2>&1 | grep -qx true
+	echo '(log ((. (set 1) rid) 1))'              | node src/moa.js 2>&1 | grep -qx true
+	echo '(log ((. (set 1) rid) 2))'              | node src/moa.js 2>&1 | grep -qx false
+	echo '(log (- (set 1 2) (set 2))'             | node src/moa.js 2>&1 | grep -qx '(set 1)'
+	echo '(log (| (set 1) (set 2))'               | node src/moa.js 2>&1 | grep -qx '(set 1 2)'
+	echo '(log (& (set 1 2) (set 2))'             | node src/moa.js 2>&1 | grep -qx '(set 2)'
+	echo '(log (^ (set 1) (set 1 2))'             | node src/moa.js 2>&1 | grep -qx '(set 2)'
+	echo '(log (. (set 1) list)'                  | node src/moa.js 2>&1 | grep -qx '(list 1)'
 # methods dict
 	echo '(log (++ (dict 1 2) (dict 3 4))'        | node src/moa.js 2>&1 | grep -qx '(dict 1 2 3 4)'
 	echo '(log (. (dict 1 2 3 4) size)'           | node src/moa.js 2>&1 | grep -qx 2

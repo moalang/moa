@@ -2,6 +2,7 @@
 const util = require('util')
 const show = o => Array.isArray(o) ? '(list' + o.map(show).map(x => ' ' + x).join('') + ')' :
   o instanceof Map ? '(dict' + [...o].flatMap(a => a.map(show)).map(x => ' ' + x).join('') + ')' :
+  o instanceof Set ? '(set' + [...o].map(show).map(x => ' ' + x).join('') + ')' :
   o.toString()
 const log = (...a) => (console.error(...a.map(o => util.inspect(o, false, null, true))), a[0])
 const attempt = f => { try { return f() } catch (e) { return e } }
@@ -69,13 +70,18 @@ const execute = (source, embedded) => {
     target.code.match(/^["'`]/) ? target.code.slice(1, -1) :
     target.code in env ? env[target.code] :
     fail('Missing', {target, ids: [...Object.keys(env)]})
+  const lambda = f => (env, a) => f(...a.map(x => run(env, x)))
   const props = {
     'String size': s => s.length,
-    'String slice': s => (env, a) => s.slice(...a.map(x => run(env, x))),
-    'String split': s => (env, a) => s.split(...a.map(x => run(env, x))),
+    'String slice': s => lambda((...a) => s.slice(...a)),
+    'String split': s => lambda((...a) => s.split(...a)),
     'String reverse': s => s.split('').reverse().join(''),
-    'String replace': s => (env, a) => s.replaceAll(...a.map(x => run(env, x))),
+    'String replace': s => lambda((...a) => s.replaceAll(...a)),
     'Array size': o => o.length,
+    'Set has': s => lambda(x => s.has(x)),
+    'Set add': s => lambda(x => s.has(x) ? false : (s.add(x), true)),
+    'Set rid': s => lambda(x => s.delete(x)),
+    'Set list': s => [...s],
     'Number abs': n => Math.abs(n),
     'Number neg': n => -n,
     'Number char': n => String.fromCharCode(n),
@@ -88,7 +94,6 @@ const execute = (source, embedded) => {
     return p ? p(obj) : typeof obj === 'object' && name in obj ? obj[name] : fail('NoProperty', {obj, name})
   }
   const map = (a, b) => Object.fromEntries(a.map((x,i) => [x,b[i]]))
-  const lambda = f => (env, a) => f(...a.map(x => run(env, x)))
   Object.assign(embedded, {
     def: (env, [name, a, body]) => env[name.code] = (e, b) =>
       run({...e, ...map(a.map(x => x.code), b.map(exp => run(e, exp)))}, body),
@@ -98,6 +103,7 @@ const execute = (source, embedded) => {
       map(fields.map(f => f[0].code), a.map(exp => run(e, exp))),
     log: lambda((...a) => (console.error(...a.map(show)), a[0])),
     list: lambda((...a) => a),
+    set: lambda((...a) => new Set(a)),
     dict: lambda((...a) => new Map([...new Array(a.length/2)].map((_, i) => [a[i*2], a[i*2+1]]))),
     '.': (env, [obj, name]) => prop(run(env, obj), name.code),
     '{': (env, lines) => lines.map(line => run(env, line)).at(-1),
@@ -110,14 +116,15 @@ const execute = (source, embedded) => {
   defineOp2('*', (l, r) => l * r)
   defineOp2('/', (l, r) => l / r)
   defineOp2('%', (l, r) => l % r)
-  defineOp2('|', (l, r) => l | r)
-  defineOp2('&', (l, r) => l & r)
-  defineOp2('^', (l, r) => l ^ r)
+  defineOp2('|', (l, r) => l instanceof Set ? new Set([...l, ...r]) : l | r)
+  defineOp2('&', (l, r) => l instanceof Set ? new Set([...l].filter(x => r.has(x))) : l & r)
+  defineOp2('^', (l, r) => l instanceof Set ? new Set([...l, ...r].flatMap(x => l.has(x) && r.has(x) ? [] : [x])) : l ^ r)
   defineOp2('||', (l, r) => l || r)
   defineOp2('&&', (l, r) => l && r)
   defineOp2('**', (l, r) => l ** r)
   defineOp2('++', (l, r) => l instanceof Map ? new Map([...l, ...r]) : l.concat(r))
-  embedded['-'] = (env, a) => a.length === 1 ? -run(env, a[0]) : a.map(x => run(env, x)).reduce((acc,n) => acc === undefined ? n : acc - n)
+  const minus = (l, r) => l instanceof Set ? new Set([...l].filter(x => !r.has(x))) : l - r
+  embedded['-'] = lambda((...a) => a.length === 1 ? -a[0] : a.reduce((acc,n) => acc === undefined ? n : minus(acc, n)))
   embedded['-='] = (env, [l, r]) => env[l.code] = run(env, l) - run(env, r)
   const comparable = x =>
     x === undefined ? 'undefined' :
