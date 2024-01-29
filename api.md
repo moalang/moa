@@ -35,7 +35,7 @@
 [ ] test    :: string bool
 [ ] match   :: string list[string]
 [ ] split   :: string int? list[string]
-[ ] replace :: string (list[string] string) int? string
+[ ] replace :: string (list[string] string) string
 
 # lambda[a b ...]
 
