@@ -1,8 +1,10 @@
 'use strict'
 class Tuple extends Array {}
+class Void extends Object {}
 const util = require('node:util')
 const show = o =>
   o instanceof Tuple ? '(tuple' + o.map(show).map(x => ' ' + x).join('') + ')' :
+  o instanceof Void ? '(void)' :
   o instanceof Array ? '(list' + o.map(show).map(x => ' ' + x).join('') + ')' :
   o instanceof Map ? '(dict' + [...o].flatMap(a => a.map(show)).map(x => ' ' + x).join('') + ')' :
   o instanceof Set ? '(set' + [...o].map(show).map(x => ' ' + x).join('') + ')' :
@@ -13,6 +15,18 @@ const attempt = f => { try { return f() } catch (e) { return e } }
 const loop = (f, g) => { const a = []; while (f()) { a.push(g()) }; return a }
 const fail = (m, o) => { log(o); throw new Error(m) }
 const tuple = (...a) => new Tuple().concat(a)
+const comparable = x =>
+  x === undefined ? 'undefined' :
+  x === null ? 'null' :
+  x.constructor.name + ':' + (
+    x instanceof Error ? e.message :
+    Array.isArray(x) ? x.map(comparable).join(' ') :
+    x instanceof Map ? [...x.keys()].sort().map(key => comparable(key + ':' + x.get(key))).join(' ') :
+    typeof x === 'object' ? Object.keys(x).sort().map(key => key + ':' + comparable(x[key])).join(' ') :
+    typeof x === 'number' ? (Array(16).join('0') + x).slice(-16) :
+    typeof x === 'string' ? x :
+    typeof x === 'boolean' ? x.toString() :
+    fail('UnComparable', x))
 
 const execute = (source, embedded) => {
   // parser
@@ -84,7 +98,6 @@ const execute = (source, embedded) => {
     'String split': s => lambda((...a) => s.split(...a)),
     'String reverse': s => s.split('').reverse().join(''),
     'String replace': s => lambda((...a) => s.replaceAll(...a)),
-    'RegExp test': r => lambda(s => r.test(s)),
     'RegExp split': r => lambda(s => s.split(r)),
     'RegExp replace': r => (env, [s, f]) => (f => run(env, s).replace(new RegExp(r, r.flags.replace('g', '') + 'g'), (...a) => f(env, a.slice(0, -2).map(raw))))(run(env, f)),
     'Array size': a => a.length,
@@ -121,6 +134,8 @@ const execute = (source, embedded) => {
     dict: lambda((...a) => new Map([...new Array(a.length/2)].map((_, i) => [a[i*2], a[i*2+1]]))),
     regexp: lambda(s => new RegExp(s)),
     tuple: lambda((...a) => tuple(...a)),
+    void: new Void(),
+    assert: lambda((a, b) => comparable(a) === comparable(b) ? new Void() : fail('Assert', {a, b})),
     '.': (env, [obj, name]) => prop(run(env, obj), name.code),
     '{': (env, lines) => lines.map(line => run(env, line)).at(-1),
   })
@@ -142,18 +157,6 @@ const execute = (source, embedded) => {
   const minus = (l, r) => l instanceof Set ? new Set([...l].filter(x => !r.has(x))) : l - r
   embedded['-'] = lambda((...a) => a.length === 1 ? -a[0] : a.reduce((acc,n) => acc === undefined ? n : minus(acc, n)))
   embedded['-='] = (env, [l, r]) => env[l.code] = run(env, l) - run(env, r)
-  const comparable = x =>
-    x === undefined ? 'undefined' :
-    x === null ? 'null' :
-    x.constructor.name + ':' + (
-      x instanceof Error ? e.message :
-      Array.isArray(x) ? x.map(comparable).join(' ') :
-      x instanceof Map ? [...x.keys()].sort().map(key => comparable(key + ':' + x.get(key))).join(' ') :
-      typeof x === 'object' ? Object.keys(x).sort().map(key => key + ':' + comparable(x[key])).join(' ') :
-      typeof x === 'number' ? (Array(16).join('0') + x).slice(-16) :
-      typeof x === 'string' ? x :
-      typeof x === 'boolean' ? x.toString() :
-      fail('UnComparable', x))
   embedded['!'] = lambda(x => !x)
   embedded['=='] = lambda((l,r) => comparable(l) === comparable(r))
   embedded['!='] = lambda((l,r) => comparable(l) !== comparable(r))

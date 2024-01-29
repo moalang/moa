@@ -4,6 +4,8 @@ watch:
 
 test:
 	clear
+# void
+	echo '(log void)'                             | node src/moa.js 2>&1 | grep -qx '(void)'
 # bool
 	echo '(log true)'                             | node src/moa.js 2>&1 | grep -qx true
 	echo '(log (! false))'                        | node src/moa.js 2>&1 | grep -qx true
@@ -47,7 +49,6 @@ test:
 	echo '(log ((. "aba" replace) "a" "_"))'      | node src/moa.js 2>&1 | grep -qx '_b_'
 # regexp
 	echo '(log (regexp "a"))'                     | node src/moa.js 2>&1 | grep -qx '(regexp a)'
-	echo '(log ((. (regexp "a") test) "a"))'      | node src/moa.js 2>&1 | grep -qx true
 	echo '(log ((. (regexp "\\d") split) "a1b"))' | node src/moa.js 2>&1 | grep -qx '(list a b)'
 	echo '(log ((. (regexp "\\d") replace) "12" (fn (x) (++ x "!"))))' | node src/moa.js 2>&1 | grep -qx 1!2!
 # tuple
@@ -87,6 +88,9 @@ test:
 	echo '(def a (b c) (+ b c)) (log (a 1 2))'    | node src/moa.js 2>&1 | grep -qx 3
 # struct
 	echo '(struct a ((b int))) (log (. (a 1) b))' | node src/moa.js 2>&1 | grep -qx 1
+# test
+	echo '(assert 1 1)'                           | node src/moa.js
+	echo '(assert 1 2)'                           | node src/moa.js 2>&1 | grep -qx 'Error: Assert'
 # comment
 	echo '(var a 1)\n#b\n(log a)'                 | node src/moa.js 2>&1 | grep -qx 1
 	echo '(var a 1) \n #b \n(log a)'              | node src/moa.js 2>&1 | grep -qx 1

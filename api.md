@@ -1,5 +1,6 @@
 # reserved
 [ ] _            :: write only variable?
+[x] void         :: void
 [x] true, false  :: bool
 [ ] none a       :: opt[a]
 [ ] throw a b    :: a b
@@ -32,7 +33,6 @@
 [x] replace :: string string string
 
 # regexp
-[x] test    :: string bool
 [ ] match   :: string opt[list[string]]
 [x] split   :: string list[string]
 [x] replace :: string (list[string] string) string
@@ -98,7 +98,10 @@
 [-] tick   :: int time
 
 # log
-[x] _ :: a ... a
+[x] :: a ... a
+
+# assert
+[x] :: a a void
 
 # io
 [-] argv   :: list[string]
