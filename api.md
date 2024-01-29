@@ -32,12 +32,13 @@
 [x] replace :: string string string
 
 # regexp
-[ ] test    :: string bool
-[ ] match   :: string list[string]
-[ ] split   :: string int? list[string]
-[ ] replace :: string (list[string] string) string
+[x] test    :: string bool
+[ ] match   :: string opt[list[string]]
+[x] split   :: string list[string]
+[x] replace :: string (list[string] string) string
 
 # lambda[a b ...]
+[x]
 
 # list[a]
 [x] ++ a    :: list[a] list[a]
@@ -51,11 +52,11 @@
 [-] keep    :: (a bool) list[a]
 [-] all     :: (a bool) bool
 [-] any     :: (a bool) bool
-[ ] slice   :: int int? list[a]
+[x] slice   :: int int? list[a]
 [ ] sort b  :: (a b)? list[a]
 [ ] count b :: (a b)? dict[b int]
 [ ] group b :: (a b)? dict[b list[a]]
-[ ] reverse :: list[a]
+[x] reverse :: list[a]
 [ ] zip b   :: list[b] list[tuple[a b]]
 [ ] fold b  :: (a b b) b? b
 [ ] find    :: (a bool) opt[a]
@@ -85,8 +86,8 @@
 [x] list   :: list[a]
 
 # tuple[a b ...]
-[-] 0 :: a
-[-] 1 :: b
+[x] 0 :: a
+[x] 1 :: b
 ...
 
 # time

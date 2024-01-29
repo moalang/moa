@@ -9,6 +9,8 @@ test:
 	echo '(log (! false))'                        | node src/moa.js 2>&1 | grep -qx true
 	echo '(log (|| false false))'                 | node src/moa.js 2>&1 | grep -qx false
 	echo '(log (&& true true))'                   | node src/moa.js 2>&1 | grep -qx true
+# lambda
+	echo '(log ((fn (a b) (+ a b)) 1 2))'         | node src/moa.js 2>&1 | grep -qx 3
 # number
 	echo '(log 1)'                                | node src/moa.js 2>&1 | grep -qx 1
 	echo '(log 1.2)'                              | node src/moa.js 2>&1 | grep -qx 1.2
@@ -43,11 +45,24 @@ test:
 	echo '(log ((. "aba" slice) 1))'              | node src/moa.js 2>&1 | grep -qx ba
 	echo '(log ((. "aba" slice) 1 2))'            | node src/moa.js 2>&1 | grep -qx b
 	echo '(log ((. "aba" replace) "a" "_"))'      | node src/moa.js 2>&1 | grep -qx '_b_'
+# regexp
+	echo '(log (regexp "a"))'                     | node src/moa.js 2>&1 | grep -qx '(regexp a)'
+	echo '(log ((. (regexp "a") test) "a"))'      | node src/moa.js 2>&1 | grep -qx true
+	echo '(log ((. (regexp "\\d") split) "a1b"))' | node src/moa.js 2>&1 | grep -qx '(list a b)'
+	echo '(log ((. (regexp "\\d") replace) "12" (fn (x) (++ x "!"))))' | node src/moa.js 2>&1 | grep -qx 1!2!
+# tuple
+	echo '(log (tuple))'                          | node src/moa.js 2>&1 | grep -qx '(tuple)'
+	echo '(log (tuple 1 "a"))'                    | node src/moa.js 2>&1 | grep -qx '(tuple 1 a)'
+	echo '(log (. (tuple 1 "a") 0)'               | node src/moa.js 2>&1 | grep -qx 1
+	echo '(log (. (tuple 1 "a") 1)'               | node src/moa.js 2>&1 | grep -qx a
 # list
 	echo '(log (list))'                           | node src/moa.js 2>&1 | grep -qx '(list)'
 	echo '(log (list 1))'                         | node src/moa.js 2>&1 | grep -qx '(list 1)'
 	echo '(log (++ (list 1) (list 2))'            | node src/moa.js 2>&1 | grep -qx '(list 1 2)'
 	echo '(log (. (list 1) size))'                | node src/moa.js 2>&1 | grep -qx 1
+	echo '(log (. (list 1 2) reverse))'           | node src/moa.js 2>&1 | grep -qx '(list 2 1)'
+	echo '(log ((. (list 1 2) slice) 1))'         | node src/moa.js 2>&1 | grep -qx '(list 2)'
+	echo '(log ((. (list 1 2) slice) 0 1))'       | node src/moa.js 2>&1 | grep -qx '(list 1)'
 # set
 	echo '(log (set))'                            | node src/moa.js 2>&1 | grep -qx '(set)'
 	echo '(log (set 1 1))'                        | node src/moa.js 2>&1 | grep -qx '(set 1)'

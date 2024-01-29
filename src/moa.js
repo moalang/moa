@@ -1,13 +1,18 @@
 'use strict'
+class Tuple extends Array {}
 const util = require('util')
-const show = o => Array.isArray(o) ? '(list' + o.map(show).map(x => ' ' + x).join('') + ')' :
+const show = o =>
+  o instanceof Tuple ? '(tuple' + o.map(show).map(x => ' ' + x).join('') + ')' :
+  o instanceof Array ? '(list' + o.map(show).map(x => ' ' + x).join('') + ')' :
   o instanceof Map ? '(dict' + [...o].flatMap(a => a.map(show)).map(x => ' ' + x).join('') + ')' :
   o instanceof Set ? '(set' + [...o].map(show).map(x => ' ' + x).join('') + ')' :
+  o instanceof RegExp ? `(regexp ${o.toString().slice(1, -1)})` :
   o.toString()
 const log = (...a) => (console.error(...a.map(o => util.inspect(o, false, null, true))), a[0])
 const attempt = f => { try { return f() } catch (e) { return e } }
 const loop = (f, g) => { const a = []; while (f()) { a.push(g()) }; return a }
 const fail = (m, o) => { log(o); throw new Error(m) }
+const tuple = (...a) => new Tuple().concat(a)
 
 const execute = (source, embedded) => {
   // parser
@@ -64,6 +69,7 @@ const execute = (source, embedded) => {
   const call = (env, f, a) => typeof f === 'function' ? f(env, a) : fail('NotFunction', {f, a})
   const run = (env, target) =>
     Array.isArray(target) ? call(env, run(env, target[0]), target.slice(1)) :
+    'raw' in target ? target.raw :
     target.code === 'true' ? true :
     target.code === 'false' ? false :
     target.code.match(/^[0-9]/) ? parseFloat(target.code) :
@@ -71,13 +77,19 @@ const execute = (source, embedded) => {
     target.code in env ? env[target.code] :
     fail('Missing', {target, ids: [...Object.keys(env)]})
   const lambda = f => (env, a) => f(...a.map(x => run(env, x)))
+  const raw = o => ({raw: o})
   const props = {
     'String size': s => s.length,
     'String slice': s => lambda((...a) => s.slice(...a)),
     'String split': s => lambda((...a) => s.split(...a)),
     'String reverse': s => s.split('').reverse().join(''),
     'String replace': s => lambda((...a) => s.replaceAll(...a)),
-    'Array size': o => o.length,
+    'RegExp test': r => lambda(s => r.test(s)),
+    'RegExp split': r => lambda(s => s.split(r)),
+    'RegExp replace': r => (env, [s, f]) => (f => run(env, s).replace(new RegExp(r, r.flags.replace('g', '') + 'g'), (...a) => f(env, a.slice(0, -2).map(raw))))(run(env, f)),
+    'Array size': a => a.length,
+    'Array slice': a => lambda((...b) => a.slice(...b)),
+    'Array reverse': a => a.reverse(),
     'Set has': s => lambda(x => s.has(x)),
     'Set add': s => lambda(x => s.has(x) ? false : (s.add(x), true)),
     'Set rid': s => lambda(x => s.delete(x)),
@@ -95,6 +107,8 @@ const execute = (source, embedded) => {
   }
   const map = (a, b) => Object.fromEntries(a.map((x,i) => [x,b[i]]))
   Object.assign(embedded, {
+    fn: (env, [a, body]) => (e, b) =>
+      run({...e, ...map(a.map(x => x.code), b.map(exp => run(e, exp)))}, body),
     def: (env, [name, a, body]) => env[name.code] = (e, b) =>
       run({...e, ...map(a.map(x => x.code), b.map(exp => run(e, exp)))}, body),
     var: (env, [name, exp]) => env[name.code] = run(env, exp),
@@ -105,6 +119,8 @@ const execute = (source, embedded) => {
     list: lambda((...a) => a),
     set: lambda((...a) => new Set(a)),
     dict: lambda((...a) => new Map([...new Array(a.length/2)].map((_, i) => [a[i*2], a[i*2+1]]))),
+    regexp: lambda(s => new RegExp(s)),
+    tuple: lambda((...a) => tuple(...a)),
     '.': (env, [obj, name]) => prop(run(env, obj), name.code),
     '{': (env, lines) => lines.map(line => run(env, line)).at(-1),
   })
