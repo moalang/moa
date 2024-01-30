@@ -2,14 +2,6 @@
 class Tuple extends Array {}
 class Void extends Object {}
 const util = require('node:util')
-const show = o =>
-  o instanceof Tuple ? '(tuple' + o.map(show).map(x => ' ' + x).join('') + ')' :
-  o instanceof Void ? '(void)' :
-  o instanceof Array ? '(list' + o.map(show).map(x => ' ' + x).join('') + ')' :
-  o instanceof Map ? '(dict' + [...o].flatMap(a => a.map(show)).map(x => ' ' + x).join('') + ')' :
-  o instanceof Set ? '(set' + [...o].map(show).map(x => ' ' + x).join('') + ')' :
-  o instanceof RegExp ? `(regexp ${o.toString().slice(1, -1)})` :
-  o.toString()
 const log = (...a) => (console.error(...a.map(o => util.inspect(o, false, null, true))), a[0])
 const attempt = f => { try { return f() } catch (e) { return e } }
 const loop = (f, g) => { const a = []; while (f()) { a.push(g()) }; return a }
@@ -80,6 +72,8 @@ const execute = (source, embedded) => {
   const nodes = many(top)
 
   // interpriter
+  const qmap = {'n': '\n', 't': '\t', '\\': '\\'}
+  const unquote = s => s.replace(/\\(.)/g, (_, c) => qmap[c] || c)
   const call = (env, f, a) => typeof f === 'function' ? f(env, a) : fail('NotFunction', {f, a})
   const run = (env, target) =>
     Array.isArray(target) ? call(env, run(env, target[0]), target.slice(1)) :
@@ -87,7 +81,7 @@ const execute = (source, embedded) => {
     target.code === 'true' ? true :
     target.code === 'false' ? false :
     target.code.match(/^[0-9]/) ? parseFloat(target.code) :
-    target.code.match(/^["'`]/) ? target.code.slice(1, -1) :
+    target.code.match(/^["'`]/) ? unquote(target.code.slice(1, -1)) :
     target.code in env ? env[target.code] :
     fail('Missing', {target, ids: [...Object.keys(env)]})
   const lambda = f => (env, a) => f(...a.map(x => run(env, x)))
@@ -128,7 +122,7 @@ const execute = (source, embedded) => {
     let: (env, [name, exp]) => env[name.code] = run(env, exp),
     struct: (env, [name, fields]) => env[name.code] = (e, a) =>
       map(fields.map(f => f[0].code), a.map(exp => run(e, exp))),
-    log: lambda((...a) => (console.error(...a.map(show)), a[0])),
+    log: lambda((...a) => (console.error(...a), a[0])),
     list: lambda((...a) => a),
     set: lambda((...a) => new Set(a)),
     dict: lambda((...a) => new Map([...new Array(a.length/2)].map((_, i) => [a[i*2], a[i*2+1]]))),
