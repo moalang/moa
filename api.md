@@ -91,11 +91,11 @@
 ...
 
 # time
-[-] year, month, day, hour, min, sec, wday, yday, offset, int :: int
-[-] format :: string string
-[-] zone   :: string
-[-] utc    :: time
-[-] tick   :: int time
+[x] year, month, day, hour, min, sec, wday, yday, offset :: int
+[x] format :: string string
+[x] utc    :: time
+[x] string :: string
+[x] tick   :: int time
 
 # log
 [x] :: a ... a

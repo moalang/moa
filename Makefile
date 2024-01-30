@@ -4,7 +4,7 @@ watch:
 
 t:
 	clear
-	cat test/basic.moa | node src/moa.js
+	cat test/*.moa | node src/moa.js
 # log
 	echo '(log 1)'                   | node src/moa.js 2>&1 | grep -qx 1
 # assert

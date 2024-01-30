@@ -1,6 +1,23 @@
 'use strict'
+process.env.TZ = 'UTC'
 class Tuple extends Array {}
 class Void extends Object {}
+class Time {
+  constructor(year, month, day, hour, min, sec, offset) {
+    const d = new Date(year, month - 1, day, hour, min, sec)
+    this.year = d.getFullYear()
+    this.month = d.getMonth() + 1
+    this.day = d.getDate()
+    this.hour = d.getHours()
+    this.min = d.getMinutes()
+    this.sec = d.getSeconds()
+    this.offset = offset || 0
+    this.wday = d.getDay()
+    const s = new Date(Date.UTC(year, 0, 1))
+    const e = new Date(Date.UTC(year, month - 1, day))
+    this.yday = Math.floor((e - s) / (1000 * 60 * 60 * 24)) + 1
+  }
+}
 const util = require('node:util')
 const log = (...a) => (console.error(...a.map(o => util.inspect(o, false, null, true))), a[0])
 const attempt = f => { try { return f() } catch (e) { return e } }
@@ -86,6 +103,29 @@ const execute = (source, embedded) => {
     fail('Missing', {target, ids: [...Object.keys(env)]})
   const lambda = f => (env, a) => f(...a.map(x => run(env, x)))
   const raw = o => ({raw: o})
+  const z2 = s => ('0' + s).slice(-2)
+  const z4 = s => ('0000' + s).slice(-4)
+  const zone = n => {
+    const sign = n >= 0 ? '+' : '-'
+    const h = Math.floor(Math.abs(n) / 60 / 60)
+    const m = Math.floor((Math.abs(n) - (h * 60 * 60)) / 60)
+    const s = Math.floor(Math.abs(n) - h * 60 * 60 - m * 60)
+    return sign + z2(h) + m + s
+  }
+  const format = (t, s) =>
+      s.replace('yyyy', z4(t.year))
+       .replace('mm', z2(t.month))
+       .replace('dd', z2(t.day))
+       .replace('HH', z2(t.hour))
+       .replace('MM', z2(t.min))
+       .replace('SS', z2(t.sec))
+       .replace('m', t.month)
+       .replace('d', t.day)
+       .replace('H', t.hour)
+       .replace('M', t.min)
+       .replace('S', t.sec)
+       .replace('Z', t.offset === 0 ? 'Z' :t.offset)
+       .replace('z', zone(t.offset))
   const props = {
     'String size': s => s.length,
     'String slice': s => lambda((...a) => s.slice(...a)),
@@ -107,11 +147,16 @@ const execute = (source, embedded) => {
     'Number floor': n => Math.floor(n),
     'Number ceil': n => Math.ceil(n),
     'Number round': n => Math.round(n),
+    'Time utc': t => new Time(t.year, t.month, t.day, t.hour, t.min, t.sec - t.offset, 0),
+    'Time string': t => format(t, 'yyyy-mm-ddTHH:MM:SSZ'),
+    'Time format': t => lambda(s => format(t, s)),
+    'Time tick': t => lambda(n => new Time(t.year, t.month, t.day, t.hour, t.min, t.sec + n, t.offset)),
   }
   const prop = (obj, name) => {
     const p = props[`${obj.constructor.name} ${name}`]
     return p ? p(obj) : typeof obj === 'object' && name in obj ? obj[name] : fail('NoProperty', {obj, name})
   }
+  const show = o => Array.isArray(o) ? `(${o.map(show).join(' ')})` : o.code.toString()
   const map = (a, b) => Object.fromEntries(a.map((x,i) => [x,b[i]]))
   Object.assign(embedded, {
     fn: (env, [a, body]) => (e, b) =>
@@ -128,8 +173,14 @@ const execute = (source, embedded) => {
     dict: lambda((...a) => new Map([...new Array(a.length/2)].map((_, i) => [a[i*2], a[i*2+1]]))),
     regexp: lambda(s => new RegExp(s)),
     tuple: lambda((...a) => tuple(...a)),
+    time: lambda((...a) => new Time(...a)),
     void: new Void(),
-    assert: lambda((a, b) => comparable(a) === comparable(b) ? new Void() : fail('Assert', {a, b})),
+    assert: (env, x) => {
+      const a = comparable(run(env, x[0]))
+      const b = comparable(run(env, x[1]))
+      const code = `(assert ${x.map(show).join(' ')})`
+      a === b || fail('Assert', {code, a, b})
+    },
     '.': (env, [obj, name]) => prop(run(env, obj), name.code),
     '{': (env, lines) => lines.map(line => run(env, line)).at(-1),
   })
