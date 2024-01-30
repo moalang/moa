@@ -2,14 +2,13 @@
 [ ] _            :: write only variable?
 [x] void         :: void
 [x] true, false  :: bool
-[ ] none a       :: opt[a]
+[ ] some a, none :: option[a]
 [ ] throw a b    :: a b
 [ ] catch a      :: (error a) a
 
-# opt a
-[ ] and b    :: opt[a] (a b) opt[b]
-[ ] or       :: opt[a] a a
-[ ] default  :: a
+# option a
+[x] and b :: option[a] (a b) option[b]
+[x] or    :: option[a] a a
 
 # num a
 [x] + - * ** / % | & ^ :: a a a
@@ -29,11 +28,11 @@
 [x] reverse :: string
 [x] slice   :: int int? string
 [x] split   :: string int? list[string]
-[ ] index   :: string opt[int]
+[x] index   :: string option[int]
 [x] replace :: string string string
 
 # regexp
-[ ] match   :: string opt[list[string]]
+[x] match   :: string option[list[string]]
 [x] split   :: string list[string]
 [x] replace :: string (list[string] string) string
 
@@ -43,36 +42,36 @@
 # list[a]
 [x] ++ a    :: list[a] list[a]
 [x] size    :: int
-[ ] get     :: int opt[a]
-[ ] set     :: int a bool
+[x] get     :: int option[a]
+[x] set     :: int a bool
 [-] []      :: int a @error
 [-] []=     :: int a a @error
-[-] map b   :: (a b) list[b]
-[-] fmap b  :: (a list[b]) list[b]
-[-] keep    :: (a bool) list[a]
-[-] all     :: (a bool) bool
-[-] any     :: (a bool) bool
+[x] map b   :: (a b) list[b]
+[x] fmap b  :: (a list[b]) list[b]
+[x] keep    :: (a bool) list[a]
+[x] all     :: (a bool) bool
+[x] any     :: (a bool) bool
 [x] slice   :: int int? list[a]
-[ ] sort b  :: (a b)? list[a]
+[x] sort    :: (a a bool)? list[a]
 [ ] count b :: (a b)? dict[b int]
 [ ] group b :: (a b)? dict[b list[a]]
 [x] reverse :: list[a]
-[ ] zip b   :: list[b] list[tuple[a b]]
-[ ] fold b  :: (a b b) b? b
-[ ] find    :: (a bool) opt[a]
-[-] join    :: string string
-[-] has     :: a bool
-[-] min     :: a
-[-] max     :: a
+[x] zip b   :: list[b] list[tuple[a b]]
+[x] fold b  :: b (a b b) b
+[x] find    :: (a bool) option[a]
+[x] join    :: string string
+[x] has     :: a bool
+[x] min     :: a
+[x] max     :: a
 
 # dict[k v]
 [x] size   :: int
-[ ] get    :: k opt[v]
-[-] set    :: k v bool
-[-] has    :: k bool
-[-] keys   :: list[k]
-[-] values :: list[v]
-[-] list   :: list[tuple[k v]]
+[x] get    :: k option[v]
+[x] set    :: k v bool
+[x] has    :: k bool
+[x] keys   :: list[k]
+[x] values :: list[v]
+[x] list   :: list[tuple[k v]]
 
 # set[a]
 [x] size   :: int
@@ -125,10 +124,10 @@
 
 # buffer
 [ ] size             :: int
-[ ] utf8,utf16,utf32 :: opt[string]
-[ ] i8,i16,i32,i64   :: int opt[int]
-[ ] u8,u16,u32,u64   :: int opt[int]
-[ ] f32,f64          :: int opt[float]
+[ ] utf8,utf16,utf32 :: option[string]
+[ ] i8,i16,i32,i64   :: int option[int]
+[ ] u8,u16,u32,u64   :: int option[int]
+[ ] f32,f64          :: int option[float]
 [ ] slice            :: int int? buffer
 
 # ---( pending )---------------------------------------
@@ -137,7 +136,7 @@
 [ ]   path   :: string
 [ ]   join   :: string path
 [ ]   glob   :: string list[path]
-[ ]   read   :: opt[bytes]
+[ ]   read   :: option[bytes]
 [ ]   write  :: bytes _ @error
 [ ]   append :: bytes _ @error
 [ ]   unlink :: @error

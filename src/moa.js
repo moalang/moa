@@ -1,7 +1,12 @@
 'use strict'
 process.env.TZ = 'UTC'
 class Tuple extends Array {}
-class Void extends Object {}
+class None {}
+class Some {
+  constructor(value) {
+    this.__value = value
+  }
+}
 class Time {
   constructor(year, month, day, hour, min, sec, offset) {
     const d = new Date(year, month - 1, day, hour, min, sec)
@@ -18,6 +23,7 @@ class Time {
     this.yday = Math.floor((e - s) / (1000 * 60 * 60 * 24)) + 1
   }
 }
+const none = new None()
 const util = require('node:util')
 const log = (...a) => (console.error(...a.map(o => util.inspect(o, false, null, true))), a[0])
 const attempt = f => { try { return f() } catch (e) { return e } }
@@ -101,7 +107,6 @@ const execute = (source, embedded) => {
     target.code.match(/^["'`]/) ? unquote(target.code.slice(1, -1)) :
     target.code in env ? env[target.code] :
     fail('Missing', {target, ids: [...Object.keys(env)]})
-  const lambda = f => (env, a) => f(...a.map(x => run(env, x)))
   const raw = o => ({raw: o})
   const z2 = s => ('0' + s).slice(-2)
   const z4 = s => ('0000' + s).slice(-4)
@@ -126,17 +131,43 @@ const execute = (source, embedded) => {
        .replace('S', t.sec)
        .replace('Z', t.offset === 0 ? 'Z' :t.offset)
        .replace('z', zone(t.offset))
+  const rg = r => new RegExp(r, r.flags.replace('g', '') + 'g')
+  const lambda = f => (env, a) => f(...a.map(x => run(env, x)))
+  const func = f => (env, a) => f(env, ...a.map(x => run(env, x)))
   const props = {
     'String size': s => s.length,
     'String slice': s => lambda((...a) => s.slice(...a)),
     'String split': s => lambda((...a) => s.split(...a)),
     'String reverse': s => s.split('').reverse().join(''),
     'String replace': s => lambda((...a) => s.replaceAll(...a)),
+    'String index': s => lambda(t => (n => n === -1 ? none : new Some(n))(s.indexOf(t))),
+    'RegExp match': r => lambda(s => (a => a === null ? none : new Some(a))(s.match(rg(r)))),
     'RegExp split': r => lambda(s => s.split(r)),
-    'RegExp replace': r => (env, [s, f]) => (f => run(env, s).replace(new RegExp(r, r.flags.replace('g', '') + 'g'), (...a) => f(env, a.slice(0, -2).map(raw))))(run(env, f)),
+    'RegExp replace': r => func((env, s, f) => s.replace(rg(r), (...a) => f(env, a.slice(0, -2).map(raw)))),
     'Array size': a => a.length,
     'Array slice': a => lambda((...b) => a.slice(...b)),
     'Array reverse': a => a.reverse(),
+    'Array get': a => lambda(i => 0 <= i && i < a.length ? new Some(a[i]) : none),
+    'Array set': a => lambda((i, v) => 0 <= i && i < a.length ? (a[i] = v, true) : false),
+    'Array map': a => func((env, f) => a.map(x => f(env, [raw(x)]))),
+    'Array fmap': a => func((env, f) => a.flatMap(x => f(env, [raw(x)]))),
+    'Array keep': a => func((env, f) => a.filter(x => f(env, [raw(x)]))),
+    'Array all': a => func((env, f) => a.every(x => f(env, [raw(x)]))),
+    'Array any': a => func((env, f) => a.some(x => f(env, [raw(x)]))),
+    'Array sort': a => func((env, f) => f ? a.toSorted((x, y) => f(env, [raw(x), raw(y)])) : a.toSorted()),
+    'Array zip': a => lambda(b => a.map((x, i) => tuple(x, b[i]))),
+    'Array fold': a => func((env, v, f) => a.reduce((acc, x) => f(env, [raw(acc), raw(x)]), v)),
+    'Array find': a => func((env, f) => (r => r === undefined ? none : new Some(r))(a.find(x => f(env, [raw(x)])))),
+    'Array join': a => lambda(s => a.join(s)),
+    'Array has': a => lambda(x => a.includes(x)),
+    'Array min': a => Math.min(...a),
+    'Array max': a => Math.max(...a),
+    'Map get': m => lambda(k => m.has(k) ? new Some(m.get(k)) : none),
+    'Map set': m => lambda((k, v) => (b => (m[k] = v, !b))(m.has(k))),
+    'Map has': m => lambda(k => m.has(k)),
+    'Map keys': m => [...m.keys()],
+    'Map values': m => [...m.values()],
+    'Map list': m => [...m].map(([k,v]) => tuple(k, v)),
     'Set has': s => lambda(x => s.has(x)),
     'Set add': s => lambda(x => s.has(x) ? false : (s.add(x), true)),
     'Set rid': s => lambda(x => s.delete(x)),
@@ -151,6 +182,10 @@ const execute = (source, embedded) => {
     'Time string': t => format(t, 'yyyy-mm-ddTHH:MM:SSZ'),
     'Time format': t => lambda(s => format(t, s)),
     'Time tick': t => lambda(n => new Time(t.year, t.month, t.day, t.hour, t.min, t.sec + n, t.offset)),
+    'Some and': s => (env, [f]) => new Some((run(env, f))(env, [raw(s.__value)])),
+    'Some or': s => () => s.__value,
+    'None and': s => () => none,
+    'None or': s => lambda(x => x),
   }
   const prop = (obj, name) => {
     const p = props[`${obj.constructor.name} ${name}`]
@@ -170,11 +205,12 @@ const execute = (source, embedded) => {
     log: lambda((...a) => (console.error(...a), a[0])),
     list: lambda((...a) => a),
     set: lambda((...a) => new Set(a)),
-    dict: lambda((...a) => new Map([...new Array(a.length/2)].map((_, i) => [a[i*2], a[i*2+1]]))),
+    dict: lambda((...a) => new Map(a.length ? [...new Array(a.length/2)].map((_, i) => [a[i*2], a[i*2+1]]) : [])),
     regexp: lambda(s => new RegExp(s)),
     tuple: lambda((...a) => tuple(...a)),
     time: lambda((...a) => new Time(...a)),
-    void: new Void(),
+    some: lambda(x => new Some(x)),
+    none: none,
     assert: (env, x) => {
       const a = comparable(run(env, x[0]))
       const b = comparable(run(env, x[1]))

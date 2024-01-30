@@ -4,7 +4,7 @@
 (assert true (&& true true))
 
 # lambda
-(assert 3 ((fn (a b) (+a b)) 1 2))
+(assert 3 ((fn (a b) (+ a b)) 1 2))
 
 # number
 (assert 3 (+ 1 2))
@@ -32,6 +32,11 @@
 (assert 1 (. 1.4 round))
 (assert 2 (. 1.5 round))
 
+# option
+(assert (some 3) ((. (some 1) and) (fn (a) (+ a 2))))
+(assert 1 ((. (some 1) or) 2))
+(assert 2 ((. none or) 2))
+
 # string
 (assert "ab" (++ "a" "b"))
 (assert 2 (. "ab" size))
@@ -39,19 +44,40 @@
 (assert "ba" ((. "aba" slice) 1))
 (assert "b" ((. "aba" slice) 1 2))
 (assert "_b_" ((. "aba" replace) "a" "_"))
+(assert (some 1) ((. "ab" index) "b"))
+(assert none ((. "ab" index) "c"))
 
 # tuple
 (assert 1 (. (tuple 1 "a") 0))
 (assert "a" (. (tuple 1 "a") 1))
 
 # list
+(assert (some 1) ((. (list 1) get) 0))
+(assert none ((. (list 1) get) 1))
 (assert (list 1 2) (++ (list 1) (list 2)))
 (assert 1 (. (list 1) size))
 (assert (list 2 1) (. (list 1 2) reverse))
 (assert (list 2) ((. (list 1 2) slice) 1))
 (assert (list 1) ((. (list 1 2) slice) 0 1))
+(assert (list 2) ((. (list 1) map) (fn (a) (+ a 1))))
+(assert (list 1 2) ((. (list 1) fmap) (fn (a) (list a (+ a 1)))))
+(assert (list 1) ((. (list 1 2) keep) (fn (a) (== a 1))))
+(assert false ((. (list 1 2) all) (fn (a) (< a 2))))
+(assert true ((. (list 1 2) any) (fn (a) (< a 2))))
+(assert (list 1 2) ((. (list 2 1) sort)))
+(assert (list 1 2) ((. (list 1 2) sort) (fn (a b) (a > b))))
+(assert (list (tuple 1 2)) ((. (list 1) zip) (list 2)))
+(assert 3 ((. (list 1 2) fold) 0 (fn (a b) (+ a b))))
+(assert (some 1) ((. (list 1) find) (fn (a) (== a 1))))
+(assert none ((. (list 1) find) (fn (a) (== a 2))))
+(assert "a,b" ((. (list "a" "b") join) ","))
+(assert true ((. (list 1) has) 1))
+(assert 1 (. (list 1 2) min))
+(assert 2 (. (list 1 2) max))
 
 # regexp
+(assert (some (list "1" "2")) ((. (regexp "\\d") match) "1.2"))
+(assert none ((. (regexp "a") match) "1.2"))
 (assert (list "a" "b") ((. (regexp "\\d") split) "a1b"))
 (assert "1!2!" ((. (regexp "\\d") replace) "12" (fn (x) (++ x "!"))))
 
@@ -69,7 +95,15 @@
 
 # dict
 (assert (dict 1 2 3 4) (++ (dict 1 2) (dict 3 4)))
+(assert (some 2) ((. (dict 1 2) get) 1))
+(assert none ((. (dict 1 2) get) 2))
 (assert 1 (. (dict 1 2) size))
+(assert true ((. (dict 1 2) has) 1))
+(assert true ((. (dict) set) 1 2))
+(assert false ((. (dict 1 2) set) 1 3))
+(assert (list 1) (. (dict 1 2) keys))
+(assert (list 2) (. (dict 1 2) values))
+(assert (list (tuple 1 2)) (. (dict 1 2) list))
 
 # variable
 (var a 1) (+= a 2) (assert 3 a)
