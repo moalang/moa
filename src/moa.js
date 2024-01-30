@@ -26,9 +26,9 @@ class Time {
 const none = new None()
 const util = require('node:util')
 const log = (...a) => (console.error(...a.map(o => util.inspect(o, false, null, true))), a[0])
-const attempt = f => { try { return f() } catch (e) { return e } }
+const attempt = (f, g) => { try { return f() } catch (e) { return g ? g(e) : e } }
 const loop = (f, g) => { const a = []; while (f()) { a.push(g()) }; return a }
-const fail = (m, o) => { log(o); throw new Error(m) }
+const fail = (m, o) => { o && log(o); throw new Error(m) }
 const tuple = (...a) => new Tuple().concat(a)
 const comparable = x =>
   x === undefined ? 'undefined' :
@@ -193,6 +193,7 @@ const execute = (source, embedded) => {
   }
   const show = o => Array.isArray(o) ? `(${o.map(show).join(' ')})` : o.code.toString()
   const map = (a, b) => Object.fromEntries(a.map((x,i) => [x,b[i]]))
+  // refactoring (env [...]) to (env ...)
   Object.assign(embedded, {
     fn: (env, [a, body]) => (e, b) =>
       run({...e, ...map(a.map(x => x.code), b.map(exp => run(e, exp)))}, body),
@@ -217,6 +218,8 @@ const execute = (source, embedded) => {
       const code = `(assert ${x.map(show).join(' ')})`
       a === b || fail('Assert', {code, a, b})
     },
+    throw: lambda((...a) => fail(...a)),
+    catch: (env, [x, f]) => attempt(() => run(env, x), e => run(env, f)(env, [raw(e)])),
     '.': (env, [obj, name]) => prop(run(env, obj), name.code),
     '{': (env, lines) => lines.map(line => run(env, line)).at(-1),
   })

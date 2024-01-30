@@ -2,9 +2,13 @@
 [ ] _            :: write only variable?
 [x] void         :: void
 [x] true, false  :: bool
-[ ] some a, none :: option[a]
-[ ] throw a b    :: a b
-[ ] catch a      :: (error a) a
+[x] some a, none :: option[a]
+[x] throw a b    :: a b
+[x] catch a      :: (error a) a
+[ ] iif a        :: ...[bool a] a
+[ ] if           :: bool a void
+[ ] else         :: a void
+[ ] while        :: or[bool option] void
 
 # option a
 [x] and b :: option[a] (a b) option[b]

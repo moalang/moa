@@ -1,0 +1,2 @@
+# throw / catch
+(assert "a" (catch (throw "a") (fn (e) (. e message))))
