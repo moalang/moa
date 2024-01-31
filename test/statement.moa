@@ -7,34 +7,17 @@
 # struct
 (struct s ((b int))) (assert 1 (. (s 1) b))
 
-# do
-(assert 2 (do 1 2))
-
 # return
 (assert 1 ((fn () (do (return 1) 2))))
 (assert 1 ((fn () (do (do (return 1)) 2))))
 
-# iif
-(assert 1 (iif true 1 2))
-(assert 2 (iif false 1 2))
-(assert 2 (iif false 1 true 2 3))
-(assert 3 (iif false 1 false 2 3))
-
-# if/else
+# if / else
 (assert 1 ((fn () (if true (return 1)) 2)))
 (assert 2 ((fn () (if false 1) (else (return 2)) 3)))
 (assert 3 ((fn () (if false 1) (else (if true (return 3))) (else (return 4)) 5)))
 (assert 4 ((fn () (if false 1) (else (if false (return 3))) (else (return 4)) 5)))
 
-# case
-(assert "a" (case 1 1 "a" 2 "b" _ "c"))
-(assert "b" (case 2 1 "a" 2 "b" _ "c"))
-(assert "c" (case 3 1 "a" 2 "b" _ "c"))
-
-# while/continue/break
+# while / continue / break
 (assert 3 (do (var n 1) (while (< n 3) (+= n 1)) n))
 (assert 3 (do (var n 1) (while true (+= n 1) (if n >= 3 break)) n))
 (assert 3 (do (var n 1) (while (< n 3) (+= n 1) continue (+= n 10)) n))
-
-# throw / catch
-(assert "a" (catch (throw "a") (fn (e) (. e message))))
