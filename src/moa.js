@@ -56,8 +56,8 @@ const execute = (source, embedded) => {
   // parser
   let offset = 0
   let lineid = 1
-  // operator | symbols | number | string | white space
-  const tokens = source.split(/([+\-*\/%|&<>!=]+|[();.]|[0-9]+(?:\.[0-9]+)?|"[^]*?(?<!\\)"|(?:#[^\n]*|\s+))/).flatMap(code => {
+  // operator | symbols | id | number | string | white space
+  const tokens = source.split(/([+\-*\/%|&<>!=]+|[();.]|[A-Za-z_][0-9A-Za-z_]*|[0-9]+(?:\.[0-9]+)?|"[^]*?(?<!\\)"|(?:#[^\n]*|\s+))/).flatMap(code => {
     offset += code.length
     lineid += code.split('\n').length - 1 + (code === ';' ? 1 : 0)
     const enabled = code !== ';' && !/^\s*#/.test(code) && code.trim()
@@ -68,38 +68,26 @@ const execute = (source, embedded) => {
   const until = (f, g) => (a => (++pos, a))(many(f, g))
   const op2s = '|| && == != < <= > >= + - * / % ^ **'.split(' ') // low...high, other operators are lowest
   const priority = t => op2s.findIndex(op => op === t.code)
-  const isOp2 = t => t && /^[+\-*\/%<>!=~.]/.test(t.code)
-  const reorder = xs => {
-    if (xs.length === 1) {
-      return xs
+  const isOp2 = t => t && t.code !== '!' && /^[+\-*\/%<>!=~.]/.test(t.code)
+  const suffix = x => {
+    if (pos >= tokens.length) {
+      return x
     }
-    const stack = []
-    for (let i=0; i<xs.length; i++) {
-      const x = xs[i]
-      if (x.code === '!') {
-        stack.push([x, xs[++i]])
-      } else if (isOp2(x) && stack.length) {
-        const prev = stack.at(-1)
-        if (isOp2(prev[0]) && priority(prev[0]) < priority(x)) {
-          const [op, lhs, rhs] = prev
-          stack[stack.length - 1] = [op, lhs, [x, rhs, xs[++i]]]
-        } else {
-          stack[stack.length - 1] = [x, prev, xs[++i]]
-        }
-      } else {
-        stack.push(x)
-      }
-    }
-    return xs.length <= 3 && stack.length === 1 ? stack[0] : stack
+    const t = tokens[pos++]
+    const isClose = t.offset - t.code.length === tokens[pos-2].offset
+    const op2 = () => suffix(isOp2(x[0]) && priority(x[0]) < priority(t) ?
+      [x[0], x[1], [t, x[2], bottom(tokens[pos++])]] :
+      [t, x, bottom(tokens[pos++])])
+    return isClose && t.code === '(' ? suffix([x].concat(...list())) :
+      isOp2(t) ? op2() :
+      (--pos, x)
   }
-  const suffix = x => pos < tokens.length - 1 && tokens[pos].code === '(' && tokens[pos].offset - 1 === tokens[pos-1].offset ?
-    [x].concat(...list()) : x
-  const list = () => suffix(reorder(until(unit, t => t.code !== ')')))
-  const unit = t => t.code === '(' ? list() :
-    t
+  const list = () => suffix(until(bottom, t => t.code !== ')'))
+  const bottom = t => t.code === '(' ? list() : t
   const line = l => {
+    const unit = t => suffix(t.code === '!' ? [t, unit(tokens[pos++])] : bottom(t))
     const a = many(unit, t => t.lineid === l)
-    return a.length === 1 ? a[0] : reorder(a)
+    return a.length === 1 ? a[0] : a
   }
   const top = t => t.code === '(' ? list() : (--pos, line(t.lineid))
   const nodes = many(top)
@@ -227,8 +215,8 @@ const execute = (source, embedded) => {
   Object.assign(embedded, {
     fn: (env, a, ...body) => (e, ...b) =>
       statement({...e, ...map(a.map(x => x.code), b.map(exp => run(e, exp)))}, ...body).valueOf(),
-    def: (env, name, a, body) => env[name.code] = (e, ...b) =>
-      run({...e, ...map(a.map(x => x.code), b.map(exp => run(e, exp)))}, body),
+    def: (env, name, ...a) => env[name.code] = (e, ...b) =>
+      run({...e, ...map(a.slice(0, -1).map(x => x.code), b.map(exp => run(e, exp)))}, a.at(-1)),
     var: (env, name, exp) => env[name.code] = run(env, exp),
     let: (env, name, exp) => env[name.code] = run(env, exp),
     struct: (env, name, fields) => env[name.code] = (e, ...a) =>

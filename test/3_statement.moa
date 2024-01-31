@@ -2,10 +2,12 @@
 (var a 1) (+= a 2) (assert 3 a)
 
 # function
-(def f (b c) (+ b c)) (assert 3 (f 1 2))
+(def f 1) (assert 1 (f))
+(def f b c (+ b c)) (assert 3 (f 1 2))
 
 # struct
-(struct s ((b int))) (assert 1 (. (s 1) b))
+(struct s1 ((b int))) (assert 1 (. (s1 1) b))
+(struct s2 ((b int) (c string))) (assert "a" (. (s2 1 "a") c))
 
 # return
 (assert 1 ((fn () (do (return 1) 2))))
@@ -19,5 +21,5 @@
 
 # while / continue / break
 (assert 3 (do (var n 1) (while (< n 3) (+= n 1)) n))
-(assert 3 (do (var n 1) (while true (+= n 1) (if n >= 3 break)) n))
+(assert 3 (do (var n 1) (while true (+= n 1) (if (>= n 3) break)) n))
 (assert 3 (do (var n 1) (while (< n 3) (+= n 1) continue (+= n 10)) n))

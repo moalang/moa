@@ -88,7 +88,7 @@
 (assert false ((. (list 1 2) all) (fn (a) (< a 2))))
 (assert true ((. (list 1 2) any) (fn (a) (< a 2))))
 (assert (list 1 2) ((. (list 2 1) sort)))
-(assert (list 1 2) ((. (list 1 2) sort) (fn (a b) (a > b))))
+(assert (list 1 2) ((. (list 1 2) sort) (fn (a b) (> a b))))
 (assert (list (tuple 1 2)) ((. (list 1) zip) (list 2)))
 (assert 3 ((. (list 1 2) fold) 0 (fn (a b) (+ a b))))
 (assert (some 1) ((. (list 1) find) (fn (a) (== a 1))))
