@@ -14,9 +14,14 @@ assert true 1 + 2 == 7 - 4
 let a 1; assert 1 a
 
 # a()       -> (a)
-#assert 1 (fn (a) a)(1)
+assert 1 (fn () 1)()
+
 # a(b)      -> (a b)
+assert 1 (fn (a) a)(1)
+
 # a.b()     -> ((. a b))
+assert 1 (fn (a) a)(1)
+
 # a.b(c)    -> ((. a b) c)
 # a[b]      -> ([ a b)
 # a.b[c]    -> ([ (. a b) c)

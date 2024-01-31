@@ -92,7 +92,9 @@ const execute = (source, embedded) => {
     }
     return xs.length <= 3 && stack.length === 1 ? stack[0] : stack
   }
-  const list = () => reorder(until(unit, t => t.code !== ')'))
+  const suffix = x => pos < tokens.length - 1 && tokens[pos].code === '(' && tokens[pos].offset - 1 === tokens[pos-1].offset ?
+    [x].concat(...list()) : x
+  const list = () => suffix(reorder(until(unit, t => t.code !== ')')))
   const unit = t => t.code === '(' ? list() :
     t
   const line = l => {
