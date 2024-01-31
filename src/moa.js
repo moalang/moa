@@ -97,7 +97,7 @@ const execute = (source, embedded) => {
   // interpriter
   const qmap = {'n': '\n', 't': '\t', '\\': '\\'}
   const unquote = s => s.replace(/\\(.)/g, (_, c) => qmap[c] || c)
-  const call = (env, f, a) => typeof f === 'function' ? f(env, a) : fail('NotFunction', {f, a})
+  const call = (env, f, a) => typeof f === 'function' ? f(env, ...a) : fail('NotFunction', {f, a})
   const run = (env, target) =>
     Array.isArray(target) ? call(env, run(env, target[0]), target.slice(1)) :
     'raw' in target ? target.raw :
@@ -132,8 +132,8 @@ const execute = (source, embedded) => {
        .replace('Z', t.offset === 0 ? 'Z' :t.offset)
        .replace('z', zone(t.offset))
   const rg = r => new RegExp(r, r.flags.replace('g', '') + 'g')
-  const lambda = f => (env, a) => f(...a.map(x => run(env, x)))
-  const func = f => (env, a) => f(env, ...a.map(x => run(env, x)))
+  const lambda = f => (env, ...a) => f(...a.map(x => run(env, x)))
+  const func = f => (env, ...a) => f(env, ...a.map(x => run(env, x)))
   const props = {
     'String size': s => s.length,
     'String slice': s => lambda((...a) => s.slice(...a)),
@@ -143,21 +143,21 @@ const execute = (source, embedded) => {
     'String index': s => lambda(t => (n => n === -1 ? none : new Some(n))(s.indexOf(t))),
     'RegExp match': r => lambda(s => (a => a === null ? none : new Some(a))(s.match(rg(r)))),
     'RegExp split': r => lambda(s => s.split(r)),
-    'RegExp replace': r => func((env, s, f) => s.replace(rg(r), (...a) => f(env, a.slice(0, -2).map(raw)))),
+    'RegExp replace': r => func((env, s, f) => s.replace(rg(r), (...a) => f(env, ...a.slice(0, -2).map(raw)))),
     'Array size': a => a.length,
     'Array slice': a => lambda((...b) => a.slice(...b)),
     'Array reverse': a => a.reverse(),
     'Array get': a => lambda(i => 0 <= i && i < a.length ? new Some(a[i]) : none),
     'Array set': a => lambda((i, v) => 0 <= i && i < a.length ? (a[i] = v, true) : false),
-    'Array map': a => func((env, f) => a.map(x => f(env, [raw(x)]))),
-    'Array fmap': a => func((env, f) => a.flatMap(x => f(env, [raw(x)]))),
-    'Array keep': a => func((env, f) => a.filter(x => f(env, [raw(x)]))),
-    'Array all': a => func((env, f) => a.every(x => f(env, [raw(x)]))),
-    'Array any': a => func((env, f) => a.some(x => f(env, [raw(x)]))),
-    'Array sort': a => func((env, f) => f ? a.toSorted((x, y) => f(env, [raw(x), raw(y)])) : a.toSorted()),
+    'Array map': a => func((env, f) => a.map(x => f(env, raw(x)))),
+    'Array fmap': a => func((env, f) => a.flatMap(x => f(env, raw(x)))),
+    'Array keep': a => func((env, f) => a.filter(x => f(env, raw(x)))),
+    'Array all': a => func((env, f) => a.every(x => f(env, raw(x)))),
+    'Array any': a => func((env, f) => a.some(x => f(env, raw(x)))),
+    'Array sort': a => func((env, f) => f ? a.toSorted((x, y) => f(env, raw(x), raw(y))) : a.toSorted()),
     'Array zip': a => lambda(b => a.map((x, i) => tuple(x, b[i]))),
-    'Array fold': a => func((env, v, f) => a.reduce((acc, x) => f(env, [raw(acc), raw(x)]), v)),
-    'Array find': a => func((env, f) => (r => r === undefined ? none : new Some(r))(a.find(x => f(env, [raw(x)])))),
+    'Array fold': a => func((env, v, f) => a.reduce((acc, x) => f(env, raw(acc), raw(x)), v)),
+    'Array find': a => func((env, f) => (r => r === undefined ? none : new Some(r))(a.find(x => f(env, raw(x))))),
     'Array join': a => lambda(s => a.join(s)),
     'Array has': a => lambda(x => a.includes(x)),
     'Array min': a => Math.min(...a),
@@ -182,7 +182,7 @@ const execute = (source, embedded) => {
     'Time string': t => format(t, 'yyyy-mm-ddTHH:MM:SSZ'),
     'Time format': t => lambda(s => format(t, s)),
     'Time tick': t => lambda(n => new Time(t.year, t.month, t.day, t.hour, t.min, t.sec + n, t.offset)),
-    'Some and': s => (env, [f]) => new Some((run(env, f))(env, [raw(s.__value)])),
+    'Some and': s => (env, f) => new Some((run(env, f))(env, raw(s.__value))),
     'Some or': s => () => s.__value,
     'None and': s => () => none,
     'None or': s => lambda(x => x),
@@ -191,17 +191,15 @@ const execute = (source, embedded) => {
     const p = props[`${obj.constructor.name} ${name}`]
     return p ? p(obj) : typeof obj === 'object' && name in obj ? obj[name] : fail('NoProperty', {obj, name})
   }
-  const show = o => Array.isArray(o) ? `(${o.map(show).join(' ')})` : o.code.toString()
   const map = (a, b) => Object.fromEntries(a.map((x,i) => [x,b[i]]))
-  // refactoring (env [...]) to (env ...)
   Object.assign(embedded, {
-    fn: (env, [a, body]) => (e, b) =>
+    fn: (env, a, body) => (e, ...b) =>
       run({...e, ...map(a.map(x => x.code), b.map(exp => run(e, exp)))}, body),
-    def: (env, [name, a, body]) => env[name.code] = (e, b) =>
+    def: (env, name, a, body) => env[name.code] = (e, ...b) =>
       run({...e, ...map(a.map(x => x.code), b.map(exp => run(e, exp)))}, body),
-    var: (env, [name, exp]) => env[name.code] = run(env, exp),
-    let: (env, [name, exp]) => env[name.code] = run(env, exp),
-    struct: (env, [name, fields]) => env[name.code] = (e, a) =>
+    var: (env, name, exp) => env[name.code] = run(env, exp),
+    let: (env, name, exp) => env[name.code] = run(env, exp),
+    struct: (env, name, fields) => env[name.code] = (e, ...a) =>
       map(fields.map(f => f[0].code), a.map(exp => run(e, exp))),
     log: lambda((...a) => (console.error(...a), a[0])),
     list: lambda((...a) => a),
@@ -212,20 +210,25 @@ const execute = (source, embedded) => {
     time: lambda((...a) => new Time(...a)),
     some: lambda(x => new Some(x)),
     none: none,
-    assert: (env, x) => {
-      const a = comparable(run(env, x[0]))
-      const b = comparable(run(env, x[1]))
-      const code = `(assert ${x.map(show).join(' ')})`
-      a === b || fail('Assert', {code, a, b})
+    assert: (env, a, b) => {
+      const show = o => Array.isArray(o) ? `(${o.map(show).join(' ')})` : o.code.toString()
+      const code = `(assert ${show(a)} ${show(b)})`
+      try {
+        const x = comparable(run(env, a))
+        const y = comparable(run(env, b))
+        x === y || fail('Assert', {code, x, y})
+      } catch (e) {
+        fail('Assert', {code, e})
+      }
     },
     throw: lambda((...a) => fail(...a)),
-    catch: (env, [x, f]) => attempt(() => run(env, x), e => run(env, f)(env, [raw(e)])),
-    '.': (env, [obj, name]) => prop(run(env, obj), name.code),
+    catch: (env, x, f) => attempt(() => run(env, x), e => run(env, f)(env, raw(e))),
+    '.': (env, obj, name) => prop(run(env, obj), name.code),
     '{': (env, lines) => lines.map(line => run(env, line)).at(-1),
   })
   const defineOp2 = (op, opf) => {
-    embedded[op] = (env, [head, ...a]) => a.reduce((acc, x) => opf(acc, run(env, x)) , run(env, head)),
-    embedded[op + '='] = (env, [l, r]) => env[l.code] = opf(run(env, l), run(env, r))
+    embedded[op] = (env, head, ...a) => a.reduce((acc, x) => opf(acc, run(env, x)) , run(env, head)),
+    embedded[op + '='] = (env, l, r) => env[l.code] = opf(run(env, l), run(env, r))
   }
   defineOp2('+', (l, r) => l + r)
   defineOp2('*', (l, r) => l * r)
