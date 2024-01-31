@@ -14,13 +14,13 @@ t:
 	echo '(catch (throw "a") log)'   | node src/moa.js 2> /dev/null
 	! echo '(throw "a")'             | node src/moa.js 2> /dev/null
 # comment
-	echo '(var a 1)\n#b\n(log a)'    | node src/moa.js 2>&1 | grep -qx 1
-	echo '(var a 1) \n #b \n(log a)' | node src/moa.js 2>&1 | grep -qx 1
+	echo '(let a 1)\n#b\n(log a)'    | node src/moa.js 2>&1 | grep -qx 1
+	echo '(let a 1) \n #b \n(log a)' | node src/moa.js 2>&1 | grep -qx 1
 	@echo ok
 
-repl:
+r:
 	node src/moa.js
 
-wc:
+w:
 	wc src/moa.js
 	wc test/*.moa

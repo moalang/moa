@@ -1,17 +1,19 @@
-## a b       -> (a b)
-#	echo 'log 1'                                  | node src/moa.js 2>&1 | grep -qx 1
-#	echo 'log !true'                              | node src/moa.js 2>&1 | grep -qx false
+# a b       -> (a b)
+assert false !true
+
 # a + b     -> (+ a b)
-(assert 3 1 + 2)
-## a+b     -> (+ a b)
-(assert 3 1+2)
-## a + b * c -> (+ a (* b c))
-(assert 7 1 + 2 * 3)
-(assert true 1 + 2 == 7 - 4)
-## a b\nc d  -> (a b) (c d)
-#	echo 'let a 1\nlog a'                         | node src/moa.js 2>&1 | grep -qx 1
-## a b; c d  -> (a b) (c d)
-#	echo 'let a 1;log a'                          | node src/moa.js 2>&1 | grep -qx 1
+assert 3 1 + 2
+
+# a+b     -> (+ a b)
+assert 3 1+2
+
+# a + b * c -> (+ a (* b c))
+assert 7 1 + 2 * 3
+assert true 1 + 2 == 7 - 4
+
+# a b; c d  -> (a b) (c d)
+let a 1; assert 1 a
+
 ## {a}       -> {a}
 #	echo '{log 1}'                                | node src/moa.js 2>&1 | grep -qx 1
 ## {a; b c}  -> {a (b c)}
@@ -20,6 +22,8 @@
 ## a(b)      -> (a b)
 ## a.b()     -> ((. a b))
 ## a.b(c)    -> ((. a b) c)
+## a[b]      -> ([ a b)
+## a.b[c]    -> ([ (. a b) c)
 ## edge cases
 #	echo '1; log 2'                               | node src/moa.js 2>&1 | grep -qx 2
 #	echo '{1; log 2}'                             | node src/moa.js 2>&1 | grep -qx 2

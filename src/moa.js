@@ -7,6 +7,16 @@ class Some {
     this.__value = value
   }
 }
+class Continue {}
+class Break {}
+class Return {
+  constructor(value) {
+    this.__return = value
+  }
+  valueOf() {
+    return this.__return
+  }
+}
 class Time {
   constructor(year, month, day, hour, min, sec, offset) {
     const d = new Date(year, month - 1, day, hour, min, sec)
@@ -23,7 +33,6 @@ class Time {
     this.yday = Math.floor((e - s) / (1000 * 60 * 60 * 24)) + 1
   }
 }
-const none = new None()
 const util = require('node:util')
 const log = (...a) => (console.error(...a.map(o => util.inspect(o, false, null, true))), a[0])
 const attempt = (f, g) => { try { return f() } catch (e) { return g ? g(e) : e } }
@@ -95,6 +104,7 @@ const execute = (source, embedded) => {
   const nodes = many(top)
 
   // interpriter
+  const none = new None()
   const qmap = {'n': '\n', 't': '\t', '\\': '\\'}
   const unquote = s => s.replace(/\\(.)/g, (_, c) => qmap[c] || c)
   const call = (env, f, a) => typeof f === 'function' ? f(env, ...a) : fail('NotFunction', {f, a})
@@ -191,10 +201,31 @@ const execute = (source, embedded) => {
     const p = props[`${obj.constructor.name} ${name}`]
     return p ? p(obj) : typeof obj === 'object' && name in obj ? obj[name] : fail('NoProperty', {obj, name})
   }
+  const iif = (env, a) => a.length === 0 ? fail('NotEnoughIif') :
+    a.length === 1 ? run(env, a[0]) :
+    run(env, a[0]) ? run(env, a[1]) :
+    iif(env, a.slice(2))
+  const case_ = (env, target, a) => a.length <= 1 ? fail('NotEnoughCase') :
+    a[0].code === '_' || target === comparable(run(env, a[0])) ? run(env, a[1]) :
+    case_(env, target, a.slice(2))
+  const while_ = (env, cond, a) => {
+    while (run(env, cond)) {
+      const ret = statement(env, ...a)
+      if (ret instanceof Return) {
+        return ret
+      }
+      if (ret instanceof Break) {
+        break
+      }
+    }
+    return none
+  }
   const map = (a, b) => Object.fromEntries(a.map((x,i) => [x,b[i]]))
+  const statement = (env, ...a) => a.reduce((acc, x) =>
+    acc instanceof Return || acc instanceof Continue || acc instanceof Break ? acc : run(env, x), null)
   Object.assign(embedded, {
-    fn: (env, a, body) => (e, ...b) =>
-      run({...e, ...map(a.map(x => x.code), b.map(exp => run(e, exp)))}, body),
+    fn: (env, a, ...body) => (e, ...b) =>
+      statement({...e, ...map(a.map(x => x.code), b.map(exp => run(e, exp)))}, ...body).valueOf(),
     def: (env, name, a, body) => env[name.code] = (e, ...b) =>
       run({...e, ...map(a.map(x => x.code), b.map(exp => run(e, exp)))}, body),
     var: (env, name, exp) => env[name.code] = run(env, exp),
@@ -210,6 +241,8 @@ const execute = (source, embedded) => {
     time: lambda((...a) => new Time(...a)),
     some: lambda(x => new Some(x)),
     none: none,
+    continue: new Continue(),
+    break: new Break(),
     assert: (env, a, b) => {
       const show = o => Array.isArray(o) ? `(${o.map(show).join(' ')})` : o.code.toString()
       const code = `(assert ${show(a)} ${show(b)})`
@@ -221,6 +254,13 @@ const execute = (source, embedded) => {
         fail('Assert', {code, e})
       }
     },
+    do: (env, ...a) => statement(env, ...a),
+    if: (env, cond, body) => (env.__if = run(env, cond)) && run({...env}, body),
+    else: (env, body) => !env.__if && (delete env.__if, run(env, body)),
+    iif: (env, ...a) => iif(env, a),
+    case: (env, a, ...b) => case_(env, comparable(run(env, a)), b),
+    while: (env, cond, ...a) => while_(env, cond, a),
+    return: lambda(x => new Return(x)),
     throw: lambda((...a) => fail(...a)),
     catch: (env, x, f) => attempt(() => run(env, x), e => run(env, f)(env, raw(e))),
     '.': (env, obj, name) => prop(run(env, obj), name.code),
