@@ -57,7 +57,7 @@ const execute = (source, embedded) => {
   let offset = 0
   let lineid = 1
   // operator | symbols | number | string | white space
-  const tokens = source.split(/([+\-*\/%|&<>!=]+|[(){};.]|[0-9]+(?:\.[0-9]+)?|"[^]*?(?<!\\)"|(?:#[^\n]*|\s+))/).flatMap(code => {
+  const tokens = source.split(/([+\-*\/%|&<>!=]+|[();.]|[0-9]+(?:\.[0-9]+)?|"[^]*?(?<!\\)"|(?:#[^\n]*|\s+))/).flatMap(code => {
     offset += code.length
     lineid += code.split('\n').length - 1 + (code === ';' ? 1 : 0)
     const enabled = code !== ';' && !/^\s*#/.test(code) && code.trim()
@@ -94,10 +94,9 @@ const execute = (source, embedded) => {
   }
   const list = () => reorder(until(unit, t => t.code !== ')'))
   const unit = t => t.code === '(' ? list() :
-    t.code === '{' ? [t].concat(until(top, t => t.code !== '}')) :
     t
   const line = l => {
-    const a = many(unit, t => t.lineid === l && t.code !== '}')
+    const a = many(unit, t => t.lineid === l)
     return a.length === 1 ? a[0] : reorder(a)
   }
   const top = t => t.code === '(' ? list() : (--pos, line(t.lineid))
