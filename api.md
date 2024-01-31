@@ -1,14 +1,14 @@
 # reserved
-[ ] _            :: write only variable?
+[x] _            :: write only variable
 [x] void         :: void
 [x] true, false  :: bool
 [x] some a, none :: option[a]
 [x] throw a b    :: a b
 [x] catch a      :: (error a) a
-[ ] iif a        :: ...[bool a] a
-[ ] if           :: bool a void
-[ ] else         :: a void
-[ ] while        :: or[bool option] void
+[x] iif a        :: ...[bool a] a
+[x] case a b     :: a ...[a b] b
+[x] if, else
+[x] while, continue, break
 
 # option a
 [x] and b :: option[a] (a b) option[b]
