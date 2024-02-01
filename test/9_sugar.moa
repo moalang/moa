@@ -1,29 +1,5 @@
-# a b       -> (a b)
-assert false !true
-
-# op1 a     -> (op1 a)
-assert true !false
-
-# a op2 b   -> (op2 a b)
-assert 3 1 + 2
-assert 3 1+2
-assert 7 1 + 2 * 3
-assert true 1 + 2 == 7 - 4
-
-# a b; c d  -> (a b) (c d)
-let a 1; assert 1 a
-
-# a()       -> (a)
-assert 1 fn(1)()
-
-# a(b)      -> (a b)
-assert 1 fn(a a)(1)
-
-# a.b()     -> ((. a b))
-# a.b(c)    -> ((. a b) c)
-assert "b" "ab".slice(1)
-
 # a[b]       -> ([ a b)       == ((. a get) b)
+#assert 1 list(1)[0]
 # a.b[c]     -> ([ (. a b) c) == ((. (. a b) get) c)
 # a[b] = c   -> (= ([ a b) c)
 # a.b[c] = d -> (= ([ (. a b) c]) d)

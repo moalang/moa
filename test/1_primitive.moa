@@ -20,7 +20,7 @@ assert 1 fn(1)()
 assert 1 fn(a a)(1)
 
 # option
-assert some(1) (some 1)
+assert some(1) some(1)
 assert none none
 
 # tuple

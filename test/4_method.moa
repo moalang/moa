@@ -1,31 +1,4 @@
-# bool
-assert true  !false
-assert true  true  || true
-assert true  true  || false
-assert true  false || true
-assert false false || false
-assert true  true  && true
-assert false true  && false
-assert false false && true
-assert false false && false
-
 # number
-assert 3 1 + 2
-assert 6 (+ 1 2 3)
-assert 1 3 - 2
-assert 6 2 * 3
-assert 2 4 / 2
-assert 1 5 % 2
-assert 3 1 | 2
-assert 2 3 & 2
-assert 1 3 ^ 2
-assert 8 2 ** 3
-assert true  1 == 1
-assert false 1 != 1
-assert false 1 > 1
-assert true  1 >= 1
-assert false 1 < 1
-assert true  1 <= 1
 assert 1 (-1).abs
 assert 1 (-1).neg
 assert (-1) 1.neg
@@ -36,7 +9,6 @@ assert 1 1.4.round
 assert 2 1.5.round
 
 # string
-assert "ab"    "a" ++ "b"
 assert 2       "ab".size
 assert "ba"    "ab".reverse
 assert "ba"    "aba".slice(1)
@@ -77,9 +49,13 @@ assert 1   tuple(1 "a").0
 assert "a" tuple(1 "a").1
 
 # list
+assert 1                list(1).at(0)
+assert 1                list(1).at((-1))
+assert 2                list(1 2).at((-1))
+assert 2                list(1).tie(0 2)
+var a list(1); a.tie(0 2); assert list(2) a
 assert some(1)          list(1).get(0)
 assert none             list(1).get(1)
-assert list(1 2)        list(1) ++ list(2)
 assert 1                list(1).size
 assert list(2 1)        list(1 2).reverse
 assert list(2)          list(1 2).slice(1)
@@ -107,13 +83,8 @@ assert false    set(1).add(1)
 assert true     set(1).add(2)
 assert true     set(1).rid(1)
 assert false    set(1).rid(2)
-assert set(1)   set(1 2) - set(2)
-assert set(1 2) set(1)   | set(2)
-assert set(2)   set(1 2) & set(2)
-assert set(1)   set(1 2) ^ set(2)
 
 # dict
-assert dict(1 2 3 4)    dict(1 2) ++ dict(3 4)
 assert some(2)          dict(1 2).get(1)
 assert none             dict(1 2).get(2)
 assert 1                dict(1 2).size

@@ -65,7 +65,7 @@ const execute = (source, embedded) => {
   })
   let pos = 0
   const many = (f, g) => loop(() => pos < tokens.length && (!g || g(tokens[pos])), () => f(tokens[pos++]))
-  const until = (f, g) => (a => (++pos, a))(many(f, g))
+  const until = code => (a => (++pos, a))(many(unit, t => t.code !== code))
   const op2s = '|| && == != < <= > >= + - * / % ^ **'.split(' ') // low...high, other operators are lowest
   const priority = t => op2s.findIndex(op => op === t.code)
   const isOp2 = t => t && t.code !== '!' && /^[+\-*\/%<>!=~|&^~.]/.test(t.code)
@@ -78,16 +78,17 @@ const execute = (source, embedded) => {
     }
     const t = tokens[pos++]
     const near = t.offset - t.code.length === tokens[pos-2].offset
-    return near && t.code === '(' ? suffix([x, ...list()]) :
+    return near && t.code === '(' ? suffix([x, ...until(')')]) :
+      near && t.code === '[' ? suffix([x, ...until(']')]) :
       near && t.code === '.' ? suffix([t, x, tokens[pos++]]) :
       isOp2(t) ? reorder(t, x, unit(tokens[pos++])) :
       (--pos, x)
   }
+  const parenthesis = a => isOp2(a[0]) ? a : a.length === 1 ? a : fail('TooManyInParenthesis', a)
   const unit = t =>
     t.code === '!' ? [t, suffix(unit(tokens[pos++]))] :
-    t.code === '(' ? suffix(list()) :
+    t.code === '(' ? suffix(parenthesis(until(')'))) :
     suffix(t)
-  const list = () => until(unit, t => t.code !== ')')
   const line = l => {
     const a = many(unit, t => t.lineid === l)
     return a.length === 1 ? a[0] : a
@@ -135,6 +136,12 @@ const execute = (source, embedded) => {
   const rg = r => new RegExp(r, r.flags.replace('g', '') + 'g')
   const lambda = f => (env, ...a) => f(...a.map(x => run(env, x)))
   const func = f => (env, ...a) => f(env, ...a.map(x => run(env, x)))
+  const at = (a, i) => 0 <= i && i < a.length ? a[i] :
+    i < 0 && Math.abs(i) <= a.length ? a[a.length + i] :
+    fail('OutOfIndex', {a, i})
+  const tie = (a, i, v) => 0 <= i && i < a.length ? a[i] = v :
+    i < 0 && Math.abs(i) <= a.length ? a[a.length + i] = v :
+    fail('OutOfIndex', {a, i, v})
   const props = {
     'String size': s => s.length,
     'String slice': s => lambda((...a) => s.slice(...a)),
@@ -145,6 +152,8 @@ const execute = (source, embedded) => {
     'RegExp match': r => lambda(s => (a => a === null ? none : new Some(a))(s.match(rg(r)))),
     'RegExp split': r => lambda(s => s.split(r)),
     'RegExp replace': r => func((env, s, f) => s.replace(rg(r), (...a) => f(env, ...a.slice(0, -2).map(raw)))),
+    'Array at': a => lambda(i => at(a, i)),
+    'Array tie': a => lambda((i, v) => tie(a, i, v)),
     'Array size': a => a.length,
     'Array slice': a => lambda((...b) => a.slice(...b)),
     'Array reverse': a => a.reverse(),
@@ -223,7 +232,6 @@ const execute = (source, embedded) => {
     let: (env, name, exp) => env[name.code] = run(env, exp),
     struct: (env, name, fields) => env[name.code] = (e, ...a) =>
       map(fields.map(f => f[0].code), a.map(exp => run(e, exp))),
-    log: lambda((...a) => (console.error(...a), a[0])),
     list: lambda((...a) => a),
     set: lambda((...a) => new Set(a)),
     dict: lambda((...a) => new Map(a.length ? [...new Array(a.length/2)].map((_, i) => [a[i*2], a[i*2+1]]) : [])),
@@ -232,6 +240,7 @@ const execute = (source, embedded) => {
     time: lambda((...a) => new Time(...a)),
     some: lambda(x => new Some(x)),
     none: none,
+    log: lambda((...a) => (console.error(...a), a[0])),
     continue: new Continue(),
     break: new Break(),
     assert: (env, a, b) => {
