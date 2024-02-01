@@ -21,12 +21,14 @@ assert 1 (fn (a) a)(1)
 
 # a.b()     -> ((. a b))
 # a.b(c)    -> ((. a b) c)
-#assert "b" "ab".slice(1)
+assert "b" "ab".slice(1)
 
-# a[b]      -> ([ a b)
-# a.b[c]    -> ([ (. a b) c)
-# a,b => c  -> (fn (a b) c)
-# a b: c    -> (: (a b) (c))
+# a[b]       -> ([ a b)       == ((. a get) b)
+# a.b[c]     -> ([ (. a b) c) == ((. (. a b) get) c)
+# a[b] = c   -> (= ([ a b) c)
+# a.b[c] = d -> (= ([ (. a b) c]) d)
+# a,b => c   -> (fn (a b) c)
+# a b: c     -> (: (a b) (c))
 # a b:
 #   c
 #   d e     -> (a b (c (d e)))

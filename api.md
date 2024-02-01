@@ -48,8 +48,8 @@
 [x] size    :: int
 [x] get     :: int option[a]
 [x] set     :: int a bool
-[-] []      :: int a @error
-[-] []=     :: int a a @error
+[ ] index   :: int a @error
+[ ] assign  :: int a a @error
 [x] map b   :: (a b) list[b]
 [x] fmap b  :: (a list[b]) list[b]
 [x] keep    :: (a bool) list[a]
