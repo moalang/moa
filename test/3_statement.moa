@@ -12,8 +12,8 @@ def f 1; assert 1 f()
 def f a b a + b; assert 3 f(1 2)
 
 # struct
-#struct s1 ((a int)); assert 1 s1(1).a
-#struct s2 ((a int) (b string)); assert "b" s2(1 "b").b
+struct s1 {a int}; assert 1 s1(1).a
+struct s2 {a int; b string}; assert "b" s2(1 "b").b
 
 # return
 assert 1 fn(do(return(1) 2))()

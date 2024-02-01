@@ -1,5 +1,7 @@
 'use strict'
+
 process.env.TZ = 'UTC'
+
 class Tuple extends Array {}
 class None {}
 class Some {
@@ -33,6 +35,7 @@ class Time {
     this.yday = Math.floor((e - s) / (1000 * 60 * 60 * 24)) + 1
   }
 }
+
 const util = require('node:util')
 const log = (...a) => (console.error(...a.map(o => util.inspect(o, false, null, true))), a[0])
 const attempt = (f, g) => { try { return f() } catch (e) { return g ? g(e) : e } }
@@ -57,7 +60,7 @@ const execute = (source, embedded) => {
   let offset = 0
   let lineid = 1
   // operator | symbols | id | number | string | white space
-  const tokens = source.split(/([+\-*\/%|&<>!=]+|[();.]|[A-Za-z_][0-9A-Za-z_]*|[0-9]+(?:\.[0-9]+)?|"[^]*?(?<!\\)"|(?:#[^\n]*|\s+))/).flatMap(code => {
+  const tokens = source.split(/([+\-*\/%|&<>!=]+|[(){};.]|[A-Za-z_][0-9A-Za-z_]*|[0-9]+(?:\.[0-9]+)?|"[^]*?(?<!\\)"|(?:#[^\n]*|\s+))/).flatMap(code => {
     offset += code.length
     lineid += code.split('\n').length - 1 + (code === ';' ? 1 : 0)
     const enabled = code !== ';' && !/^\s*#/.test(code) && code.trim()
@@ -65,7 +68,9 @@ const execute = (source, embedded) => {
   })
   let pos = 0
   const many = (f, g) => loop(() => pos < tokens.length && (!g || g(tokens[pos])), () => f(tokens[pos++]))
-  const until = code => (a => (++pos, a))(many(unit, t => t.code !== code))
+  const go = x => (++pos, x)
+  const unlist = a => a.length === 1 ? a[0] : a
+  const until = code => go(many(unit, t => t.code !== code))
   const op2s = '|| && == != < <= > >= + - * / % ^ **'.split(' ') // low...high, other operators are lowest
   const priority = t => op2s.findIndex(op => op === t.code)
   const isOp2 = t => t && t.code !== '!' && /^[+\-*\/%<>!=~|&^~.]/.test(t.code)
@@ -88,12 +93,10 @@ const execute = (source, embedded) => {
   const unit = t =>
     t.code === '!' ? [t, suffix(unit(tokens[pos++]))] :
     t.code === '(' ? suffix(parenthesis(until(')'))) :
+    t.code === '{' ? suffix([t, ...go(many(t => (--pos, line(t.lineid)), t => t.code !== '}'))]) :
     suffix(t)
-  const line = l => {
-    const a = many(unit, t => t.lineid === l)
-    return a.length === 1 ? a[0] : a
-  }
-  const nodes = many(t => (--pos, line(t.lineid)))
+  const line = l => many(unit, t => t.lineid === l && t.code !== '}')
+  const nodes = many(t => (--pos, unlist(line(t.lineid))))
 
   // interpriter
   const none = new None()
@@ -131,7 +134,7 @@ const execute = (source, embedded) => {
        .replace('H', t.hour)
        .replace('M', t.min)
        .replace('S', t.sec)
-       .replace('Z', t.offset === 0 ? 'Z' :t.offset)
+       .replace('Z', t.offset === 0 ? 'Z' : t.offset)
        .replace('z', zone(t.offset))
   const rg = r => new RegExp(r, r.flags.replace('g', '') + 'g')
   const lambda = f => (env, ...a) => f(...a.map(x => run(env, x)))
@@ -232,7 +235,7 @@ const execute = (source, embedded) => {
     var: (env, name, exp) => env[name.code] = run(env, exp),
     let: (env, name, exp) => env[name.code] = run(env, exp),
     struct: (env, name, fields) => env[name.code] = (e, ...a) =>
-      map(fields.map(f => f[0].code), a.map(exp => run(e, exp))),
+      map(fields.slice(1).map(f => f[0].code), a.map(exp => run(e, exp))),
     list: lambda((...a) => a),
     set: lambda((...a) => new Set(a)),
     dict: lambda((...a) => new Map(a.length ? [...new Array(a.length/2)].map((_, i) => [a[i*2], a[i*2+1]]) : [])),

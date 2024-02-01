@@ -4,7 +4,7 @@ watch:
 
 t:
 	clear
-	grep -h assert test/* | node src/moa.js
+	cat test/* | node src/moa.js
 # exit code
 	! echo 'assert 1 2'             | node src/moa.js 2>&1 > /dev/null
 	! echo 'throw "a"'              | node src/moa.js 2>&1 > /dev/null
