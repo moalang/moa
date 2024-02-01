@@ -212,11 +212,11 @@ const execute = (source, embedded) => {
   const map = (a, b) => Object.fromEntries(a.map((x,i) => [x,b[i]]))
   const statement = (env, ...a) => a.reduce((acc, x) =>
     acc instanceof Return || acc instanceof Continue || acc instanceof Break ? acc : run(env, x), null)
+  const fn = (env, ...a) => (e, ...b) =>
+      run({...e, ...map(a.slice(0, -1).map(x => x.code), b.map(exp => run(e, exp)))}, a.at(-1)).valueOf()
   Object.assign(embedded, {
-    fn: (env, a, ...body) => (e, ...b) =>
-      statement({...e, ...map(a.map(x => x.code), b.map(exp => run(e, exp)))}, ...body).valueOf(),
-    def: (env, name, ...a) => env[name.code] = (e, ...b) =>
-      run({...e, ...map(a.slice(0, -1).map(x => x.code), b.map(exp => run(e, exp)))}, a.at(-1)),
+    fn: fn,
+    def: (env, name, ...a) => env[name.code] = fn(env, ...a),
     var: (env, name, exp) => env[name.code] = run(env, exp),
     let: (env, name, exp) => env[name.code] = run(env, exp),
     struct: (env, name, fields) => env[name.code] = (e, ...a) =>

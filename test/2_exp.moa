@@ -13,4 +13,4 @@
 (assert "c" (case 3 1 "a" 2 "b" _ "c"))
 
 # throw / catch
-(assert "a" (catch (throw "a") (fn (e) (. e message))))
+(assert "a" (catch (throw "a") (fn e (. e message))))

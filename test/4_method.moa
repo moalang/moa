@@ -43,7 +43,7 @@
 (assert (some (list "1" "2")) ((. (regexp "\\d") match) "1.2"))
 (assert none ((. (regexp "a") match) "1.2"))
 (assert (list "a" "b") ((. (regexp "\\d") split) "a1b"))
-(assert "1!2!" ((. (regexp "\\d") replace) "12" (fn (x) (++ x "!"))))
+(assert "1!2!" ((. (regexp "\\d") replace) "12" (fn x (++ x "!"))))
 
 # time
 (assert 2024 (. (time 2024 1 2 3 4 5 6) year))
@@ -62,11 +62,11 @@
 (assert "2024/01/02 03:03:59+0000" ((. (. (time 2024 1 2 3 4 5 6) utc) format) "yyyy/mm/dd HH:MM:SSz"))
 
 # lambda
-(assert 3 ((fn (a) (+ a 2)) 1))
-(assert 3 ((fn (a) (var b 1) (+= b a) b) 2))
+(assert 3 ((fn a (+ a 2)) 1))
+(assert 3 ((fn a (do (var b 1) (+= b a) b)) 2))
 
 # option
-(assert (some 3) ((. (some 1) and) (fn (a) (+ a 2))))
+(assert (some 3) ((. (some 1) and) (fn a (+ a 2))))
 (assert 1 ((. (some 1) or) 2))
 (assert 2 ((. none or) 2))
 
@@ -82,17 +82,17 @@
 (assert (list 2 1) (. (list 1 2) reverse))
 (assert (list 2) ((. (list 1 2) slice) 1))
 (assert (list 1) ((. (list 1 2) slice) 0 1))
-(assert (list 2) ((. (list 1) map) (fn (a) (+ a 1))))
-(assert (list 1 2) ((. (list 1) fmap) (fn (a) (list a (+ a 1)))))
-(assert (list 1) ((. (list 1 2) keep) (fn (a) (== a 1))))
-(assert false ((. (list 1 2) all) (fn (a) (< a 2))))
-(assert true ((. (list 1 2) any) (fn (a) (< a 2))))
+(assert (list 2) ((. (list 1) map) (fn a (+ a 1))))
+(assert (list 1 2) ((. (list 1) fmap) (fn a (list a (+ a 1)))))
+(assert (list 1) ((. (list 1 2) keep) (fn a (== a 1))))
+(assert false ((. (list 1 2) all) (fn a (< a 2))))
+(assert true ((. (list 1 2) any) (fn a (< a 2))))
 (assert (list 1 2) ((. (list 2 1) sort)))
-(assert (list 1 2) ((. (list 1 2) sort) (fn (a b) (> a b))))
+(assert (list 1 2) ((. (list 1 2) sort) (fn a b (> a b))))
 (assert (list (tuple 1 2)) ((. (list 1) zip) (list 2)))
-(assert 3 ((. (list 1 2) fold) 0 (fn (a b) (+ a b))))
-(assert (some 1) ((. (list 1) find) (fn (a) (== a 1))))
-(assert none ((. (list 1) find) (fn (a) (== a 2))))
+(assert 3 ((. (list 1 2) fold) 0 (fn a b (+ a b))))
+(assert (some 1) ((. (list 1) find) (fn a (== a 1))))
+(assert none ((. (list 1) find) (fn a (== a 2))))
 (assert "a,b" ((. (list "a" "b") join) ","))
 (assert true ((. (list 1) has) 1))
 (assert 1 (. (list 1 2) min))

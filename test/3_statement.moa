@@ -10,14 +10,14 @@
 (struct s2 ((b int) (c string))) (assert "a" (. (s2 1 "a") c))
 
 # return
-(assert 1 ((fn () (do (return 1) 2))))
-(assert 1 ((fn () (do (do (return 1)) 2))))
+(assert 1 ((fn (do (return 1) 2))))
+(assert 1 ((fn (do (do (return 1)) 2))))
 
 # if / else
-(assert 1 ((fn () (if true (return 1)) 2)))
-(assert 2 ((fn () (if false 1) (else (return 2)) 3)))
-(assert 3 ((fn () (if false 1) (else (if true (return 3))) (else (return 4)) 5)))
-(assert 4 ((fn () (if false 1) (else (if false (return 3))) (else (return 4)) 5)))
+(assert 1 ((fn (do (if true (return 1)) 2))))
+(assert 2 ((fn (do (if false 1) (else (return 2)) 3))))
+(assert 3 ((fn (do (if false 1) (else (if true (return 3))) (else (return 4)) 5))))
+(assert 4 ((fn (do (if false 1) (else (if false (return 3))) (else (return 4)) 5))))
 
 # while / continue / break
 (assert 3 (do (var n 1) (while (< n 3) (+= n 1)) n))
