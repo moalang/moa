@@ -37,7 +37,7 @@ const util = require('node:util')
 const log = (...a) => (console.error(...a.map(o => util.inspect(o, false, null, true))), a[0])
 const attempt = (f, g) => { try { return f() } catch (e) { return g ? g(e) : e } }
 const loop = (f, g) => { const a = []; while (f()) { a.push(g()) }; return a }
-const fail = (m, o) => { o && log(o); throw new Error(m) }
+const fail = (m, o) => { const e = new Error(m); e.detail = o; throw e }
 const tuple = (...a) => new Tuple().concat(a)
 const comparable = x =>
   x === undefined ? 'undefined' :
@@ -303,7 +303,15 @@ const repl = () => {
 
 if (process.stdin.isRaw === undefined) {
   const fs = require('node:fs')
-  execute(fs.readFileSync('/dev/stdin', 'utf8'), {})
+  for (const line of fs.readFileSync('/dev/stdin', 'utf8').split(/[\r\n]+/g)) {
+    try {
+      execute(line, {})
+    } catch (e) {
+      console.log(`echo '${line}' | node src/moa.js`)
+      console.error(e)
+      process.exit(1)
+    }
+  }
 } else {
   repl()
 }
