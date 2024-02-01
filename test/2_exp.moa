@@ -1,16 +1,16 @@
 # do
-(assert 2 (do 1 2))
+assert 2 do(1 2)
 
 # iif
-(assert 1 (iif true 1 2))
-(assert 2 (iif false 1 2))
-(assert 2 (iif false 1 true 2 3))
-(assert 3 (iif false 1 false 2 3))
+assert 1 (iif true 1 2)
+assert 2 (iif false 1 2)
+assert 2 (iif false 1 true 2 3)
+assert 3 (iif false 1 false 2 3)
 
 # case
-(assert "a" (case 1 1 "a" 2 "b" _ "c"))
-(assert "b" (case 2 1 "a" 2 "b" _ "c"))
-(assert "c" (case 3 1 "a" 2 "b" _ "c"))
+assert "a" (case 1 1 "a" 2 "b" _ "c")
+assert "b" (case 2 1 "a" 2 "b" _ "c")
+assert "c" (case 3 1 "a" 2 "b" _ "c")
 
 # throw / catch
-(assert "a" (catch (throw "a") (fn e (. e message))))
+assert "a" catch(throw("a") fn(e e.message))

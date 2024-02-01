@@ -50,7 +50,7 @@ const comparable = x =>
     typeof x === 'number' ? (Array(16).join('0') + x).slice(-16) :
     typeof x === 'string' ? x :
     typeof x === 'boolean' ? x.toString() :
-    fail('UnComparable', x))
+    `${x} ${Math.random()}`)
 
 const execute = (source, embedded) => {
   // parser
@@ -68,29 +68,31 @@ const execute = (source, embedded) => {
   const until = (f, g) => (a => (++pos, a))(many(f, g))
   const op2s = '|| && == != < <= > >= + - * / % ^ **'.split(' ') // low...high, other operators are lowest
   const priority = t => op2s.findIndex(op => op === t.code)
-  const isOp2 = t => t && t.code !== '!' && /^[+\-*\/%<>!=~.]/.test(t.code)
+  const isOp2 = t => t && t.code !== '!' && /^[+\-*\/%<>!=~|&^~.]/.test(t.code)
+  const reorder = (op, l, r) => isOp2(r[0]) && priority(r[0]) < priority(op) ?
+    [r[0], [op, l, r[1]], r[2]] :
+    [op, l, r]
   const suffix = x => {
     if (pos >= tokens.length) {
       return x
     }
     const t = tokens[pos++]
-    const isClose = t.offset - t.code.length === tokens[pos-2].offset
-    const op2 = () => suffix(isOp2(x[0]) && priority(x[0]) < priority(t) ?
-      [x[0], x[1], [t, x[2], bottom(tokens[pos++])]] :
-      [t, x, bottom(tokens[pos++])])
-    return isClose && t.code === '(' ? suffix([x].concat(...list())) :
-      isOp2(t) ? op2() :
+    const near = t.offset - t.code.length === tokens[pos-2].offset
+    return near && t.code === '(' ? suffix([x, ...list()]) :
+      near && t.code === '.' ? suffix([t, x, tokens[pos++]]) :
+      isOp2(t) ? reorder(t, x, unit(tokens[pos++])) :
       (--pos, x)
   }
-  const list = () => suffix(until(bottom, t => t.code !== ')'))
-  const bottom = t => t.code === '(' ? list() : t
+  const unit = t =>
+    t.code === '!' ? [t, suffix(unit(tokens[pos++]))] :
+    t.code === '(' ? suffix(list()) :
+    suffix(t)
+  const list = () => until(unit, t => t.code !== ')')
   const line = l => {
-    const unit = t => suffix(t.code === '!' ? [t, unit(tokens[pos++])] : bottom(t))
     const a = many(unit, t => t.lineid === l)
     return a.length === 1 ? a[0] : a
   }
-  const top = t => t.code === '(' ? list() : (--pos, line(t.lineid))
-  const nodes = many(top)
+  const nodes = many(t => (--pos, line(t.lineid)))
 
   // interpriter
   const none = new None()
@@ -199,7 +201,7 @@ const execute = (source, embedded) => {
     case_(env, target, a.slice(2))
   const while_ = (env, cond, a) => {
     while (run(env, cond)) {
-      const ret = statement(env, ...a)
+      const ret = statement(env, a)
       if (ret instanceof Return) {
         return ret
       }
@@ -210,7 +212,7 @@ const execute = (source, embedded) => {
     return none
   }
   const map = (a, b) => Object.fromEntries(a.map((x,i) => [x,b[i]]))
-  const statement = (env, ...a) => a.reduce((acc, x) =>
+  const statement = (env, a) => a.reduce((acc, x) =>
     acc instanceof Return || acc instanceof Continue || acc instanceof Break ? acc : run(env, x), null)
   const fn = (env, ...a) => (e, ...b) =>
       run({...e, ...map(a.slice(0, -1).map(x => x.code), b.map(exp => run(e, exp)))}, a.at(-1)).valueOf()
@@ -233,17 +235,11 @@ const execute = (source, embedded) => {
     continue: new Continue(),
     break: new Break(),
     assert: (env, a, b) => {
-      const show = o => Array.isArray(o) ? `(${o.map(show).join(' ')})` : o.code.toString()
-      const code = `(assert ${show(a)} ${show(b)})`
-      try {
-        const x = comparable(run(env, a))
-        const y = comparable(run(env, b))
-        x === y || fail('Assert', {code, x, y})
-      } catch (e) {
-        fail('Assert', {code, e})
-      }
+      const x = comparable(run(env, a))
+      const y = comparable(run(env, b))
+      x === y || fail('Assert', {a, b, x, y})
     },
-    do: (env, ...a) => statement(env, ...a),
+    do: (env, ...a) => statement(env, a),
     if: (env, cond, body) => (env.__if = run(env, cond)) && run({...env}, body),
     else: (env, body) => !env.__if && (delete env.__if, run(env, body)),
     iif: (env, ...a) => iif(env, a),
@@ -308,7 +304,7 @@ if (process.stdin.isRaw === undefined) {
       execute(line, {})
     } catch (e) {
       console.log(`echo '${line}' | node src/moa.js`)
-      console.error(e)
+      console.dir(e, {depth: null})
       process.exit(1)
     }
   }

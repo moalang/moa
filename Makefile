@@ -6,10 +6,10 @@ t:
 	clear
 	grep -h assert test/* | node src/moa.js
 # exit code
-	! echo '(assert 1 2)'             | node src/moa.js 2> /dev/null
-	! echo '(throw "a")'              | node src/moa.js 2> /dev/null
+	! echo 'assert 1 2'             | node src/moa.js 2>&1 > /dev/null
+	! echo 'throw "a"'              | node src/moa.js 2>&1 > /dev/null
 # log & comment
-	echo '#a\n1\n #b \n(log 1)#c\n#d' | node src/moa.js 2>&1 | grep -qx 1
+	echo '#a\n1\n #b \nlog 1#c\n#d' | node src/moa.js 2>&1 | grep -qx 1
 	@echo ok
 
 r:
