@@ -79,7 +79,7 @@ const execute = (source, embedded) => {
     const t = tokens[pos++]
     const near = t.offset - t.code.length === tokens[pos-2].offset
     return near && t.code === '(' ? suffix([x, ...until(')')]) :
-      near && t.code === '[' ? suffix([x, ...until(']')]) :
+      near && t.code === '[' ? suffix([t, x, ...until(']')]) :
       near && t.code === '.' ? suffix([t, x, tokens[pos++]]) :
       isOp2(t) ? reorder(t, x, unit(tokens[pos++])) :
       (--pos, x)
@@ -225,6 +225,7 @@ const execute = (source, embedded) => {
     acc instanceof Return || acc instanceof Continue || acc instanceof Break ? acc : run(env, x), null)
   const fn = (env, ...a) => (e, ...b) =>
       run({...e, ...map(a.slice(0, -1).map(x => x.code), b.map(exp => run(e, exp)))}, a.at(-1)).valueOf()
+  const assign = (env, a, b) => Array.isArray(a) && a[0].code === '[' ? tie(run(env, a[1]), run(env, a[2]), b) : env[a.code] = b
   Object.assign(embedded, {
     fn: fn,
     def: (env, name, ...a) => env[name.code] = fn(env, ...a),
@@ -258,11 +259,12 @@ const execute = (source, embedded) => {
     throw: lambda((...a) => fail(...a)),
     catch: (env, x, f) => attempt(() => run(env, x), e => run(env, f)(env, raw(e))),
     '.': (env, obj, name) => prop(run(env, obj), name.code),
-    '{': (env, lines) => lines.map(line => run(env, line)).at(-1),
+    '[': lambda(at),
+    '=': (env, a, b) => assign(env, a, run(env, b)),
   })
   const defineOp2 = (op, opf) => {
     embedded[op] = (env, head, ...a) => a.reduce((acc, x) => opf(acc, run(env, x)) , run(env, head)),
-    embedded[op + '='] = (env, l, r) => env[l.code] = opf(run(env, l), run(env, r))
+    embedded[op + '='] = (env, l, r) => assign(env, l, opf(run(env, l), run(env, r)))
   }
   defineOp2('+', (l, r) => l + r)
   defineOp2('*', (l, r) => l * r)

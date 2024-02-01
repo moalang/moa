@@ -1,9 +1,4 @@
-# a[b]       -> ([ a b)       == ((. a get) b)
-#assert 1 list(1)[0]
-# a.b[c]     -> ([ (. a b) c) == ((. (. a b) get) c)
-# a[b] = c   -> (= ([ a b) c)
 # a.b[c] = d -> (= ([ (. a b) c]) d)
-# a,b => c   -> (fn (a b) c)
 # a b: c     -> (: (a b) (c))
 # a b:
 #   c
