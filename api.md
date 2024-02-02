@@ -1,163 +1,162 @@
 # reserved
-[x] _            :: write only variable
-[x] void         :: void
-[x] true, false  :: bool
-[x] some a, none :: option[a]
-[x] throw a b    :: a b
-[x] catch a      :: (error a) a
-[x] iif a        :: ...[bool a] a
-[x] case a b     :: a ...[a b] b
-[x] if, else
-[x] while, continue, break
+- [x] _            :: write only variable
+- [x] void         :: void
+- [x] true, false  :: bool
+- [x] some a, none :: option[a]
+- [x] throw a b    :: a b
+- [x] catch a      :: (error a) a
+- [x] iif a        :: ...[bool a] a
+- [x] case a b     :: a ...[a b] b
+- [x] if, else
+- [x] while, continue, break
 
 # option a
-[x] and b :: option[a] (a b) option[b]
-[x] or    :: option[a] a a
+- [x] and b :: option[a] (a b) option[b]
+- [x] or    :: option[a] a a
 
 # num a
-[x] + - * ** / % | & ^ :: a a a
-[x] abs, neg :: a
+- [x] + - * ** / % | & ^ :: a a a
+- [x] abs, neg :: a
 
 # int.num
-[x] char   :: string
+- [x] char   :: string
 
 # float.num
-[x] floor  :: int
-[x] ceil   :: int
-[x] round  :: int
+- [x] floor  :: int
+- [x] ceil   :: int
+- [x] round  :: int
 
 # string
-[x] ++      :: string string string
-[x] size    :: int
-[x] reverse :: string
-[x] slice   :: int int? string
-[x] split   :: string int? list[string]
-[x] index   :: string option[int]
-[x] replace :: string string string
+- [x] ++      :: string string string
+- [x] size    :: int
+- [x] reverse :: string
+- [x] slice   :: int int? string
+- [x] split   :: string int? list[string]
+- [x] index   :: string option[int]
+- [x] replace :: string string string
 
 # regexp
-[x] match   :: string option[list[string]]
-[x] split   :: string list[string]
-[x] replace :: string (list[string] string) string
+- [x] match   :: string option[list[string]]
+- [x] split   :: string list[string]
+- [x] replace :: string (list[string] string) string
 
 # lambda[a b ...]
-[x]
+- [x]
 
 # list[a]
-[x] ++ a    :: list[a] list[a]
-[x] size    :: int
-[x] get     :: int option[a]
-[x] set     :: int a bool
-[x] at      :: int a @error
-[x] tie     :: int a a @error
-[x] map b   :: (a b) list[b]
-[x] fmap b  :: (a list[b]) list[b]
-[x] keep    :: (a bool) list[a]
-[x] all     :: (a bool) bool
-[x] any     :: (a bool) bool
-[x] slice   :: int int? list[a]
-[x] sort    :: (a a bool)? list[a]
-[ ] count b :: (a b)? dict[b int]
-[ ] group b :: (a b)? dict[b list[a]]
-[x] reverse :: list[a]
-[x] zip b   :: list[b] list[tuple[a b]]
-[x] fold b  :: b (a b b) b
-[x] find    :: (a bool) option[a]
-[x] join    :: string string
-[x] has     :: a bool
-[x] min     :: a
-[x] max     :: a
+- [x] ++ a    :: list[a] list[a]
+- [x] size    :: int
+- [x] get     :: int option[a]
+- [x] set     :: int a bool
+- [x] at      :: int a @error
+- [x] tie     :: int a a @error
+- [x] map b   :: (a b) list[b]
+- [x] fmap b  :: (a list[b]) list[b]
+- [x] keep    :: (a bool) list[a]
+- [x] all     :: (a bool) bool
+- [x] any     :: (a bool) bool
+- [x] slice   :: int int? list[a]
+- [x] sort    :: (a a bool)? list[a]
+- [ ] count b :: (a b)? dict[b int]
+- [ ] group b :: (a b)? dict[b list[a]]
+- [x] reverse :: list[a]
+- [x] zip b   :: list[b] list[tuple[a b]]
+- [x] fold b  :: b (a b b) b
+- [x] find    :: (a bool) option[a]
+- [x] join    :: string string
+- [x] has     :: a bool
+- [x] min     :: a
+- [x] max     :: a
 
 # dict[k v]
-[x] size   :: int
-[x] get    :: k option[v]
-[x] set    :: k v bool
-[x] has    :: k bool
-[x] keys   :: list[k]
-[x] values :: list[v]
-[x] list   :: list[tuple[k v]]
+- [x] size   :: int
+- [x] get    :: k option[v]
+- [x] set    :: k v bool
+- [x] has    :: k bool
+- [x] keys   :: list[k]
+- [x] values :: list[v]
+- [x] list   :: list[tuple[k v]]
 
 # set[a]
-[x] size   :: int
-[x] -      :: set[a] set[a]
-[x] |      :: set[a] set[a]
-[x] &      :: set[a] set[a]
-[x] ^      :: set[a] set[a]
-[x] has    :: a bool
-[x] add    :: a bool
-[x] rid    :: a bool
-[x] list   :: list[a]
+- [x] size   :: int
+- [x] -      :: set[a] set[a]
+- [x] |      :: set[a] set[a]
+- [x] &      :: set[a] set[a]
+- [x] ^      :: set[a] set[a]
+- [x] has    :: a bool
+- [x] add    :: a bool
+- [x] rid    :: a bool
+- [x] list   :: list[a]
 
 # tuple[a b ...]
-[x] 0 :: a
-[x] 1 :: b
-...
+- [x] 0 :: a
+- [x] 1 :: b
+- ...
 
 # time
-[x] year, month, day, hour, min, sec, wday, yday, offset :: int
-[x] format :: string string
-[x] utc    :: time
-[x] string :: string
-[x] tick   :: int time
+- [x] year, month, day, hour, min, sec, wday, yday, offset :: int
+- [x] format :: string string
+- [x] utc    :: time
+- [x] string :: string
+- [x] tick   :: int time
 
 # log
-[x] :: a ... a
+- [x] :: a ... a
 
 # assert
-[x] :: a a void
+- [x] :: a a void
 
 # io
-[-] argv   :: list[string]
-[-] now    :: time
-[-] rand   :: float
-[ ] stdin  :: stream
-[ ] stdout :: stream
-[ ] stderr :: stream
+- [-] argv   :: list[string]
+- [-] now    :: time
+- [-] rand   :: float
+- [ ] stdin  :: stream
+- [ ] stdout :: stream
+- [ ] stderr :: stream
 
 # ---( standard module )-------------------------------
 
 # steram
-[ ] read             :: int? buffer @error
-[ ] write a          :: a int @error
-[ ] offset           :: int
-[ ] seek             :: int int
-[ ] end              :: bool
-[ ] le               :: stream
-[ ] be               :: stream
-[ ] i8,i16,i32,i64   :: int @error
-[ ] u8,u16,u32,u64   :: int @error
-[ ] f32,f64          :: int @error
-[ ] utf8,utf16,utf32 :: string @error
+- [ ] read             :: int? buffer @error
+- [ ] write a          :: a int @error
+- [ ] offset           :: int
+- [ ] seek             :: int int
+- [ ] end              :: bool
+- [ ] le               :: stream
+- [ ] be               :: stream
+- [ ] i8,i16,i32,i64   :: int @error
+- [ ] u8,u16,u32,u64   :: int @error
+- [ ] f32,f64          :: int @error
+- [ ] utf8,utf16,utf32 :: string @error
 
 # buffer
-[ ] size             :: int
-[ ] utf8,utf16,utf32 :: int int? option[string]
-[ ] i8,i16,i32,i64   :: int option[int]
-[ ] u8,u16,u32,u64   :: int option[int]
-[ ] f32,f64          :: int option[float]
-[ ] slice            :: int int? buffer
-[ ] append           :: any int
+- [ ] size             :: int
+- [ ] utf8,utf16,utf32 :: int int? option[string]
+- [ ] i8,i16,i32,i64   :: int option[int]
+- [ ] u8,u16,u32,u64   :: int option[int]
+- [ ] f32,f64          :: int option[float]
+- [ ] slice            :: int int? buffer
+- [ ] append           :: any int
 
 # ---( pending )---------------------------------------
 # io
-[ ] path string:
-[ ]   path   :: string
-[ ]   join   :: string path
-[ ]   glob   :: string list[path]
-[ ]   read   :: option[bytes]
-[ ]   write  :: bytes _ @error
-[ ]   append :: bytes _ @error
-[ ]   unlink :: @error
-[ ] debug, info, warn, error a :: any* a a
-[ ] database t u :: (t u) u
-[ ] randint :: int int int
-[ ] randbytes :: int bytes
-[ ] http:
-[ ]   listen (http.request http.response) _
-[ ]   call string {method.string="get" headers.list[tuple[string list[string]]]=[] body.bytes=[]} http.response
-[ ]   get url option.. = call url {method="get" option..}
-[ ]   post url option.. = call url {method="post" option..}
-[ ]   request:
+- [ ] path string:
+- [ ]   path   :: string
+- [ ]   join   :: string path
+- [ ]   glob   :: string list[path]
+- [ ]   read   :: option[bytes]
+- [ ]   write  :: bytes _ @error
+- [ ]   append :: bytes _ @error
+- [ ]   unlink :: @error
+- [ ] database t u :: (t u) u
+- [ ] randint :: int int int
+- [ ] randbytes :: int bytes
+- [ ] http:
+- [ ]   listen (http.request http.response) _
+- [ ]   call string {method.string="get" headers.list[tuple[string list[string]]]=[] body.bytes=[]} http.response
+- [ ]   get url option.. = call url {method="get" option..}
+- [ ]   post url option.. = call url {method="post" option..}
+- [ ]   request:
         method  :: string
         path    :: string
         header  :: string string
@@ -167,36 +166,35 @@
         post    :: string string
         posts   :: string list[string]
         body    :: bytes
-[ ]   response:
+- [ ]   response:
         status  :: int
         headers :: list[tuple[string string]]
         body    :: bytes
 
 # bcrypt
-[ ] encrypt :: string
-[ ] eq      :: string string bool
+- [ ] encrypt :: string
+- [ ] eq      :: string string bool
 
 
 # interface
-eq = interface a:
+[ ] eq = interface a:
   eq: a a bool
   ne l r = !eq l r
-
-time.eq.eq l r = l.int == r.int
+  time.eq.eq l r = l.int == r.int
 
 # statement
-[ ] if a      :: bool a _
-[ ] else a    :: a _
-[ ] for a     :: .int int int? int? a _
-[ ] each a b  :: .a seq[a] b _
-[ ] while a   :: bool a _
-[ ] continue  :: _
-[ ] break     :: _
-[ ] return a  :: a a
+- [ ] if a      :: bool a _
+- [ ] else a    :: a _
+- [ ] for a     :: .int int int? int? a _
+- [ ] each a b  :: .a seq[a] b _
+- [ ] while a   :: bool a _
+- [ ] continue  :: _
+- [ ] break     :: _
+- [ ] return a  :: a a
 
 # math
-[ ] acos acosh asin asinh atan atan2 atanh cbrt cos cosh erf erfc exp gamma log log10 log2 sin sinh sqrt tan tanh :: float float
-[ ] e, pi, inf, nan :: float
-[ ] hypot, logn :: float float float
-[ ] lgamma, frexp :: float (float, int)
-[ ] ldexp :: float int float
+- [ ] acos acosh asin asinh atan atan2 atanh cbrt cos cosh erf erfc exp gamma log log10 log2 sin sinh sqrt tan tanh :: float float
+- [ ] e, pi, inf, nan :: float
+- [ ] hypot, logn :: float float float
+- [ ] lgamma, frexp :: float (float, int)
+- [ ] ldexp :: float int float
