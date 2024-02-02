@@ -23,18 +23,23 @@ op2: [+-*/%<>|&^~=!]+ | ","
 id: [A-Za-z_][A-Za-z0-9_]*
 ```
 
+Reserved word
+```
+declaration: let var def record enum
+     branch: if else
+       flow: return throw catch assert
+       loop: for while continue break
+     module: use module
+     booked: interface implement
+```
+
 Keyword
 ```
-   constant: true false
-       type: void bool int float string time duration tuple array list dict ref fn any
-declaration: let var def struct enum
-     branch: iif if else case
-       flow: return throw catch
-       loop: for while continue break
-    special: _ moa test log math rand db
-  namespace: use module
-     binary: bytes i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
-   reserved: num decimal interface implement
+constant: true false moa test log math rand db
+    type: void bool int float string time duration tuple struct array list dict fn any
+  branch: iif case
+  binary: bytes i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
+  booked: num decimal ref
 ```
 
 Symbols
@@ -44,24 +49,24 @@ _                part of id
 ..               variadic function
 "                string
 #                comment
-( )              priority or tuple
-[ ]              list
-{ }              struct
+( )              priority
+[ ]              list?
+{ }              struct?
 ! -              singular operator
 && ||            boolean operator
 + - * / % **     number operator
 | & ^ ~ << >>    bit operator
 < <= > >= == !=  comparing operator
-->               right hand assign operator
 =                update a variable
+=>               lambda
 ,                separation of arguments
 :                block
+;                break line
 ? undefined
 \ undefined
 ' undefined
 $ undefined
 @ undefined
-; undefined
 ` undefined
 ```
 

@@ -59,12 +59,14 @@ const execute = (source, embedded) => {
   // parser
   let offset = 0
   let lineid = 1
+  let indent = 0
   // operator | symbols | id | number | string | white space
   const tokens = source.split(/([+\-*\/%|&<>!=]+|[(){};.]|[A-Za-z_][0-9A-Za-z_]*|[0-9]+(?:\.[0-9]+)?|"[^]*?(?<!\\)"|(?:#[^\n]*|\s+))/).flatMap(code => {
     offset += code.length
     lineid += code.split('\n').length - 1 + (code === ';' ? 1 : 0)
+    indent = code.includes('\n') ? code.split('\n').at(-1).length : indent
     const enabled = code !== ';' && !/^\s*#/.test(code) && code.trim()
-    return enabled ? [{code, lineid, offset}] : []
+    return enabled ? [{code, lineid, offset, indent}] : []
   })
   let pos = 0
   const many = (f, g) => loop(() => pos < tokens.length && (!g || g(tokens[pos])), () => f(tokens[pos++]))
@@ -90,12 +92,16 @@ const execute = (source, embedded) => {
       (--pos, x)
   }
   const parenthesis = a => isOp2(a[0]) ? a : a.length === 1 ? a : fail('TooManyInParenthesis', a)
+  const block = (t, indent) =>
+    tokens[pos].lineid === t.lineid ? line(t.lineid) :
+    [t, ...many(t => (--pos, line(t.lineid)), t => t.indent === indent)]
   const unit = t =>
     t.code === '!' ? [t, suffix(unit(tokens[pos++]))] :
     t.code === '(' ? suffix(parenthesis(until(')'))) :
-    t.code === '{' ? suffix([t, ...go(many(t => (--pos, line(t.lineid)), t => t.code !== '}'))]) :
+    t.code === ':' ? block(t, tokens[pos].indent) :
     suffix(t)
-  const line = l => many(unit, t => t.lineid === l && t.code !== '}')
+  const one = a => a.length === 1 ? a[0] : a
+  const line = lineid => one(many(unit, t => t.lineid === lineid))
   const nodes = many(t => (--pos, unlist(line(t.lineid))))
 
   // interpriter
@@ -229,13 +235,14 @@ const execute = (source, embedded) => {
   const fn = (env, ...a) => (e, ...b) =>
       run({...e, ...map(a.slice(0, -1).map(x => x.code), b.map(exp => run(e, exp)))}, a.at(-1)).valueOf()
   const assign = (env, a, b) => Array.isArray(a) && a[0].code === '[' ? tie(run(env, a[1]), run(env, a[2]), b) : env[a.code] = b
+  const fields = body => body[0].code === ':' ? body.slice(1) : [body]
   Object.assign(embedded, {
     fn: fn,
     def: (env, name, ...a) => env[name.code] = fn(env, ...a),
     var: (env, name, exp) => env[name.code] = run(env, exp),
     let: (env, name, exp) => env[name.code] = run(env, exp),
-    struct: (env, name, fields) => env[name.code] = (e, ...a) =>
-      map(fields.slice(1).map(f => f[0].code), a.map(exp => run(e, exp))),
+    record: (env, name, body) => env[name.code] = (e, ...a) => map(fields(body).map(f => f[0].code), a.map(exp => run(e, exp))),
+    struct: (env, ...a) => Object.fromEntries(a.map(x => Array.isArray(x) ? [x[1].code, run(env, x[2])] : [x.code, run(env, x)])),
     list: lambda((...a) => a),
     set: lambda((...a) => new Set(a)),
     dict: lambda((...a) => new Map(a.length ? [...new Array(a.length/2)].map((_, i) => [a[i*2], a[i*2+1]]) : [])),
@@ -264,6 +271,7 @@ const execute = (source, embedded) => {
     '.': (env, obj, name) => prop(run(env, obj), name.code),
     '[': lambda(at),
     '=': (env, a, b) => assign(env, a, run(env, b)),
+    ':': (env, ...a) => statement(env, a),
   })
   const defineOp2 = (op, opf) => {
     embedded[op] = (env, head, ...a) => a.reduce((acc, x) => opf(acc, run(env, x)) , run(env, head)),
@@ -313,11 +321,11 @@ const repl = () => {
 
 if (process.stdin.isRaw === undefined) {
   const fs = require('node:fs')
-  for (const line of fs.readFileSync('/dev/stdin', 'utf8').split(/[\r\n]+/g)) {
+  for (const chunk of fs.readFileSync('/dev/stdin', 'utf8').split(/\n(?=[A-Za-z_])/mg)) {
     try {
-      execute(line, {})
+      execute(chunk, {})
     } catch (e) {
-      console.log(`echo '${line}' | node src/moa.js`)
+      console.log(`echo '${chunk}' | node src/moa.js`)
       console.dir(e, {depth: null})
       process.exit(1)
     }
