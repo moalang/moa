@@ -30,12 +30,13 @@ declaration: let var def record enum
        flow: return throw catch assert
        loop: for while continue break
      module: use module
+  assertion: assert
      booked: interface implement
 ```
 
 Keyword
 ```
-constant: true false moa test log math rand db
+constant: true false moa log math rand db
     type: void bool int float string time duration tuple struct array list dict fn any
   branch: iif case
   binary: bytes i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64

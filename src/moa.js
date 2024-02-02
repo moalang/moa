@@ -73,9 +73,11 @@ const execute = (source, embedded) => {
   const go = x => (++pos, x)
   const unlist = a => a.length === 1 ? a[0] : a
   const until = code => go(many(unit, t => t.code !== code))
-  const op2s = '|| && == != < <= > >= + - * / % ^ **'.split(' ') // low...high, other operators are lowest
+  const op2s = '|| && = == != < <= > >= ++ + - | & ^ ~ * / % ^ **'.split(' ') // low...high, other operators are lowest
+  const ops = ['!', '=>', ...op2s]
   const priority = t => op2s.findIndex(op => op === t.code)
-  const isOp2 = t => t && t.code !== '!' && /^[+\-*\/%<>!=~|&^~.]/.test(t.code)
+  const isOp = t => t && t.code && ops.includes(t.code)
+  const isOp2 = t => t && t.code && (op2s.includes(t.code) || op2s.find(op => t.code === op + '='))
   const reorder = (op, l, r) => isOp2(r[0]) && priority(r[0]) < priority(op) ?
     [r[0], [op, l, r[1]], r[2]] :
     [op, l, r]
@@ -88,10 +90,14 @@ const execute = (source, embedded) => {
     return near && t.code === '(' ? suffix([x, ...until(')')]) :
       near && t.code === '[' ? suffix([t, x, ...until(']')]) :
       near && t.code === '.' ? suffix([t, x, tokens[pos++]]) :
+      t.code === '=>' ? arrow(x, t, tokens[pos].indent) :
       isOp2(t) ? reorder(t, x, unit(tokens[pos++])) :
       (--pos, x)
   }
-  const parenthesis = a => isOp2(a[0]) ? a : a.length === 1 ? a : fail('TooManyInParenthesis', a)
+  const parenthesis = a => isOp(a[0]) ? a : a.length === 1 ? (isOp(a[0][0]) ? a[0] : a) : fail('TooManyInParenthesis', a)
+  const arrow = (x, t, indent) =>
+    tokens[pos].lineid === t.lineid ? [t, x, unit(tokens[pos++])] :
+      [t, x, [{code: ':'}, ...many(t => (--pos, line(t.lineid)), t => t.indent === indent)]]
   const block = (t, indent) =>
     tokens[pos].lineid === t.lineid ? line(t.lineid) :
     [t, ...many(t => (--pos, line(t.lineid)), t => t.indent === indent)]
@@ -238,10 +244,11 @@ const execute = (source, embedded) => {
   const fields = body => body[0].code === ':' ? body.slice(1) : [body]
   Object.assign(embedded, {
     fn: fn,
-    def: (env, name, ...a) => env[name.code] = fn(env, ...a),
-    var: (env, name, exp) => env[name.code] = run(env, exp),
-    let: (env, name, exp) => env[name.code] = run(env, exp),
-    record: (env, name, body) => env[name.code] = (e, ...a) => map(fields(body).map(f => f[0].code), a.map(exp => run(e, exp))),
+    '=>': (env, ...a) => fn(env, ...a),
+    def: (env, name, ...a) => assign(env, name, fn(env, ...a)),
+    var: (env, name, exp) => assign(env, name, run(env, exp)),
+    let: (env, name, exp) => assign(env, name, run(env, exp)),
+    record: (env, name, body) => assign(env, name, (e, ...a) => map(fields(body).map(f => f[0].code), a.map(exp => run(e, exp)))),
     struct: (env, ...a) => Object.fromEntries(a.map(x => Array.isArray(x) ? [x[1].code, run(env, x[2])] : [x.code, run(env, x)])),
     list: lambda((...a) => a),
     set: lambda((...a) => new Set(a)),
@@ -290,7 +297,7 @@ const execute = (source, embedded) => {
   defineOp2('++', (l, r) => l instanceof Map ? new Map([...l, ...r]) : l.concat(r))
   const minus = (l, r) => l instanceof Set ? new Set([...l].filter(x => !r.has(x))) : l - r
   embedded['-'] = lambda((...a) => a.length === 1 ? -a[0] : a.reduce((acc,n) => acc === undefined ? n : minus(acc, n)))
-  embedded['-='] = (env, [l, r]) => env[l.code] = run(env, l) - run(env, r)
+  embedded['-='] = (env, [l, r]) => assign(env, l.code, run(env, l) - run(env, r))
   embedded['!'] = lambda(x => !x)
   embedded['=='] = lambda((l,r) => comparable(l) === comparable(r))
   embedded['!='] = lambda((l,r) => comparable(l) !== comparable(r))
