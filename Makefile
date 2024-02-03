@@ -1,6 +1,6 @@
 watch:
 	-make t
-	-fswatch -0 -o -l 2 src test | xargs -I {} -n1 -0 make t
+	-fswatch -0 -o -l 2 Makefile src test | xargs -I {} -n1 -0 make t
 
 t:
 	clear
@@ -10,6 +10,10 @@ t:
 	! echo 'throw "a"'              | node src/moa.js 2>&1 > /dev/null
 # log & comment
 	echo '#a\n1\n #b \nlog 1#c\n#d' | node src/moa.js 2>&1 | grep -qx 1
+# syntax error
+	echo 'abc'                 | node src/moa.js 2>&1 | grep -q 'cannot find value `abc` in this scope'
+	echo 'abc += 1'            | node src/moa.js 2>&1 | grep -q 'cannot find value `abc` in this scope'
+	echo 'let abc 1; abc += 1' | node src/moa.js 2>&1 | grep -q 'cannot assign twice to immutable variable `abc`'
 	@echo ok
 
 r:

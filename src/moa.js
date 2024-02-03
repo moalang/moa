@@ -114,7 +114,7 @@ const execute = (source, embedded) => {
     target.code.match(/^[0-9]/) ? parseFloat(target.code) :
     target.code.match(/^["'`]/) ? unquote(target.code.slice(1, -1)) :
     target.code in env ? unwrap(env[target.code], Ref) :
-    fail('Missing', {target, ids: [...Object.keys(env)]})
+    fail(`cannot find value \`${target.code}\` in this scope`, {target, ids: [...Object.keys(env)]})
   const raw = o => ({raw: o})
   const z2 = s => ('0' + s).slice(-2)
   const z4 = s => ('0000' + s).slice(-4)
@@ -227,27 +227,31 @@ const execute = (source, embedded) => {
     return none
   }
   const map = (a, b) => Object.fromEntries(a.map((x,i) => [x,b[i]]))
-  const statement = (env, a) => a.reduce((acc, x) =>
-    acc instanceof Return || acc instanceof Continue || acc instanceof Break ? acc : run(env, x), null)
+  const statement = (env, a) => (env => a.reduce((acc, x) =>
+    acc instanceof Return || acc instanceof Continue || acc instanceof Break ? acc : run(env, x), null))({...env})
   const fn = (env, ...a) => (e, ...b) =>
       unwrap(run({...e, ...map(a.slice(0, -1).map(x => x.code), b.map(exp => run(e, exp)))}, a.at(-1)), Return)
-  const assign = (env, a, b) => Array.isArray(a) && a[0].code === '[' ? tie(run(env, a[1]), run(env, a[2]), b) :
-    env[a.code] instanceof Ref ? env[a.code].__value = b :
+  const declar = (env, a, b) => Array.isArray(a) && a[0].code === '[' ? tie(run(env, a[1]), run(env, a[2]), b) :
+    (a.code in env) ? fail(`cannot assign twice to immutable variable \`${a.code}\``) :
     env[a.code] = b
+  const update = (env, a, b) => Array.isArray(a) && a[0].code === '[' ? tie(run(env, a[1]), run(env, a[2]), b) :
+    !(a.code in env) ? fail(`cannot find value \`${a.code}\` in this scope`) :
+    env[a.code] instanceof Ref ? env[a.code].__value = b :
+    fail(`cannot assign twice to immutable variable \`${a.code}\``)
   const fields = body => body[0].code === ':' ? body.slice(1) : [body]
   Object.assign(embedded, {
     fn: fn,
-    '=>': (env, ...a) => fn(env, ...a),
-    def: (env, name, ...a) => assign(env, name, fn(env, ...a)),
-    var: (env, name, exp) => assign(env, name, new Ref(run(env, exp))),
-    let: (env, name, exp) => assign(env, name, run(env, exp)),
-    record: (env, name, body) => assign(env, name, (e, ...a) => map(fields(body).map(f => f[0].code), a.map(exp => run(e, exp)))),
+    '=>': fn,
+    def: (env, name, ...a) => declar(env, name, fn(env, ...a)),
+    var: (env, name, exp) => declar(env, name, new Ref(run(env, exp))),
+    let: (env, name, exp) => declar(env, name, run(env, exp)),
+    record: (env, name, body) => declar(env, name, (e, ...a) => map(fields(body).map(f => f[0].code), a.map(exp => run(e, exp)))),
     struct: (env, ...a) => Object.fromEntries(a.map(x => Array.isArray(x) ? [x[1].code, run(env, x[2])] : [x.code, run(env, x)])),
     list: lambda((...a) => a),
     set: lambda((...a) => new Set(a)),
     dict: lambda((...a) => new Map(a.length ? [...new Array(a.length/2)].map((_, i) => [a[i*2], a[i*2+1]]) : [])),
     regexp: lambda(s => new RegExp(s)),
-    tuple: lambda((...a) => tuple(...a)),
+    tuple: lambda(tuple),
     time: lambda((...a) => new Time(...a)),
     some: lambda(x => new Some(x)),
     none: none,
@@ -259,23 +263,23 @@ const execute = (source, embedded) => {
       const y = comparable(run(env, b))
       x === y || fail('Assert', {a, b, x, y})
     },
-    do: (env, ...a) => statement({...env}, a),
     if: (env, cond, body) => (env.__if = run(env, cond)) && run({...env}, body),
     else: (env, body) => !env.__if && (delete env.__if, run(env, body)),
     iif: (env, ...a) => iif(env, a),
     case: (env, a, ...b) => case_(env, comparable(run(env, a)), b),
     while: (env, cond, ...a) => while_(env, cond, a),
     return: lambda(x => new Return(x)),
-    throw: lambda((...a) => fail(...a)),
+    throw: lambda(fail),
     catch: (env, x, f) => attempt(() => run(env, x), e => run(env, f)(env, raw(e))),
     '.': (env, obj, name) => prop(run(env, obj), name.code),
     '[': lambda(at),
-    '=': (env, a, b) => assign(env, a, run(env, b)),
-    ':': (env, ...a) => statement({...env}, a),
+    '=': (env, a, b) => update(env, a, run(env, b)),
+    do: (env, ...a) => statement(env, a),
+    ':': (env, ...a) => statement(env, a),
   })
   const defineOp2 = (op, opf) => {
     embedded[op] = (env, head, ...a) => a.reduce((acc, x) => opf(acc, run(env, x)) , run(env, head)),
-    embedded[op + '='] = (env, l, r) => assign(env, l, opf(run(env, l), run(env, r)))
+    embedded[op + '='] = (env, l, r) => update(env, l, opf(run(env, l), run(env, r)))
   }
   defineOp2('+', (l, r) => l + r)
   defineOp2('*', (l, r) => l * r)
@@ -290,7 +294,7 @@ const execute = (source, embedded) => {
   defineOp2('++', (l, r) => l instanceof Map ? new Map([...l, ...r]) : l.concat(r))
   const minus = (l, r) => l instanceof Set ? new Set([...l].filter(x => !r.has(x))) : l - r
   embedded['-'] = lambda((...a) => a.length === 1 ? -a[0] : a.reduce((acc,n) => acc === undefined ? n : minus(acc, n)))
-  embedded['-='] = (env, [l, r]) => assign(env, l.code, run(env, l) - run(env, r))
+  embedded['-='] = (env, [l, r]) => update(env, l.code, run(env, l) - run(env, r))
   embedded['!'] = lambda(x => !x)
   embedded['=='] = lambda((l,r) => comparable(l) === comparable(r))
   embedded['!='] = lambda((l,r) => comparable(l) !== comparable(r))
