@@ -17,6 +17,11 @@ assert 1:
 assert 3:
   def f a b a + b
   f 1 2
+assert 3:
+  var a 1
+  def f: a += 2
+  f()
+  a
 
 # record
 assert 1:

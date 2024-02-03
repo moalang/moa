@@ -4,21 +4,11 @@ process.env.TZ = 'UTC'
 
 class Tuple extends Array {}
 class None {}
-class Some {
-  constructor(value) {
-    this.__value = value
-  }
-}
+class Some   { constructor(value) { this.__value = value } }
+class Ref    { constructor(value) { this.__value = value } }
+class Return { constructor(value) { this.__value = value } }
 class Continue {}
 class Break {}
-class Return {
-  constructor(value) {
-    this.__return = value
-  }
-  valueOf() {
-    return this.__return
-  }
-}
 class Time {
   constructor(year, month, day, hour, min, sec, offset) {
     const d = new Date(year, month - 1, day, hour, min, sec)
@@ -35,6 +25,7 @@ class Time {
     this.yday = Math.floor((e - s) / (1000 * 60 * 60 * 24)) + 1
   }
 }
+const unwrap = (o, t) => o instanceof t ? o.__value : o
 
 const util = require('node:util')
 const log = (...a) => (console.error(...a.map(o => util.inspect(o, false, null, true))), a[0])
@@ -122,7 +113,7 @@ const execute = (source, embedded) => {
     target.code === 'false' ? false :
     target.code.match(/^[0-9]/) ? parseFloat(target.code) :
     target.code.match(/^["'`]/) ? unquote(target.code.slice(1, -1)) :
-    target.code in env ? env[target.code] :
+    target.code in env ? unwrap(env[target.code], Ref) :
     fail('Missing', {target, ids: [...Object.keys(env)]})
   const raw = o => ({raw: o})
   const z2 = s => ('0' + s).slice(-2)
@@ -239,14 +230,16 @@ const execute = (source, embedded) => {
   const statement = (env, a) => a.reduce((acc, x) =>
     acc instanceof Return || acc instanceof Continue || acc instanceof Break ? acc : run(env, x), null)
   const fn = (env, ...a) => (e, ...b) =>
-      run({...e, ...map(a.slice(0, -1).map(x => x.code), b.map(exp => run(e, exp)))}, a.at(-1)).valueOf()
-  const assign = (env, a, b) => Array.isArray(a) && a[0].code === '[' ? tie(run(env, a[1]), run(env, a[2]), b) : env[a.code] = b
+      unwrap(run({...e, ...map(a.slice(0, -1).map(x => x.code), b.map(exp => run(e, exp)))}, a.at(-1)), Return)
+  const assign = (env, a, b) => Array.isArray(a) && a[0].code === '[' ? tie(run(env, a[1]), run(env, a[2]), b) :
+    env[a.code] instanceof Ref ? env[a.code].__value = b :
+    env[a.code] = b
   const fields = body => body[0].code === ':' ? body.slice(1) : [body]
   Object.assign(embedded, {
     fn: fn,
     '=>': (env, ...a) => fn(env, ...a),
     def: (env, name, ...a) => assign(env, name, fn(env, ...a)),
-    var: (env, name, exp) => assign(env, name, run(env, exp)),
+    var: (env, name, exp) => assign(env, name, new Ref(run(env, exp))),
     let: (env, name, exp) => assign(env, name, run(env, exp)),
     record: (env, name, body) => assign(env, name, (e, ...a) => map(fields(body).map(f => f[0].code), a.map(exp => run(e, exp)))),
     struct: (env, ...a) => Object.fromEntries(a.map(x => Array.isArray(x) ? [x[1].code, run(env, x[2])] : [x.code, run(env, x)])),
@@ -266,7 +259,7 @@ const execute = (source, embedded) => {
       const y = comparable(run(env, b))
       x === y || fail('Assert', {a, b, x, y})
     },
-    do: (env, ...a) => statement(env, a),
+    do: (env, ...a) => statement({...env}, a),
     if: (env, cond, body) => (env.__if = run(env, cond)) && run({...env}, body),
     else: (env, body) => !env.__if && (delete env.__if, run(env, body)),
     iif: (env, ...a) => iif(env, a),
@@ -278,7 +271,7 @@ const execute = (source, embedded) => {
     '.': (env, obj, name) => prop(run(env, obj), name.code),
     '[': lambda(at),
     '=': (env, a, b) => assign(env, a, run(env, b)),
-    ':': (env, ...a) => statement(env, a),
+    ':': (env, ...a) => statement({...env}, a),
   })
   const defineOp2 = (op, opf) => {
     embedded[op] = (env, head, ...a) => a.reduce((acc, x) => opf(acc, run(env, x)) , run(env, head)),
