@@ -28,6 +28,7 @@ class Time {
 const unwrap = (o, t) => o instanceof t ? o.__value : o
 
 const util = require('node:util')
+const { spawnSync } = require('child_process')
 const log = (...a) => (console.error(...a.map(o => util.inspect(o, false, null, true))), a[0])
 const attempt = (f, g) => { try { return f() } catch (e) { return g ? g(e) : e } }
 const loop = (f, g) => { const a = []; while (f()) { a.push(g()) }; return a }
@@ -41,7 +42,7 @@ const comparable = x =>
     Array.isArray(x) ? x.map(comparable).join(' ') :
     x instanceof Map ? [...x.keys()].sort().map(key => comparable(key + ':' + x.get(key))).join(' ') :
     typeof x === 'object' ? Object.keys(x).sort().map(key => key + ':' + comparable(x[key])).join(' ') :
-    typeof x === 'number' ? (Array(16).join('0') + x).slice(-16) :
+    typeof x === 'number' ? (Array(16).join('0') + x.toString()).slice(-16) :
     typeof x === 'string' ? x :
     typeof x === 'boolean' ? x.toString() :
     `${x} ${Math.random()}`)
@@ -260,7 +261,7 @@ const execute = (source, embedded) => {
     break: new Break(),
     assert: (env, a, b) => {
       const x = comparable(run(env, a))
-      const y = comparable(run(env, b))
+      const y = comparable(b === undefined ? true : run(env, b))
       x === y || fail('Assert', {a, b, x, y})
     },
     if: (env, cond, body) => (env.__if = run(env, cond)) && run({...env}, body),
@@ -276,6 +277,19 @@ const execute = (source, embedded) => {
     '=': (env, a, b) => update(env, a, run(env, b)),
     do: (env, ...a) => statement(env, a),
     ':': (env, ...a) => statement(env, a),
+    io: {
+      shell: (env, cmd, ...a) => {
+        const p = spawnSync(run(env, cmd), a.map(x => run(env, x)), {encoding: 'utf8'})
+        return {
+          get result() {
+            return p.error ? fail(p.error.message) : p.stdout
+          }
+        }
+      },
+      get rand() {
+        return Math.random()
+      }
+    }
   })
   const defineOp2 = (op, opf) => {
     embedded[op] = (env, head, ...a) => a.reduce((acc, x) => opf(acc, run(env, x)) , run(env, head)),
@@ -329,7 +343,7 @@ if (process.stdin.isRaw === undefined) {
     try {
       execute(chunk, {})
     } catch (e) {
-      console.log(`echo '${chunk}' | node src/moa.js`)
+      console.log(`echo '${chunk.trim()}' | node src/moa.js`)
       console.dir(e, {depth: null})
       process.exit(1)
     }

@@ -36,7 +36,7 @@ Moa 0.0.1
 
 3. Compile the program
 ```
-$ echo 'def main io: io.puts "Hello world"' > main.moa
+$ echo 'def main: io.puts "Hello world"' > main.moa
 $ moa build
 $ ./a
 Hello world

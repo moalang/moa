@@ -1,4 +1,4 @@
-# reserved
+# global
 - [x] _            :: write only variable
 - [x] void         :: void
 - [x] true, false  :: bool
@@ -57,8 +57,6 @@
 - [x] any     :: (a bool) bool
 - [x] slice   :: int int? list[a]
 - [x] sort    :: (a a bool)? list[a]
-- [ ] count b :: (a b)? dict[b int]
-- [ ] group b :: (a b)? dict[b list[a]]
 - [x] reverse :: list[a]
 - [x] zip b   :: list[b] list[tuple[a b]]
 - [x] fold b  :: b (a b b) b
@@ -100,6 +98,11 @@
 - [x] string :: string
 - [x] tick   :: int time
 
+# shell
+- [x] result :: string @error
+
+# ---( standard module )-------------------------------
+
 # log
 - [x] :: a ... a
 
@@ -108,35 +111,37 @@
 
 # io
 - [-] argv   :: list[string]
+- [-] env    :: string option[string]
 - [-] now    :: time
 - [-] rand   :: float
+- [x] shell  :: string ..string shell
 - [ ] stdin  :: stream
 - [ ] stdout :: stream
 - [ ] stderr :: stream
-
-# ---( standard module )-------------------------------
 
 # steram
 - [ ] read             :: int? buffer @error
 - [ ] write a          :: a int @error
 - [ ] offset           :: int
-- [ ] seek             :: int int
-- [ ] end              :: bool
+- [ ] seek             :: int int @error
+- [ ] flush            :: @error
+- [ ] close            :: @error
+- [ ] closed           :: bool
+- [ ] peek             :: Buffer
 - [ ] le               :: stream
 - [ ] be               :: stream
 - [ ] i8,i16,i32,i64   :: int @error
 - [ ] u8,u16,u32,u64   :: int @error
-- [ ] f32,f64          :: int @error
+- [ ] f32,f64          :: float @error
 - [ ] utf8,utf16,utf32 :: string @error
 
 # buffer
 - [ ] size             :: int
-- [ ] utf8,utf16,utf32 :: int int? option[string]
 - [ ] i8,i16,i32,i64   :: int option[int]
 - [ ] u8,u16,u32,u64   :: int option[int]
 - [ ] f32,f64          :: int option[float]
+- [ ] utf8,utf16,utf32 :: int int? option[string]
 - [ ] slice            :: int int? buffer
-- [ ] append           :: any int
 
 # ---( pending )---------------------------------------
 # io

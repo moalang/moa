@@ -1,0 +1,6 @@
+# shell
+assert ";\n" io.shell("echo" ";").result
+assert 1 catch(io.shell("nocommand").result fn(e 1))
+
+# rand
+assert io.rand < 1.0
