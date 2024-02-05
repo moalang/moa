@@ -1,0 +1,29 @@
+def main:
+  case io.argv.get(0).or(""):
+    "": repl()
+    "build": build()
+    "test": test()
+    "format": format()
+    _: help()
+
+def build:
+  log "(build under developing)"
+
+def repl:
+  log "(repl under developing)"
+
+def test:
+  log "(test under developing)"
+
+def format:
+  log "(format under developing)"
+
+def help:
+  log "Usage:
+  moa <command> [arguments]
+
+The commands are:
+  moa                    # launch REPL
+  moa build [option] ... # compile
+  moa test [path] ...    # run tests
+  moa format [path] ...  # format code"

@@ -45,7 +45,7 @@ const comp = (a, b, f) =>
   a instanceof Array ? a.length === b.length && a.every((x,i) => comp(x, b[i], f)) :
   a instanceof Map ? [...a.keys()].sort().map(k => comp(a.get(k), b.get(k), f)) :
   typeof object ? Object.keys(a).sort().every(k => comp(a[k], b[k], f)) :
-  fail(`${a} and ${b} are cannot be compared`)
+  fail(`${a} and ${b} are can not be compared`)
 
 const execute = (source, embedded) => {
   // parser
@@ -53,18 +53,17 @@ const execute = (source, embedded) => {
   let lineid = 1
   let indent = 0
   // operator | symbols | id | number | string | white space
-  const tokens = source.split(/([+\-*\/%|&<>!=]+|[(){};.]|[A-Za-z_][0-9A-Za-z_]*|[0-9]+(?:\.[0-9]+)?|"[^]*?(?<!\\)"|(?:#[^\n]*|\s+))/).flatMap(code => {
+  const tokens = source.split(/([+\-*\/%|&<>!=]+|[(){};.]|[A-Za-z_][0-9A-Za-z_]*|[0-9]+(?:\.[0-9]+)?|"[^"]*?(?<!\\)"|(?:#[^\n]*|\s+))/).flatMap(code => {
     offset += code.length
-    lineid += code.split('\n').length - 1 + (code === ';' ? 1 : 0)
-    indent = code.includes('\n') ? code.split('\n').at(-1).length : indent
+    lineid += (code[0] !== '"' ? code.split('\n').length - 1 : 0) + (code === ';' ? 1 : 0)
+    indent = code[0] !== '"' && code.includes('\n') ? code.split('\n').at(-1).length : indent
     const enabled = code !== ';' && !/^\s*#/.test(code) && code.trim()
     return enabled ? [{code, lineid, offset, indent}] : []
   })
   let pos = 0
   const many = (f, g) => loop(() => pos < tokens.length && (!g || g(tokens[pos])), () => f(tokens[pos++]))
-  const go = x => (++pos, x)
   const unlist = a => a.length === 1 ? a[0] : a
-  const until = code => go(many(unit, t => t.code !== code))
+  const until = code => (x => (++pos, x))(many(unit, t => t.code !== code))
   const op2s = '|| && = == != < <= > >= ++ + - | & ^ ~ * / % ^ **'.split(' ') // low...high, other operators are lowest
   const ops = ['!', '=>', ...op2s]
   const priority = t => op2s.findIndex(op => op === t.code)
@@ -98,13 +97,12 @@ const execute = (source, embedded) => {
     t.code === '(' ? suffix(parenthesis(until(')'))) :
     t.code === ':' ? block(t, tokens[pos].indent) :
     suffix(t)
-  const one = a => a.length === 1 ? a[0] : a
-  const line = lineid => one(many(unit, t => t.lineid === lineid))
-  const nodes = many(t => (--pos, unlist(line(t.lineid))))
+  const line = lineid => unlist(many(unit, t => t.lineid === lineid && t.code !== ')'))
+  const nodes = many(t => (--pos, line(t.lineid)))
 
   // interpriter
   const none = new None()
-  const qmap = {'n': '\n', 't': '\t', '\\': '\\'}
+  const qmap = {'n': '\n', 't': '\t'}
   const unquote = s => s.replace(/\\(.)/g, (_, c) => qmap[c] || c)
   const call = (env, f, a) => typeof f === 'function' ? f(env, ...a) : fail('NotFunction', {f, a})
   const run = (env, target) =>
@@ -115,7 +113,7 @@ const execute = (source, embedded) => {
     target.code.match(/^[0-9]/) ? parseFloat(target.code) :
     target.code.match(/^["'`]/) ? unquote(target.code.slice(1, -1)) :
     target.code in env ? unwrap(env[target.code], Ref) :
-    fail(`cannot find value \`${target.code}\` in this scope`, {target, ids: [...Object.keys(env)]})
+    fail(`can not find value \`${target.code}\` in this scope`, {target, ids: [...Object.keys(env)]})
   const raw = o => ({raw: o})
   const z2 = s => ('0' + s).slice(-2)
   const z4 = s => ('0000' + s).slice(-4)
@@ -212,7 +210,7 @@ const execute = (source, embedded) => {
     a.length === 1 ? run(env, a[0]) :
     run(env, a[0]) ? run(env, a[1]) :
     iif(env, a.slice(2))
-  const case_ = (env, target, a) => a.length <= 1 ? fail('NotEnoughCase') :
+  const case_ = (env, target, a) => a.length <= 1 ? fail('NotEnoughCase', target) :
     a[0].code === '_' || comp(target, run(env, a[0]), (x,y) => x === y) ? run(env, a[1]) :
     case_(env, target, a.slice(2))
   const while_ = (env, cond, a) => {
@@ -233,13 +231,14 @@ const execute = (source, embedded) => {
   const fn = (env, ...a) => (e, ...b) =>
       unwrap(run({...e, ...map(a.slice(0, -1).map(x => x.code), b.map(exp => run(e, exp)))}, a.at(-1)), Return)
   const declar = (env, a, b) => Array.isArray(a) && a[0].code === '[' ? tie(run(env, a[1]), run(env, a[2]), b) :
-    (a.code in env) ? fail(`cannot assign twice to immutable variable \`${a.code}\``) :
+    (a.code in env) ? fail(`can not assign twice to immutable variable \`${a.code}\``) :
     env[a.code] = b
   const update = (env, a, b) => Array.isArray(a) && a[0].code === '[' ? tie(run(env, a[1]), run(env, a[2]), b) :
-    !(a.code in env) ? fail(`cannot find value \`${a.code}\` in this scope`) :
+    !(a.code in env) ? fail(`can not find value \`${a.code}\` in this scope`) :
     env[a.code] instanceof Ref ? env[a.code].__value = b :
-    fail(`cannot assign twice to immutable variable \`${a.code}\``)
+    fail(`can not assign twice to immutable variable \`${a.code}\``)
   const fields = body => body[0].code === ':' ? body.slice(1) : [body]
+  const unblock = a => a.length === 1 && a[0][0].code === ':' ? a[0].slice(1).flatMap(x => x) : a
   Object.assign(embedded, {
     fn: fn,
     '=>': fn,
@@ -267,7 +266,7 @@ const execute = (source, embedded) => {
     if: (env, cond, body) => (env.__if = run(env, cond)) && run({...env}, body),
     else: (env, body) => !env.__if && (delete env.__if, run(env, body)),
     iif: (env, ...a) => iif(env, a),
-    case: (env, a, ...b) => case_(env, run(env, a), b),
+    case: (env, a, ...b) => case_(env, run(env, a), unblock(b)),
     while: (env, cond, ...a) => while_(env, cond, a),
     return: lambda(x => new Return(x)),
     throw: lambda(fail),
@@ -338,15 +337,17 @@ const repl = () => {
 
 if (process.stdin.isRaw === undefined) {
   const fs = require('node:fs')
-  for (const chunk of fs.readFileSync('/dev/stdin', 'utf8').split(/\n(?=[A-Za-z_])/mg)) {
+  const env = {}
+  for (const chunk of fs.readFileSync('/dev/stdin', 'utf8').split(/\n(?=assert )/mg)) {
     try {
-      execute(chunk, {})
+      execute(chunk, env)
     } catch (e) {
       console.log(`echo '${chunk.trim()}' | node src/moa.js`)
       console.dir(e, {depth: null})
       process.exit(1)
     }
   }
+  env.main && env.main(env)
 } else {
   repl()
 }

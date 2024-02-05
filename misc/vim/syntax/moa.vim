@@ -19,7 +19,7 @@ syn keyword Conditional iif if else case
 syn keyword Boolean     true false
 syn keyword Type        void any bool int float string tuple list set dict option ref array
 syn keyword Type        i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 num bytes interface implement decimal assert
-syn keyword keyword     test use module
+syn keyword keyword     use module
 syn keyword Repeat      for while
 syn keyword keyword     return continue break yield
 syn keyword PreProc     catch

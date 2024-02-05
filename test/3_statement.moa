@@ -14,6 +14,14 @@ assert "a" catch(throw("a") fn(e e.message))
 assert 1:
   def f 1
   f()
+assert 1:
+  def f: 1
+  f()
+assert 1:
+  def f:
+    let n 1
+    n
+  f()
 assert 3:
   def f a b a + b
   f 1 2

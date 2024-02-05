@@ -34,7 +34,7 @@ assert    6 time(2024  1 2 3 4 5 6).offset
 assert    2 time(2024  1 2 3 4 5 6).wday
 assert  337 time(2024 12 2 3 4 5 6).yday
 assert "2024-01-02T03:04:05Z"     time(2024 1 2 3 4 5 0).string
-assert "2024-01-02T04:05:06Z"     time(2024 1 2 3 4 5 0).tick(3661).string))
+assert "2024-01-02T04:05:06Z"     time(2024 1 2 3 4 5 0).tick(3661).string
 assert "2024/1/2 3:4:5 -0006"     time(2024 1 2 3 4 5 (-6)).format("yyyy/m/d H:M:S z")
 assert "2024/01/02 03:04:05+0006" time(2024 1 2 3 4 5 6).format("yyyy/mm/dd HH:MM:SSz")
 assert "2024/01/02 03:03:59+0000" time(2024 1 2 3 4 5 6).utc.format("yyyy/mm/dd HH:MM:SSz")
