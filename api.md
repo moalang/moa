@@ -113,7 +113,7 @@
 - [-] argv   :: list[string]
 - [-] env    :: string option[string]
 - [-] now    :: time
-- [-] rand   :: float
+- [x] rand   :: float
 - [x] shell  :: string ..string shell
 - [ ] stdin  :: stream
 - [ ] stdout :: stream

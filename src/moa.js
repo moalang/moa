@@ -34,18 +34,18 @@ const attempt = (f, g) => { try { return f() } catch (e) { return g ? g(e) : e }
 const loop = (f, g) => { const a = []; while (f()) { a.push(g()) }; return a }
 const fail = (m, o) => { const e = new Error(m); e.detail = o; throw e }
 const tuple = (...a) => new Tuple().concat(a)
-const comparable = x =>
-  x === undefined ? 'undefined' :
-  x === null ? 'null' :
-  x.constructor.name + ':' + (
-    x instanceof Error ? e.message :
-    Array.isArray(x) ? x.map(comparable).join(' ') :
-    x instanceof Map ? [...x.keys()].sort().map(key => comparable(key + ':' + x.get(key))).join(' ') :
-    typeof x === 'object' ? Object.keys(x).sort().map(key => key + ':' + comparable(x[key])).join(' ') :
-    typeof x === 'number' ? (Array(16).join('0') + x.toString()).slice(-16) :
-    typeof x === 'string' ? x :
-    typeof x === 'boolean' ? x.toString() :
-    `${x} ${Math.random()}`)
+const comp = (a, b, f) =>
+  a === undefined ? b === undefined :
+  a === null ? b === null :
+  typeof a === 'string'  && typeof b === 'string'  ? f(a, b) :
+  typeof a === 'number'  && typeof b === 'number'  ? f(a, b) :
+  typeof a === 'boolean' && typeof b === 'boolean' ? f(a, b) :
+  a.constructor.name !== b.constructor.name ? fail(`${a.constructor.name} and ${b.constructor.name} are can not be compared`) :
+  a instanceof Error ? a.message === b.message :
+  a instanceof Array ? a.length === b.length && a.every((x,i) => comp(x, b[i], f)) :
+  a instanceof Map ? [...a.keys()].sort().map(k => comp(a.get(k), b.get(k), f)) :
+  typeof object ? Object.keys(a).sort().every(k => comp(a[k], b[k], f)) :
+  fail(`${a} and ${b} are cannot be compared`)
 
 const execute = (source, embedded) => {
   // parser
@@ -213,7 +213,7 @@ const execute = (source, embedded) => {
     run(env, a[0]) ? run(env, a[1]) :
     iif(env, a.slice(2))
   const case_ = (env, target, a) => a.length <= 1 ? fail('NotEnoughCase') :
-    a[0].code === '_' || target === comparable(run(env, a[0])) ? run(env, a[1]) :
+    a[0].code === '_' || comp(target, run(env, a[0]), (x,y) => x === y) ? run(env, a[1]) :
     case_(env, target, a.slice(2))
   const while_ = (env, cond, a) => {
     while (run(env, cond)) {
@@ -260,14 +260,14 @@ const execute = (source, embedded) => {
     continue: new Continue(),
     break: new Break(),
     assert: (env, a, b) => {
-      const x = comparable(run(env, a))
-      const y = comparable(b === undefined ? true : run(env, b))
-      x === y || fail('Assert', {a, b, x, y})
+      const x = run(env, a)
+      const y = b === undefined ? true : run(env, b)
+      comp(x, y, (x, y) => x === y) || fail('Assert', {a, b, x, y})
     },
     if: (env, cond, body) => (env.__if = run(env, cond)) && run({...env}, body),
     else: (env, body) => !env.__if && (delete env.__if, run(env, body)),
     iif: (env, ...a) => iif(env, a),
-    case: (env, a, ...b) => case_(env, comparable(run(env, a)), b),
+    case: (env, a, ...b) => case_(env, run(env, a), b),
     while: (env, cond, ...a) => while_(env, cond, a),
     return: lambda(x => new Return(x)),
     throw: lambda(fail),
@@ -286,9 +286,7 @@ const execute = (source, embedded) => {
           }
         }
       },
-      get rand() {
-        return Math.random()
-      }
+      get rand() { return Math.random() },
     }
   })
   const defineOp2 = (op, opf) => {
@@ -310,12 +308,12 @@ const execute = (source, embedded) => {
   embedded['-'] = lambda((...a) => a.length === 1 ? -a[0] : a.reduce((acc,n) => acc === undefined ? n : minus(acc, n)))
   embedded['-='] = (env, [l, r]) => update(env, l.code, run(env, l) - run(env, r))
   embedded['!'] = lambda(x => !x)
-  embedded['=='] = lambda((l,r) => comparable(l) === comparable(r))
-  embedded['!='] = lambda((l,r) => comparable(l) !== comparable(r))
-  embedded['>']  = lambda((l,r) => comparable(l) >   comparable(r))
-  embedded['>='] = lambda((l,r) => comparable(l) >=  comparable(r))
-  embedded['<']  = lambda((l,r) => comparable(l) <   comparable(r))
-  embedded['<='] = lambda((l,r) => comparable(l) <=  comparable(r))
+  embedded['=='] = lambda((l,r) => comp(l, r, (x,y) => x === y))
+  embedded['!='] = lambda((l,r) => comp(l, r, (x,y) => x !== y))
+  embedded['>']  = lambda((l,r) => comp(l, r, (x,y) => x >   y))
+  embedded['>='] = lambda((l,r) => comp(l, r, (x,y) => x >=  y))
+  embedded['<']  = lambda((l,r) => comp(l, r, (x,y) => x <   y))
+  embedded['<='] = lambda((l,r) => comp(l, r, (x,y) => x <=  y))
   return nodes.map(node => run(embedded, node)).at(-1)
 }
 
