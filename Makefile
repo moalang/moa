@@ -5,6 +5,8 @@ watch:
 t:
 	clear
 	cat test/* | node src/moa.js
+# arguments from shell
+	echo 'assert list("a" "b") io.argv' | node src/moa.js a b 2>&1 > /dev/null
 # exit code
 	! echo 'assert 1 2'             | node src/moa.js 2>&1 > /dev/null
 	! echo 'throw "a"'              | node src/moa.js 2>&1 > /dev/null

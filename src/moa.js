@@ -287,6 +287,7 @@ const execute = (source, embedded) => {
         }
       },
       get rand() { return Math.random() },
+      argv: process.argv.slice(2),
     }
   })
   const defineOp2 = (op, opf) => {

@@ -110,7 +110,7 @@
 - [x] :: a a void
 
 # io
-- [-] argv   :: list[string]
+- [x] argv   :: list[string]
 - [-] env    :: string option[string]
 - [-] now    :: time
 - [x] rand   :: float
