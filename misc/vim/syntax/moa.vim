@@ -7,17 +7,17 @@ endif
 syn match  Comment /#.*$/
 
 " Constant
-syn region String start=+[uU]\=\z([`"]\)+ end="\z1" skip="\\\\\|\\\z1"
-syn region String start=+[uU]\=\z(```\|"""\)+ end="\z1"
-syn region String start=+[uU]\=\z(r!\)+ end="!" skip="\\\\!"
+syn region String start=+\z(["']\)+  skip=+\\\%(\z1\|$\)+  end=+\z1+ end=+$+
+syn region String start=+\z(```\|"""\|'''\)+  skip=+\\\%(\z1\|$\)+  end=+\z1+ end=+$+
+syn region String start=+r\z([`"'/]\)+  skip=+\\\%(\z1\|$\)+  end=+\z1+ end=+$+
 syn match Number /\%([A-Za-z_]\)\@<![0-9]\+\(\.[0-9]\+\)\?/
 syn keyword Boolean true false
 
 " Statement
-syn keyword Define      let var def struct enum
+syn keyword Define      let var def record enum
 syn keyword Conditional iif if else case
 syn keyword Boolean     true false
-syn keyword Type        void any bool int float string tuple list set dict option ref array
+syn keyword Type        void any bool int float string tuple struct list set dict option ref array
 syn keyword Type        i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 num bytes interface implement decimal assert
 syn keyword keyword     use module
 syn keyword Repeat      for while

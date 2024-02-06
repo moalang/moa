@@ -16,12 +16,19 @@ assert "b"     "aba".slice(1 2)
 assert "_b_"   "aba".replace("a" "_")
 assert some(1) "ab".index("b")
 assert none    "ab".index("c")
+assert true    "ab".starts("a")
+assert false   "ab".starts("b")
+assert false   "ab".ends("a")
+assert true    "ab".ends("b")
+assert "ab"    "\t\r\n ab \t\r\n".trim
 
 # regexp
-assert some(list("1" "2")) regexp("\\d").match("1.2")
-assert none                regexp("a").match("1.2")
-assert list("a" "b")       regexp("\\d").split("a1b")
-assert "1!2!"              regexp("\\d").replace("12" fn(x x ++ "!"))
+assert regexp("^\\d+$").match("123")
+assert false regexp("^\\d+$").match("1.2")
+assert list("1" "2") regexp("\\d").capture("1.2")
+assert list()        regexp("a").capture("1.2")
+assert list("a" "b") regexp("\\d").split("a1b")
+assert "1!2!"        regexp("\\d").replace("12" fn(x x ++ "!"))
 
 # time
 assert 2024 time(2024  1 2 3 4 5 6).year

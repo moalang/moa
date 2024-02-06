@@ -33,6 +33,8 @@ assert "ab" "a" ++ "b"
 # list
 assert list(1 2) list(1) ++ list(2)
 assert 1 list(1)[0]
+assert 1 list(1)[-1]
+assert 1 list(1 2)[-2]
 assert list(2):
   var a list(1)
   a[0] = 2
@@ -56,9 +58,21 @@ assert dict(1 2 3 4) dict(1 2) ++ dict(3 4)
 
 # iif
 assert 1 iif(true  1 2)
-assert 2 iif(false 1 2)
+assert 2 iif(false throw("a") 2)
 assert 2 iif(false 1 true  2 3)
 assert 3 iif(false 1 false 2 3)
+assert 3 iif(
+  false: throw("a")
+  3)
+assert 3:
+  iif false:
+    throw("a")
+    3
+assert 3:
+  iif:
+    false: throw("a")
+    false: 2
+    3
 
 # case
 assert "a" case(1 1 "a" 2 "b" _ "c")
@@ -68,6 +82,11 @@ assert "c" case(3
   1: "a"
   2: "b"
   _: "c")
+assert "c":
+  case 3:
+    1: "a"
+    2: "b"
+    _: "c"
 
 # priority
 assert 7 1 + 2 * 3

@@ -27,8 +27,9 @@ class Time {
 }
 const unwrap = (o, t) => o instanceof t ? o.__value : o
 
+const fs = require('node:fs')
 const util = require('node:util')
-const { spawnSync } = require('child_process')
+const { execSync } = require('child_process')
 const log = (...a) => (console.error(...a.map(o => util.inspect(o, false, null, true))), a[0])
 const attempt = (f, g) => { try { return f() } catch (e) { return g ? g(e) : e } }
 const loop = (f, g) => { const a = []; while (f()) { a.push(g()) }; return a }
@@ -46,14 +47,15 @@ const comp = (a, b, f) =>
   a instanceof Map ? [...a.keys()].sort().map(k => comp(a.get(k), b.get(k), f)) :
   typeof object ? Object.keys(a).sort().every(k => comp(a[k], b[k], f)) :
   fail(`${a} and ${b} are can not be compared`)
+const stdin = { utf8: fs.readFileSync('/dev/stdin', 'utf8') } // TODO: to be passed via embedded argument
 
-const execute = (source, embedded) => {
+const parse = source => {
   // parser
   let offset = 0
   let lineid = 1
   let indent = 0
   // operator | symbols | id | number | string | white space
-  const tokens = source.split(/([+\-*\/%|&<>!=]+|[(){};.]|[A-Za-z_][0-9A-Za-z_]*|[0-9]+(?:\.[0-9]+)?|"[^"]*?(?<!\\)"|(?:#[^\n]*|\s+))/).flatMap(code => {
+  const tokens = source.split(/([+\-*\/%|&<>!=]+|[(){};.]|[A-Za-z_][0-9A-Za-z_]*|[0-9]+(?:\.[0-9]+)?|".*?(?<!\\)"|(?:#[^\n]*|\s+))/s).flatMap(code => {
     offset += code.length
     lineid += (code[0] !== '"' ? code.split('\n').length - 1 : 0) + (code === ';' ? 1 : 0)
     indent = code[0] !== '"' && code.includes('\n') ? code.split('\n').at(-1).length : indent
@@ -79,7 +81,7 @@ const execute = (source, embedded) => {
     const t = tokens[pos++]
     const near = t.offset - t.code.length === tokens[pos-2].offset
     return near && t.code === '(' ? suffix([x, ...until(')')]) :
-      near && t.code === '[' ? suffix([t, x, ...until(']')]) :
+      near && t.code === '[' ? suffix([t, x, unlist(until(']'))]) :
       near && t.code === '.' ? suffix([t, x, tokens[pos++]]) :
       t.code === '=>' ? arrow(x, t, tokens[pos].indent) :
       isOp2(t) ? reorder(t, x, unit(tokens[pos++])) :
@@ -88,21 +90,23 @@ const execute = (source, embedded) => {
   const parenthesis = a => isOp(a[0]) ? a : a.length === 1 ? (isOp(a[0][0]) ? a[0] : a) : fail('TooManyInParenthesis', a)
   const arrow = (x, t, indent) =>
     tokens[pos].lineid === t.lineid ? [t, x, unit(tokens[pos++])] :
-      [t, x, [{code: ':'}, ...many(t => (--pos, line(t.lineid)), t => t.indent === indent)]]
+    [t, x, [{code: ':'}, ...(many(line, t => t.indent === indent))]]
   const block = (t, indent) =>
-    tokens[pos].lineid === t.lineid ? line(t.lineid) :
-    [t, ...many(t => (--pos, line(t.lineid)), t => t.indent === indent)]
+    tokens[pos].lineid === t.lineid ? line(tokens[pos++]) :
+    [t, ...many(line, t => t.indent === indent)]
   const unit = t =>
     t.code === '!' ? [t, suffix(unit(tokens[pos++]))] :
     t.code === '(' ? suffix(parenthesis(until(')'))) :
     t.code === ':' ? block(t, tokens[pos].indent) :
     suffix(t)
-  const line = lineid => unlist(many(unit, t => t.lineid === lineid && t.code !== ')'))
-  const nodes = many(t => (--pos, line(t.lineid)))
+  const line = t => unlist([suffix(t)].concat(many(unit, u => u.lineid === t.lineid && u.code !== ')')))
+  return many(line)
+}
 
-  // interpriter
+const execute = (source, embedded) => {
+  const nodes = parse(source)
   const none = new None()
-  const qmap = {'n': '\n', 't': '\t'}
+  const qmap = {'r': '\r', 'n': '\n', 't': '\t'}
   const unquote = s => s.replace(/\\(.)/g, (_, c) => qmap[c] || c)
   const call = (env, f, a) => typeof f === 'function' ? f(env, ...a) : fail('NotFunction', {f, a})
   const run = (env, target) =>
@@ -154,7 +158,12 @@ const execute = (source, embedded) => {
     'String reverse': s => s.split('').reverse().join(''),
     'String replace': s => lambda((...a) => s.replaceAll(...a)),
     'String index': s => lambda(t => (n => n === -1 ? none : new Some(n))(s.indexOf(t))),
-    'RegExp match': r => lambda(s => (a => a === null ? none : new Some(a))(s.match(rg(r)))),
+    'String starts': s => lambda(t => s.startsWith(t)),
+    'String ends': s => lambda(t => s.endsWith(t)),
+    'String trim': s => s.trim(),
+    'String has': s => lambda(t => s.includes(t)),
+    'RegExp match': r => lambda(s => r.test(s)),
+    'RegExp capture': r => lambda(s => (a => a === null ? [] : a)(s.match(rg(r)))),
     'RegExp split': r => lambda(s => s.split(r)),
     'RegExp replace': r => func((env, s, f) => s.replace(rg(r), (...a) => f(env, ...a.slice(0, -2).map(raw)))),
     'Array at': a => lambda(i => at(a, i)),
@@ -206,10 +215,14 @@ const execute = (source, embedded) => {
     const p = props[`${obj.constructor.name} ${name}`]
     return p ? p(obj) : typeof obj === 'object' && name in obj ? obj[name] : fail('NoProperty', {obj, name})
   }
-  const iif = (env, a) => a.length === 0 ? fail('NotEnoughIif') :
+  const iif = (env, a) => _iif(env,
+    a.length === 1 && a[0][0].code === ':' ? a[0].slice(1).flatMap(x => x) :
+    a.length === 2 && a[1][0].code === ':' ? [a[0], ...a[1].slice(1)] :
+    a)
+  const _iif = (env, a) => a.length === 0 ? fail('NotEnoughIif') :
     a.length === 1 ? run(env, a[0]) :
     run(env, a[0]) ? run(env, a[1]) :
-    iif(env, a.slice(2))
+    _iif(env, a.slice(2))
   const case_ = (env, target, a) => a.length <= 1 ? fail('NotEnoughCase', target) :
     a[0].code === '_' || comp(target, run(env, a[0]), (x,y) => x === y) ? run(env, a[1]) :
     case_(env, target, a.slice(2))
@@ -231,12 +244,10 @@ const execute = (source, embedded) => {
   const fn = (env, ...a) => (e, ...b) =>
       unwrap(run({...e, ...map(a.slice(0, -1).map(x => x.code), b.map(exp => run(e, exp)))}, a.at(-1)), Return)
   const declar = (env, a, b) => Array.isArray(a) && a[0].code === '[' ? tie(run(env, a[1]), run(env, a[2]), b) :
-    (a.code in env) ? fail(`can not assign twice to immutable variable \`${a.code}\``) :
     env[a.code] = b
   const update = (env, a, b) => Array.isArray(a) && a[0].code === '[' ? tie(run(env, a[1]), run(env, a[2]), b) :
-    !(a.code in env) ? fail(`can not find value \`${a.code}\` in this scope`) :
     env[a.code] instanceof Ref ? env[a.code].__value = b :
-    fail(`can not assign twice to immutable variable \`${a.code}\``)
+    fail(`can not assign twice to immutable variable \`${a.code}\``, a)
   const fields = body => body[0].code === ':' ? body.slice(1) : [body]
   const unblock = a => a.length === 1 && a[0][0].code === ':' ? a[0].slice(1).flatMap(x => x) : a
   Object.assign(embedded, {
@@ -250,7 +261,7 @@ const execute = (source, embedded) => {
     list: lambda((...a) => a),
     set: lambda((...a) => new Set(a)),
     dict: lambda((...a) => new Map(a.length ? [...new Array(a.length/2)].map((_, i) => [a[i*2], a[i*2+1]]) : [])),
-    regexp: lambda(s => new RegExp(s)),
+    regexp: lambda((s, o) => new RegExp(s, o)),
     tuple: lambda(tuple),
     time: lambda((...a) => new Time(...a)),
     some: lambda(x => new Some(x)),
@@ -272,22 +283,21 @@ const execute = (source, embedded) => {
     throw: lambda(fail),
     catch: (env, x, f) => attempt(() => run(env, x), e => run(env, f)(env, raw(e))),
     '.': (env, obj, name) => prop(run(env, obj), name.code),
-    '[': lambda(at),
+    '[': lambda((a, i) => at(a, i)),
     '=': (env, a, b) => update(env, a, run(env, b)),
     do: (env, ...a) => statement(env, a),
     ':': (env, ...a) => statement(env, a),
     io: {
-      shell: (env, cmd, ...a) => {
-        const p = spawnSync(run(env, cmd), a.map(x => run(env, x)), {encoding: 'utf8'})
-        return {
-          get result() {
-            return p.error ? fail(p.error.message) : p.stdout
-          }
-        }
-      },
       get rand() { return Math.random() },
       argv: process.argv.slice(2),
-    }
+      print: lambda((...a) => console.log(...a)),
+      shell: (env, ...a) => {
+        const cmd = a.map(x => run(env, x)).join(' ').replace(/'/g, "'")
+        const result = execSync(cmd, {encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore']})
+        return {result}
+      },
+      stdin,
+    },
   })
   const defineOp2 = (op, opf) => {
     embedded[op] = (env, head, ...a) => a.reduce((acc, x) => opf(acc, run(env, x)) , run(env, head)),
@@ -306,7 +316,7 @@ const execute = (source, embedded) => {
   defineOp2('++', (l, r) => l instanceof Map ? new Map([...l, ...r]) : l.concat(r))
   const minus = (l, r) => l instanceof Set ? new Set([...l].filter(x => !r.has(x))) : l - r
   embedded['-'] = lambda((...a) => a.length === 1 ? -a[0] : a.reduce((acc,n) => acc === undefined ? n : minus(acc, n)))
-  embedded['-='] = (env, [l, r]) => update(env, l.code, run(env, l) - run(env, r))
+  embedded['-='] = (env, a) => { log(a); const l=a[0]; const r=a[1]; return update(env, l.code, run(env, l) - run(env, r)) }
   embedded['!'] = lambda(x => !x)
   embedded['=='] = lambda((l,r) => comp(l, r, (x,y) => x === y))
   embedded['!='] = lambda((l,r) => comp(l, r, (x,y) => x !== y))
@@ -317,28 +327,24 @@ const execute = (source, embedded) => {
   return nodes.map(node => run(embedded, node)).at(-1)
 }
 
-const repl = () => {
-  const rl = require('node:readline/promises').createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  })
-  process.stdout.write('> ')
-  const env = {}
-  rl.on('line', line => {
-    if ('exit quit q'.split(' ').includes(line)) {
-      log('Bye \u{1F44B}')
-      rl.close()
-    } else {
-      log(attempt(() => execute(line, env)))
-      process.stdout.write('> ')
-    }
-  })
+const compile = source => {
+  const nodes = parse(source)
+  const def = (name, args, body) => `func ${name.code}(${args.map(x => `${x.code} interface{}`).join(', ')}) { ${gen(body)} }`
+  const gen = a =>
+    !Array.isArray(a) ? a.code :
+    a[0].code === 'def' ? def(a[1], a.slice(2, -1), a.at(-1)) :
+    a[0].code === '.' ? `${gen(a[1])}.${a[2].code}` :
+    `${gen(a[0])}(${a.slice(1).map(gen).join(', ')})`
+  return fs.readFileSync(__dirname + '/base.go', 'utf8') + nodes.map(gen).join('\n')
 }
 
-if (process.stdin.isRaw === undefined) {
-  const fs = require('node:fs')
+if (process.argv[2] === 'go') {
+  console.log(compile(stdin.utf8))
+} else if (process.argv[2] === 'parse') {
+  log(parse(stdin.utf8))
+} else {
   const env = {}
-  for (const chunk of fs.readFileSync('/dev/stdin', 'utf8').split(/\n(?=assert )/mg)) {
+  for (const chunk of stdin.utf8.split(/\n(?=assert )/mg)) {
     try {
       execute(chunk, env)
     } catch (e) {
@@ -348,6 +354,4 @@ if (process.stdin.isRaw === undefined) {
     }
   }
   env.main && env.main(env)
-} else {
-  repl()
 }

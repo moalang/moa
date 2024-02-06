@@ -1,5 +1,5 @@
 # shell
-assert ";\n" io.shell("echo" ";").result
+assert ";\n" io.shell("echo" "';'").result
 assert 1 catch(io.shell("nocommand").result fn(e 1))
 
 # rand

@@ -34,9 +34,14 @@
 - [x] split   :: string int? list[string]
 - [x] index   :: string option[int]
 - [x] replace :: string string string
+- [x] trim    :: string
+- [x] starts  :: string bool
+- [x] ends    :: string bool
+- [x] has     :: string bool
 
 # regexp
-- [x] match   :: string option[list[string]]
+- [x] match   :: string bool
+- [x] capture :: string list[string]
 - [x] split   :: string list[string]
 - [x] replace :: string (list[string] string) string
 
@@ -62,6 +67,7 @@
 - [x] fold b  :: b (a b b) b
 - [x] find    :: (a bool) option[a]
 - [x] join    :: string string
+- [ ] index   :: (a bool) opt[int]
 - [x] has     :: a bool
 - [x] min     :: a
 - [x] max     :: a
@@ -91,6 +97,9 @@
 - [x] 1 :: b
 - ...
 
+# struct
+[x]
+
 # time
 - [x] year, month, day, hour, min, sec, wday, yday, offset :: int
 - [x] format :: string string
@@ -115,7 +124,8 @@
 - [-] now    :: time
 - [x] rand   :: float
 - [x] shell  :: string ..string shell
-- [ ] stdin  :: stream
+- [x] print  :: ...any void
+- [-] stdin  :: stream
 - [ ] stdout :: stream
 - [ ] stderr :: stream
 
@@ -124,7 +134,7 @@
 - [ ] write a          :: a int @error
 - [ ] offset           :: int
 - [ ] seek             :: int int @error
-- [ ] flush            :: @error
+- [ ] flush            :: any? int @error
 - [ ] close            :: @error
 - [ ] closed           :: bool
 - [ ] peek             :: Buffer
@@ -133,7 +143,7 @@
 - [ ] i8,i16,i32,i64   :: int @error
 - [ ] u8,u16,u32,u64   :: int @error
 - [ ] f32,f64          :: float @error
-- [ ] utf8,utf16,utf32 :: string @error
+- [-] utf8,utf16,utf32 :: string @error
 
 # buffer
 - [ ] size             :: int

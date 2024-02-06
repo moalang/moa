@@ -30,6 +30,12 @@ assert 3:
   def f: a += 2
   f()
   a
+assert 1:
+  var m 0
+  def f n:
+    var m 1
+    iif n == 0 m f(n - 1)
+  f(2)
 
 # record
 assert 1:
@@ -45,6 +51,11 @@ assert "b":
 assert 1 fn(do(return(1) 2))()
 assert 1 fn(do(return(1) throw("a")))()
 assert 1 fn(do(do(return(1)) 2))()
+assert 3:
+  def g:
+    def f: return 1
+    f() + 2
+  g()
 
 # if / else
 assert 1 fn(do(if(true return(1)) 2))()

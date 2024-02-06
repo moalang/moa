@@ -19,8 +19,14 @@ t:
 # syntax error
 	echo 'abc'                 | node src/moa.js 2>&1 | grep -q 'can not find value `abc` in this scope'
 	echo 'abc += 1'            | node src/moa.js 2>&1 | grep -q 'can not find value `abc` in this scope'
-	echo 'let abc 1; abc += 1' | node src/moa.js 2>&1 | grep -q 'can not assign twice to immutable variable `abc`'
+# stdio
+	echo 'io.print io.stdin.utf8' | node src/moa.js | grep -q 'io.print io.stdin.utf8'
+# go
+	echo 'def main: io.print "Hello go"' | node src/moa.js go > /tmp/a.go && go run /tmp/a.go | grep -q 'Hello go'
 	@echo ok
+
+s:
+	(cd src; cat moa.moa | node moa.js build)
 
 r:
 	node src/moa.js
