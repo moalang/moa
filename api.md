@@ -13,6 +13,7 @@
 # option a
 - [x] and b :: option[a] (a b) option[b]
 - [x] or    :: option[a] a a
+- [x] bool  :: bool
 
 # num a
 - [x] + - * ** / % | & ^ :: a a a
@@ -55,6 +56,7 @@
 - [x] set     :: int a bool
 - [x] at      :: int a @error
 - [x] tie     :: int a a @error
+- [x] push    :: a a
 - [x] map b   :: (a b) list[b]
 - [x] fmap b  :: (a list[b]) list[b]
 - [x] keep    :: (a bool) list[a]
@@ -66,8 +68,8 @@
 - [x] zip b   :: list[b] list[tuple[a b]]
 - [x] fold b  :: b (a b b) b
 - [x] find    :: (a bool) option[a]
+- [x] index   :: (a bool) option[int]
 - [x] join    :: string string
-- [ ] index   :: (a bool) opt[int]
 - [x] has     :: a bool
 - [x] min     :: a
 - [x] max     :: a

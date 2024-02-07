@@ -25,6 +25,7 @@ class Time {
     this.yday = Math.floor((e - s) / (1000 * 60 * 60 * 24)) + 1
   }
 }
+class UserError extends Error {}
 const unwrap = (o, t) => o instanceof t ? o.__value : o
 
 const fs = require('node:fs')
@@ -32,20 +33,21 @@ const util = require('node:util')
 const { execSync } = require('child_process')
 const log = (...a) => (console.error(...a.map(o => util.inspect(o, false, null, true))), a[0])
 const attempt = (f, g) => { try { return f() } catch (e) { return g ? g(e) : e } }
+const trap = (a, f) => attempt(f, e => { throw e instanceof UserError ? e : fail('Trap', {a, e}) })
 const fail = (m, o) => { const e = new Error(m); e.detail = o; throw e }
 const tuple = (...a) => new Tuple().concat(a)
-const comp = (a, b, f) =>
+const compare = (a, b, f) =>
   a === undefined ? b === undefined :
   a === null ? b === null :
   typeof a === 'string'  && typeof b === 'string'  ? f(a, b) :
   typeof a === 'number'  && typeof b === 'number'  ? f(a, b) :
   typeof a === 'boolean' && typeof b === 'boolean' ? f(a, b) :
-  a.constructor.name !== b.constructor.name ? fail(`${a.constructor.name} and ${b.constructor.name} are can not be compared`) :
+  a.constructor.name !== b.constructor.name ? fail(`${a.constructor.name} and ${b.constructor.name} are can not be compared by ${f.toString()}`) :
   a instanceof Error ? a.message === b.message :
-  a instanceof Array ? a.length === b.length && a.every((x,i) => comp(x, b[i], f)) :
-  a instanceof Map ? [...a.keys()].sort().map(k => comp(a.get(k), b.get(k), f)) :
-  typeof object ? Object.keys(a).sort().every(k => comp(a[k], b[k], f)) :
-  fail(`${a} and ${b} are can not be compared`)
+  a instanceof Array ? a.length === b.length && a.every((x,i) => compare(x, b[i], f)) :
+  a instanceof Map ? [...a.keys()].sort().map(k => compare(a.get(k), b.get(k), f)) :
+  typeof object ? Object.keys(a).sort().every(k => compare(a[k], b[k], f)) :
+  fail(`${a} and ${b} are can not be compared by ${f.toString()}`)
 const stdin = { utf8: fs.readFileSync('/dev/stdin', 'utf8') } // TODO: to be passed via embedded argument
 
 const parse = source => {
@@ -54,7 +56,7 @@ const parse = source => {
   let lineid = 1
   let indent = 0
   // operator | symbols | id | number | string | white space
-  const tokens = source.split(/([+\-*\/%|&<>!=]+|[(){};.]|[A-Za-z_][0-9A-Za-z_]*|[0-9]+(?:\.[0-9]+)?|".*?(?<!\\)"|(?:#[^\n]*|\s+))/s).flatMap(code => {
+  const tokens = source.split(/([+\-*\/%|&<>!=^]+|[(){};.]|[A-Za-z_][0-9A-Za-z_]*|[0-9]+(?:\.[0-9]+)?|".*?(?<!\\)"|(?:#[^\n]*|\s+))/s).flatMap(code => {
     offset += code.length
     lineid += (code[0] !== '"' ? code.split('\n').length - 1 : 0) + (code === ';' ? 1 : 0)
     indent = code[0] !== '"' && code.includes('\n') ? code.split('\n').at(-1).length : indent
@@ -109,7 +111,7 @@ const execute = (source, embedded) => {
   const qmap = {'r': '\r', 'n': '\n', 't': '\t'}
   const unquote = s => s.replace(/\\(.)/g, (_, c) => qmap[c] || c)
   const call = (env, f, a) => typeof f === 'function' ? f(env, ...a) : fail('NotFunction', {f, a})
-  const run = (env, target) =>
+  const run = (env, target) => trap(target, () =>
     Array.isArray(target) ? call(env, run(env, target[0]), target.slice(1)) :
     'raw' in target ? target.raw :
     target.code === 'true' ? true :
@@ -117,7 +119,7 @@ const execute = (source, embedded) => {
     target.code.match(/^[0-9]/) ? parseFloat(target.code) :
     target.code.match(/^["'`]/) ? unquote(target.code.slice(1, -1)) :
     target.code in env ? unwrap(env[target.code], Ref) :
-    fail(`can not find value \`${target.code}\` in this scope`, {target, ids: [...Object.keys(env)]})
+    fail(`can not find value \`${target.code}\` in this scope`, {target, ids: [...Object.keys(env)]}))
   const raw = o => ({raw: o})
   const z2 = s => ('0' + s).slice(-2)
   const z4 = s => ('0000' + s).slice(-4)
@@ -168,6 +170,7 @@ const execute = (source, embedded) => {
     'RegExp replace': r => func((env, s, f) => s.replace(rg(r), (...a) => f(env, ...a.slice(0, -2).map(raw)))),
     'Array at': a => lambda(i => at(a, i)),
     'Array tie': a => lambda((i, v) => tie(a, i, v)),
+    'Array push': a => lambda(v => a.push(v)),
     'Array size': a => a.length,
     'Array slice': a => lambda((...b) => a.slice(...b)),
     'Array reverse': a => a.reverse(),
@@ -182,6 +185,7 @@ const execute = (source, embedded) => {
     'Array zip': a => lambda(b => a.map((x, i) => tuple(x, b[i]))),
     'Array fold': a => func((env, v, f) => a.reduce((acc, x) => f(env, raw(acc), raw(x)), v)),
     'Array find': a => func((env, f) => (r => r === undefined ? none : new Some(r))(a.find(x => f(env, raw(x))))),
+    'Array index': a => func((env, f) => (i => i === -1 ? none : new Some(i))(a.findIndex(x => f(env, raw(x))))),
     'Array join': a => lambda(s => a.join(s)),
     'Array has': a => lambda(x => a.includes(x)),
     'Array min': a => Math.min(...a),
@@ -206,8 +210,10 @@ const execute = (source, embedded) => {
     'Time string': t => format(t, 'yyyy-mm-ddTHH:MM:SSZ'),
     'Time format': t => lambda(s => format(t, s)),
     'Time tick': t => lambda(n => new Time(t.year, t.month, t.day, t.hour, t.min, t.sec + n, t.offset)),
+    'Some bool': s => true,
     'Some and': s => (env, f) => new Some((run(env, f))(env, raw(s.__value))),
     'Some or': s => () => s.__value,
+    'None bool': s => false,
     'None and': s => () => none,
     'None or': s => lambda(x => x),
   }
@@ -216,7 +222,7 @@ const execute = (source, embedded) => {
     return p ? p(obj) : typeof obj === 'object' && name in obj ? obj[name] : fail('NoProperty', {obj, name})
   }
   const iif = (env, a) => _iif(env,
-    a.length === 1 && a[0][0].code === ':' ? a[0].slice(1).flatMap(x => x) :
+    a.length === 1 && a[0][0].code === ':' ? a[0].slice(1, 1).flatMap(x => x).concat([a[0].at(-1)]) :
     a.length === 2 && a[1][0].code === ':' ? [a[0], ...a[1].slice(1)] :
     a)
   const _iif = (env, a) => a.length === 0 ? fail('NotEnoughIif') :
@@ -224,7 +230,7 @@ const execute = (source, embedded) => {
     run(env, a[0]) ? run(env, a[1]) :
     _iif(env, a.slice(2))
   const case_ = (env, target, a) => a.length <= 1 ? fail('NotEnoughCase', target) :
-    a[0].code === '_' || comp(target, run(env, a[0]), (x,y) => x === y) ? run(env, a[1]) :
+    a[0].code === '_' || compare(target, run(env, a[0]), (x,y) => x === y) ? run(env, a[1]) :
     case_(env, target, a.slice(2))
   const while_ = (env, cond, a) => {
     while (run(env, cond)) {
@@ -272,7 +278,7 @@ const execute = (source, embedded) => {
     assert: (env, a, b) => {
       const x = run(env, a)
       const y = b === undefined ? true : run(env, b)
-      comp(x, y, (x, y) => x === y) || fail('Assert', {a, b, x, y})
+      compare(x, y, (x, y) => x === y) || fail('Assert', {a, b, x, y})
     },
     if: (env, cond, body) => (env.__if = run(env, cond)) && run({...env}, body),
     else: (env, body) => !env.__if && (delete env.__if, run(env, body)),
@@ -280,7 +286,7 @@ const execute = (source, embedded) => {
     case: (env, a, ...b) => case_(env, run(env, a), unblock(b)),
     while: (env, cond, ...a) => while_(env, cond, a),
     return: lambda(x => new Return(x)),
-    throw: lambda(fail),
+    throw: (env, x) => { throw new UserError(run(env, x)) },
     catch: (env, x, f) => attempt(() => run(env, x), e => run(env, f)(env, raw(e))),
     '.': (env, obj, name) => prop(run(env, obj), name.code),
     '[': lambda((a, i) => at(a, i)),
@@ -316,14 +322,14 @@ const execute = (source, embedded) => {
   defineOp2('++', (l, r) => l instanceof Map ? new Map([...l, ...r]) : l.concat(r))
   const minus = (l, r) => l instanceof Set ? new Set([...l].filter(x => !r.has(x))) : l - r
   embedded['-'] = lambda((...a) => a.length === 1 ? -a[0] : a.reduce((acc,n) => acc === undefined ? n : minus(acc, n)))
-  embedded['-='] = (env, a) => { log(a); const l=a[0]; const r=a[1]; return update(env, l.code, run(env, l) - run(env, r)) }
+  embedded['-='] = (env, l, r) => update(env, l, run(env, l) - run(env, r))
   embedded['!'] = lambda(x => !x)
-  embedded['=='] = lambda((l,r) => comp(l, r, (x,y) => x === y))
-  embedded['!='] = lambda((l,r) => comp(l, r, (x,y) => x !== y))
-  embedded['>']  = lambda((l,r) => comp(l, r, (x,y) => x >   y))
-  embedded['>='] = lambda((l,r) => comp(l, r, (x,y) => x >=  y))
-  embedded['<']  = lambda((l,r) => comp(l, r, (x,y) => x <   y))
-  embedded['<='] = lambda((l,r) => comp(l, r, (x,y) => x <=  y))
+  embedded['=='] = lambda((l,r) => compare(l, r, (x,y) => x === y))
+  embedded['!='] = lambda((l,r) => compare(l, r, (x,y) => x !== y))
+  embedded['>']  = lambda((l,r) => compare(l, r, (x,y) => x >   y))
+  embedded['>='] = lambda((l,r) => compare(l, r, (x,y) => x >=  y))
+  embedded['<']  = lambda((l,r) => compare(l, r, (x,y) => x <   y))
+  embedded['<='] = lambda((l,r) => compare(l, r, (x,y) => x <=  y))
   return nodes.map(node => run(embedded, node)).at(-1)
 }
 

@@ -1,6 +1,11 @@
 # do
 assert 2 do(1 2)
 
+# constant
+assert 3:
+  let n 1 + 2
+  n
+
 # variable
 assert 3:
   var a 1

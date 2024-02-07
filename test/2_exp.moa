@@ -26,6 +26,15 @@ assert false 1 > 1
 assert true  1 >= 1
 assert false 1 < 1
 assert true  1 <= 1
+assert 2 do(var(a 1) a += 1)
+assert 1 do(var(a 3) a -= 2)
+assert 6 do(var(a 2) a *= 3)
+assert 2 do(var(a 4) a /= 2)
+assert 1 do(var(a 5) a %= 2)
+assert 3 do(var(a 1) a |= 2)
+assert 2 do(var(a 3) a &= 2)
+assert 1 do(var(a 3) a ^= 2)
+assert 8 do(var(a 2) a **= 3)
 
 # string
 assert "ab" "a" ++ "b"
@@ -57,10 +66,10 @@ assert set(1)   set(1 2) ^ set(2)
 assert dict(1 2 3 4) dict(1 2) ++ dict(3 4)
 
 # iif
-assert 1 iif(true  1 2)
+assert 1 iif(true 1 throw("a"))
 assert 2 iif(false throw("a") 2)
-assert 2 iif(false 1 true  2 3)
-assert 3 iif(false 1 false 2 3)
+assert 2 iif(false throw("a") true 2 throw("b"))
+assert 3 iif(false throw("a") false throw("b") 3)
 assert 3 iif(
   false: throw("a")
   3)
@@ -71,8 +80,7 @@ assert 3:
 assert 3:
   iif:
     false: throw("a")
-    false: 2
-    3
+    1 + 2
 
 # case
 assert "a" case(1 1 "a" 2 "b" _ "c")
@@ -91,3 +99,4 @@ assert "c":
 # priority
 assert 7 1 + 2 * 3
 assert true 1 + 2 == 7 - 4
+assert true !list().find(fn(x x == 0)).bool

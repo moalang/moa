@@ -47,85 +47,83 @@ def parse source:
     lineid += iif(code.starts("\"") 0 code.split("\n").size - 1)
     lineid + iif(code == ";" 1 0)
     indent = iif(code.starts("\"") && code.has("\n") code.split("\n")[-1].size indent)
-    let enabled code != ";" && !regexp("^\s*#").match(code) && code.trim.size > 0
-    iif enabled list(Token(code lineid offset indent)) list()
+    let enabled code != ";" && code.trim.size > 0 && !regexp("^\\s*#").match(code)
+    iif enabled list(Token(code offset lineid indent list())) list()
   let reg regexp("([+\\-*\\/%|&<>!=]+|[(){};.]|[A-Za-z_][0-9A-Za-z_]*|[0-9]+(?:\\.[0-9]+)?|\".*?(?<!\\\\)\"|(?:#[^\\n]*|\\s+))" "s")
   let tokens reg.split(source).fmap(tmap)
-  var pos 0
-  let op2s "|| && = == != < <= > >= ++ + - | & ^ ~ * / % ^ **".split(" ") # low...high, other operators are lowest
-  let ops list("!"  "=>") ++ op2s
-  def back t:
-    pos -= 1
-    t
-  def forward:
-    let t tokens[pos]
-    pos += 1
-    t
+
+  let empty Token("" 0 0 0 list())
   def tlist a:
     Token "" 0 0 0 a
   def tcode code:
     Token code 0 0 0 list()
+  var pos 0
+  def forward x:
+    pos += 1
+    x
+  def back x:
+    pos -= 1
+    x
   def many f:
     var a list()
-    while pos < tokens.size:
-      let x f(tokens[pos])
-      iif x.size == 0 break a.push(f(tokens[pos]))
-      pos += 1
-    a
+    while pos < tokens.length:
+      let t f(tokens[pos])
+      iif t == empty break a.push(t)
+    tlist a
+  def many2 f:
+    var a list()
+    while pos < tokens.length:
+      let t f(tokens[pos])
+      iif t == empty break a.push(t)
+    tlist a
+  def unnest t:
+    iif t.args.size == 1 t.args[0] t
   def until code:
-    let a many(unit t => t.code != code)
-    pos += 1
-    a
+    many2(t => iif(t.code == code forward(empty) consume()))
+  let op2s "|| && = == != < <= > >= ++ + - | & ^ ~ * / % ^ **".split(" ") # low...high, other operators are lowest
+  let ops "! =>".split(" ") ++ op2s
   def priority t:
-    op2s.index op => op == t.code
+    op2s.index(op => op == t.code).or(0)
   def isOp t:
-    t.code && ops.has(t.code)
+    ops.has(t.code) || t.args.size > 0
   def isOp2 t:
-    t.code && op2s.includes(t.code) || op2s.find(op => t.code == op + '=')
+    op2s.has(t.code) || op2s.find(op => t.code == op ++ "=").bool || t.args.size > 0
   def reorder op l r:
-    iif:
-      isOp2(r[0]) && priority(r[0]) < priority(op): list(r[0] list(op l r[1]) r[2])
-      list(op l r)
+    iif r.args.size == 3 && isOp2(r.args[0]) && priority(r.args[0]) < priority(op):
+      tlist(list(r.args[0] tlist(list(op l r.args[1])) r.args[2]))
+      tlist(list(op l r))
   def suffix x:
-    if pos >= tokens.length:
+    if pos >= tokens.size:
       return x
-    let t tokens[pos]
-    pos += 1
+    let t forward(tokens[pos])
     let near t.offset - t.code.size == tokens[pos-2].offset
     iif:
-      near && t.code == '(': suffix list(x) ++ until(')')
-      near && t.code == '[': suffix list(t x) ++ until(']')
-      near && t.code == '.': suffix list(t x forward())
-      t.code == '=>'       : arrow(x, t, tokens[pos].indent)
-      isOp2(t)             : reorder(t, x, unit(forward()))
+      near && t.code == "(": suffix(tlist(list(x) ++ until(")")))
+      near && t.code == "[": suffix(tlist(list(t x unnest(until("]")))))
+      near && t.code == ".": suffix(tlist(list(t x forward(tokens[pos]))))
+      t.code == "=>"       : arrow(x t tokens[pos].indent)
+      isOp2(t)             : reorder(t x consume())
       back(x)
-  def parenthesis a:
+  def parenthesis t:
     iif:
-      isOp(a[0])                     : a
-      a.length == 1 && isOp(a[0][0]) : a[0]
-      a.length == 1                  : a
-      throw "TooManyInParenthesis"
+      isOp(t): t
+      t.args.size == 1 : iif(isOp(t.args[0].args[0]) t.args[0] t)
+      throw("TooManyInParenthesis")
   def arrow x t indent:
     iif:
-      tokens[pos].lineid == t.lineid: list(t x unit(forward()))
-      list(t, x, list(tcode(':')) ++ many(t => back(line(t.lineid)) t => t.indent == indent))
+      tokens[pos].lineid == t.lineid: tlist(list(t x consume()))
+      tlist(list(t x tlist(tcode(":") ++ many2(t => iif(t.indent == indent line(t) empty)))))
   def block t indent:
-    iif tokens[pos].lineid == t.lineid:
-      line t.lineid
-      list(t) ++ many t =>
-        iif t.indent != indent:
-          list()
-          back(line(t.lineid))
-  def unit t:
     iif:
-      t.code == "!": list t suffix(unit(forward()))
-      t.code == "(": suffix parenthesis(until(")"))
-      t.code == ":": block t tokens[pos].indent
+      tokens[pos].lineid == t.lineid: line(t)
+      tlist(list(t) ++ many2(t => iif(t.indent == indent line(t) empty)))
+  def consume:
+    let t forward(tokens[pos])
+    iif:
+      t.code == "!": tlist(list(t suffix(consume())))
+      t.code == "(": suffix(parenthesis(until(")")))
+      t.code == ":": block(t tokens[pos].indent)
       suffix(t)
-  def line lineid:
-    def unlist a:
-      iif a.size == 1:
-        a[0]
-        a
-    unlist many(unit t => t.lineid == lineid && t.code != ")")
-  many t => back(line(t.lineid))
+  def line t:
+    unnest(many2(u => iif(u.lineid == t.lineid && u.code != ")" consume() empty)))
+  many line

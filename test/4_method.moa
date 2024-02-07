@@ -50,6 +50,8 @@ assert "2024/01/02 03:03:59+0000" time(2024 1 2 3 4 5 6).utc.format("yyyy/mm/dd 
 assert some(3) some(1).and(fn(a a + 2))
 assert 1 some(1).or(2)
 assert 2 none.or(2)
+assert true some(0).bool
+assert false none.bool
 
 # tuple
 assert 1   tuple(1 "a").0
@@ -63,6 +65,10 @@ assert 2                list(1).tie(0 2)
 assert list(2):
   var a list(1)
   a.tie 0 2
+  a
+assert list(1):
+  var a list()
+  a.push 1
   a
 assert some(1)          list(1).get(0)
 assert none             list(1).get(1)
@@ -81,6 +87,8 @@ assert list(tuple(1 2)) list(1).zip(list(2))
 assert 3                list(1 2).fold(0 fn(a b a + b))
 assert some(1)          list(1).find(fn(a a == 1))
 assert none             list(1).find(fn(a a == 2))
+assert some(0)          list(1).index(fn(a a == 1))
+assert none             list(1).index(fn(a a == 2))
 assert "a,b"            list("a" "b").join(",")
 assert true             list(1).has(1)
 assert 1                list(1 2).min
