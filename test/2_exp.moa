@@ -81,6 +81,10 @@ assert 3:
   iif:
     false: throw("a")
     1 + 2
+assert 3:
+  iif:
+    true: 1 + 2
+    throw("a")
 
 # case
 assert "a" case(1 1 "a" 2 "b" _ "c")
@@ -91,7 +95,7 @@ assert "c" case(3
   2: "b"
   _: "c")
 assert "c":
-  case 3:
+  case 1 + 2:
     1: "a"
     2: "b"
     _: "c"

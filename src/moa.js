@@ -31,7 +31,7 @@ const unwrap = (o, t) => o instanceof t ? o.__value : o
 const fs = require('node:fs')
 const util = require('node:util')
 const { execSync } = require('child_process')
-const log = (...a) => (console.error(...a.map(o => util.inspect(o, false, null, true))), a[0])
+const log = (...a) => (console.error(...a.map(o => util.inspect(o, false, null, false))), a[0])
 const attempt = (f, g) => { try { return f() } catch (e) { return g ? g(e) : e } }
 const trap = (a, f) => attempt(f, e => { throw e instanceof UserError ? e : fail('Trap', {a, e}) })
 const fail = (m, o) => { const e = new Error(m); e.detail = o; throw e }
@@ -222,7 +222,7 @@ const execute = (source, embedded) => {
     return p ? p(obj) : typeof obj === 'object' && name in obj ? obj[name] : fail('NoProperty', {obj, name})
   }
   const iif = (env, a) => _iif(env,
-    a.length === 1 && a[0][0].code === ':' ? a[0].slice(1, 1).flatMap(x => x).concat([a[0].at(-1)]) :
+    a.length === 1 && a[0][0].code === ':' ? a[0].slice(1, -1).flatMap(x => x).concat([a[0].at(-1)]) :
     a.length === 2 && a[1][0].code === ':' ? [a[0], ...a[1].slice(1)] :
     a)
   const _iif = (env, a) => a.length === 0 ? fail('NotEnoughIif') :
@@ -272,7 +272,7 @@ const execute = (source, embedded) => {
     time: lambda((...a) => new Time(...a)),
     some: lambda(x => new Some(x)),
     none: none,
-    log: lambda((...a) => (console.error(...a), a[0])),
+    log: lambda(log),
     continue: new Continue(),
     break: new Break(),
     assert: (env, a, b) => {
@@ -344,12 +344,20 @@ const compile = source => {
   return fs.readFileSync(__dirname + '/base.go', 'utf8') + nodes.map(gen).join('\n')
 }
 
+const env = {}
 if (process.argv[2] === 'go') {
   console.log(compile(stdin.utf8))
 } else if (process.argv[2] === 'parse') {
   log(parse(stdin.utf8))
+} else if (process.argv[2] === 'build') {
+  try {
+    execute(fs.readFileSync(__dirname + '/moa.moa', {encoding: 'utf8'}), env)
+    env.main()
+  } catch (e) {
+    console.dir(e, {depth: null})
+    process.exit(1)
+  }
 } else {
-  const env = {}
   for (const chunk of stdin.utf8.split(/\n(?=assert )/mg)) {
     try {
       execute(chunk, env)

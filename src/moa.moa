@@ -7,9 +7,9 @@ def main:
     _: help()
 
 def build:
-  let source io.shell("find . -name *.moa | xargs cat").result
+  let source io.stdin.utf8
+  log source
   let nodes parse(source)
-  log nodes
   log "(build under developing)"
 
 def repl:
@@ -70,16 +70,10 @@ def parse source:
       let t f(tokens[pos])
       iif t == empty break a.push(t)
     tlist a
-  def many2 f:
-    var a list()
-    while pos < tokens.length:
-      let t f(tokens[pos])
-      iif t == empty break a.push(t)
-    tlist a
   def unnest t:
     iif t.args.size == 1 t.args[0] t
   def until code:
-    many2(t => iif(t.code == code forward(empty) consume()))
+    many(t => iif(t.code == code forward(empty) consume()))
   let op2s "|| && = == != < <= > >= ++ + - | & ^ ~ * / % ^ **".split(" ") # low...high, other operators are lowest
   let ops "! =>".split(" ") ++ op2s
   def priority t:
@@ -98,7 +92,7 @@ def parse source:
     let t forward(tokens[pos])
     let near t.offset - t.code.size == tokens[pos-2].offset
     iif:
-      near && t.code == "(": suffix(tlist(list(x) ++ until(")")))
+      near && t.code == "(": suffix(tlist(list(x) ++ until(")").args))
       near && t.code == "[": suffix(tlist(list(t x unnest(until("]")))))
       near && t.code == ".": suffix(tlist(list(t x forward(tokens[pos]))))
       t.code == "=>"       : arrow(x t tokens[pos].indent)
@@ -112,11 +106,11 @@ def parse source:
   def arrow x t indent:
     iif:
       tokens[pos].lineid == t.lineid: tlist(list(t x consume()))
-      tlist(list(t x tlist(tcode(":") ++ many2(t => iif(t.indent == indent line(t) empty)))))
+      tlist(list(t x tlist(tcode(":") ++ many(t => iif(t.indent == indent line(t) empty)))))
   def block t indent:
     iif:
       tokens[pos].lineid == t.lineid: line(t)
-      tlist(list(t) ++ many2(t => iif(t.indent == indent line(t) empty)))
+      tlist(list(t) ++ many(t => iif(t.indent == indent line(t) empty)))
   def consume:
     let t forward(tokens[pos])
     iif:
@@ -125,5 +119,5 @@ def parse source:
       t.code == ":": block(t tokens[pos].indent)
       suffix(t)
   def line t:
-    unnest(many2(u => iif(u.lineid == t.lineid && u.code != ")" consume() empty)))
-  many line
+    unnest(many(u => iif(u.lineid == t.lineid && u.code != ")" consume() empty)))
+  many(line)

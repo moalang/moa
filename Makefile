@@ -26,7 +26,8 @@ t:
 	@echo ok
 
 s:
-	(cd src; cat moa.moa | node moa.js build)
+	echo 'def main: io.print "Hello go"' | node src/moa.js build
+	#echo 'def main: io.print "Hello go"' | node src/moa.js build > /tmp/a.go && go run /tmp/a.go | grep -q 'Hello go'
 
 r:
 	node src/moa.js
