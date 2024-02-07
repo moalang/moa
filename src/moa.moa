@@ -8,9 +8,18 @@ def main:
 
 def build:
   let source io.stdin.utf8
-  log source
-  let nodes parse(source)
-  log "(build under developing)"
+  let top parse(source)
+  def func name args body:
+    "func " ++ name.code ++ "(" ++ args.map(t => t.code ++ " interface{}").join(", ") ++ ") {" ++ gen(body) ++ "}"
+  def gen t:
+    let a t.args
+    iif:
+      t.code != "": t.code
+      a[0].code == "def": func(a[1] a.slice(2 (-1)) a.at((-1)))
+      a[0].code == ".": gen(a[1]) ++ "." ++ a[2].code
+      gen(a[0]) ++ "(" ++ a.slice(1).map(gen).join(", ") ++ ")"
+  let go io.shell("cat base.go").result ++ top.args.map(gen).join("\n")
+  io.print go
 
 def repl:
   log "(repl under developing)"

@@ -33,7 +33,7 @@ const util = require('node:util')
 const { execSync } = require('child_process')
 const log = (...a) => (console.error(...a.map(o => util.inspect(o, false, null, false))), a[0])
 const attempt = (f, g) => { try { return f() } catch (e) { return g ? g(e) : e } }
-const trap = (a, f) => attempt(f, e => { throw e instanceof UserError ? e : fail('Trap', {a, e}) })
+const trap = (a, f) => attempt(f, e => { throw e instanceof UserError ? e : e.message === 'Trap' ? e : fail('Trap', {a, e}) })
 const fail = (m, o) => { const e = new Error(m); e.detail = o; throw e }
 const tuple = (...a) => new Tuple().concat(a)
 const compare = (a, b, f) =>
@@ -248,7 +248,7 @@ const execute = (source, embedded) => {
   const statement = (env, a) => (env => a.reduce((acc, x) =>
     acc instanceof Return || acc instanceof Continue || acc instanceof Break ? acc : run(env, x), null))({...env})
   const fn = (env, ...a) => (e, ...b) =>
-      unwrap(run({...e, ...map(a.slice(0, -1).map(x => x.code), b.map(exp => run(e, exp)))}, a.at(-1)), Return)
+      unwrap(run({...env, ...e, ...map(a.slice(0, -1).map(x => x.code), b.map(exp => run(e, exp)))}, a.at(-1)), Return)
   const declar = (env, a, b) => Array.isArray(a) && a[0].code === '[' ? tie(run(env, a[1]), run(env, a[2]), b) :
     env[a.code] = b
   const update = (env, a, b) => Array.isArray(a) && a[0].code === '[' ? tie(run(env, a[1]), run(env, a[2]), b) :
