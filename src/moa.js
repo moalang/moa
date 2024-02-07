@@ -32,7 +32,6 @@ const util = require('node:util')
 const { execSync } = require('child_process')
 const log = (...a) => (console.error(...a.map(o => util.inspect(o, false, null, true))), a[0])
 const attempt = (f, g) => { try { return f() } catch (e) { return g ? g(e) : e } }
-const loop = (f, g) => { const a = []; while (f()) { a.push(g()) }; return a }
 const fail = (m, o) => { const e = new Error(m); e.detail = o; throw e }
 const tuple = (...a) => new Tuple().concat(a)
 const comp = (a, b, f) =>
@@ -63,9 +62,10 @@ const parse = source => {
     return enabled ? [{code, lineid, offset, indent}] : []
   })
   let pos = 0
-  const many = (f, g) => loop(() => pos < tokens.length && (!g || g(tokens[pos])), () => f(tokens[pos++]))
+  const many = (f, acc) => pos >= tokens.length ? acc || [] :
+    ((x, acc) => x ? many(f, acc.concat([x])) : acc)(f(tokens[pos]), acc || [])
   const unlist = a => a.length === 1 ? a[0] : a
-  const until = code => (x => (++pos, x))(many(unit, t => t.code !== code))
+  const until = code => many(t => t.code === code ? (++pos, null) : consume())
   const op2s = '|| && = == != < <= > >= ++ + - | & ^ ~ * / % ^ **'.split(' ') // low...high, other operators are lowest
   const ops = ['!', '=>', ...op2s]
   const priority = t => op2s.findIndex(op => op === t.code)
@@ -84,22 +84,22 @@ const parse = source => {
       near && t.code === '[' ? suffix([t, x, unlist(until(']'))]) :
       near && t.code === '.' ? suffix([t, x, tokens[pos++]]) :
       t.code === '=>' ? arrow(x, t, tokens[pos].indent) :
-      isOp2(t) ? reorder(t, x, unit(tokens[pos++])) :
+      isOp2(t) ? reorder(t, x, consume()) :
       (--pos, x)
   }
   const parenthesis = a => isOp(a[0]) ? a : a.length === 1 ? (isOp(a[0][0]) ? a[0] : a) : fail('TooManyInParenthesis', a)
   const arrow = (x, t, indent) =>
-    tokens[pos].lineid === t.lineid ? [t, x, unit(tokens[pos++])] :
-    [t, x, [{code: ':'}, ...(many(line, t => t.indent === indent))]]
+    tokens[pos].lineid === t.lineid ? [t, x, consume()] :
+    [t, x, [{code: ':'}, ...many(t => t.indent === indent && line(t))]]
   const block = (t, indent) =>
-    tokens[pos].lineid === t.lineid ? line(tokens[pos++]) :
-    [t, ...many(line, t => t.indent === indent)]
-  const unit = t =>
-    t.code === '!' ? [t, suffix(unit(tokens[pos++]))] :
+    tokens[pos].lineid === t.lineid ? line(t) :
+    [t, ...many(t => t.indent === indent && line(t))]
+  const consume = () => (t =>
+    t.code === '!' ? [t, suffix(consume())] :
     t.code === '(' ? suffix(parenthesis(until(')'))) :
     t.code === ':' ? block(t, tokens[pos].indent) :
-    suffix(t)
-  const line = t => unlist([suffix(t)].concat(many(unit, u => u.lineid === t.lineid && u.code !== ')')))
+    suffix(t))(tokens[pos++])
+  const line = t => unlist(many(u => u.lineid === t.lineid && u.code !== ')' && consume()))
   return many(line)
 }
 
