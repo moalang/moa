@@ -23,6 +23,8 @@ t:
 	echo 'io.print io.stdin.utf8' | node src/moa.js | grep -q 'io.print io.stdin.utf8'
 # go
 	echo 'def main: io.print "Hello go"' | node src/moa.js go > /tmp/a.go && go run /tmp/a.go | grep -q 'Hello go'
+# self boot
+	(cd src && echo 'def main: io.print "Hello moa"' | node moa.js build) > /tmp/a.go && go run /tmp/a.go | grep -q 'Hello moa'
 	@echo ok
 
 s:

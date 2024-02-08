@@ -4,14 +4,14 @@
 - [x] true, false  :: bool
 - [x] some a, none :: option[a]
 - [x] throw a b    :: a b
-- [x] catch a      :: (error a) a
+- [x] catch a      :: fn[error a] a
 - [x] iif a        :: ...[bool a] a
 - [x] case a b     :: a ...[a b] b
 - [x] if, else
 - [x] while, continue, break
 
 # option a
-- [x] and b :: option[a] (a b) option[b]
+- [x] and b :: option[a] fn[a b] option[b]
 - [x] or    :: option[a] a a
 - [x] bool  :: bool
 
@@ -39,12 +39,13 @@
 - [x] starts  :: string bool
 - [x] ends    :: string bool
 - [x] has     :: string bool
+- [ ] encode  :: string string? bytes @error
 
 # regexp
 - [x] match   :: string bool
 - [x] capture :: string list[string]
 - [x] split   :: string list[string]
-- [x] replace :: string (list[string] string) string
+- [x] replace :: string fn[list[string] string] string
 
 # lambda[a b ...]
 - [x]
@@ -57,18 +58,18 @@
 - [x] at      :: int a @error
 - [x] tie     :: int a a @error
 - [x] push    :: a a
-- [x] map b   :: (a b) list[b]
-- [x] fmap b  :: (a list[b]) list[b]
-- [x] keep    :: (a bool) list[a]
-- [x] all     :: (a bool) bool
-- [x] any     :: (a bool) bool
+- [x] map b   :: fn[a b] list[b]
+- [x] fmap b  :: fn[a list[b]] list[b]
+- [x] keep    :: fn[a bool] list[a]
+- [x] all     :: fn[a bool] bool
+- [x] any     :: fn[a bool] bool
 - [x] slice   :: int int? list[a]
-- [x] sort    :: (a a bool)? list[a]
+- [x] sort    :: fn[a a bool]? list[a]
 - [x] reverse :: list[a]
 - [x] zip b   :: list[b] list[tuple[a b]]
-- [x] fold b  :: b (a b b) b
-- [x] find    :: (a bool) option[a]
-- [x] index   :: (a bool) option[int]
+- [x] fold b  :: b fn[a b b] b
+- [x] find    :: fn[a bool] option[a]
+- [x] index   :: fn[a bool] option[int]
 - [x] join    :: string string
 - [x] has     :: a bool
 - [x] min     :: a
@@ -121,57 +122,88 @@
 - [x] :: a a void
 
 # io
-- [x] argv   :: list[string]
-- [-] env    :: string option[string]
-- [-] now    :: time
-- [x] fs     :: fs
-- [x] rand   :: float
-- [x] shell  :: string ..string shell
-- [x] print  :: ...any void
-- [-] stdin  :: stream
-- [ ] stdout :: stream
-- [ ] stderr :: stream
+- [x] argv       :: list[string]
+- [-] env        :: string option[string]
+- [-] now        :: time
+- [x] fs         :: fs
+- [-] rand       :: rand
+- [x] shell      :: string ...string shell
+- [x] print      :: ... void
+- [-] stdin      :: stream
+- [ ] stdout     :: stream
+- [ ] stderr     :: stream
+
+# rand
+- [ ] int        :: int? int? int
+- [ ] float      :: float? float? float
+- [ ] bytes      :: int bytes
 
 # fs
-- [x] open   :: string stream @error
+- [-] open t  :: string string? fn[stream t] a @error
+- [-] read    :: string bytes @error
+- [-] reads   :: string string @error
+- [-] write   :: string ...serial int @error
+- [-] append  :: string ...serial int @error
 
-# steram
-- [ ] read             :: int? buffer @error
-- [ ] write a          :: a int @error
+# stream
 - [ ] offset           :: int
-- [ ] seek             :: int int @error
-- [ ] flush            :: any? int @error
-- [ ] close            :: @error
+- [ ] seek             :: int stream @error
+- [ ] read             :: int? bytes @error
+- [ ] write            :: ...serial int @error
+- [ ] flush            :: ...serial int @error
+- [ ] close            :: bool @error
 - [ ] closed           :: bool
-- [ ] peek             :: Buffer
+- [ ] peek             :: bytes
 - [ ] le               :: stream
 - [ ] be               :: stream
-- [ ] i8,i16,i32,i64   :: int @error
-- [ ] u8,u16,u32,u64   :: int @error
-- [ ] f32,f64          :: float @error
-- [-] utf8,utf16,utf32 :: string @error
+- [ ] i8,i16,i32,i64   :: i8,i16,i32,i64 @error
+- [ ] u8,u16,u32,u64   :: u8,u16,u32,u64 @error
+- [ ] f32,f64          :: f32,f64        @error
+- [x] utf8             :: string @error
+- [ ] decode           :: string string @error
 
-# buffer
+# bytes
 - [ ] size             :: int
-- [ ] i8,i16,i32,i64   :: int option[int]
-- [ ] u8,u16,u32,u64   :: int option[int]
-- [ ] f32,f64          :: int option[float]
-- [ ] utf8,utf16,utf32 :: int int? option[string]
-- [ ] slice            :: int int? buffer
+- [ ] slice            :: int int? bytes
+- [ ] i8,i16,i32,i64   :: option[i8,i16,i32,i64] @error
+- [ ] u8,u16,u32,u64   :: option[u8,u16,u32,u64] @error
+- [ ] f32,f64          :: option[f32,f64       ] @error
+- [ ] tr               :: string string
+- [ ] utf8             :: option[string]
+- [ ] decode           :: string option[string]
+- [ ] deserialize t    :: option[t]
+- [ ] stream           :: stream
+
+# serial a
+- [ ] serialize :: fn[serial void] void @error
+- [ ] int.serial
+- [ ] float.serial
+- [ ] string.serial
+- [ ] time.serial
+- [ ] tuple.serial
+- [ ] struct.serial
+- [ ] list.serial
+- [ ] set.serial
+- [ ] dict.serial
+- [ ] stream.serial
+- [ ] bytes.serial
+- [ ] option.serial
+- [ ] regexp.serial
+
+# example: json
+enum json:
+  jstring string
+  jlist list[json]
+  jdict dict[string json]
+impl json serial:
+  serialize w:
+    jstring s: w "\""; s.each(c => w(jquote(c))); w "\""
+    jlist   l: w "["; l.each(w); w "]"
+    jdict   d: w "{"; l.each(fn((k v) w k; w v)) w "}"
 
 # ---( pending )---------------------------------------
 # io
-- [ ] path string:
-- [ ]   path   :: string
-- [ ]   join   :: string path
-- [ ]   glob   :: string list[path]
-- [ ]   read   :: option[bytes]
-- [ ]   write  :: bytes _ @error
-- [ ]   append :: bytes _ @error
-- [ ]   unlink :: @error
 - [ ] database t u :: (t u) u
-- [ ] randint :: int int int
-- [ ] randbytes :: int bytes
 - [ ] http:
 - [ ]   listen (http.request http.response) _
 - [ ]   call string {method.string="get" headers.list[tuple[string list[string]]]=[] body.bytes=[]} http.response

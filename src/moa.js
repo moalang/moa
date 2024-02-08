@@ -298,7 +298,7 @@ const execute = (source, embedded) => {
       argv: process.argv.slice(2),
       print: lambda((...a) => console.log(...a)),
       fs: {
-        open: lambda(path => ({ utf8: fs.readFileSync(path, {encoding: 'utf8'}) }))
+        reads: lambda(path => fs.readFileSync(path, {encoding: 'utf8'}))
       },
       shell: (env, ...a) => {
         const cmd = a.map(x => run(env, x)).join(' ').replace(/'/g, "'")

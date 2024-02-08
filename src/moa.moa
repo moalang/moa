@@ -18,7 +18,7 @@ def build:
       a[0].code == "def": func(a[1] a.slice(2 (-1)) a.at((-1)))
       a[0].code == ".": gen(a[1]) ++ "." ++ a[2].code
       gen(a[0]) ++ "(" ++ a.slice(1).map(gen).join(", ") ++ ")"
-  let go io.fs.open("base.go").utf8 ++ top.args.map(gen).join("\n")
+  let go io.fs.reads("base.go") ++ top.args.map(gen).join("\n")
   io.print go
 
 def repl:
