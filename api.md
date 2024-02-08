@@ -124,7 +124,7 @@
 - [x] argv   :: list[string]
 - [-] env    :: string option[string]
 - [-] now    :: time
-- [-] fs     :: fs
+- [x] fs     :: fs
 - [x] rand   :: float
 - [x] shell  :: string ..string shell
 - [x] print  :: ...any void
@@ -133,9 +133,7 @@
 - [ ] stderr :: stream
 
 # fs
-- [ ] root   :: string
-- [ ] open   :: string stream @error
-- [ ] glob   :: string list[string] @error
+- [x] open   :: string stream @error
 
 # steram
 - [ ] read             :: int? buffer @error

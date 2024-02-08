@@ -4,7 +4,7 @@ watch:
 
 t:
 	clear
-	cat test/* | node src/moa.js
+	(cd test/fs && cat ../*.moa | node ../../src/moa.js)
 # arguments from shell
 	echo 'assert list("a" "b") io.argv' | node src/moa.js a b 2>&1 > /dev/null
 # multiline string

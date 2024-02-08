@@ -5,3 +5,6 @@ assert 1 catch(io.shell("nocommand").result fn(e 1))
 # rand
 assert 0 <= io.rand
 assert io.rand <= 1.0
+
+# fs
+assert "Hello\n" io.fs.open("hello.txt").utf8
