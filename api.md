@@ -124,12 +124,18 @@
 - [x] argv   :: list[string]
 - [-] env    :: string option[string]
 - [-] now    :: time
+- [-] fs     :: fs
 - [x] rand   :: float
 - [x] shell  :: string ..string shell
 - [x] print  :: ...any void
 - [-] stdin  :: stream
 - [ ] stdout :: stream
 - [ ] stderr :: stream
+
+# fs
+- [ ] root   :: string
+- [ ] open   :: string stream @error
+- [ ] glob   :: string list[string] @error
 
 # steram
 - [ ] read             :: int? buffer @error
