@@ -6,17 +6,39 @@ def main:
     "format": format()
     _: help()
 
+record type:
+  name string
+  params list[type]
+
+def tfunc params:
+  type "" params
+
+def tshow t:
+  t.name ++ iif(t.params.size == 0 "" "(" ++ t.params.map(tshow).join(" ") ++ ")")
+
 def build:
   let source io.stdin.utf8
   let top parse(source)
+  let op2s "|| && = == != < <= > >= ++ + - | & ^ ~ * / % ^ **".split(" ")
+  let tfvoid tfunc(list())
+  var tenv dict("main" tfvoid)
   def func name args body:
-    "func " ++ name.code ++ "(" ++ args.map(t => t.code ++ " interface{}").join(", ") ++ ") {" ++ gen(body) ++ "}"
+    let targs tenv.get(name.code).or(tfvoid).params
+    def argument t i:
+      t.code ++ " " ++ tshow(targs[i])
+    iif targs.size == 0:
+      "func " ++ name.code ++ "() { " ++ gen(body) ++ "; }"
+      "func " ++ name.code ++ "(" ++ args.mapi(argument).join(", ") ++ ") " ++ tshow(targs.at((-1))) ++ " { return " ++ gen(body) ++ "; }"
   def gen t:
     let a t.args
     iif:
-      t.code != "": t.code
-      a[0].code == "def": func(a[1] a.slice(2 (-1)) a.at((-1)))
-      a[0].code == ".": gen(a[1]) ++ "." ++ a[2].code
+      t.code != ""       : t.code
+      a[0].code == "dec" :
+        tenv.set(a[1].code tfunc(a.slice(2).map(t => type(t.code list()))))
+        ""
+      a[0].code == "def" : func(a[1] a.slice(2 (-1)) a.at((-1)))
+      a[0].code == "."   : gen(a[1]) ++ "." ++ a[2].code
+      op2s.has(a[0].code): gen(a[1]) ++ a[0].code ++ gen(a[2])
       gen(a[0]) ++ "(" ++ a.slice(1).map(gen).join(", ") ++ ")"
   let go io.fs.reads("base.go") ++ top.args.map(gen).join("\n")
   io.print go

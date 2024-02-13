@@ -15,8 +15,8 @@ type Stream struct {
 
 var io = new(IO)
 
-func (_ IO) print(s string) {
-	fmt.Printf(s)
+func (_ IO) print(s interface{}) {
+	fmt.Printf("%v", s)
 }
 
 func (_ FS) open(path string) Stream {

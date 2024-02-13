@@ -177,6 +177,7 @@ const execute = (source, embedded) => {
     'Array get': a => lambda(i => 0 <= i && i < a.length ? new Some(a[i]) : none),
     'Array set': a => lambda((i, v) => 0 <= i && i < a.length ? (a[i] = v, true) : false),
     'Array map': a => func((env, f) => a.map(x => f(env, raw(x)))),
+    'Array mapi': a => func((env, f) => a.map((x,i) => f(env, raw(x), raw(i)))),
     'Array fmap': a => func((env, f) => a.flatMap(x => f(env, raw(x)))),
     'Array keep': a => func((env, f) => a.filter(x => f(env, raw(x)))),
     'Array all': a => func((env, f) => a.every(x => f(env, raw(x)))),
@@ -191,7 +192,7 @@ const execute = (source, embedded) => {
     'Array min': a => Math.min(...a),
     'Array max': a => Math.max(...a),
     'Map get': m => lambda(k => m.has(k) ? new Some(m.get(k)) : none),
-    'Map set': m => lambda((k, v) => (b => (m[k] = v, !b))(m.has(k))),
+    'Map set': m => lambda((k, v) => (b => (m.set(k, v), !b))(m.has(k))),
     'Map has': m => lambda(k => m.has(k)),
     'Map keys': m => [...m.keys()],
     'Map values': m => [...m.values()],
@@ -309,20 +310,20 @@ const execute = (source, embedded) => {
     },
   })
   const defineOp2 = (op, opf) => {
-    embedded[op] = (env, head, ...a) => a.reduce((acc, x) => opf(acc, run(env, x)) , run(env, head)),
-    embedded[op + '='] = (env, l, r) => update(env, l, opf(run(env, l), run(env, r)))
+    embedded[op] = (env, l, r) => opf(env, l, r)
+    embedded[op + '='] = (env, l, r) => update(env, l, opf(env, l, r))
   }
-  defineOp2('+', (l, r) => l + r)
-  defineOp2('*', (l, r) => l * r)
-  defineOp2('/', (l, r) => l / r)
-  defineOp2('%', (l, r) => l % r)
-  defineOp2('|', (l, r) => l instanceof Set ? new Set([...l, ...r]) : l | r)
-  defineOp2('&', (l, r) => l instanceof Set ? new Set([...l].filter(x => r.has(x))) : l & r)
-  defineOp2('^', (l, r) => l instanceof Set ? new Set([...l, ...r].flatMap(x => l.has(x) && r.has(x) ? [] : [x])) : l ^ r)
-  defineOp2('||', (l, r) => l || r)
-  defineOp2('&&', (l, r) => l && r)
-  defineOp2('**', (l, r) => l ** r)
-  defineOp2('++', (l, r) => l instanceof Map ? new Map([...l, ...r]) : l.concat(r))
+  defineOp2('+', lambda((l, r) => l + r))
+  defineOp2('*', lambda((l, r) => l * r))
+  defineOp2('/', lambda((l, r) => l / r))
+  defineOp2('%', lambda((l, r) => l % r))
+  defineOp2('|', lambda((l, r) => l instanceof Set ? new Set([...l, ...r]) : l | r))
+  defineOp2('&', lambda((l, r) => l instanceof Set ? new Set([...l].filter(x => r.has(x))) : l & r))
+  defineOp2('^', lambda((l, r) => l instanceof Set ? new Set([...l, ...r].flatMap(x => l.has(x) && r.has(x) ? [] : [x])) : l ^ r))
+  defineOp2('||', (env, l, r) => run(env, l) || run(env, r))
+  defineOp2('&&', (env, l, r) => run(env, l) && run(env, r))
+  defineOp2('**', lambda((l, r) => l ** r))
+  defineOp2('++', lambda((l, r) => l instanceof Map ? new Map([...l, ...r]) : l.concat(r)))
   const minus = (l, r) => l instanceof Set ? new Set([...l].filter(x => !r.has(x))) : l - r
   embedded['-'] = lambda((...a) => a.length === 1 ? -a[0] : a.reduce((acc,n) => acc === undefined ? n : minus(acc, n)))
   embedded['-='] = (env, l, r) => update(env, l, run(env, l) - run(env, r))

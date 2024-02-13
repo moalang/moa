@@ -25,7 +25,7 @@ id: [A-Za-z_][A-Za-z0-9_]*
 
 Reserved word
 ```
-declaration: let var def record enum
+declaration: let var def dec record enum
      branch: if else
        flow: return throw catch assert
        loop: for while continue break
@@ -162,10 +162,17 @@ def validate t:
 
 - typed argument
 ```
-def f a.int .int      : a     # int int
-def f a b.float       : a / b # float float float
-def f t.num => a.t b.t: a + b # t.num => t t t
-def f a.ref: a += 1           # a = ref 1; f a; a == 2
+dec f int int
+def f a  : a      # int int
+
+dec f float float float
+def f a b: a / b  # float float float
+
+dec t.num: t t t
+def f a b: a + b  # t.num => t t t
+
+dec f ref int
+def f a  : a += 1 # a = ref 1; f a; a == 2
 ```
 
 - Core syntax

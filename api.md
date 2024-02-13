@@ -59,6 +59,7 @@
 - [x] tie     :: int a a @error
 - [x] push    :: a a
 - [x] map b   :: fn[a b] list[b]
+- [x] mapi b  :: fn[a int b] list[b]
 - [x] fmap b  :: fn[a list[b]] list[b]
 - [x] keep    :: fn[a bool] list[a]
 - [x] all     :: fn[a bool] bool

@@ -11,6 +11,15 @@ assert 3:
   var a 1
   a += 2
   a
+assert 1:
+  var a list()
+  a.push(1)
+  a.size
+assert 1:
+  var a dict()
+  a.set(1 2)
+  a.size
+
 
 # throw / catch
 assert "a" catch(throw("a") fn(e e.message))

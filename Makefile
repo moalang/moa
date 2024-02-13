@@ -25,6 +25,8 @@ t:
 	echo 'def main: io.print "Hello go"' | node src/moa.js go > /tmp/a.go && go run /tmp/a.go | grep -q 'Hello go'
 # self boot
 	(cd src && echo 'def main: io.print "Hello moa"' | node moa.js build) > /tmp/a.go && go run /tmp/a.go | grep -q 'Hello moa'
+# type hint
+	(cd src && echo 'dec add int int int\ndef add a b: a + b\ndef main: io.print add(1 2)' | node moa.js build) > /tmp/a.go && go run /tmp/a.go | grep -q 3
 	@echo ok
 
 s:
