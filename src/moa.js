@@ -63,7 +63,7 @@ const newEnv = () => {
     a.constructor === Array   ? a.length === b.length && a.every((x,i) => compare(x, b[i], f)) :
     a.constructor === Map     ? [...a.keys()].sort().map(k => compare(a.get(k), b.get(k), f)) :
     a.constructor === Object  ? Object.keys(a).sort().every(k => compare(a[k], b[k], f)) :
-    fail(`${a} and ${b} are can not be compared by ${f.toString()}`)
+    fail(`${a} and ${b} are not compared by ${f.toString()}`)
   const properties = {
     'String size': s => s.length,
   }
@@ -71,7 +71,7 @@ const newEnv = () => {
   const assign = (f, x, v) => !Array.isArray(x) ? f.set(x.code, v) :
     x[0].code === '[' ? f.get(x[1].code)[f(x[2])] = v :
     x[0].code === '.' ? f.get(x[1].code)[x[2].code] = v :
-    fail('Unable to assign', x)
+    fail('assign', x)
   const env = {
     assert: (f, l, r) => compare(f(l), f(r), (a, b) => a === b || fail('assert', {l, r, a, b})),
     do: (f, ...a) => (f => a.reduce((acc, x) => acc instanceof Return ? acc : f(x), '').valueOf())(f.with({})),
