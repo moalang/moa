@@ -1,0 +1,77 @@
+# bool
+(assert true !false)
+(assert true  (|| true  true))
+(assert true  (|| true  false))
+(assert true  (|| false true))
+(assert false (|| false false))
+(assert true  (&& true  true))
+(assert false (&& true  false))
+(assert false (&& false true))
+(assert false (&& false false))
+
+# number
+(assert 3 (+  1 2)
+(assert 1 (-  3 2)
+(assert 6 (*  2 3)
+(assert 2 (/  4 2)
+(assert 1 (%  5 2)
+(assert 3 (|  1 2)
+(assert 2 (&  3 2)
+(assert 1 (^  3 2)
+(assert 8 (** 2 3)
+(assert true  (== 1 1))
+(assert false (!= 1 1))
+(assert false (>  1 1))
+(assert true  (>= 1 1))
+(assert false (<  1 1))
+(assert true  (<= 1 1))
+(assert 2 (do (var a 1) (+=  a 1)))
+(assert 1 (do (var a 3) (-=  a 2)))
+(assert 6 (do (var a 2) (*=  a 3)))
+(assert 2 (do (var a 4) (/=  a 2)))
+(assert 1 (do (var a 5) (%=  a 2)))
+(assert 3 (do (var a 1) (|=  a 2)))
+(assert 2 (do (var a 3) (&=  a 2)))
+(assert 1 (do (var a 3) (^=  a 2)))
+(assert 8 (do (var a 2) (**= a 3)))
+
+# lambda
+(assert 1 (fn 1)())
+(assert 1 (fn a a)(1))
+
+# string
+(assert "ab" (++ "a" "b"))
+
+# list
+(assert (list 1 2) (++ (list 1) (list 2)))
+(assert 1 (list 1)[0])
+(assert list(2) do((var a (list 1)) (= a[0] 2) a))
+
+# struct
+(assert 1 (struct (= a 1)).a)
+(assert 2 (struct (= a 1 b 2).b))
+(assert 3 (do (let c 3) (struct c).c))
+
+# set
+(assert (set 1)   (- (set 1 2) (set 2)))
+(assert (set 1 2) (| (set 1)   (set 2)))
+(assert (set 2)   (& (set 1 2) (set 2)))
+(assert (set 1)   (^ (set 1 2) (set 2)))
+
+# dict
+(assert (dict 1 2 3 4) (dict 1 2) ++ (dict 3 4))
+
+# iif
+(assert 1 (iif true 1 (list)[0]))
+(assert 2 (iif false (list)[0] 2))
+(assert 2 (iif false (list)[0] true 2 (list)[0]))
+(assert 3 (iif false (list)[0] false (list)[0] 3))
+
+# case
+(assert "a" (case 1 1 "a" 2 "b" _ "c"))
+(assert "b" (case 2 1 "a" 2 "b" _ "c"))
+(assert "c" (case 3 1 "a" 2 "b" _ "c"))
+
+# short circuit evaluation
+(assert false (&& false (list)[0]))
+(assert true  (|| true (list)[0]))
