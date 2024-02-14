@@ -7,7 +7,9 @@
 
 # Todo
 - [x] Foundation: int, string, list, dict and operators
-- [ ] Methods: int, string, list, dict
+- [x] Methods: int, string, list, dict
+- [x] Accept f(-1) instead of error
+- [ ] Remove ":" as syntax sugar for test and interpriter?
 - [ ] HTTP server
 - [ ] Transactional database: read and write lock, append only log on desk, undo log on memory
 - [ ] Debugger

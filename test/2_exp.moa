@@ -65,10 +65,10 @@ assert set(1)   set(1 2) ^ set(2)
 assert dict(1 2 3 4) dict(1 2) ++ dict(3 4)
 
 # iif
-assert 1 iif(true 1 throw("a"))
-assert 2 iif(false throw("a") 2)
-assert 2 iif(false throw("a") true 2 throw("b"))
-assert 3 iif(false throw("a") false throw("b") 3)
+assert 1 iif(true 1 list()[0])
+assert 2 iif(false list()[0] 2)
+assert 2 iif(false list()[0] true 2 list()[0])
+assert 3 iif(false list()[0] false list()[0] 3)
 assert 3 iif(
   false: throw("a")
   3)
@@ -101,6 +101,10 @@ assert "c":
     1: "a"
     2: "b"
     _: "c"
+
+# associativity for operators
+assert -1 < 0
+assert(-1 < 0)
 
 # priority
 assert 7 1 + 2 * 3

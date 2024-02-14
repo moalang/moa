@@ -98,6 +98,7 @@ const parse = source => {
     [t, ...many(t => t.indent === indent && line(t))]
   const consume = () => (t =>
     t.code === '!' ? [t, suffix(consume())] :
+    t.code === '-' ? suffix([t, tokens[pos++]]) :
     t.code === '(' ? suffix(parenthesis(until(')'))) :
     t.code === ':' ? block(t, tokens[pos].indent) :
     suffix(t))(tokens[pos++])

@@ -28,7 +28,7 @@ def build:
       t.code ++ " " ++ tshow(targs[i])
     iif targs.size == 0:
       "func " ++ name.code ++ "() { " ++ gen(body) ++ "; }"
-      "func " ++ name.code ++ "(" ++ args.mapi(argument).join(", ") ++ ") " ++ tshow(targs.at((-1))) ++ " { return " ++ gen(body) ++ "; }"
+      "func " ++ name.code ++ "(" ++ args.mapi(argument).join(", ") ++ ") " ++ tshow(targs.at(-1)) ++ " { return " ++ gen(body) ++ "; }"
   def gen t:
     let a t.args
     iif:
@@ -36,7 +36,7 @@ def build:
       a[0].code == "dec" :
         tenv.set(a[1].code tfunc(a.slice(2).map(t => type(t.code list()))))
         ""
-      a[0].code == "def" : func(a[1] a.slice(2 (-1)) a.at((-1)))
+      a[0].code == "def" : func(a[1] a.slice(2 (-1)) a.at(-1))
       a[0].code == "."   : gen(a[1]) ++ "." ++ a[2].code
       op2s.has(a[0].code): gen(a[1]) ++ a[0].code ++ gen(a[2])
       gen(a[0]) ++ "(" ++ a.slice(1).map(gen).join(", ") ++ ")"
