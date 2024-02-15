@@ -5,3 +5,5 @@ const __show = o => typeof o === 'string' ? o :
   o.toString()
 const __io_put = (...a) => process.stdout.write(a.map(__show).join(' '))
 const __io_puts = (...a) => process.stdout.write(a.map(__show).join(' ') + '\n')
+const assert = (a, b) => __show(a) === __show(b) ? process.stdout.write('.') : true
+

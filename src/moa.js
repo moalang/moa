@@ -246,14 +246,27 @@ const newEnv = () => {
   return f({})
 }
 
-if (process.argv[2] === 'selfboot') {
+const compiler = () => {
   const moa = fs.readFileSync(__dirname + '/moa.moa', 'utf8')
   const base = fs.readFileSync(__dirname + '/base.js', 'utf8')
-  const nodes = parse(moa)
   const env = newEnv()
-  nodes.map(node => execute(env, node))
-  const js = env.get('compileToJs')(fs.readFileSync('/dev/stdin', 'utf8'))
-  process.stdout.write(base + '\n' + js + '\nmain()\n')
+  parse(moa).map(node => execute(env, node))
+  return code => base + '\n' + env.get('compileToJs')(code) + '\ntypeof main !== "undefined" && main()\n'
+}
+
+if (process.argv[2] === 'selfboot') {
+  process.stdout.write(compiler()(fs.readFileSync('/dev/stdin', 'utf8')))
+} else if (process.argv[2] === 'selftest') {
+  const c = compiler()
+  for (const chunk of fs.readFileSync('/dev/stdin', 'utf8').split(/^(?=\()/m)) {
+    try {
+      eval(c(chunk))
+    } catch (e) {
+      log(e)
+      console.log(`echo '${chunk.trim().replace(/'/g, "`")}' | node src/moa.js selftest`)
+      process.exit(1)
+    }
+  }
 } else {
   const env = newEnv({})
   for (const chunk of fs.readFileSync('/dev/stdin', 'utf8').split(/^(?=\()/m)) {

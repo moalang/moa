@@ -53,7 +53,7 @@
         (back t)))
     (iif
       (== t.code "(") (suffix (parseList))
-      (== t.code "!")    (suffix (list t (parseUnit (next))))
+      (== t.code "!") (suffix (tlist (list t (parseUnit (next)))))
       (suffix t)))
   (many parseUnit).args)
 
@@ -67,7 +67,15 @@
   (let tstring (Type "string" (list) (dict)))
   (let tbool   (Type "bool"   (list) (dict)))
   (let tserial (tor (list tint tfloat tstring tbool)))
-  (let embedded dict("io" Type("io" (list) dict("puts" tf((list tserial tvoid))))))
+  (let embedded dict(
+    "io" Type("io" (list) dict("puts" tf((list tserial tvoid))))
+    "assert" (tf (list tv1 tv1 tvoid))
+    "!"      (tf (list tbool tbool))
+    "||"     (tf (list tbool tbool))
+    "&&"     (tf (list tbool tbool))
+    "true"   tbool
+    "false"  tbool
+  ))
   (def inferTop(node tenv)
     (iif
       tenv.has(node) tenv.get(node)
@@ -77,9 +85,11 @@
     (def get(token)
       (let key token.code)
       (iif
-        tenv.has(key) tenv[key]
-        embedded.has(key) embedded[key]
-        key.starts(34.char) tstring
+        regexp("^[0-9]+\.").match(key) tfloat
+        regexp("^[0-9]").match(key)    tint
+        key.starts(34.char)            tstring
+        tenv.has(key)                  tenv[key]
+        embedded.has(key)              embedded[key]
         (throw (++ "key `" key "` not found"))))
     (def put(key type)
       tenv.set(key type))
@@ -111,9 +121,14 @@
   (def apply(node)
     (let head node.args[0])
     (let tail node.args.slice(1))
+    (def isOp2(op)
+      (&& (!= op "!") (regexp "^[+\\-*\\/%|&<>!=^]").match(op)))
+    (def op2(op l r)
+      (++ l " " op " " r))
     (iif
       (== head.code "def") (++ "const " tail[0].code " = (" ") => " gen(tail.at((-1))))
       (== head.code ".") (property node tail[0] tail[1])
+      (isOp2 head.code) (op2 head.code gen(tail[0]) gen(tail[1]))
       (++ gen(head) "(" tail.map(gen).join(", ") ")")))
   (def gen(node)
     (iif
