@@ -1,154 +1,122 @@
-def main:
-  case io.argv.get(0).or(""):
-    "": repl()
-    "build": build()
-    "test": test()
-    "format": format()
-    _: help()
-
-record type:
-  name string
-  params list[type]
-
-def tfunc params:
-  type "" params
-
-def tshow t:
-  t.name ++ iif(t.params.size == 0 "" "(" ++ t.params.map(tshow).join(" ") ++ ")")
-
-def build:
-  let source io.stdin.utf8
-  let top parse(source)
-  let op2s "|| && = == != < <= > >= ++ + - | & ^ ~ * / % ^ **".split(" ")
-  let tfvoid tfunc(list())
-  var tenv dict("main" tfvoid)
-  def func name args body:
-    let targs tenv.get(name.code).or(tfvoid).params
-    def argument t i:
-      t.code ++ " " ++ tshow(targs[i])
-    iif targs.size == 0:
-      "func " ++ name.code ++ "() { " ++ gen(body) ++ "; }"
-      "func " ++ name.code ++ "(" ++ args.mapi(argument).join(", ") ++ ") " ++ tshow(targs.at(-1)) ++ " { return " ++ gen(body) ++ "; }"
-  def gen t:
-    let a t.args
-    iif:
-      t.code != ""       : t.code
-      a[0].code == "dec" :
-        tenv.set(a[1].code tfunc(a.slice(2).map(t => type(t.code list()))))
-        ""
-      a[0].code == "def" : func(a[1] a.slice(2 (-1)) a.at(-1))
-      a[0].code == "."   : gen(a[1]) ++ "." ++ a[2].code
-      op2s.has(a[0].code): gen(a[1]) ++ a[0].code ++ gen(a[2])
-      gen(a[0]) ++ "(" ++ a.slice(1).map(gen).join(", ") ++ ")"
-  let go io.fs.reads("base.go") ++ top.args.map(gen).join("\n")
-  io.print go
-
-def repl:
-  log "(repl under developing)"
-
-def test:
-  log "(test under developing)"
-
-def format:
-  log "(format under developing)"
-
-def help:
-  log "Usage:
-  moa <command> [arguments]
-
-The commands are:
-  moa                    # launch REPL
-  moa build [option] ... # compile
-  moa test [path] ...    # run tests
-  moa format [path] ...  # format code"
-
-record Token:
+(record Token
   code   string
   offset int
-  lineid int
-  indent int
-  args   list[Token]
+  args   list[Token])
 
-def parse source:
-  var offset 0
-  var lineid 1
-  var indent 0
-  def tmap code:
-    offset += code.size
-    lineid += iif(code.starts("\"") 0 code.split("\n").size - 1)
-    lineid + iif(code == ";" 1 0)
-    indent = iif(code.starts("\"") && code.has("\n") code.split("\n")[-1].size indent)
-    let enabled code != ";" && code.trim.size > 0 && !regexp("^\\s*#").match(code)
-    iif enabled list(Token(code offset lineid indent list())) list()
-  let reg regexp("([+\\-*\\/%|&<>!=]+|[(){};.]|[A-Za-z_][0-9A-Za-z_]*|[0-9]+(?:\\.[0-9]+)?|\".*?(?<!\\\\)\"|(?:#[^\\n]*|\\s+))" "s")
-  let tokens reg.split(source).fmap(tmap)
+(record Type
+  name   string
+  params list[Type]
+  props  dict[string Type])
 
-  let empty Token("" 0 0 0 list())
-  def tlist a:
-    Token "" 0 0 0 a
-  def tcode code:
-    Token code 0 0 0 list()
-  var pos 0
-  def forward x:
-    pos += 1
-    x
-  def back x:
-    pos -= 1
-    x
-  def many f:
-    var a list()
-    while pos < tokens.length:
-      let t f(tokens[pos])
-      iif t == empty break a.push(t)
-    tlist a
-  def unnest t:
-    iif t.args.size == 1 t.args[0] t
-  def until code:
-    many(t => iif(t.code == code forward(empty) consume()))
-  let op2s "|| && = == != < <= > >= ++ + - | & ^ ~ * / % ^ **".split(" ") # low...high, other operators are lowest
-  let ops "! =>".split(" ") ++ op2s
-  def priority t:
-    op2s.index(op => op == t.code).or(0)
-  def isOp t:
-    ops.has(t.code) || t.args.size > 0
-  def isOp2 t:
-    op2s.has(t.code) || op2s.find(op => t.code == op ++ "=").bool || t.args.size > 0
-  def reorder op l r:
-    iif r.args.size == 3 && isOp2(r.args[0]) && priority(r.args[0]) < priority(op):
-      tlist(list(r.args[0] tlist(list(op l r.args[1])) r.args[2]))
-      tlist(list(op l r))
-  def suffix x:
-    if pos >= tokens.size:
-      return x
-    let t forward(tokens[pos])
-    let near t.offset - t.code.size == tokens[pos-2].offset
-    iif:
-      near && t.code == "(": suffix(tlist(list(x) ++ until(")").args))
-      near && t.code == "[": suffix(tlist(list(t x unnest(until("]")))))
-      near && t.code == ".": suffix(tlist(list(t x forward(tokens[pos]))))
-      t.code == "=>"       : arrow(x t tokens[pos].indent)
-      isOp2(t)             : reorder(t x consume())
-      back(x)
-  def parenthesis t:
-    iif:
-      isOp(t): t
-      t.args.size == 1 : iif(isOp(t.args[0].args[0]) t.args[0] t)
-      throw("TooManyInParenthesis")
-  def arrow x t indent:
-    iif:
-      tokens[pos].lineid == t.lineid: tlist(list(t x consume()))
-      tlist(list(t x tlist(tcode(":") ++ many(t => iif(t.indent == indent line(t) empty)))))
-  def block t indent:
-    iif:
-      tokens[pos].lineid == t.lineid: line(t)
-      tlist(list(t) ++ many(t => iif(t.indent == indent line(t) empty)))
-  def consume:
-    let t forward(tokens[pos])
-    iif:
-      t.code == "!": tlist(list(t suffix(consume())))
-      t.code == "(": suffix(parenthesis(until(")")))
-      t.code == ":": block(t tokens[pos].indent)
-      suffix(t)
-  def line t:
-    unnest(many(u => iif(u.lineid == t.lineid && u.code != ")" consume() empty)))
-  many(line)
+(def tshow(t)
+  (++ t.name (iif (== t.params.size 0) "" (++ "[" t.params.map(tshow).join(" ") "]"))))
+
+(def parse(source)
+  (var offset 0)
+  (let tempty (Token "" 0 list()))
+  (def tlist(a) (Token "" 0 a))
+  (let reg regexp("([+\\-*\\/%|&<>!=]+|[(){};.]|[A-Za-z_][0-9A-Za-z_]*|[0-9]+(?:\\.[0-9]+)?|\".*?(?<!\\\\)\"|(?:#[^\\n]*|\\s+))" "s"))
+  (let tokens source.split(reg).fmap((fn code do(
+    (+= offset code.size)
+    (iif
+      regexp("^[^#\\s]").match(code) Token(code offset (list))
+      (list))
+  ))))
+  (var pos 0)
+  (def next (+= pos 1) tokens[(- pos 1)])
+  (def back(t) (-= pos 1) t)
+  (def many_(f acc)
+    (iif
+      (>= pos tokens.size) acc
+      (fn(t
+        (iif
+          (== t tempty) acc
+          (many f (++ acc (list t)))))
+        (f (next)))))
+  (def many(f)
+    (var a (list))
+    (while (< pos tokens.size)
+      (let t (f (next)))
+      (if (== t tempty) break)
+      a.push(t))
+    tlist(a))
+  (def parseList
+    (many (fn t (iif (&& (!= t.code ")") (!= t.code "]")) (parseUnit t) tempty))))
+  (def parseUnit(t)
+    (def suffix(t)
+      (if (<= tokens.size pos) (return t))
+      (let tt (next))
+      (let near (== tokens[(- pos 2)].offset (- tt.offset tt.code.size)))
+      (iif (== tt.code ".") (suffix (tlist (list tt t (next))))
+        (&& near (== tt.code "(")) (suffix (tlist (++ (list t) (parseList).args)))
+        (&& near (== tt.code "[")) (suffix (tlist (++ (list tt t) (parseList).args)))
+        (back t)))
+    (iif
+      (== t.code "(") (suffix (parseList))
+      (== t.code "!")    (suffix (list t (parseUnit (next))))
+      (suffix t)))
+  (many parseUnit).args)
+
+(def infer(root)
+  (let tv1     (Type "1"      (list) (dict)))
+  (def tf(a)   (Type ""       a      (dict)))
+  (def tor(a)  (Type "__or"   a      (dict)))
+  (let tvoid   (Type "void"   (list) (dict)))
+  (let tint    (Type "int"    (list) (dict)))
+  (let tfloat  (Type "float " (list) (dict)))
+  (let tstring (Type "string" (list) (dict)))
+  (let tbool   (Type "bool"   (list) (dict)))
+  (let tserial (tor (list tint tfloat tstring tbool)))
+  (let embedded dict("io" Type("io" (list) dict("puts" tf((list tserial tvoid))))))
+  (def inferTop(node tenv)
+    (iif
+      tenv.has(node) tenv.get(node)
+      tenv.set(node inferWith(node tenv))))
+  (def inferWith(node tenv)
+    (def touch(x) inferTop(x tenv))
+    (def get(token)
+      (let key token.code)
+      (iif
+        tenv.has(key) tenv[key]
+        embedded.has(key) embedded[key]
+        key.starts(34.char) tstring
+        (throw (++ "key `" key "` not found"))))
+    (def put(key type)
+      tenv.set(key type))
+    (def unify(a b)
+      # TODO implement
+      b)
+    (def call(f args)
+      args.mapi(fn(a i (unify f.params[i] a))).at((-1))
+      f.params.at((-1)))
+    (iif
+      (== node.args.size 0) get(node)
+      (== node.args[0].code "def") put(node.args[1] node.args.slice(2).map(touch).at((-1)))
+      (== node.args[0].code ".") touch(node.args[1]).props[node.args[2].code]
+      (call (touch node.args[0]) node.args.slice(1).map(touch))))
+  (let troot dict())
+  root.map(fn(node (inferTop node troot)))
+  troot)
+
+(def compileToJs(source)
+  (let nodes (parse source))
+  (let tenv (infer nodes))
+  (def isFn(t)
+    (== t.name ""))
+  (def method(t f)
+    (++ "__" t.name (iif (== t.params.size 0) "" (++ "__" t.params.map(tshow).join("_"))) "_" f.code))
+  (def property(node o f)
+    (iif (isFn tenv[node]) (method tenv[o] f)
+      (++ o.code "." f.code)))
+  (def apply(node)
+    (let head node.args[0])
+    (let tail node.args.slice(1))
+    (iif
+      (== head.code "def") (++ "const " tail[0].code " = (" ") => " gen(tail.at((-1))))
+      (== head.code ".") (property node tail[0] tail[1])
+      (++ gen(head) "(" tail.map(gen).join(", ") ")")))
+  (def gen(node)
+    (iif
+      (== node.args.size 0) node.code
+      (apply node)))
+  nodes.map(gen).join("\n"))

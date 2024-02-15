@@ -1,14 +1,19 @@
 # global
 - [x] _            :: write only variable
 - [x] void         :: void
-- [x] true, false  :: bool
-- [x] some a, none :: option[a]
+- [x] true         :: bool
+- [x] false        :: bool
+- [x] some a       :: option[a]
+- [x] none         :: option[a]
 - [x] throw a b    :: a b
 - [x] catch a      :: fn[error a] a
 - [x] iif a        :: ...[bool a] a
 - [x] case a b     :: a ...[a b] b
-- [x] if, else
-- [x] while, continue, break
+- [x] if           :: bool ... void
+- [x] else         :: ... void
+- [x] while        :: bool ... void
+- [x] continue     :: void
+- [x] break        :: void
 
 # option a
 - [x] and b :: option[a] fn[a b] option[b]
@@ -129,6 +134,7 @@
 - [x] fs         :: fs
 - [-] rand       :: rand
 - [x] shell      :: string ...string shell
+- [x] puts       :: ... void
 - [x] print      :: ... void
 - [-] stdin      :: stream
 - [ ] stdout     :: stream
@@ -142,8 +148,9 @@
 # fs
 - [-] open t  :: string string? fn[stream t] a @error
 - [-] read    :: string bytes @error
-- [-] reads   :: string string @error
-- [-] write   :: string ...serial int @error
+- [x] reads   :: string string @error
+- [x] write   :: string ...serial int @error
+- [x] rm      :: string bool @error
 - [-] append  :: string ...serial int @error
 
 # stream

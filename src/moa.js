@@ -6,12 +6,19 @@ const util = require('node:util')
 const log = (...a) => (console.error(...a.map(o => typeof o === 'function' ? o.toString() : util.inspect(o, false, null, true))), a[0])
 const fail = (m, o) => { const e = new Error(m); e.detail = o; throw e }
 
+class Token {
+  constructor(code, offset) {
+    this.code = code
+    this.offset = offset
+  }
+}
+
 const parse = source => {
   let offset = 0
   // operator | symbols | id | number | string | white space
   const tokens = source.split(/([+\-*\/%|&<>!=^]+|[()\[\]]|[A-Za-z_][0-9A-Za-z_]*|[0-9]+(?:\.[0-9]+)?|".*?(?<!\\)"|(?:#[^\n]*|\s+))/s).flatMap(code => {
     offset += code.length
-    return code.match(/^[^#\s]/) ? [{code, offset}] : []
+    return code.match(/^[^#\s]/) ? [new Token(code, offset)] : []
   })
   let pos = 0
   const many = (f, acc) => pos >= tokens.length ? acc :
@@ -34,15 +41,13 @@ const parse = source => {
   return many(unit, [])
 }
 
-class Record { constructor(v) { this.v = v } }
-
 const execute = (env, node) => {
   const qmap = {'r': '\r', 'n': '\n', 't': '\t'}
   const unquote = s => s.replace(/\\(.)/g, (_, c) => qmap[c] || c)
-  const trap = (target, f )=> { try { return f() } catch (e) { e.target = target; throw e } }
+  const trap = (target, f )=> { try { return f() } catch (e) { e.target ||= target; throw e } }
   const run = target => trap(target, () =>
-    target instanceof Record ? target :
     Array.isArray(target) ? env.call(run(target[0]), ...target.slice(1)) :
+    !(target instanceof Token) ? target :
     target.code === 'true' ? true :
     target.code === 'false' ? false :
     target.code.match(/^[0-9]/) ? parseFloat(target.code) :
@@ -114,7 +119,7 @@ const newEnv = () => {
     'Array max': a => Math.max(...a),
     'Map size': m => m.size,
     'Map get': m => k => m.has(k) ? new Some(m.get(k)) : none,
-    'Map set': m => (k, v) => (b => (m.set(k, v), !b))(m.has(k)),
+    'Map set': m => (k, v) => (m.set(k, v), v),
     'Map has': m => k => m.has(k),
     'Map keys': m => [...m.keys()],
     'Map values': m => [...m.values()],
@@ -137,8 +142,8 @@ const newEnv = () => {
     'None or': s => x => x,
   }
   const property = (x, field, key) => key in properties ? properties[key](x) :
-    x instanceof Record && field in x.v ? x.v[field] :
     x instanceof Array ? x[field] :
+    x instanceof Object && field in x ? x[field] :
     fail(`not find property \`${key}\` in \`${x}\``)
   const assign = (f, x, v) => !Array.isArray(x) ? f.set(x.code, v) :
     x[0].code === '[' ? f.get(x[1].code)[f(x[2])] = v :
@@ -156,45 +161,52 @@ const newEnv = () => {
     fn,
     do: (f, ...a) => statement(f.with({}), a).valueOf(),
     fn: (f, ...a) => (...b) => f.with(Object.fromEntries(a.slice(0, -1).map((x, i) => [x.code, b[i]])))(a.at(-1)),
-    def: (f, a, ...b) => f.put(a.code, fn(f, ...b)),
+    def: (f, a, ...b) => Array.isArray(a) ?
+      f.put(a[0].code, (...c) => statement(f.with(Object.fromEntries(a.slice(1).map((x, i) => [x.code, c[i]]))), b).valueOf()) :
+      f.put(a.code, () => statement(f, b).valueOf()),
     var: (f, k, v) => f.put(k.code, f(v)),
     let: (f, k, v) => f.put(k.code, f(v)),
-    struct: (f, ...a) => new Record(Object.fromEntries([...Array(a.length/2)].map((_,i) => [a[i*2].code, f(a[i*2+1])]))),
-    record: (f, a, ...b) => f.put(a.code, (...c) => new Record(Object.fromEntries([...Array(b.length/2)].map((_,i) => [b[i*2].code, c[i]])))),
+    struct: (f, ...a) => Object.fromEntries([...Array(a.length/2)].map((_,i) => [a[i*2].code, f(a[i*2+1])])),
+    record: (f, a, ...b) => f.put(a.code, (...c) => Object.fromEntries([...Array(b.length/2)].map((_,i) => [b[i*2].code, c[i]]))),
     '.': (f, t, u) => (x => property(x, u.code, `${x.constructor.name} ${u.code}`))(f(t)),
     '=': (f, l, r) => assign(f, l, f(r)),
+    '||': (f, l, r) => f(l) || f(r),
+    '&&': (f, l, r) => f(l) && f(r),
     if: (f, a, ...b) => f.put('__if', f(a)) && statement(f, b),
     else: (f, ...a) => f.get('__if') || statement(f, a),
     iif: (f, ...a) => iif(f, a),
     case: (f, ...a) => case_(f, f(a[0]), a.slice(1)),
-    catch: (f, a, b) => attempt(() => f(a), e => f.call(f(b), new Record(e))),
+    catch: (f, a, b) => attempt(() => f(a), e => f.call(f(b), e)),
     while: (f, cond, ...body) => next(f, cond, body, null)
   }
+  const check = (target, ...a) => target == null ? fail('check', a) : target
   const lazy = f => (f.lazy = true, f)
   const embedded = {
     none,
+    log,
     some: x => new Some(x),
     continue: new Continue(),
     break: new Break(),
     assert: (l, r) => compare(l, r, (a, b) => a === b || fail('assert', {l, r, a, b})),
-    throw: x => { throw new Error(x) },
+    throw: (a, b) => fail(a, b),
     return: x => new Return(x),
-    regexp: s => new RegExp(s, 'g'),
+    regexp: (s, o) => new RegExp(s, o || 'g'),
     tuple: (...a) => new Tuple().concat(a),
     list: (...a) => a,
     dict: (...a) => new Map(a.length ? [...Array(a.length/2)].map((_,i) => [a[i*2], a[i*2+1]]) : []),
-    io: new Record({
-      fs: new Record({
+    io: {
+      argv: process.argv.slice(2),
+      fs: {
         write: (path, x) => (fs.writeFileSync(path, x), x.length),
         reads: path => fs.readFileSync(path, 'utf8'),
         rm: path => (fs.unlinkSync(path), true),
-      }),
+      },
       shell: (...a) => {
         const result = child_process.execSync(a.join(' '), {encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore']})
-        return new Record({result})
+        return {result}
       },
-    }),
-    '[': (a, i) => a[i],
+    },
+    '[': (a, i) => check(a instanceof Map ? a.get(i) : a[i], a, i),
     '!': (x) => !x,
     '>': (l, r) => l > r,
     '<': (l, r) => l < r,
@@ -215,9 +227,7 @@ const newEnv = () => {
     '^': (l, r) => l ^ r,
     '*': (l, r) => l * r,
     '**': (l, r) => l ** r,
-    '||': (l, r) => l || r,
-    '&&': (l, r) => l && r,
-    '++': (l, r) => l instanceof Map ? new Map([...l, ...r]) : l.concat(r),
+    '++': (l, ...r) => l instanceof Map ? new Map([...l, ...r.flatMap(x => [...x])]) : l.concat(...r),
   }
   const updates = Object.fromEntries(Object.keys(op2s).map(op => [op + '=', lazy((f, l, r) => f.set(l.code, op2s[op](f(l), f(r))))]))
   Object.assign(embedded, op2s, updates)
@@ -236,16 +246,26 @@ const newEnv = () => {
   return f({})
 }
 
-const env = newEnv({})
-for (const chunk of fs.readFileSync('/dev/stdin', 'utf8').split(/^(?=\()/m)) {
-  for (const node of parse(chunk)) {
-    try {
-      execute(env, node)
-      process.stdout.write('.')
-    } catch(e) {
-      log(e)
-      console.log(`echo '${chunk.trim().replace(/'/g, "`")}' | node src/moa.js`)
-      process.exit(1)
+if (process.argv[2] === 'selfboot') {
+  const moa = fs.readFileSync(__dirname + '/moa.moa', 'utf8')
+  const base = fs.readFileSync(__dirname + '/base.js', 'utf8')
+  const nodes = parse(moa)
+  const env = newEnv()
+  nodes.map(node => execute(env, node))
+  const js = env.get('compileToJs')(fs.readFileSync('/dev/stdin', 'utf8'))
+  process.stdout.write(base + '\n' + js + '\nmain()\n')
+} else {
+  const env = newEnv({})
+  for (const chunk of fs.readFileSync('/dev/stdin', 'utf8').split(/^(?=\()/m)) {
+    for (const node of parse(chunk)) {
+      try {
+        execute(env, node)
+        process.stdout.write('.')
+      } catch(e) {
+        log(e)
+        console.log(`echo '${chunk.trim().replace(/'/g, "`")}' | node src/moa.js`)
+        process.exit(1)
+      }
     }
   }
 }
