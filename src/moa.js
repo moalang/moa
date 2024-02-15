@@ -39,7 +39,7 @@ const execute = (env, node) => {
   const unquote = s => s.replace(/\\(.)/g, (_, c) => qmap[c] || c)
   const trap = (target, f )=> { try { return f() } catch (e) { e.target = target; throw e } }
   const run = target => trap(target, () =>
-    Array.isArray(target) ? run(target[0])(env, ...target.slice(1)) :
+    Array.isArray(target) ? env.call(run(target[0]), ...target.slice(1)) :
     target.code === 'true' ? true :
     target.code === 'false' ? false :
     target.code.match(/^[0-9]/) ? parseFloat(target.code) :
@@ -51,6 +51,7 @@ const execute = (env, node) => {
 
 const newEnv = () => {
   class Return { constructor(v) { this.v = v } valueOf() { return this.v } }
+  class Record { constructor(v) { this.v = v } }
   const attempt = (f, g) => { try { return f() } catch (e) { return g ? g(e) : e } }
   const compare = (a, b, f) =>
     a === undefined ? b === undefined :
@@ -64,47 +65,61 @@ const newEnv = () => {
     a.constructor === Map     ? [...a.keys()].sort().map(k => compare(a.get(k), b.get(k), f)) :
     a.constructor === Object  ? Object.keys(a).sort().every(k => compare(a[k], b[k], f)) :
     fail(`${a} and ${b} are not compared by ${f.toString()}`)
+  const eq = (l, r) => compare(l, r, (a, b) => a === b)
   const properties = {
     'String size': s => s.length,
   }
-  const property = (key, x) => key in properties ? properties[key](x) : fail(`not find property \`${key}\` in \`${x}\``)
+  const property = (x, field, key) => key in properties ? properties[key](x) :
+    x instanceof Record && field in x.v ? x.v[field] :
+    fail(`not find property \`${key}\` in \`${x}\``)
   const assign = (f, x, v) => !Array.isArray(x) ? f.set(x.code, v) :
     x[0].code === '[' ? f.get(x[1].code)[f(x[2])] = v :
     x[0].code === '.' ? f.get(x[1].code)[x[2].code] = v :
     fail('assign', x)
-  const embedded = {
-    assert: (f, l, r) => compare(f(l), f(r), (a, b) => a === b || fail('assert', {l, r, a, b})),
+  const iif = (f, [a, b, ...c]) => b === undefined ? f(a) : f(a) ? f(b) : iif(f, c)
+  const case_ = (f, a, [b, c, ...d]) => b.code === '_' || eq(a, f(b)) ? f(c) : case_(f, a, d)
+  const lazy = f => (f.lazy = true, f)
+  const laziness = {
     do: (f, ...a) => (f => a.reduce((acc, x) => acc instanceof Return ? acc : f(x), '').valueOf())(f.with({})),
-    fn: (_, ...a) => (f, ...b) => f.with(Object.fromEntries(a.slice(0, -1).map((x, i) => [x.code, f(b[i])])))(a.at(-1)),
+    fn: (f, ...a) => (...b) => f.with(Object.fromEntries(a.slice(0, -1).map((x, i) => [x.code, b[i]])))(a.at(-1)),
     var: (f, k, v) => f.put(k.code, f(v)),
-    list: (f, ...a) => a.map(f),
-    '[': (f, a, i) => f(a)[f(i)],
-    '!': (f, x) => !f(x),
-    '.': (f, t, u) => (x => property(`${x.constructor.name} ${u.code}`, x))(f(t)),
+    let: (f, k, v) => f.put(k.code, f(v)),
+    struct: (f, ...a) => new Record(Object.fromEntries([...Array(a.length/2)].map((_,i) => [a[i*2].code, f(a[i*2+1])]))),
+    '.': (f, t, u) => (x => property(x, u.code, `${x.constructor.name} ${u.code}`))(f(t)),
     '=': (f, l, r) => assign(f, l, f(r)),
-    '>': (f, l, r) => f(l) > f(r),
-    '<': (f, l, r) => f(l) < f(r),
-    '==': (f, l, r) => f(l) == f(r),
-    '!=': (f, l, r) => f(l) != f(r),
-    '>=': (f, l, r) => f(l) >= f(r),
-    '<=': (f, l, r) => f(l) <= f(r),
-    '++': (f, l, r) => f(l).concat(f(r)),
+    iif: (f, ...a) => iif(f, a),
+    case: (f, ...a) => case_(f, f(a[0]), a.slice(1)),
+  }
+  const embedded = {
+    ...Object.fromEntries(Object.keys(laziness).map(k => [k, lazy(laziness[k])])),
+    assert: (l, r) => compare(l, r, (a, b) => a === b || fail('assert', {l, r, a, b})),
+    list: (...a) => a,
+    dict: (...a) => new Map([...Array(a.length/2)].map((_,i) => [a[i*2].code, a[i*2+1]])),
+    '[': (a, i) => a[i],
+    '!': (x) => !x,
+    '>': (l, r) => l > r,
+    '<': (l, r) => l < r,
+    '==': (l, r) => l == r,
+    '!=': (l, r) => l != r,
+    '>=': (l, r) => l >= r,
+    '<=': (l, r) => l <= r,
   }
   const op2s = {
-    '+': (f, l, r) => f(l) + f(r),
-    '-': (f, l, r) => r === undefined ? -f(l) : f(l) - f(r),
-    '*': (f, l, r) => f(l) * f(r),
-    '/': (f, l, r) => f(l) / f(r),
-    '%': (f, l, r) => f(l) % f(r),
-    '|': (f, l, r) => f(l) | f(r),
-    '&': (f, l, r) => f(l) & f(r),
-    '^': (f, l, r) => f(l) ^ f(r),
-    '*': (f, l, r) => f(l) * f(r),
-    '**': (f, l, r) => f(l) ** f(r),
-    '||': (f, l, r) => f(l) || f(r),
-    '&&': (f, l, r) => f(l) && f(r),
+    '+': (l, r) => l + r,
+    '-': (l, r) => r === undefined ? -l : l - r,
+    '*': (l, r) => l * r,
+    '/': (l, r) => l / r,
+    '%': (l, r) => l % r,
+    '|': (l, r) => l | r,
+    '&': (l, r) => l & r,
+    '^': (l, r) => l ^ r,
+    '*': (l, r) => l * r,
+    '**': (l, r) => l ** r,
+    '||': (l, r) => l || r,
+    '&&': (l, r) => l && r,
+    '++': (l, r) => l instanceof Map ? new Map([...l, ...r]) : l.concat(r),
   }
-  const updates = Object.fromEntries(Object.keys(op2s).map(op => [op + '=', (f, l, r) => f.set(l.code, op2s[op](f, l, r))]))
+  const updates = Object.fromEntries(Object.keys(op2s).map(op => [op + '=', lazy((f, l, r) => f.set(l.code, op2s[op](f(l), f(r))))]))
   Object.assign(embedded, op2s, updates)
   const f = m => {
     const g = node => execute(g, node)
@@ -114,6 +129,7 @@ const newEnv = () => {
     g.put = (key, val) => (m[key] = {val}, val)
     g.keys = () => Object.keys(m)
     g.with = obj => (Object.keys(obj).map(key => obj[key] = {val: obj[key]}), f({...m, ...obj}))
+    g.call = (h, ...a) => h.lazy ? h(g, ...a) : h(...a.map(g))
     return g
   }
   return f({})

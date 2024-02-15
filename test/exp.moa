@@ -48,9 +48,9 @@
 (assert list(2) do((var a (list 1)) (= a[0] 2) a))
 
 # struct
-(assert 1 (struct (= a 1)).a)
-(assert 2 (struct (= a 1 b 2).b))
-(assert 3 (do (let c 3) (struct c).c))
+(assert 1 (struct a 1).a)
+(assert 2 (struct a 1 b 2).b)
+(assert 3 (do (let c 3) (struct c c).c))
 
 # set
 (assert (set 1)   (- (set 1 2) (set 2)))
@@ -59,7 +59,7 @@
 (assert (set 1)   (^ (set 1 2) (set 2)))
 
 # dict
-(assert (dict 1 2 3 4) (dict 1 2) ++ (dict 3 4))
+(assert (dict 1 2 3 4) (++ (dict 1 2) (dict 3 4)))
 
 # iif
 (assert 1 (iif true 1 (list)[0]))
