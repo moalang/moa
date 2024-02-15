@@ -72,7 +72,7 @@ const newEnv = () => {
     x[0].code === '[' ? f.get(x[1].code)[f(x[2])] = v :
     x[0].code === '.' ? f.get(x[1].code)[x[2].code] = v :
     fail('assign', x)
-  const env = {
+  const embedded = {
     assert: (f, l, r) => compare(f(l), f(r), (a, b) => a === b || fail('assert', {l, r, a, b})),
     do: (f, ...a) => (f => a.reduce((acc, x) => acc instanceof Return ? acc : f(x), '').valueOf())(f.with({})),
     fn: (_, ...a) => (f, ...b) => f.with(Object.fromEntries(a.slice(0, -1).map((x, i) => [x.code, f(b[i])])))(a.at(-1)),
@@ -82,17 +82,15 @@ const newEnv = () => {
     '!': (f, x) => !f(x),
     '.': (f, t, u) => (x => property(`${x.constructor.name} ${u.code}`, x))(f(t)),
     '=': (f, l, r) => assign(f, l, f(r)),
+    '>': (f, l, r) => f(l) > f(r),
+    '<': (f, l, r) => f(l) < f(r),
     '==': (f, l, r) => f(l) == f(r),
     '!=': (f, l, r) => f(l) != f(r),
-    '>': (f, l, r) => f(l) >  f(r),
     '>=': (f, l, r) => f(l) >= f(r),
-    '<': (f, l, r) => f(l) <  f(r),
     '<=': (f, l, r) => f(l) <= f(r),
     '++': (f, l, r) => f(l).concat(f(r)),
   }
   const op2s = {
-    '||': (f, l, r) => f(l) || f(r),
-    '&&': (f, l, r) => f(l) && f(r),
     '+': (f, l, r) => f(l) + f(r),
     '-': (f, l, r) => r === undefined ? -f(l) : f(l) - f(r),
     '*': (f, l, r) => f(l) * f(r),
@@ -103,17 +101,19 @@ const newEnv = () => {
     '^': (f, l, r) => f(l) ^ f(r),
     '*': (f, l, r) => f(l) * f(r),
     '**': (f, l, r) => f(l) ** f(r),
+    '||': (f, l, r) => f(l) || f(r),
+    '&&': (f, l, r) => f(l) && f(r),
   }
   const updates = Object.fromEntries(Object.keys(op2s).map(op => [op + '=', (f, l, r) => f.set(l.code, op2s[op](f, l, r))]))
-  Object.assign(env, op2s, updates)
+  Object.assign(embedded, op2s, updates)
   const f = m => {
     const g = node => execute(g, node)
-    g.has = key => key in m || key in env
-    g.get = key => (key in m ? m : env)[key].valueOf()
+    g.has = key => key in m || key in embedded
+    g.get = key => key in m ? m[key].val : embedded[key]
     g.set = (key, val) => m[key].val = val
-    g.put = (key, val) => m[key] = {valueOf() { return val }}
+    g.put = (key, val) => (m[key] = {val}, val)
     g.keys = () => Object.keys(m)
-    g.with = obj => f({...m, ...obj})
+    g.with = obj => (Object.keys(obj).map(key => obj[key] = {val: obj[key]}), f({...m, ...obj}))
     return g
   }
   return f({})
