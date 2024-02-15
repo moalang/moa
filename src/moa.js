@@ -1,6 +1,7 @@
 'use strict'
 
 const fs = require('node:fs')
+const child_process = require('node:child_process')
 const util = require('node:util')
 const log = (...a) => (console.error(...a.map(o => typeof o === 'function' ? o.toString() : util.inspect(o, false, null, true))), a[0])
 const fail = (m, o) => { const e = new Error(m); e.detail = o; throw e }
@@ -15,8 +16,8 @@ const parse = source => {
   let pos = 0
   const many = (f, acc) => pos >= tokens.length ? acc :
     ((t, acc) => t ? many(f, acc.concat([t])) : acc)(f(tokens[pos++]), acc)
-  const list = () => suffix(many(t => t.code !== ')' && t.code !== ']' && unit(t), []))
-  const unit = t => t.code === '(' ? list() :
+  const list = () => many(t => t.code !== ')' && t.code !== ']' && unit(t), [])
+  const unit = t => t.code === '(' ? suffix(list()) :
     t.code === '!' ? suffix([t, unit(tokens[pos++])]) :
     t.code === '-' && tokens[pos-2] && tokens[pos-2].code !== '(' ? suffix([t, unit(tokens[pos++])]) :
     suffix(t)
@@ -25,7 +26,7 @@ const parse = source => {
       return t
     }
     const tt = tokens[pos++]
-    const near = tokens[pos-2].offset === tt.offset - tt.code.length
+    const near = tt.offset - tt.code.length === tokens[pos-2].offset
     return tt.code === '.' ? suffix([tt, t, tokens[pos++]]) :
       near && tt.code === '(' ? suffix([t, ...list()]) :
       near && tt.code === '[' ? suffix([tt, t, ...list()]) :
@@ -34,11 +35,14 @@ const parse = source => {
   return many(unit, [])
 }
 
+class Record { constructor(v) { this.v = v } }
+
 const execute = (env, node) => {
   const qmap = {'r': '\r', 'n': '\n', 't': '\t'}
   const unquote = s => s.replace(/\\(.)/g, (_, c) => qmap[c] || c)
   const trap = (target, f )=> { try { return f() } catch (e) { e.target = target; throw e } }
   const run = target => trap(target, () =>
+    target instanceof Record ? target :
     Array.isArray(target) ? env.call(run(target[0]), ...target.slice(1)) :
     target.code === 'true' ? true :
     target.code === 'false' ? false :
@@ -51,7 +55,7 @@ const execute = (env, node) => {
 
 const newEnv = () => {
   class Return { constructor(v) { this.v = v } valueOf() { return this.v } }
-  class Record { constructor(v) { this.v = v } }
+
   const attempt = (f, g) => { try { return f() } catch (e) { return g ? g(e) : e } }
   const compare = (a, b, f) =>
     a === undefined ? b === undefined :
@@ -89,12 +93,24 @@ const newEnv = () => {
     '=': (f, l, r) => assign(f, l, f(r)),
     iif: (f, ...a) => iif(f, a),
     case: (f, ...a) => case_(f, f(a[0]), a.slice(1)),
+    catch: (f, a, b) => attempt(() => f(a), e => f.call(f(b), new Record(e))),
   }
   const embedded = {
     ...Object.fromEntries(Object.keys(laziness).map(k => [k, lazy(laziness[k])])),
     assert: (l, r) => compare(l, r, (a, b) => a === b || fail('assert', {l, r, a, b})),
     list: (...a) => a,
     dict: (...a) => new Map([...Array(a.length/2)].map((_,i) => [a[i*2].code, a[i*2+1]])),
+    io: new Record({
+      fs: new Record({
+        write: (path, x) => (fs.writeFileSync(path, x), x.length),
+        reads: path => fs.readFileSync(path, 'utf8'),
+        rm: path => (fs.unlinkSync(path), true),
+      }),
+      shell: (...a) => {
+        const result = child_process.execSync(a.join(' '), {encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore']})
+        return new Record({result})
+      },
+    }),
     '[': (a, i) => a[i],
     '!': (x) => !x,
     '>': (l, r) => l > r,
@@ -121,6 +137,7 @@ const newEnv = () => {
   }
   const updates = Object.fromEntries(Object.keys(op2s).map(op => [op + '=', lazy((f, l, r) => f.set(l.code, op2s[op](f(l), f(r))))]))
   Object.assign(embedded, op2s, updates)
+
   const f = m => {
     const g = node => execute(g, node)
     g.has = key => key in m || key in embedded
@@ -143,7 +160,7 @@ for (const chunk of fs.readFileSync('/dev/stdin', 'utf8').split(/^(?=\()/m)) {
       process.stdout.write('.')
     } catch(e) {
       log(e)
-      console.log(`echo ${JSON.stringify(chunk.trim())} | node src/moa.js`)
+      console.log(`echo '${chunk.trim().replace(/'/g, "`")}' | node src/moa.js`)
       process.exit(1)
     }
   }
