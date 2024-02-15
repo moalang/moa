@@ -4,7 +4,7 @@ watch:
 
 t:
 	clear
-	cat test/*.moa | grep -v "(set " | node src/moa.js
+	cat test/*.moa | egrep -v "\((set|time) " | node src/moa.js
 ### arguments from shell
 ##	echo 'assert list("a" "b") io.argv' | node src/moa.js a b 2>&1 > /dev/null
 ### multiline string

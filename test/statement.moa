@@ -15,23 +15,24 @@
 # function
 (assert 1 (do (def f 1) f()))
 (assert 1 (do (def f a a) f(1)))
-(assert 3 (do (var a 1) (def f b (a += b)) f(2) a))
-(assert 6 (do (def f a b (iif (== a.size 0) b f(a.slice(1) a[0] + b)) f(list(1 2 3)))))
+(assert 3 (do (def f a b (+ a b)) f(1 2)))
+(assert 3 (do (var a 1) (def f b (+= a b)) f(2) a))
+(assert 6 (do (def f a b (iif (== a.size 0) b (f a.slice(1) (+ a[0] b)))) f(list(1 2 3) 0)))
 
 # record
-(assert 3 (do (record s a int b int) s(1 2).a + s(1 2).b))
+(assert 3 (do (record s a int b int) (+ s(1 2).a s(1 2).b)))
 
 # return
-(assert 1 (fn (do (return 1) 2))())
-(assert 2 (fn (fn (do (return 1)) 2)())())
+(assert 1 ((fn (do (return 1) 2))))
+(assert 2 ((fn ((fn (do (return 1)) 2)))))
 
 # if / else
-(assert 1 (fn (do (if true (return 1)) 2))())
-(assert 2 (fn (do (if false (return 1)) (else (return 2) 3))()))
-(assert 2 (fn (do (if false (return 1)) (else (if true (return 2)) (else (return 3))) 4))())
-(assert 4 (fn (do (if false (return 1)) (else (if false (return 3)) (else (return 4))) 5))())
+(assert 1 ((fn (do (if true (return 1)) 2))))
+(assert 2 ((fn (do (if false (return 1)) (else (return 2) 3)))))
+(assert 2 ((fn (do (if false (return 1)) (else (if true (return 2)) (else (return 3))) 4))))
+(assert 4 ((fn (do (if false (return 1)) (else (if false (return 3)) (else (return 4))) 5))))
 
 # while / continue / break
-(assert 3 (do (var n 1) (while (< n 3) (+= n 1) n)))
-(assert 3 (do (var n 1) (while true (+= n 1) (if n >= 3 break)) n))
+(assert 3 (do (var n 1) (while (< n 3) (+= n 1)) n))
+(assert 3 (do (var n 1) (while true (+= n 1) (if (>= n 3) break)) n))
 (assert 3 (do (var n 1) (while (< n 3) (+= n 1) continue (+= n 9)) n))
