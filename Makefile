@@ -23,4 +23,5 @@ t:
 
 w:
 	wc src/moa.js
+	wc src/moa.moa
 	wc test/*.moa
