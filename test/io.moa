@@ -1,6 +1,10 @@
 # shell
-(assert ";\n" io.shell("echo" "';'").result)
-(assert 1 catch(io.shell("nocommand").result fn(e 1)))
+assert ";\n" io.shell("echo" "';'").result
+assert 1 catch(io.shell("nocommand").result fn(e 1))
 
 # fs
-(assert "Hello\n" (do io.fs.write("hello.txt" "Hello\n") (let a io.fs.reads("hello.txt")) io.fs.rm("hello.txt") a))
+assert "Hello\n":
+  io.fs.write("hello.txt" "Hello\n")
+  let a io.fs.reads("hello.txt")
+  io.fs.rm("hello.txt")
+  a

@@ -1,0 +1,221 @@
+dec option a:
+  and[b] option[a] fn[a b] option[b]
+  or     option[a] a a
+  bool   bool
+
+dec num[a]:
+  (+ - * ** / % | & ^) a a a
+  (abs neg) a
+
+dec int.num::
+  char   string
+
+dec float.num:
+  floor  int
+  ceil   int
+  round  int
+
+dec string:
+  ++      string string string
+  size    int
+  reverse string
+  slice   int int? string
+  split   string int? list[string]
+  index   string option[int]
+  replace string string string
+  trim    string
+  starts  string bool
+  ends    string bool
+  has     string bool
+  encode  string string? bytes @error
+
+dec regexp:
+  match   string bool
+  capture string list[string]
+  split   string list[string]
+  replace string fn[list[string] string] string
+
+dec list[a]:
+  call    ...a list[a]
+  ++ a    list[a] list[a]
+  size    int
+  get     int option[a]
+  set     int a bool
+  at      int a @error
+  tie     int a a @error
+  push    a a
+  map b   fn[a b] list[b]
+  mapi b  fn[a int b] list[b]
+  fmap b  fn[a list[b]] list[b]
+  keep    fn[a bool] list[a]
+  all     fn[a bool] bool
+  any     fn[a bool] bool
+  slice   int int? list[a]
+  sort    fn[a a bool]? list[a]
+  reverse list[a]
+  zip b   list[b] list[tuple[a b]]
+  fold b  b fn[a b b] b
+  find    fn[a bool] option[a]
+  index   fn[a bool] option[int]
+  join    string string
+  has     a bool
+  min     a
+  max     a
+
+dec dict[k v]:
+  call    ...[k v] dict[k v]
+  size   int
+  get    k option[v]
+  set    k v bool
+  has    k bool
+  keys   list[k]
+  values list[v]
+  list   list[tuple[k v]]
+
+dec set[a]:
+  size   int
+  -      set[a] set[a]
+  |      set[a] set[a]
+  &      set[a] set[a]
+  ^      set[a] set[a]
+  has    a bool
+  add    a bool
+  rid    a bool
+  list   list[a]
+
+dec tuple[...a]:
+  $ a.mapi t,i => puts(i t.name)
+
+dec struct[...[$id _]]:
+  $ a.map2 id,t => puts(id.text t.name)
+
+dec time:
+  (year month day hour min sec wday yday offset) int
+  format string string
+  utc    time
+  string string
+  tick   int time
+
+dec io:
+  argv     list[string]
+  env      string option[string]
+  now      time
+  sh       string ...string string @error
+  puts     ... void
+  print    ... void
+  stdin    stream
+  stdout   stream
+  stderr   stream
+  db[t u]  fn[t u] u
+  rand:
+    int        int? int? int
+    float      float? float? float
+    bytes      int bytes
+  fs:
+    open t     string string? fn[stream t] a @error
+    read       string bytes @error
+    reads      string string @error
+    write      string ...serial int @error
+    rm         string bool @error
+    append     string ...serial int @error
+  http:
+    call   request response
+    listen fn[request response] @noret
+    request:
+        version :: string
+        method  :: string
+        path    :: string
+        headers :: list[string,string]
+        body    :: bytes
+      .methods
+        header  :: string string
+        get     :: string string
+        gets    :: string list[string]
+        post    :: string string
+        posts   :: string list[string]
+    response:
+        version :: string
+        status  :: int
+        headers :: list[string,string]
+        body    :: bytes
+      .methods
+        header  :: string string
+
+dec stream:
+  offset            int
+  seek              int stream @error
+  read              int? bytes @error
+  write             ...serial int @error
+  flush             ...serial int @error
+  close             bool @error
+  closed            bool
+  peek              bytes
+  le                stream
+  be                stream
+  utf8              string @error
+  decode            string string @error
+  i8                int @error
+  i16               int @error
+  i32               int @error
+  i64               int @error
+  u8                int @error
+  u16               int @error
+  u32               int @error
+  u64               int @error
+  f32               float @error
+  f64               float @error
+
+dec bytes:
+  size             int
+  slice            int int? bytes
+  tr               string string
+  utf8             option[string]
+  decode           string option[string]
+  deserialize[t]   option[t]
+  stream           stream
+  i8               option[int]
+  i16              option[int]
+  i32              option[int]
+  i64              option[int]
+  u8               option[int]
+  u16              option[int]
+  u32              option[int]
+  u64              option[int]
+  f32              option[float]
+  f64              option[float]
+
+dec serial:
+  | int
+  | float
+  | string
+  | regexp
+  | list
+  | dict
+  | set
+  | tuple
+  | struct
+  | time
+  | option
+  | bytes
+  | stream
+
+dec bcrypt:
+  encrypt string
+  eq      string string bool
+
+dec math:
+  (acos acosh asin asinh atan atan2 atanh cbrt cos cosh erf erfc exp gamma log log10 log2 sin sinh sqrt tan tanh) float float
+  (e pi inf nan)  float
+  (hypot logn)    float float float
+  (lgamma frexp)  float tuple[float int]
+  ldexp           float int float
+
+dec true       bool
+dec false      bool
+dec some[a]    option[a]
+dec none       option[a]
+dec throw[a b] a b
+dec catch[a]   fn[error a] a
+dec if[a]      ...[bool a] a
+dec case[a b]  a ...[a b] b
+dec def[... a] ... a

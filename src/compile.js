@@ -1,11 +1,20 @@
+/*
 # global
 - [ ] true         :: bool
 - [ ] false        :: bool
-- [ ] def a        :: ... (... a)
+- [ ] some a       :: option[a]
+- [ ] none         :: option[a]
+- [ ] def ... a    :: fn[... a]
 - [ ] throw a b    :: a b
 - [ ] catch a      :: fn[error a] a
 - [ ] if a         :: ...[bool a] a
 - [ ] case a b     :: a ...[a b] b
+- [ ] fn ... a     :: fn[... a]
+
+# option a
+- [ ] and b :: option[a] fn[a b] option[b]
+- [ ] or    :: option[a] a a
+- [ ] bool  :: bool
 
 # num a
 - [ ] + - * ** / % | & ^ :: a a a
@@ -38,9 +47,6 @@
 - [ ] capture :: string list[string]
 - [ ] split   :: string list[string]
 - [ ] replace :: string fn[list[string] string] string
-
-# lambda[a b ...]
-- [ ]
 
 # list[a]
 - [ ] ++ a    :: list[a] list[a]
@@ -103,41 +109,29 @@
 - [ ] string :: string
 - [ ] tick   :: int time
 
-# shell
-- [ ] result :: string @error
-
 # ---( standard module )-------------------------------
-
-# log
-- [ ] :: a ... a
-
-# assert
-- [ ] :: a a void
-
 # io
 - [ ] argv       :: list[string]
-- [-] env        :: string string
-- [-] now        :: time
-- [ ] fs         :: fs
-- [-] rand       :: rand
-- [ ] shell      :: string ...string shell
+- [?] env        :: string option[string]
+- [?] now        :: time
+- [ ] sh         :: string ...string string @error
 - [ ] puts       :: ... void
 - [ ] print      :: ... void
-- [-] stdin      :: stream
-- [-] stdout     :: stream
-- [-] stderr     :: stream
+- [?] stdin      :: stream
+- [?] stdout     :: stream
+- [?] stderr     :: stream
 
-# rand
-- [-] int        :: int? int? int
-- [-] float      :: float? float? float
-- [-] bytes      :: int bytes
+# io.rand
+- [ ] int        :: int? int? int
+- [ ] float      :: float? float? float
+- [ ] bytes      :: int bytes
 
-# fs
+# io.fs
 - [-] open t  :: string string? fn[stream t] a @error
 - [-] read    :: string bytes @error
-- [ ] reads   :: string string @error
-- [ ] write   :: string ...serial int @error
-- [ ] rm      :: string bool @error
+- [x] reads   :: string string @error
+- [x] write   :: string ...serial int @error
+- [x] rm      :: string bool @error
 - [-] append  :: string ...serial int @error
 
 # stream
@@ -145,7 +139,6 @@
 - [ ] seek             :: int stream @error
 - [ ] read             :: int? bytes @error
 - [ ] write            :: ...serial int @error
-- [ ] deserialize a    :: a @error
 - [ ] flush            :: ...serial int @error
 - [ ] close            :: bool @error
 - [ ] closed           :: bool
@@ -160,51 +153,44 @@
 
 # bytes
 - [ ] size             :: int
-- [ ] at               :: int a @error
-- [ ] tie              :: int a a @error
 - [ ] slice            :: int int? bytes
-- [ ] fill a           :: a int? int? bytes @error
+- [ ] i8,i16,i32,i64   :: option[i8,i16,i32,i64] @error
+- [ ] u8,u16,u32,u64   :: option[u8,u16,u32,u64] @error
+- [ ] f32,f64          :: option[f32,f64       ] @error
 - [ ] tr               :: string string
+- [ ] utf8             :: option[string]
+- [ ] decode           :: string option[string]
+- [ ] deserialize t    :: option[t]
 - [ ] stream           :: stream
 
-# serial
+# serial a
 - [ ] serialize :: fn[serial void] void @error
-- [ ] int.serial
-- [ ] float.serial
-- [ ] string.serial
-- [ ] time.serial
-- [ ] tuple.serial
-- [ ] struct.serial
-- [ ] list.serial
-- [ ] set.serial
-- [ ] dict.serial
-- [ ] stream.serial
-- [ ] bytes.serial
-- [ ] option.serial
-- [ ] regexp.serial
 
-# ---( pending )---------------------------------------
-# io
-- [ ] database t u :: (t u) u
-- [ ] http:
-- [ ]   listen (http.request http.response) _
-- [ ]   call string {method.string="get" headers.list[tuple[string list[string]]]=[] body.bytes=[]} http.response
-- [ ]   get url option.. = call url {method="get" option..}
-- [ ]   post url option.. = call url {method="post" option..}
-- [ ]   request:
+# io.db
+- [ ] _ t u            :: fn[t u] u
+
+# io.http
+- [ ] listen (http.request http.response) @noret
+- [ ] call http.request http.response
+- [ ] request:
+        version :: string
         method  :: string
         path    :: string
+        headers :: list[string,string]
+        body    :: bytes
+      .methods
         header  :: string string
-        headers :: string list[string]
         get     :: string string
         gets    :: string list[string]
         post    :: string string
         posts   :: string list[string]
-        body    :: bytes
 - [ ]   response:
+        version :: string
         status  :: int
-        headers :: list[tuple[string string]]
+        headers :: list[string,string]
         body    :: bytes
+      .methods
+        header  :: string string
 
 # bcrypt
 - [ ] encrypt :: string
@@ -216,3 +202,4 @@
 - [ ] hypot, logn :: float float float
 - [ ] lgamma, frexp :: float (float, int)
 - [ ] ldexp :: float int float
+*/

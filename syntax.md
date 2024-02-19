@@ -23,24 +23,47 @@ op2: [+-*/%<>|&^~=!]+ | ","
 id: [A-Za-z_][A-Za-z0-9_]*
 ```
 
-Reserved word
+Key word
 ```
-declaration: let var def dec record enum
-     branch: if else
-       flow: return throw catch assert
-       loop: for while continue break
-     module: use module
-  assertion: assert
-     booked: interface implement
-```
+void
+bool
+int
+float
+string
+time
+re
+bytes
 
-Keyword
-```
-constant: true false moa log math rand db
-    type: void bool int float string time duration tuple struct array list dict fn any
-  branch: iif case
-  binary: bytes i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
-  booked: num decimal ref
+tuple
+struct
+list
+dict
+set
+
+fn
+num
+ref
+serial
+stream
+
+def
+dec
+let
+var
+record
+enum
+
+if
+case
+throw
+catch
+
+true
+false
+math
+io
+
+reserved: use module decimal array i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
 ```
 
 Symbols
@@ -70,6 +93,7 @@ $ undefined
 @ undefined
 ` undefined
 ```
+
 
 
 # Idea

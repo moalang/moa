@@ -1,3 +1,134 @@
+# let
+assert 3:
+  let n 1 + 2
+  n
+
+# var
+assert 3:
+  var a 1
+  a += 2
+  a
+assert 1:
+  var a []
+  a.push 1
+  a.size
+assert 1:
+  var a dict()
+  a[1] := 2
+  a.size
+
+# function
+assert 1:
+  def f 1
+  f
+assert 1:
+  def f a: a
+  f 1
+assert 3:
+  def a b: a + b
+  f 1 2
+assert 3:
+  var a 1
+  def f b: a += b
+  f(2)
+  a
+assert 6:
+  def f a b:
+    if a.size == 0:
+      b
+      f a.slice(1) a[0] + b
+  f [1 2 3] 0
+
+# record
+assert 3:
+  record s: a int; b int
+  s(1 2).a + s(1 2).b
+# bool
+assert true !false
+assert true  true  || true
+assert true  true  && true
+
+# number
+assert 3 1 +  2
+assert 1 3 -  2
+assert 6 2 *  3
+assert 2 4 /  2
+assert 1 5 %  2
+assert 3 1 |  2
+assert 2 3 &  2
+assert 1 3 ^  2
+assert 8 2 ** 3
+assert true  1 == 1
+assert false 1 != 1
+assert false 1 >  1
+assert true  1 >= 1
+assert false 1 <  1
+assert true  1 <= 1
+assert 2: var a 1; a +=  1; a
+assert 1: var a 3; a -=  2; a
+assert 6: var a 2; a *=  3; a
+assert 2: var a 4; a /=  2; a
+assert 1: var a 5; a %=  2; a
+assert 3: var a 1; a |=  2; a
+assert 2: var a 3; a &=  2; a
+assert 1: var a 3; a ^=  2; a
+assert 8: var a 2; a **= 3; a
+
+# lambda
+assert 1 fn(1)()
+assert 1 fn(a a)(1)
+
+# string
+assert "ab" "a" ++ "b"
+
+# list
+assert [1 2] [1] ++ [2]
+assert 1 [1][0]
+assert [2]: var a [1]; a[0] = 2; a
+
+# struct
+assert 1 struct(a 1).a
+assert 2 struct(a 1 b 2).b
+
+# set
+assert set(1)   set(1 2) - set(2)
+assert set(1 2) set(1)   | set(2)
+assert set(2)   set(1 2) & set(2)
+assert set(1)   set(1 2) ^ set(2)
+
+# dict
+assert dict(1 2 3 4) dict(1 2) ++ dict(3 4)
+
+# if
+assert 1: if true 1 [][0]
+assert 2: if false [][0] 2
+assert 2: if false [][0] true 2 [][0]
+assert 3: if false [][0] false [][0] 3
+
+# case
+assert "a": case 1 1 "a" 2 "b" _ "c"
+assert "b": case 2 1 "a" 2 "b" _ "c"
+assert "c": case 3 1 "a" 2 "b" _ "c"
+
+# short circuit evaluation
+assert false false && [][0]
+assert true  true || [][0]
+
+# do
+assert 2 (1; 2)
+
+# throw / catch
+assert "a" catch(throw("a") fn(e e.message))
+# shell
+assert ";\n" io.shell("echo" "';'").result
+assert 1 catch(io.shell("nocommand").result fn(e 1))
+
+# fs
+assert "Hello\n":
+  io.fs.write("hello.txt" "Hello\n")
+  let a io.fs.reads("hello.txt")
+  io.fs.rm("hello.txt")
+  a
 # number
 assert 1 (-1).abs
 assert 1 (-1).neg

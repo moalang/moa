@@ -44,7 +44,18 @@ const parse = source => {
 const execute = (env, node) => {
   const qmap = {'r': '\r', 'n': '\n', 't': '\t'}
   const unquote = s => s.replace(/\\(.)/g, (_, c) => qmap[c] || c)
-  const trap = (target, f )=> { try { return f() } catch (e) { e.target ||= target; throw e } }
+  const trap = (target, f )=> {
+    try {
+      const ret = f()
+      if (ret === undefined) {
+        throw new Error('Target is undefined')
+      }
+      return ret
+    } catch (e) {
+      e.target ||= target;
+      throw e
+    }
+  }
   const run = target => trap(target, () =>
     Array.isArray(target) ? env.call(run(target[0]), ...target.slice(1)) :
     !(target instanceof Token) ? target :
@@ -58,12 +69,9 @@ const execute = (env, node) => {
 }
 
 const newEnv = () => {
-  class Return { constructor(v) { this.v = v } valueOf() { return this.v } }
   class Tuple extends Array {}
-  class Some { constructor(v) { this.v = v } valueOf() { return this.v } }
+  class Some { constructor(v) { this.v = v } }
   class None { }
-  class Continue { }
-  class Break { }
 
   const none = new None()
   const attempt = (f, g) => { try { return f() } catch (e) { return g ? g(e) : e } }
@@ -144,7 +152,7 @@ const newEnv = () => {
   const property = (x, field, key) => key in properties ? properties[key](x) :
     x instanceof Array ? x[field] :
     x instanceof Object && field in x ? x[field] :
-    fail(`not find property \`${key}\` in \`${x}\``)
+    fail(`not find property \`${key}\` in \`${util.inspect(x)}\``)
   const assign = (f, x, v) => !Array.isArray(x) ? f.set(x.code, v) :
     x[0].code === '[' ? f.get(x[1].code)[f(x[2])] = v :
     x[0].code === '.' ? f.get(x[1].code)[x[2].code] = v :
@@ -152,18 +160,14 @@ const newEnv = () => {
   const iif = (f, [a, b, ...c]) => b === undefined ? f(a) : f(a) ? f(b) : iif(f, c)
   const case_ = (f, a, [b, c, ...d]) => b.code === '_' || eq(a, f(b)) ? f(c) : case_(f, a, d)
   const fn = (f, ...a) => (...b) => f.with(Object.fromEntries(a.slice(0, -1).map((x, i) => [x.code, b[i]])))(a.at(-1))
-  const discontinued = x => x instanceof Return || x instanceof Continue || x instanceof Break
-  const statement = (f, a) => a.reduce((acc, x) => discontinued(acc) ? acc : f(x), '__statement')
-  const next = (f, cond, body, x) => x instanceof Return ? x :
-    x instanceof Break ? '__break' :
-    f(cond) && next(f, cond, body, statement(f, body))
+  const do_ = (f, a) => a.map(f).at(-1)
   const laziness = {
     fn,
-    do: (f, ...a) => statement(f.with({}), a).valueOf(),
+    do: (f, ...a) => do_(f.with({}), a),
     fn: (f, ...a) => (...b) => f.with(Object.fromEntries(a.slice(0, -1).map((x, i) => [x.code, b[i]])))(a.at(-1)),
     def: (f, a, ...b) => Array.isArray(a) ?
-      f.put(a[0].code, (...c) => statement(f.with(Object.fromEntries(a.slice(1).map((x, i) => [x.code, c[i]]))), b).valueOf()) :
-      f.put(a.code, () => statement(f, b).valueOf()),
+      f.put(a[0].code, (...c) => do_(f.with(Object.fromEntries(a.slice(1).map((x, i) => [x.code, c[i]]))), b)) :
+      f.put(a.code, () => do_(f, b)),
     var: (f, k, v) => f.put(k.code, f(v)),
     let: (f, k, v) => f.put(k.code, f(v)),
     struct: (f, ...a) => Object.fromEntries([...Array(a.length/2)].map((_,i) => [a[i*2].code, f(a[i*2+1])])),
@@ -172,12 +176,11 @@ const newEnv = () => {
     '=': (f, l, r) => assign(f, l, f(r)),
     '||': (f, l, r) => f(l) || f(r),
     '&&': (f, l, r) => f(l) && f(r),
-    if: (f, a, ...b) => f.put('__if', f(a)) && statement(f, b),
-    else: (f, ...a) => f.get('__if') || statement(f, a),
+    if: (f, a, ...b) => f.put('__if', f(a)) && do_(f, b),
+    else: (f, ...a) => f.get('__if') || do_(f, a),
     iif: (f, ...a) => iif(f, a),
     case: (f, ...a) => case_(f, f(a[0]), a.slice(1)),
     catch: (f, a, b) => attempt(() => f(a), e => f.call(f(b), e)),
-    while: (f, cond, ...body) => next(f, cond, body, null)
   }
   const check = (target, ...a) => target == null ? fail('check', a) : target
   const lazy = f => (f.lazy = true, f)
@@ -185,11 +188,8 @@ const newEnv = () => {
     none,
     log,
     some: x => new Some(x),
-    continue: new Continue(),
-    break: new Break(),
     assert: (l, r) => compare(l, r, (a, b) => a === b || fail('assert', {l, r, a, b})),
     throw: (a, b) => fail(a, b),
-    return: x => new Return(x),
     regexp: (s, o) => new RegExp(s, o || 'g'),
     tuple: (...a) => new Tuple().concat(a),
     list: (...a) => a,
@@ -259,10 +259,13 @@ if (process.argv[2] === 'selfboot') {
 } else if (process.argv[2] === 'selftest') {
   const c = compiler()
   for (const chunk of fs.readFileSync('/dev/stdin', 'utf8').split(/^(?=\()/m)) {
+    let js = ''
     try {
-      eval(c(chunk))
+      js = c(chunk)
+      eval(js)
     } catch (e) {
       log(e)
+      console.log(js)
       console.log(`echo '${chunk.trim().replace(/'/g, "`")}' | node src/moa.js selftest`)
       process.exit(1)
     }

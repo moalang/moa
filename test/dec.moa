@@ -1,0 +1,69 @@
+assert "bool":
+  dec symbol bool
+  string symbol
+
+assert "fn[int int]":
+  dec symbol int int
+  string symbol
+
+assert "type[argument]":
+  dec symbol type[0]
+  string symbol
+
+assert "type[int]":
+  dec symbol type[0]
+  string symbol[int]
+
+assert "fn[... int]":
+  dec symbol ... int
+  string symbol
+
+assert "a fn[...a a]":
+  dec symbol[a] ...a a
+  string symbol
+
+assert "a b fn[...[a b] tuple[a b]]":
+  dec symbol[a b] ...[a b] tuple[a b]
+  string symbol
+
+assert "struct[field int]":
+  dec symbol:
+    field int
+  string symbol
+
+assert "a struct[field a]":
+  dec symbol[a]:
+    field a
+  string symbol
+
+assert "a struct[field int]":
+  dec symbol[a]:
+    field a
+  string symbol[int]
+
+assert "struct[...]":
+  dec symbol[...]:
+    $ a.mapi t,i => puts(i t.name)
+  string symbol
+
+assert "struct[0 int 1 bool]":
+  dec symbol[...]:
+    $ a.mapi t,i => puts(i t.name)
+  string symbol[int bool]
+
+assert "struct[a int b int]":
+  dec symbol:
+    (a b) int
+  string symbol
+
+assert "struct[f fn[int int]]":
+  dec symbol:
+    f int int
+  string symbol
+
+assert "struct[a struct[b int c fn[bool bool]]]":
+  dec symbol:
+    a:
+      b int
+      c bool bool
+  string symbol

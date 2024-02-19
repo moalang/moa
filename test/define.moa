@@ -1,0 +1,45 @@
+# let
+assert 3:
+  let n 1 + 2
+  n
+
+# var
+assert 3:
+  var a 1
+  a += 2
+  a
+assert 1:
+  var a []
+  a.push 1
+  a.size
+assert 1:
+  var a dict()
+  a[1] := 2
+  a.size
+
+# function
+assert 1:
+  def f 1
+  f
+assert 1:
+  def f a: a
+  f 1
+assert 3:
+  def a b: a + b
+  f 1 2
+assert 3:
+  var a 1
+  def f b: a += b
+  f(2)
+  a
+assert 6:
+  def f a b:
+    if a.size == 0:
+      b
+      f a.slice(1) a[0] + b
+  f [1 2 3] 0
+
+# record
+assert 3:
+  record s: a int; b int
+  s(1 2).a + s(1 2).b
