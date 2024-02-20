@@ -24,8 +24,8 @@ const infer = nodes => {
   const tfn = (...types) => types.length === 1 ? types[0] : ({types})
   const tinf = props => ({props})
   const ttype = name => ({name})
-  const ttuple = types => ttype('tuple', types)
-  const tdot3 = ttype('...')
+  const ttuple = types => ({name: 'tuple', types})
+  const tdot3 = {name: '...', var: true}
   const tint = ttype('int')
   const tbool = ttype('bool')
   const fresh = (type, nonGeneric) => {
@@ -34,7 +34,9 @@ const infer = nodes => {
       const p = prune(t)
       return p.var ?
         (nonGeneric.includes(p.name) ? p : d[p.name] ||= tvar()) :
-        ({name: p.name, types: (p.types || []).map(rec)})
+        p.name && p.types ? ({name: p.name, types: p.types.map(rec)}) :
+        p.types ? ({types: p.types.map(rec)}) :
+        p
     }
     return rec(type)
   }
@@ -71,7 +73,7 @@ const infer = nodes => {
         const args = tail.slice(1, -1).map(arg => [arg.code.replace('...', ''), arg.type = arg.code.startsWith('...') ? tdot3 : tvar()])
         const body = tail.slice(-1)[0]
         const local = {...tenv, ...Object.fromEntries(args)}
-        const ret = analyse(body, local, nonGeneric.concat(args.map(([_, t]) => t.name)))
+        const ret = analyse(body, local, [...nonGeneric, ...[...tvars, ...args].map(([_, t]) => t.name)])
         const ft = tfn(...args.map(([_, t]) => t), ret)
         return env[name] = ft
       } else if (head.code === 'dec') {
@@ -111,12 +113,15 @@ const infer = nodes => {
     '<': tfn(tint, tint, tbool),
     'if': tfn(tbool, v1, v1, v1),
   }
-  return nodes.map(node => analyse(node, top, []))
+  return nodes.map(node => analyse(node, top, ['...']))
 }
 
 const showType = type => {
   const show = t => t.instance ? show(t.instance) :
-    t.name || '(' + (t.types ? t.types.map(show) : t.props.map(([f,t]) => `${f}.${show(t)}`)).join(' ') + ')'
+    t.name && t.types ? t.name + '[' + t.types.map(show).join(' ') + ']' :
+    t.types ? '(' + t.types.map(show).join(' ') + ')' :
+    t.props ? '(' + t.props.map(([f,t]) => `${f}.${show(t)}`).join(' ') + ')' :
+    t.name
   const s = show(type)
   const o = {}
   const r = s.replace(/\d+/g, t => o[t] ||= Object.keys(o).length + 1)
@@ -241,8 +246,9 @@ const testType = () => {
   inf('int', 'def f ... 1; f 1')
   inf('int', 'def f ... 1; f 1 true')
   inf('(... ...)', 'def f ...a a')
-  //inf('(... (tuple int))', 'def f ...a a; f 1')
-  //inf('true', 'def f[t] ...t true; f 1 2')
+  inf('tuple[int]', 'def f ...a a; f 1')
+  inf('tuple[int bool]', 'def f ...a a; f 1 bool')
+  //inf('bool', 'def f[t] ...[t] true; f 1 2')
 
   print('ok')
 }
