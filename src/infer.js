@@ -89,8 +89,8 @@ const infer = nodes => {
         const body = tail.slice(-1)[0]
         const local = {...tenv, ...Object.fromEntries(args.map(([name, t]) => [name, t.dot3 ? t.ref : t]))}
         const ng = [...nonGeneric, ...[...tvars, ...args].map(([_, t]) => t.dot3 ? t.ref.name : t.name)]
-        const ret = analyse(body, local, ng)
-        const ft = tfn(...args.map(([_, t]) => t), ret)
+        const rt = analyse(body, local, ng)
+        const ft = tfn(...args.map(([_, t]) => t), rt)
         return env[name] = ft
       } else if (head.code === 'dec') {
         const tvars = (Array.isArray(tail[0]) ? tail[0] : [tail[0]]).map(t => [t.code, tvar()])
@@ -104,9 +104,9 @@ const infer = nodes => {
           return env[name] = args.length === 1 ? args[0] : tfn(...args)
         }
       } else if (tail.length) {
+        const ft = analyse(head, env, nonGeneric)
         const argv = tail.map(t => analyse(t, env, nonGeneric))
         const rt = cache[str(argv)] ||= tvar() // fix tvar
-        const ft = analyse(head, env, nonGeneric)
         unify(ft, tfn(...argv, rt))
         return rt
       } else {
