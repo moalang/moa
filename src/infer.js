@@ -21,22 +21,26 @@ const infer = nodes => {
   let tvarSequence = 0
   const cache = {}
   const tvar = () => (name => ({name, var: true}))((++tvarSequence).toString())
+  const tdot3 = () => ({dot3: true, ref: tvar()})
   const tfn = (...types) => types.length === 1 ? types[0] : ({types})
   const tinf = props => ({props})
   const ttype = name => ({name})
   const ttuple = types => ({name: 'tuple', types})
-  const tdot3 = {name: '...', var: true}
   const tint = ttype('int')
   const tbool = ttype('bool')
+  const tcon = (t, constrains) => ({...t, constrains})
   const fresh = (type, nonGeneric) => {
     const d = {}
     const rec = t => {
+      const copy = t => {
+        t = {...t}
+        t.constrains &&= t.constrains.map(rec)
+        t.types &&= t.types.map(rec)
+        t.ref &&= rec(t.ref)
+        return t
+      }
       const p = prune(t)
-      return p.var ?
-        (nonGeneric.includes(p.name) ? p : d[p.name] ||= tvar()) :
-        p.name && p.types ? ({name: p.name, types: p.types.map(rec)}) :
-        p.types ? ({types: p.types.map(rec)}) :
-        p
+      return p.var ?  (nonGeneric.includes(p.name) ? p : d[p.name] ||= tvar()) : copy(p)
     }
     return rec(type)
   }
@@ -52,12 +56,20 @@ const infer = nodes => {
     } else {
       const as = a.types || []
       const bs = b.types || []
-      if (a.name !== b.name || (as.length !== bs.length && !as.find(t => t.name === '...'))) {
+      if (a.name !== b.name || (as.length !== bs.length && !as.find(t => t.dot3))) {
         fail(`type miss match`, {a,b})
       }
-      as.some((t,i) =>
-        t.name === '...' ? (t.instance = ttuple(bs.slice(i, -1)), unify(as.at(-1), bs.at(-1)), true) :
-        unify(t, bs[i]))
+      for (let i=0; i<as.length; i++) {
+        if (as[i].dot3) {
+          const cs = as[i].constrains
+          cs && [...Array(bs.length-i-1)].map((_, j) => unify(cs[j%cs.length], bs[i+j]))
+          as[i].ref.instance = ttuple(bs.slice(i, -1))
+          unify(as.at(-1), bs.at(-1))
+          break
+        } else {
+          unify(as[i], bs[i])
+        }
+      }
     }
   }
   const v1 = tvar()
@@ -70,10 +82,14 @@ const infer = nodes => {
         const tvars = (Array.isArray(tail[0]) ? tail[0] : [tail[0]]).map(t => [t.code, tvar()])
         const name = tvars[0][0]
         const tenv = {...env, ...Object.fromEntries(tvars)}
-        const args = tail.slice(1, -1).map(arg => [arg.code.replace('...', ''), arg.type = arg.code.startsWith('...') ? tdot3 : tvar()])
+        const argument = arg => Array.isArray(arg) ?
+          [arg[0].code.replace('...', ''), arg[0].type = tcon(arg[0].code.startsWith('...') ? tdot3() : tvar(), arg.slice(1).map(t => tenv[t.code]))] :
+          [arg.code.replace('...', ''), arg.type = arg.code.startsWith('...') ? tdot3() : tvar()]
+        const args = tail.slice(1, -1).map(argument)
         const body = tail.slice(-1)[0]
-        const local = {...tenv, ...Object.fromEntries(args)}
-        const ret = analyse(body, local, [...nonGeneric, ...[...tvars, ...args].map(([_, t]) => t.name)])
+        const local = {...tenv, ...Object.fromEntries(args.map(([name, t]) => [name, t.dot3 ? t.ref : t]))}
+        const ng = [...nonGeneric, ...[...tvars, ...args].map(([_, t]) => t.dot3 ? t.ref.name : t.name)]
+        const ret = analyse(body, local, ng)
         const ft = tfn(...args.map(([_, t]) => t), ret)
         return env[name] = ft
       } else if (head.code === 'dec') {
@@ -104,7 +120,7 @@ const infer = nodes => {
     }
   }
   const top = {
-    '...': tdot3,
+    '...': tdot3(),
     'int': tint,
     'bool': tbool,
     'true': tbool,
@@ -113,11 +129,12 @@ const infer = nodes => {
     '<': tfn(tint, tint, tbool),
     'if': tfn(tbool, v1, v1, v1),
   }
-  return nodes.map(node => analyse(node, top, ['...']))
+  return nodes.map(node => analyse(node, top, []))
 }
 
 const showType = type => {
   const show = t => t.instance ? show(t.instance) :
+    t.dot3 ? '...' :
     t.name && t.types ? t.name + '[' + t.types.map(show).join(' ') + ']' :
     t.types ? '(' + t.types.map(show).join(' ') + ')' :
     t.props ? '(' + t.props.map(([f,t]) => `${f}.${show(t)}`).join(' ') + ')' :
@@ -156,8 +173,9 @@ const testType = () => {
         return
       }
     }
-    print('Failed')
+    print('Invalid')
     print('src:', src)
+    process.exit(1)
   }
   const inf = (expect, src) => {
     try {
@@ -224,9 +242,6 @@ const testType = () => {
   inf('int',                           'def f x (3); def g (+ (f true) (f 4))')
   inf('(bool (1 1))',                  'def f x x; def g y y; def h b (if b (f g) (g f))')
 
-  // type errors
-  reject('(+ 1 true)')
-
   // declare function
   inf('bool', 'dec f bool; f')
   inf('int', 'dec _ int')
@@ -245,10 +260,17 @@ const testType = () => {
   inf('(... int)', 'def f ... 1')
   inf('int', 'def f ... 1; f 1')
   inf('int', 'def f ... 1; f 1 true')
-  inf('(... ...)', 'def f ...a a')
+  inf('(... 1)', 'def f ...a a')
   inf('tuple[int]', 'def f ...a a; f 1')
   inf('tuple[int bool]', 'def f ...a a; f 1 bool')
-  //inf('bool', 'def f[t] ...[t] true; f 1 2')
+  inf('bool', 'def f[t] ...[t] true; f 1 2')
+  inf('int', 'def f[t] ...[t] t; f 1 2')
+  inf('tuple[int bool int bool]', 'def f[t u] ...a[t u] a; f 1 true 2 false')
+
+  // type errors
+  reject('(+ 1 true)')
+  reject('def f[t] ...[t] true; f 1 true')
+  reject('def f[t u] ...[t u] true; f 1 true true')
 
   print('ok')
 }
