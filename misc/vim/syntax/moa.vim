@@ -14,15 +14,19 @@ syn match Number /\%([A-Za-z_]\)\@<![0-9]\+\(\.[0-9]\+\)\?/
 syn keyword Boolean true false
 
 " Statement
-syn keyword Define      let var def record enum
-syn keyword Conditional iif if else case
+syn keyword Define      def dec let var record enum
+syn keyword Conditional if case throw catch
 syn keyword Boolean     true false
-syn keyword Type        void any bool int float string tuple struct list set dict option ref array
-syn keyword Type        i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 num bytes interface implement decimal assert
-syn keyword keyword     use module
-syn keyword Repeat      for while
-syn keyword keyword     return continue break yield
-syn keyword PreProc     catch
+syn keyword Type        void bool int float string time re bytes
+syn keyword Type        tuple struct list dict set
+syn keyword Type        fn num ref serial stream
+syn keyword Type        void bool int float string tuple struct list set dict time re bytes fn num
+syn keyword Type        array i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 num interface implement decimal assert
+syn keyword Keyword     use module
+syn keyword Constant    math io
+"syn keyword Repeat      for while
+"syn keyword keyword     return continue break yield
+"syn keyword PreProc     catch
 syn match Operator /[+\-\*/|&]=\=/
 syn match Operator /[<>]=\=/
 syn match Operator /[=!]=/

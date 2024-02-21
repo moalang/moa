@@ -1,4 +1,4 @@
-dec option a:
+dec option[a]:
   and[b] option[a] fn[a b] option[b]
   or     option[a] a a
   bool   bool
@@ -7,7 +7,7 @@ dec num[a]:
   (+ - * ** / % | & ^) a a a
   (abs neg) a
 
-dec int.num::
+dec int.num:
   char   string
 
 dec float.num:
@@ -36,11 +36,9 @@ dec regexp:
   replace string fn[list[string] string] string
 
 dec list[a]:
-  call    ...a list[a]
+  call    ...[a] list[a]
   ++ a    list[a] list[a]
   size    int
-  get     int option[a]
-  set     int a bool
   at      int a @error
   tie     int a a @error
   push    a a
@@ -65,7 +63,7 @@ dec list[a]:
 dec dict[k v]:
   call    ...[k v] dict[k v]
   size   int
-  get    k option[v]
+  at     k v @error
   set    k v bool
   has    k bool
   keys   list[k]
@@ -86,7 +84,7 @@ dec set[a]:
 dec tuple[...a]:
   $ a.mapi t,i => puts(i t.name)
 
-dec struct[...[$id _]]:
+dec struct[...[$id _]a]:
   $ a.map2 id,t => puts(id.text t.name)
 
 dec time:
@@ -98,9 +96,9 @@ dec time:
 
 dec io:
   argv     list[string]
-  env      string option[string]
+  env      string string
   now      time
-  sh       string ...string string @error
+  sh       string ...[string] string @error
   puts     ... void
   print    ... void
   stdin    stream
@@ -115,38 +113,38 @@ dec io:
     open t     string string? fn[stream t] a @error
     read       string bytes @error
     reads      string string @error
-    write      string ...serial int @error
+    write      string ...[serial] int @error
     rm         string bool @error
-    append     string ...serial int @error
+    append     string ...[serial] int @error
   http:
     call   request response
     listen fn[request response] @noret
     request:
-        version :: string
-        method  :: string
-        path    :: string
-        headers :: list[string,string]
-        body    :: bytes
+        version  string
+        method   string
+        path     string
+        headers  list[string,string]
+        body     bytes
       .methods
-        header  :: string string
-        get     :: string string
-        gets    :: string list[string]
-        post    :: string string
-        posts   :: string list[string]
+        header   string string
+        get      string string
+        gets     string list[string]
+        post     string string
+        posts    string list[string]
     response:
-        version :: string
-        status  :: int
-        headers :: list[string,string]
-        body    :: bytes
+        version  string
+        status   int
+        headers  list[string,string]
+        body     bytes
       .methods
-        header  :: string string
+        header   string string
 
 dec stream:
   offset            int
   seek              int stream @error
   read              int? bytes @error
-  write             ...serial int @error
-  flush             ...serial int @error
+  write             ...[serial] int @error
+  flush             ...[serial] int @error
   close             bool @error
   closed            bool
   peek              bytes
@@ -154,6 +152,7 @@ dec stream:
   be                stream
   utf8              string @error
   decode            string string @error
+  deserialize[t]    t @error
   i8                int @error
   i16               int @error
   i32               int @error
@@ -166,38 +165,12 @@ dec stream:
   f64               float @error
 
 dec bytes:
-  size             int
-  slice            int int? bytes
-  tr               string string
-  utf8             option[string]
-  decode           string option[string]
-  deserialize[t]   option[t]
-  stream           stream
-  i8               option[int]
-  i16              option[int]
-  i32              option[int]
-  i64              option[int]
-  u8               option[int]
-  u16              option[int]
-  u32              option[int]
-  u64              option[int]
-  f32              option[float]
-  f64              option[float]
+  size    int
+  slice   int int? bytes
+  tr      string string
+  stream  stream
 
-dec serial:
-  | int
-  | float
-  | string
-  | regexp
-  | list
-  | dict
-  | set
-  | tuple
-  | struct
-  | time
-  | option
-  | bytes
-  | stream
+dec serial: | int float string re list dict set tuple struct time bytes stream
 
 dec bcrypt:
   encrypt string
@@ -212,10 +185,10 @@ dec math:
 
 dec true       bool
 dec false      bool
-dec some[a]    option[a]
-dec none       option[a]
 dec throw[a b] a b
 dec catch[a]   fn[error a] a
 dec if[a]      ...[bool a] a
 dec case[a b]  a ...[a b] b
 dec def[... a] ... a
+#dec some[a]    option[a]
+#dec none       option[a]
