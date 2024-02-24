@@ -22,7 +22,7 @@ extern string:
   size    int
   reverse string
   slice   int int? string
-  split   string int? list(string)
+  split   string int? [string]
   index   string option(int)
   replace string string string
   trim    string
@@ -33,27 +33,27 @@ extern string:
 
 extern regexp:
   match   string bool
-  capture string list(string)
-  split   string list(string)
-  replace string (list(string) string) string
+  capture string [string]
+  split   string [string]
+  replace string ([string] string) string
 
-extern list(a):
-  call    ...(a) list(a)
-  ++ a    list(a) list(a)
+extern list a:
+  call    ...(a) [a]
+  ++ a    [a] [a]
   size    int
   at      int a @error
   tie     int a a @error
   push    a a
-  map b   (a b) list(b)
-  mapi b  (a int b) list(b)
-  fmap b  (a list(b)) list(b)
-  keep    (a bool) list(a)
+  map b   (a b) [b]
+  mapi b  (a int b) [b]
+  fmap b  (a [b]) [b]
+  keep    (a bool) [a]
   all     (a bool) bool
   any     (a bool) bool
-  slice   int int? list(a)
-  sort    (a a bool)? list(a)
-  reverse list(a)
-  zip b   list(b) list(tuple(a b))
+  slice   int int? [a]
+  sort    (a a bool)? [a]
+  reverse [a]
+  zip b   [b] [tuple(a b)]
   fold b  b (a b b) b
   find    (a bool) option(a)
   index   (a bool) option(int)
@@ -68,9 +68,9 @@ extern dict(k v):
   at     k v @error
   set    k v bool
   has    k bool
-  keys   list(k)
-  values list(v)
-  list   list(tuple(k v))
+  keys   [k]
+  values [v]
+  list   [tuple(k v)]
 
 extern set(a):
   size   int
@@ -81,7 +81,7 @@ extern set(a):
   has    a bool
   add    a bool
   rid    a bool
-  list   list(a)
+  list   [a]
 
 extern tuple(...):
   ...(.index .type)
@@ -97,7 +97,7 @@ extern time:
   tick   int time
 
 extern io:
-  argv     list(string)
+  argv     [string]
   env      string string
   now      time
   sh       string ...(string) string @error
@@ -125,18 +125,18 @@ extern io:
         version  string
         method   string
         path     string
-        headers  list(tuple(string string))
+        headers  [tuple(string string)]
         body     bytes
       .methods
         header   string string
         get      string string
-        gets     string list(string)
+        gets     string [string]
         post     string string
-        posts    string list(string)
+        posts    string [string]
     response:
         version  string
         status   int
-        headers  list(string,string)
+        headers  [string,string]
         body     bytes
       .methods
         header   string string
