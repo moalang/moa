@@ -52,6 +52,8 @@ let
 var
 record
 enum
+interface
+extern
 
 if
 case

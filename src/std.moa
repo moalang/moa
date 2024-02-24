@@ -1,27 +1,29 @@
-dec option[a]:
-  and[b] option[a] fn[a b] option[b]
-  or     option[a] a a
+extern option(a):
+  and(b) option(a) (a b) option(b)
+  or     option(a) a a
   bool   bool
+extern some(a)    option(a)
+extern none       option(a)
 
-dec num[a]:
+extern num(a):
   (+ - * ** / % | & ^) a a a
   (abs neg) a
 
-dec int.num:
+extern int.num:
   char   string
 
-dec float.num:
+extern float.num:
   floor  int
   ceil   int
   round  int
 
-dec string:
+extern string:
   ++      string string string
   size    int
   reverse string
   slice   int int? string
-  split   string int? list[string]
-  index   string option[int]
+  split   string int? list(string)
+  index   string option(int)
   replace string string string
   trim    string
   starts  string bool
@@ -29,122 +31,122 @@ dec string:
   has     string bool
   encode  string string? bytes @error
 
-dec regexp:
+extern regexp:
   match   string bool
-  capture string list[string]
-  split   string list[string]
-  replace string fn[list[string] string] string
+  capture string list(string)
+  split   string list(string)
+  replace string (list(string) string) string
 
-dec list[a]:
-  call    ...[a] list[a]
-  ++ a    list[a] list[a]
+extern list(a):
+  call    ...(a) list(a)
+  ++ a    list(a) list(a)
   size    int
   at      int a @error
   tie     int a a @error
   push    a a
-  map b   fn[a b] list[b]
-  mapi b  fn[a int b] list[b]
-  fmap b  fn[a list[b]] list[b]
-  keep    fn[a bool] list[a]
-  all     fn[a bool] bool
-  any     fn[a bool] bool
-  slice   int int? list[a]
-  sort    fn[a a bool]? list[a]
-  reverse list[a]
-  zip b   list[b] list[tuple[a b]]
-  fold b  b fn[a b b] b
-  find    fn[a bool] option[a]
-  index   fn[a bool] option[int]
+  map b   (a b) list(b)
+  mapi b  (a int b) list(b)
+  fmap b  (a list(b)) list(b)
+  keep    (a bool) list(a)
+  all     (a bool) bool
+  any     (a bool) bool
+  slice   int int? list(a)
+  sort    (a a bool)? list(a)
+  reverse list(a)
+  zip b   list(b) list(tuple(a b))
+  fold b  b (a b b) b
+  find    (a bool) option(a)
+  index   (a bool) option(int)
   join    string string
   has     a bool
   min     a
   max     a
 
-dec dict[k v]:
-  call    ...[k v] dict[k v]
+extern dict(k v):
+  call    ...(k v) dict(k v)
   size   int
   at     k v @error
   set    k v bool
   has    k bool
-  keys   list[k]
-  values list[v]
-  list   list[tuple[k v]]
+  keys   list(k)
+  values list(v)
+  list   list(tuple(k v))
 
-dec set[a]:
+extern set(a):
   size   int
-  -      set[a] set[a]
-  |      set[a] set[a]
-  &      set[a] set[a]
-  ^      set[a] set[a]
+  -      set(a) set(a)
+  |      set(a) set(a)
+  &      set(a) set(a)
+  ^      set(a) set(a)
   has    a bool
   add    a bool
   rid    a bool
-  list   list[a]
+  list   list(a)
 
-dec tuple[...a]:
-  $ a.mapi t,i => puts(i t.name)
+extern tuple(...):
+  ...(.index .type)
 
-dec struct[...[$id _]a]:
-  $ a.map2 id,t => puts(id.text t.name)
+extern struct(...(id type)):
+  ...(.id .type)
 
-dec time:
+extern time:
   (year month day hour min sec wday yday offset) int
   format string string
   utc    time
   string string
   tick   int time
 
-dec io:
-  argv     list[string]
+extern io:
+  argv     list(string)
   env      string string
   now      time
-  sh       string ...[string] string @error
+  sh       string ...(string) string @error
   puts     ... void
   print    ... void
   stdin    stream
   stdout   stream
   stderr   stream
-  db[t u]  fn[t u] u
+  db(t u)  (t u) u
   rand:
     int        int? int? int
     float      float? float? float
     bytes      int bytes
   fs:
-    open t     string string? fn[stream t] a @error
+    open t     string string? (stream t) a @error
     read       string bytes @error
     reads      string string @error
-    write      string ...[serial] int @error
+    write      string ...(serial) int @error
     rm         string bool @error
-    append     string ...[serial] int @error
+    append     string ...(serial) int @error
   http:
     call   request response
-    listen fn[request response] @noret
+    listen (request response) @noret
     request:
         version  string
         method   string
         path     string
-        headers  list[string,string]
+        headers  list(tuple(string string))
         body     bytes
       .methods
         header   string string
         get      string string
-        gets     string list[string]
+        gets     string list(string)
         post     string string
-        posts    string list[string]
+        posts    string list(string)
     response:
         version  string
         status   int
-        headers  list[string,string]
+        headers  list(string,string)
         body     bytes
       .methods
         header   string string
 
-dec stream:
+extern stream:
   offset            int
   seek              int stream @error
   read              int? bytes @error
-  write             ...[serial] int @error
-  flush             ...[serial] int @error
+  write             ...(serial) int @error
+  flush             ...(serial) int @error
   close             bool @error
   closed            bool
   peek              bytes
@@ -152,7 +154,7 @@ dec stream:
   be                stream
   utf8              string @error
   decode            string string @error
-  deserialize[t]    t @error
+  deserialize(t)    t @error
   i8                int @error
   i16               int @error
   i32               int @error
@@ -164,31 +166,40 @@ dec stream:
   f32               float @error
   f64               float @error
 
-dec bytes:
+extern bytes:
   size    int
   slice   int int? bytes
   tr      string string
   stream  stream
 
-dec serial: | int float string re list dict set tuple struct time bytes stream
+interface serial a: serialize (serial void) void
+extern serial.int
+extern serial.float
+extern serial.string
+extern serial.re
+extern serial.list
+extern serial.dict
+extern serial.set
+extern serial.tuple
+extern serial.struct
+extern serial.time
+extern serial.bytes
+extern serial.stream
 
-dec bcrypt:
+extern bcrypt:
   encrypt string
   eq      string string bool
 
-dec math:
+extern math:
   (acos acosh asin asinh atan atan2 atanh cbrt cos cosh erf erfc exp gamma log log10 log2 sin sinh sqrt tan tanh) float float
   (e pi inf nan)  float
   (hypot logn)    float float float
-  (lgamma frexp)  float tuple[float int]
+  (lgamma frexp)  float tuple(float int)
   ldexp           float int float
 
 dec true       bool
 dec false      bool
-dec throw[a b] a b
-dec catch[a]   fn[error a] a
-dec if[a]      ...[bool a] a
-dec case[a b]  a ...[a b] b
-dec def[... a] ... a
-#dec some[a]    option[a]
-#dec none       option[a]
+dec throw(a b) a b
+dec catch(a)   (error a) a
+dec if(a)      ...(bool a) a
+dec case(a b)  a ...(a b) b
