@@ -14,7 +14,7 @@ syn match Number /\%([A-Za-z_]\)\@<![0-9]\+\(\.[0-9]\+\)\?/
 syn keyword Boolean true false
 
 " Statement
-syn keyword Define      def dec let var record enum
+syn keyword Define      def dec let var record enum interface extern
 syn keyword Conditional if case throw catch
 syn keyword Boolean     true false
 syn keyword Type        void bool int float string time re bytes

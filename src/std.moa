@@ -1,28 +1,32 @@
-extern option(a):
+extern option(a) {
   and(b) option(a) (a b) option(b)
   or     option(a) a a
   bool   bool
-extern some(a)    option(a)
-extern none       option(a)
+}
+dec some(a) option(a)
+dec none    option(a)
 
-extern num(a):
+extern num(a) {
   (+ - * ** / % | & ^) a a a
   (abs neg) a
+}
 
-extern int.num:
-  char   string
+extern int.num {
+  char string
+}
 
-extern float.num:
+extern float.num {
   floor  int
   ceil   int
   round  int
+}
 
-extern string:
+extern string {
   ++      string string string
   size    int
   reverse string
   slice   int int? string
-  split   string int? [string]
+  split   string int? list(string)
   index   string option(int)
   replace string string string
   trim    string
@@ -30,49 +34,53 @@ extern string:
   ends    string bool
   has     string bool
   encode  string string? bytes @error
+}
 
-extern regexp:
+extern regexp {
   match   string bool
-  capture string [string]
-  split   string [string]
-  replace string ([string] string) string
+  capture string list(string)
+  split   string list(string)
+  replace string (list(string) string) string
+}
 
-extern list a:
-  call    ...(a) [a]
-  ++ a    [a] [a]
+extern list(a) {
+  call    ...(a) list(a)
+  ++      list(a) list(a)
   size    int
   at      int a @error
   tie     int a a @error
   push    a a
-  map b   (a b) [b]
-  mapi b  (a int b) [b]
-  fmap b  (a [b]) [b]
-  keep    (a bool) [a]
+  map(b)  (a b) list(b)
+  mapi(b) (a int b) list(b)
+  fmap(b) (a list(b)) list(b)
+  keep    (a bool) list(a)
   all     (a bool) bool
   any     (a bool) bool
-  slice   int int? [a]
-  sort    (a a bool)? [a]
-  reverse [a]
-  zip b   [b] [tuple(a b)]
-  fold b  b (a b b) b
+  slice   int int? list(a)
+  sort    (a a bool)? list(a)
+  reverse list(a)
+  zip(b)  list(b) list(tuple(a b))
+  fold(b) b (a b b) b
   find    (a bool) option(a)
   index   (a bool) option(int)
   join    string string
   has     a bool
   min     a
   max     a
+}
 
-extern dict(k v):
+extern dict(k v) {
   call    ...(k v) dict(k v)
   size   int
   at     k v @error
   set    k v bool
   has    k bool
-  keys   [k]
-  values [v]
-  list   [tuple(k v)]
+  keys   list(k)
+  values list(v)
+  list   list(tuple(k v))
+}
 
-extern set(a):
+extern set(a) {
   size   int
   -      set(a) set(a)
   |      set(a) set(a)
@@ -81,23 +89,27 @@ extern set(a):
   has    a bool
   add    a bool
   rid    a bool
-  list   [a]
+  list   list(a)
+}
 
-extern tuple(...):
+extern tuple(...) {
   ...(.index .type)
+}
 
-extern struct(...(id type)):
+extern struct(...(id type)) {
   ...(.id .type)
+}
 
-extern time:
+extern time {
   (year month day hour min sec wday yday offset) int
   format string string
   utc    time
   string string
   tick   int time
+}
 
-extern io:
-  argv     [string]
+extern io {
+  argv     list(string)
   env      string string
   now      time
   sh       string ...(string) string @error
@@ -107,72 +119,80 @@ extern io:
   stdout   stream
   stderr   stream
   db(t u)  (t u) u
-  rand:
+  rand {
     int        int? int? int
     float      float? float? float
     bytes      int bytes
-  fs:
+  }
+  fs {
     open t     string string? (stream t) a @error
     read       string bytes @error
     reads      string string @error
     write      string ...(serial) int @error
     rm         string bool @error
     append     string ...(serial) int @error
-  http:
+  }
+  http {
     call   request response
     listen (request response) @noret
-    request:
-        version  string
-        method   string
-        path     string
-        headers  [tuple(string string)]
-        body     bytes
-      .methods
-        header   string string
-        get      string string
-        gets     string [string]
-        post     string string
-        posts    string [string]
-    response:
-        version  string
-        status   int
-        headers  [string,string]
-        body     bytes
-      .methods
-        header   string string
+    request {
+      version  string
+      method   string
+      path     string
+      headers  list(tuple(string string))
+      body     bytes
+      header   string string
+      get      string string
+      gets     string list(string)
+      post     string string
+      posts    string list(string)
+    }
+    response {
+      version  string
+      status   int
+      headers  list(string,string)
+      body     bytes
+      header   string string
+    }
+  }
+}
 
-extern stream:
-  offset            int
-  seek              int stream @error
-  read              int? bytes @error
-  write             ...(serial) int @error
-  flush             ...(serial) int @error
-  close             bool @error
-  closed            bool
-  peek              bytes
-  le                stream
-  be                stream
-  utf8              string @error
-  decode            string string @error
-  deserialize(t)    t @error
-  i8                int @error
-  i16               int @error
-  i32               int @error
-  i64               int @error
-  u8                int @error
-  u16               int @error
-  u32               int @error
-  u64               int @error
-  f32               float @error
-  f64               float @error
+extern stream {
+  offset          int
+  seek            int stream @error
+  read            int? bytes @error
+  write           ...(serial) int @error
+  flush           ...(serial) int @error
+  close           bool @error
+  closed          bool
+  peek            bytes
+  le              stream
+  be              stream
+  utf8            string @error
+  decode          string string @error
+  deserialize(t)  t @error
+  i8              int @error
+  i16             int @error
+  i32             int @error
+  i64             int @error
+  u8              int @error
+  u16             int @error
+  u32             int @error
+  u64             int @error
+  f32             float @error
+  f64             float @error
+}
 
-extern bytes:
+extern bytes {
   size    int
   slice   int int? bytes
   tr      string string
   stream  stream
+}
 
-interface serial a: serialize (serial void) void
+interface serial a {
+  serialize (serial void) void
+}
 extern serial.int
 extern serial.float
 extern serial.string
@@ -186,16 +206,18 @@ extern serial.time
 extern serial.bytes
 extern serial.stream
 
-extern bcrypt:
+extern bcrypt {
   encrypt string
   eq      string string bool
+}
 
-extern math:
+extern math {
   (acos acosh asin asinh atan atan2 atanh cbrt cos cosh erf erfc exp gamma log log10 log2 sin sinh sqrt tan tanh) float float
   (e pi inf nan)  float
   (hypot logn)    float float float
   (lgamma frexp)  float tuple(float int)
   ldexp           float int float
+}
 
 dec true       bool
 dec false      bool
@@ -203,3 +225,4 @@ dec throw(a b) a b
 dec catch(a)   (error a) a
 dec if(a)      ...(bool a) a
 dec case(a b)  a ...(a b) b
+dec default(a) a
