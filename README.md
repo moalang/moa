@@ -39,15 +39,14 @@ Hello world
 Create from template
 ```
 $ moa new web
-└ src
-   ├ main.moa
-   └ public
-      ├ common.css
-      ├ common.js
-      ├ logo.png
-      ├ og.png
-      ├ apple-touch-icon.png
-      └ favicon.ico
+├ main.moa
+└ public
+  ├ common.css
+  ├ common.js
+  ├ logo.png
+  ├ og.png
+  ├ apple-touch-icon.png
+  └ favicon.ico
 ```
 
 See programs
@@ -71,11 +70,13 @@ def main:
       todos.tie post("id").int post
       location path
     method == "get" && path == "/":
-      html index
+      html html.index({req})
     method == "get" && r"/todos/(?<id.int>\d+)".match(path) if todo=todos[id]:
-      html todo({todo})
+      html html.todo({req todo})
     mount "./public"
   
+package html
+
 let index layout "title" "desc":
   h1 | Example
   - for todos todo =>
@@ -97,8 +98,8 @@ let todo layout "title" "desc":
     textarea name=memo $todo.memo
     button | Update
 
-def layout title desc @body:
-  library.template {title desc}:
+def layout title desc @body.string:
+  library.template {title desc body}:
     doctype html
     html lang=ja
       head
@@ -124,7 +125,7 @@ def layout title desc @body:
           h1 a href=/ img src=/logo.png | Example Application
         $body
         footer
-          | &copy; $req.domain
+          | &copy; example.com
         script src=/common.js
 
 test t:
