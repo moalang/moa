@@ -9,15 +9,13 @@
 - [x] Foundation: int, string, list, dict and operators
 - [x] Methods: int, string, list, dict
 - [x] Accept f(-1) instead of error
-- [ ] Remove ":" as syntax sugar for test and interpriter?
+- [ ] infer.js: Type inferecen for interface
+- [ ] compile.js: Compile to Go
+- [ ] REPL
 - [ ] HTTP server
 - [ ] Transactional database: read and write lock, append only log on desk, undo log on memory
-- [ ] Debugger
-- [ ] Reactive UI framework
-- [ ] Bidirectional remote procedure call
 
 # Optimization
-- [ ] Compiler to Go by interpriter
 - [ ] Cross compile to Linux, Mac and Windows
 - [ ] Debugger
 - [ ] Profiler
@@ -25,13 +23,12 @@
 # Pending
 - [ ] Create new syntax for name of capture variable in enum matching as ===
 - [ ] Bcrypt
-- Consider to add events type for UI
+- [ ] Support HTML
 
 # Policy
-- Main purpose of Moa language is that accelarate web development
-- Moa language consists core and library
-- The core is pure, which does not provide any IO
-- The library provides IO via its interface
+- Moa language helps you program enjoy like Ruby
+- Type safe and optional type annotation like Haskell
+- Fast compile and execution like Go
 
 # Memo
 https://www.swift.org/

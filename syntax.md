@@ -1,19 +1,19 @@
 # Syntax
 ```
-top: line+
+top: line*
 line: exp+ (":" block)?
 block: (("\n  " line)+ | line)
 exp:
-| (id | "(" id+ ")") "=>" block # a => a
+| (id | "(" id+ ")") "=>" exp | block
 | op1? atom (op2 exp)?
-atom: bottom (prop | call | index | copy)*
+atom: bottom (prop | call | index | slice)*
 prop: "." (id | [0-9]+)
 call: "(" exp* ")"
 index: "[" exp+ "]"
-copy: "{" (id ("=" atom)?)* "}"
+slice: "{" (id ("=" atom)?)* "}"
 bottom:
 | "(" exp ")"               # 1 * (2 + 3)
-| "{" (id ("=" atom)?)* "}" # {x y z=0}
+| "{" (id ("=" exp)?)* "}"  # {x y z=0}
 | "[" exp* "]"              # [1 2 3]
 | "-"? [0-9]+ ("." [0-9]+)? # -1.2
 | '"' [^"]* '"'             # "string"
@@ -62,10 +62,10 @@ catch
 
 true
 false
-math
 io
+std
 
-reserved: use module decimal array i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
+reserved: use module decimal array duration i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
 ```
 
 Symbols
@@ -117,14 +117,15 @@ $ undefined
 
 - Variadic function
 ```
-def f a=1: a          # f() or f(1)
-def f ..a: a.max.1    # f(), f(1) or f(1 2)
-def f ..a,: a.max.1   # f(), f(1 "a"), f(1 "a" 2 "b")
+def f a?: a            # f(1) is opt[int], f() is opt[void]
+def f a=1: a           # f() or f(1)
+def f ...a: a.max.1    # f(), f(1) or f(1 2)
+def f ...a,: a.max.1   # f(), f(1 "a"), f(1 "a" 2 "b")
 ```
 
 - Pass through
 ```
-def show ..a: print ..a
+def show ...a: print ...a
 ```
 
 - Named argument
@@ -149,7 +150,7 @@ pattern: matcher ("if" exp) "=>" block
 matcher:
 | '"' [^"]* '"'                 # string
 | "-"? [0-9]+ ("." [0-9]+)?     # number
-| "[" matcher* (".." id?)? "]"  # list
+| "[" matcher* ("..." id?)? "]" # list
 | "{" capture+ "}"              # struct
 | capture
 capture:
@@ -160,45 +161,45 @@ capture:
 
 ```
 enum tree t:
-    leaf
-    node t tree(t) tree(t)
+  leaf
+  node t tree(t) tree(t)
 def validate t:
-    case t:
-        leaf: true
-        _.node(m _.leaf _.leaf) => true
-        _.node(m l.node _.leaf) => l.0 <= m
-        _.node(m _.leaf r.leaf) => m <= r.0
-        _.node(m l.node r.node) => l.0 <= m <= r.0 && validate(l) && validate(r)
+  case t:
+    leaf: true
+    _.node(m _.leaf _.leaf) => true
+    _.node(m l.node _.leaf) => l.0 <= m
+    _.node(m _.leaf r.leaf) => m <= r.0
+    _.node(m l.node r.node) => l.0 <= m <= r.0 && validate(l) && validate(r)
 
 enum tree t:
-    leaf
-    node:
-        value t
-        left tree t
-        right tree t
+  leaf
+  node:
+    value t
+    left tree t
+    right tree t
 def validate t:
-    case t:
-        leaf: true
-        {value left.leaf right.leaf} => true
-        {value left.node right.leaf} => left.value <= value && validate(left)
-        {value left.leaf right.node} => value <= right.value && validate(right)
-        {value left.node right.node} => left.value <= value <= right.value && validate(left) && validate(right)
+  case t:
+    leaf: true
+    {value left.leaf right.leaf} => true
+    {value left.node right.leaf} => left.value <= value && validate(left)
+    {value left.leaf right.node} => value <= right.value && validate(right)
+    {value left.node right.node} => left.value <= value && value <= right.value && validate(left) && validate(right)
 ```
 
 
 - typed argument
 ```
 dec f int int
-def f a  : a      # int int
+def f a: a      # int int
 
 dec f float float float
 def f a b: a / b  # float float float
 
-dec t.num: t t t
+dec f t.num: t t t
 def f a b: a + b  # t.num => t t t
 
-dec f ref int
-def f a  : a += 1 # a = ref 1; f a; a == 2
+dec f t: list(t) t? t
+def f lst alt?: if lst.size == 0 alt.or(t()) lst[0] 
 ```
 
 - Core syntax

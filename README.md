@@ -36,22 +36,8 @@ Hello world
 ```
 
 ## Example: ToDo app
-Create from template
+You can copy the program below and create `main.moa`.
 ```
-$ moa new web
-├ main.moa
-└ public
-  ├ common.css
-  ├ common.js
-  ├ logo.png
-  ├ og.png
-  ├ apple-touch-icon.png
-  └ favicon.ico
-```
-
-See programs
-```
-$ cat src/main.moa
 record todo:
   title string
   memo  string
@@ -60,7 +46,7 @@ record scheme:
   todos list todo
 
 def main:
-  {method path post location html mount} <- io.http.listen
+  {method path post status location html} <- io.http.listen
   {todos} <- io.db scheme
   if:
     method == "post" && path == "/api/todos":
@@ -70,85 +56,77 @@ def main:
       todos.tie post("id").int post
       location path
     method == "get" && path == "/":
-      html html.index({req})
-    method == "get" && r"/todos/(?<id.int>\d+)".match(path) if todo=todos[id]:
-      html html.todo({req todo})
-    mount "./public"
-  
-package html
+      html template.index({todos})
+    method == "get" && r"/todos/(?<id.int>\d+)".match(path) && todo <- todos[id]:
+      html template.todo({todo})
+    status 404
 
-let index layout "title" "desc":
-  h1 | Example
-  - for todos todo =>
-    h2 a href=/todos/$todo.id $todo.title
-    form action=/todos method=post
+package template
+
+def index params:
+  render params:
+    $title = "List of TODOs"
+    h1 | Example
+    - for todos todo =>
+      h2 a href=/todos/$todo.id $todo.title
+      form action=/todos method=post
+        | Title
+        input type=text name=title
+        | Memo
+        textarea name=memo
+        button | Submit
+
+
+def todo params:
+  render params:
+    $title = todo.title
+    h1 | $todo.title
+    $todo.memo
+    form action=/todos/$todo.id method=post
       | Title
-      input type=text name=title
+      input type=text name=title value=$todo.title
       | Memo
-      textarea name=memo
-      button | Submit
+      textarea name=memo $todo.memo
+      button | Update
 
-let todo layout "title" "desc":
-  h1 | $todo.title
-  $todo.memo
-  form action=/todos/$todo.id method=post
-    | Title
-    input type=text name=title value=$todo.title
-    | Memo
-    textarea name=memo $todo.memo
-    button | Update
-
-def layout title desc @body.string:
-  library.template {title desc body}:
+def render params @body.string:
+  std.template params:
     doctype html
     html lang=ja
       head
         meta charset=utf-8
         title $title
-        meta name=viewport content=initial-scale=1,minimum-scale=1,width=device-width
-        meta name=description content=$desc
-        meta name=theme-color content=#0878C9
-        link rel=manifest href=/manifest.webmanifest
-        link rel=icon href=/favicon.ico
-        link rel=apple-touch-icon href=/apple-touch-icon.png
-        link rel=stylesheet href=/common.css
-        meta property=og:title content=$title
-        meta property=og:description content=$desc
-        meta property=og:type content=$(if req.path=="/" "website" "article")
-        meta property=og:url content=$req.url
-        meta property=og:image content=/og.png
-        meta property=og:site_name content="Todo site"
-        meta property=og:locale content=ja_JP
-        meta name=twitter:card content=summary
       body
         header
-          h1 a href=/ img src=/logo.png | Example Application
-        $body
+          h1 a href=/ | Example Application
+        $(std.template body)
         footer
           | &copy; example.com
-        script src=/common.js
 
 test t:
-  let {get post location contains} t.http
-  get "/":
+  let {get post header contains} t.http
+  def ok s:
     status 200
+    contains s
+  def location value:
+    status 301
+    header "location" value
+
+  get "/":
+    ok "example.com"
   get "/todos/1":
     status 404
   post "/todos" title="hello" memo="world":
-    status 301
     location "/"
   get "/todos/1":
-    status 200
-    contains "hello" "world"
+    ok "hello" "world"
   post "/todos" id=1 title="hello" memo="world":
-    status 301
     location "/"
   get "/todos/1":
-    status 200
-    contains "hello!" "world!"
+    ok "hello!" "world!"
 ```
 
-Access
+Execute the program, then you can access `http://localhost:8000` by your browser.
 ```
 $ moa run
 http://localhost:8000
@@ -159,11 +137,6 @@ Run test
 $ moa test
 ```
 
-Compile and deploy
-```
-$ moa deploy linux x86 8000 ssh://user@hostname:~/
-```
-
 
 
 ## Manual for moa command
@@ -172,10 +145,8 @@ Usage:
   moa <command> [arguments]
 
 The commands are:
-  moa                                     # launch REPL
-  moa build [os] [arch]                   # compile to executable file
-  moa deploy [os] [arch] [port] ssh://... # compile and deploy to server
-  moa new [platform]                      # make a project
-  moa run                                 # run the program
-  moa test [path] ...                     # run tests
+  moa                   # launch REPL
+  moa build [os] [arch] # compile to executable file
+  moa run               # run the program
+  moa test [path] ...   # run tests
 ```
