@@ -36,8 +36,9 @@ Hello world
 ```
 
 ## Example: ToDo app
-You can copy the program below and create `main.moa`.
+Create files below.
 ```
+# main.moa
 record todo:
   title string
   memo  string
@@ -56,16 +57,13 @@ def main:
       todos.tie post("id").int post
       location path
     method == "get" && path == "/":
-      html template.index({todos})
+      html index({todos})
     method == "get" && r"/todos/(?<id.int>\d+)".match(path) && todo <- todos[id]:
-      html template.todo({todo})
+      html todo({todo})
     status 404
 
-package template
-
-def index params:
-  render params:
-    $title = "List of TODOs"
+def index:
+  layout title="List of TODOs":
     h1 | Example
     - for todos todo =>
       h2 a href=/todos/$todo.id $todo.title
@@ -76,21 +74,20 @@ def index params:
         textarea name=memo
         button | Submit
 
+def todo:
+  std.template:
+    layout title=$todo.title:
+      h1 | $todo.title
+      $todo.memo
+      form action=/todos/$todo.id method=post
+        | Title
+        input type=text name=title value=$todo.title
+        | Memo
+        textarea name=memo $todo.memo
+        button | Update
 
-def todo params:
-  render params:
-    $title = todo.title
-    h1 | $todo.title
-    $todo.memo
-    form action=/todos/$todo.id method=post
-      | Title
-      input type=text name=title value=$todo.title
-      | Memo
-      textarea name=memo $todo.memo
-      button | Update
-
-def render params @body.string:
-  std.template params:
+def layout:
+  std.template:
     doctype html
     html lang=ja
       head
