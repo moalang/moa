@@ -62,38 +62,38 @@ def main:
     status 404
 
 let template lib.html5:
-  @index todos
-  layout `Todos ($todos.size)`:
-    - for todos todo =>
-      h2 a href=/todos/$todo.id $todo.title
-    form action=/todos method=post
-      | Title
-      input type=text name=title
-      | Memo
-      textarea name=memo
-      button | Submit
-  
-  @todo todo
-  layout todo.title:
-    h1 | $todo.title
-    pre $todo.memo
-    form action=/todos/$todo.id method=post
-      | Title
-      input type=text name=title value=$todo.title
-      | Memo
-      textarea name=memo $todo.memo
-      button | Update
-  
-  @layout title body
-  !doctype html
-  html lang=ja
-    head
-      meta charset=utf-8
-      title $title
-    body
-      header h1 a href=/ | Todo App
-      $$body
-      footer | &copy; example.com
+  index todos:
+    layout `Todos ($todos.size)`:
+      - for todos todo =>
+        h2 a href=/todos/$todo.id $todo.title
+      form action=/todos method=post
+        | Title
+        input type=text name=title
+        | Memo
+        textarea name=memo
+        button | Submit
+    
+  todo todo:
+    layout todo.title:
+      h1 | $todo.title
+      pre $todo.memo
+      form action=/todos/$todo.id method=post
+        | Title
+        input type=text name=title value=$todo.title
+        | Memo
+        textarea name=memo $todo.memo
+        button | Update
+    
+  layout title body:
+    !doctype html
+    html lang=ja
+      head
+        meta charset=utf-8
+        title $title
+      body
+        header h1 a href=/ | Todo App
+        $body
+        footer | &copy; example.com
 
 test t:
   let {get post} t.http
