@@ -129,7 +129,7 @@ def main:
       db.sessions.delete request.cookie(cookie_sid)
       location("/").cookie(cookie_sid "" ttl=0)
     public.has(path):
-      response.file path public
+      response.file path public headers=["cache-control","public, max-age=3600"]
     template.match(path):
       html template.dispatch({request user})
     notfound
