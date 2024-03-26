@@ -77,66 +77,61 @@ record scheme:
 
 def main:
   let template std.html5(io.file.cat("template/*.mt"))
-  let cookie_sid "sid"
   {request response} <- io.http.listen
   db <- io.db scheme
-  let user db.sessions.get(request.cookie(cookie_sid)).default
+  dispatch request response db template
 
-  def html body status=200:
-    let headers [
-      "cache-control","private, max-age=0"
-      "expires","-1"
-      "permissions-policy","unload=()"
-      "content-security-policy","default-src 'self'"
-      "cross-origin-opener-policy","same-origin"
-      "cross-origin-resource-policy","same-origin"
-      "cross-origin-embedder-policy","require-corp"
-      "x-content-type-options","nosniff"
-    ]
-    response.new status headers body
-
-  def location loc:
-    response.new 301 ["location",loc] ""
-
-  def notfound:
+def dispatch request response db template:
+  if:
+    mp == "post /api/signup"     : signup()
+    mp == "post /api/signin"     : signin()
+    mp == "post /api/todos"      : new_todo()
+    mp.starts("post /api/todos/"): update_todo()
+    mp == "get /signout"         : signout()
+    io.dir("public").exists(path): response.file path headers=["cache-control","public, max-age=3600"]
+    template.match(path)         : html template.dispatch({request user})
     html template.render.notfound({request}) status=404
-
-  def handle_post:
-    def start_session user loc:
+  with:
+    mp = request.method ++ " " ++ request.path
+    user = db.sessions.get(request.cookie(cookie_sid)).default
+    cookie_sid = "sid"
+    html body status=200:
+      let headers [
+        "cache-control","private, max-age=0"
+        "expires","-1"
+        "permissions-policy","unload=()"
+        "content-security-policy","default-src 'self'"
+        "cross-origin-opener-policy","same-origin"
+        "cross-origin-resource-policy","same-origin"
+        "cross-origin-embedder-policy","require-corp"
+        "x-content-type-options","nosniff"
+      ]
+      response.new status headers body
+    location loc:
+      response.new 301 ["location",loc] ""
+    start_session user loc:
       let sid io.rand.bytes(128).base64
       db.sessions.tie sid user
       location(loc).cookie(cookie_sid sid ttl=ttl_session) # by default, secure; httponly; samesite=lax; path=/
-    case request.path:
-    "/api/signup":
+    signup:
       let {email password} request.post
       guard db.users.find(u => u.email != email) location("/signup?error=existed")
       let u user(email std.bcrypt("password")
       db.users.push(u)
       start_session u "/"
-    "/api/signin":
+    signin:
       let {email password} request.post
       guard u = db.users.find(u => u.email == email && u.pwd.eq(password)) location("/signin?error=notfound")
       start_session u "/"
-    "/api/todos":
+    new_todo:
       user.todos.push {...request.post}
       location "/"
-    _ if request.path.starts("/api/todos/"):
+    update_todo:
       user.todos.update {...request.post}
       location "/"
-    _:
-      notfound
-
-  if:
-    request.method == "post":
-      handle_post
-    request.path == "/signout":
+    signout:
       db.sessions.delete request.cookie(cookie_sid)
       location("/").cookie(cookie_sid "" ttl=0)
-    io.dir("public").exists(path):
-      response.file path headers=["cache-control","public, max-age=3600"]
-    template.match(path):
-      html template.dispatch({request user})
-    notfound
 ```
 
 ```# test.moa
