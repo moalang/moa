@@ -13,14 +13,14 @@ exec $SHELL
 
 Hello World
 ```
-$ echo 'def main: pr "Hello World"' > main.moa
+$ echo 'main: pr "Hello World"' > main.moa
 $ moa run
 Hello World
 ```
 
 Compile
 ```
-$ echo 'def main: pr "Hello world"' > main.moa
+$ echo 'main: pr "Hello world"' > main.moa
 $ moa build
 $ ./a
 Hello world
@@ -60,84 +60,84 @@ You can see created files.
 ```
 
 ```# main.moa
-let ttl_session 90days
+ttl_session = 90days
 
 record scheme:
   sessions dict string ref(user) ttl=ttl_session
-  users list user unique=(u => u.email)
-  record user:
-    id     int
-    email  string
-    pwd    std.bcrypt
-    todos  list todo
-  record todo:
+  users dict string user
+  user
+    id    int
+    email string
+    pwd   std.bcrypt
+    todos list todo
+  todo
     id    int
     title string
     memo  string
 
-def main:
-  let template std.html5(io.file.cat("template/*.mt"))
-  {request response} <- io.http.listen
-  db <- io.db scheme
-  dispatch request response db template
-
-def dispatch request response db template:
-  if:
-    mp == "post /api/signup"     : signup()
-    mp == "post /api/signin"     : signin()
-    mp == "post /api/todos"      : new_todo()
-    mp.starts("post /api/todos/"): update_todo()
-    mp == "get /signout"         : signout()
-    io.dir("public").exists(path): response.file path headers=["cache-control","public, max-age=3600"]
-    template.match(path)         : html template.dispatch({request user})
-    html template.render.notfound({request}) status=404
-  with:
-    mp = request.method ++ " " ++ request.path
-    user = db.sessions.get(request.cookie(cookie_sid)).default
-    cookie_sid = "sid"
-    html body status=200:
-      let headers [
-        "cache-control","private, max-age=0"
-        "expires","-1"
-        "permissions-policy","unload=()"
-        "content-security-policy","default-src 'self'"
-        "cross-origin-opener-policy","same-origin"
-        "cross-origin-resource-policy","same-origin"
-        "cross-origin-embedder-policy","require-corp"
-        "x-content-type-options","nosniff"
-      ]
-      response.new status headers body
-    location loc:
-      response.new 301 ["location",loc] ""
-    start_session user loc:
-      let sid io.rand.bytes(128).base64
-      db.sessions.tie sid user
-      location(loc).cookie(cookie_sid sid ttl=ttl_session) # by default, secure; httponly; samesite=lax; path=/
-    signup:
-      let {email password} request.post
-      guard db.users.find(u => u.email != email) location("/signup?error=existed")
-      let u user(email std.bcrypt("password")
-      db.users.push(u)
-      start_session u "/"
-    signin:
-      let {email password} request.post
-      guard u = db.users.find(u => u.email == email && u.pwd.eq(password)) location("/signin?error=notfound")
-      start_session u "/"
-    new_todo:
-      user.todos.push {...request.post}
-      location "/"
-    update_todo:
-      user.todos.update {...request.post}
-      location "/"
-    signout:
-      db.sessions.delete request.cookie(cookie_sid)
-      location("/").cookie(cookie_sid "" ttl=0)
+main =
+  {request response} <- std.http.listen
+  db <- std.db(scheme)
+  | mp == "post /signup"          -> signup
+  | mp == "post /signin"          -> signin
+  | mp == "post /new/todo"        -> new_todo
+  | mp == "post /up/todo"         -> update_todo
+  | mp == "get /signout"          -> signout
+  | std.fs("public" path).exists  -> response.file(path headers=["cache-control","public, max-age=3600"])
+  | template.match(path)          -> html(template.dispatch({request user}))
+  | html(template.render.notfound({request}) status:404)
+with:
+  template
+    std.html5(std.fs.cat("template/*.mt"))
+  mp
+    request.method ++ " " ++ request.path
+  cookie_sid
+    "sid"
+  user
+    db.sessions.get(request.cookie(cookie_sid)).default
+  html body status:200
+    html_headers = [
+      "cache-control","private, max-age=0"
+      "expires","-1"
+      "permissions-policy","unload=()"
+      "content-security-policy","default-src 'self'"
+      "cross-origin-opener-policy","same-origin"
+      "cross-origin-resource-policy","same-origin"
+      "cross-origin-embedder-policy","require-corp"
+      "x-content-type-options","nosniff"
+    ]
+    response.new(status html_headers body)
+  location loc
+    response.new(301 ["location",loc] "")
+  start_session user loc
+    sid std.rand.bytes(128).base64
+    db.sessions.tie(sid user)
+    location(loc).cookie(cookie_sid sid ttl=ttl_session) # by default, secure; httponly; samesite=lax; path=/
+  signup
+    {email password} = request.post
+    guard !db.users.has(email) location("/signup?error=existed")
+    u = user(email std.bcrypt("password")
+    db.users.tie(email u)
+    start_session(u "/")
+  signin
+    {email password} = request.post
+    guard u:db.users.get(email).and(u => u.pwd.eq(password)) location("/signin?error=notfound")
+    start_session(u "/")
+  new_todo
+    user.todos.push({...request.post})
+    location("/")
+  update_todo
+    user.todos.update({...request.post})
+    location("/")
+  signout
+    db.sessions.delete(request.cookie(cookie_sid))
+    location("/").cookie(cookie_sid "" ttl=0)
 ```
 
 ```# test.moa
 test t:
   db <- t.db scheme
-  let b t.browse "/"
+  b = t.browse "/"
   b.a.signup
   b.form.signup {email="foo@example.com" memo="bar"}
   b.a.new
@@ -147,7 +147,7 @@ test t:
   t.browse b.url r => t.eq 404 r.status
 
   t.eq 1 db.users.size
-  let user db.users.0
+  user = db.users.0
   t.eq "foo@example.com" user.email
   t.eq true user.pwd.eq("bar")
   t.eq [{id=0 title="Hello" memo="world"}] user.todos
@@ -168,7 +168,7 @@ test t:
 
 /todos
   layout("New Todo")
-    form@new action=/api/todos method=post
+    form@new action=/new/todo method=post
       | Title
       input type=text name=title
       | Memo
@@ -180,7 +180,7 @@ test t:
   layout(todo.title)
     h1 | $todo.title
     pre $todo.memo
-    form@update action=/api/todos/$todo.id method=post
+    form@update action=/up/todo method=post
       input type=hidden name=id value=$todo.id
       | Title
       input type=text name=title value=$todo.title
@@ -192,7 +192,7 @@ test t:
   layout("Signin")
     - if get("error")
       p | Failed to signin
-    form@signin action=/api/signin method=post
+    form@signin action=/signin method=post
       | Email
       input type=text name=email
       | Password
@@ -203,7 +203,7 @@ test t:
   layout("Signup")
     - if get("error")
       p | Email already registered
-    form@signup action=/api/signup method=post
+    form@signup action=/signup method=post
       | Email
       input type=text name=email
       | Password
@@ -240,7 +240,7 @@ layout title body
     body
       header
         h1 a href=/ | Todo App
-        a@signout href=/api/signout | Signout
+        a@signout href=/signout | Signout
       $body
       footer | &copy; example.com
 ```

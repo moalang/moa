@@ -1,10 +1,21 @@
 # Syntax
 ```
-top: line*
-line: exp+ (":" block)?
-block: (("\n  " line)+ | line)
+top: def | exp+
+def: id id+ exp
 exp:
-| (id | "(" id+ ")") "=>" exp | block
+| id ("," id+ )* "=>" exp | block
+| op1? atom (op2 exp)?
+| ":" block
+block: ("\n  " line)+ | line
+
+
+func: id arg* ":" exp+ | block
+declare: id+ "::" arg+ type
+struct: id+ "::" ("\n  " id exp)+
+enum: id+ ":|" ("\n  " id exp)+
+block: ("\n  " line)+ | line
+exp:
+| id ("," id+ )* "=>" exp | block
 | op1? atom (op2 exp)?
 atom: bottom (prop | call | index | slice)*
 prop: "." (id | [0-9]+)
@@ -21,6 +32,14 @@ bottom:
 op1: [!-] | ".."
 op2: [+-*/%<>|&^~=!]+ | ","
 id: [A-Za-z_][A-Za-z0-9_]*
+arg:
+| id
+| id "?"
+| id "=" exp
+type:
+| id ("[" type+ "]")?
+| "(" type+ ")"
+| "[" type+ "]"
 ```
 
 Key word
@@ -40,29 +59,18 @@ list
 dict
 set
 
-fn
 num
 ref
-serial
-stream
+io
 
-def
-dec
-let
-var
-record
-enum
 interface
 extern
 
-if
-case
 throw
 catch
 
 true
 false
-io
 std
 
 reserved: use module decimal array duration i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64

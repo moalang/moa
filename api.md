@@ -1,11 +1,10 @@
 # global
-- [ ] true         :: bool
-- [ ] false        :: bool
-- [ ] def a        :: ... (... a)
-- [ ] throw a b    :: a b
-- [ ] catch a      :: fn[error a] a
-- [ ] if a         :: ...[bool a] a
-- [ ] case a b     :: a ...[a b] b
+- [ ] true      :: bool
+- [ ] false     :: bool
+- [ ] throw a b :: a b
+- [ ] catch a   :: (error a) a
+- [ ] pr        :: a ... a
+- [ ] assert    :: a a void
 
 # num a
 - [ ] + - * ** / % | & ^ :: a a a
@@ -25,7 +24,7 @@
 - [ ] reverse :: string
 - [ ] slice   :: int int? string
 - [ ] split   :: string int? list[string]
-- [ ] index   :: string option[int]
+- [ ] index   :: string opt[int]
 - [ ] replace :: string string string
 - [ ] trim    :: string
 - [ ] starts  :: string bool
@@ -37,7 +36,7 @@
 - [ ] match   :: string bool
 - [ ] capture :: string list[string]
 - [ ] split   :: string list[string]
-- [ ] replace :: string fn[list[string] string] string
+- [ ] replace :: string (list[string] string) string
 
 # lambda[a b ...]
 - [ ]
@@ -45,24 +44,24 @@
 # list[a]
 - [ ] ++ a    :: list[a] list[a]
 - [ ] size    :: int
-- [ ] get     :: int option[a]
+- [ ] get     :: int opt[a]
 - [ ] set     :: int a bool
 - [ ] at      :: int a @error
 - [ ] tie     :: int a a @error
 - [ ] push    :: a a
-- [ ] map b   :: fn[a b] list[b]
-- [ ] mapi b  :: fn[a int b] list[b]
-- [ ] fmap b  :: fn[a list[b]] list[b]
-- [ ] keep    :: fn[a bool] list[a]
-- [ ] all     :: fn[a bool] bool
-- [ ] any     :: fn[a bool] bool
+- [ ] map b   :: (a b) list[b]
+- [ ] mapi b  :: (a int b) list[b]
+- [ ] fmap b  :: (a list[b]) list[b]
+- [ ] keep    :: (a bool) list[a]
+- [ ] all     :: (a bool) bool
+- [ ] any     :: (a bool) bool
 - [ ] slice   :: int int? list[a]
-- [ ] sort    :: fn[a a bool]? list[a]
+- [ ] sort    :: (a a bool)? list[a]
 - [ ] reverse :: list[a]
 - [ ] zip b   :: list[b] list[tuple[a b]]
-- [ ] fold b  :: b fn[a b b] b
-- [ ] find    :: fn[a bool] option[a]
-- [ ] index   :: fn[a bool] option[int]
+- [ ] fold b  :: b (a b b) b
+- [ ] find    :: (a bool) opt[a]
+- [ ] index   :: (a bool) opt[int]
 - [ ] join    :: string string
 - [ ] has     :: a bool
 - [ ] min     :: a
@@ -70,7 +69,7 @@
 
 # dict[k v]
 - [ ] size   :: int
-- [ ] get    :: k option[v]
+- [ ] get    :: k opt[v]
 - [ ] set    :: k v bool
 - [ ] has    :: k bool
 - [ ] keys   :: list[k]
@@ -94,7 +93,6 @@
 - ...
 
 # struct
-[ ]
 
 # time
 - [ ] year, month, day, hour, min, sec, wday, yday, offset :: int
@@ -103,114 +101,91 @@
 - [ ] string :: string
 - [ ] tick   :: int time
 
-# shell
-- [ ] result :: string @error
+# bytes
+- [ ] size   :: int
+- [ ] at     :: int a @error
+- [ ] tie    :: int a a @error
+- [ ] slice  :: int int? bytes
+- [ ] fill a :: a int? int? bytes @error
+- [ ] tr     :: string string
+- [ ] io     :: io
+
 
 # ---( standard module )-------------------------------
 
-# log
-- [ ] :: a ... a
-
-# assert
-- [ ] :: a a void
-
-# io
+# std
 - [ ] argv       :: list[string]
+- [ ] db t u     :: (t u) u
 - [-] env        :: string string
 - [-] now        :: time
-- [ ] fs         :: fs
+- [ ] fs         :: string string std.fs
 - [-] rand       :: rand
-- [ ] shell      :: string ...string shell
-- [ ] puts       :: ... void
-- [ ] print      :: ... void
-- [-] stdin      :: stream
-- [-] stdout     :: stream
-- [-] stderr     :: stream
+- [ ] shell      :: string ...string bytes @error
+- [-] http       :: http
+- [-] stdin      :: io
+- [-] stdout     :: io
+- [-] stderr     :: io
 
-# rand
+# std.fs
+- [ ] path    :: string
+- [ ] open t  :: string? (io t) a @error
+- [ ] read    :: bytes @error
+- [ ] reads   :: string @error
+- [ ] write   :: ... int @error
+- [ ] append  :: ... int @error
+- [ ] rm      :: bool @error
+- [ ] exists  :: bool @error
+- [ ] glob    :: list[std.fs]
+
+# std.http
+- [ ] listen (http.request http.response) _ @error
+- [ ] call string {method.string="get" headers.list[tuple[string list[string]]]=[] body.bytes=[]} http.response
+- [ ] request
+      method  :: string
+      path    :: string
+      has     :: string bool
+      header  :: string string
+      headers :: string list[string]
+      get     :: string string
+      gets    :: string list[string]
+      post    :: string string
+      posts   :: string list[string]
+      body    :: bytes
+- [ ] response
+      status  :: int
+      has     :: string bool
+      header  :: string string
+      headers :: list[tuple[string string]]
+      body    :: bytes
+
+# std.rand
 - [-] int        :: int? int? int
 - [-] float      :: float? float? float
 - [-] bytes      :: int bytes
 
-# fs
-- [-] open t  :: string string? fn[stream t] a @error
-- [-] read    :: string bytes @error
-- [ ] reads   :: string string @error
-- [ ] write   :: string ...serial int @error
-- [ ] rm      :: string bool @error
-- [-] append  :: string ...serial int @error
-
-# stream
+# std.io
 - [ ] offset           :: int
-- [ ] seek             :: int stream @error
+- [ ] seek             :: int io @error
 - [ ] read             :: int? bytes @error
-- [ ] write            :: ...serial int @error
+- [ ] write            :: ... int @error
 - [ ] deserialize a    :: a @error
-- [ ] flush            :: ...serial int @error
+- [ ] flush            :: ... int @error
 - [ ] close            :: bool @error
 - [ ] closed           :: bool
 - [ ] peek             :: bytes
-- [ ] le               :: stream
-- [ ] be               :: stream
+- [ ] le               :: io
+- [ ] be               :: io
 - [ ] i8,i16,i32,i64   :: i8,i16,i32,i64 @error
 - [ ] u8,u16,u32,u64   :: u8,u16,u32,u64 @error
 - [ ] f32,f64          :: f32,f64        @error
 - [ ] utf8             :: string @error
 - [ ] decode           :: string string @error
 
-# bytes
-- [ ] size             :: int
-- [ ] at               :: int a @error
-- [ ] tie              :: int a a @error
-- [ ] slice            :: int int? bytes
-- [ ] fill a           :: a int? int? bytes @error
-- [ ] tr               :: string string
-- [ ] stream           :: stream
-
-# serial
-- [ ] serialize :: fn[serial void] void @error
-- [ ] int.serial
-- [ ] float.serial
-- [ ] string.serial
-- [ ] time.serial
-- [ ] tuple.serial
-- [ ] struct.serial
-- [ ] list.serial
-- [ ] set.serial
-- [ ] dict.serial
-- [ ] stream.serial
-- [ ] bytes.serial
-- [ ] option.serial
-- [ ] regexp.serial
-
-# ---( pending )---------------------------------------
-# io
-- [ ] database t u :: (t u) u
-- [ ] http:
-- [ ]   listen (http.request http.response) _
-- [ ]   call string {method.string="get" headers.list[tuple[string list[string]]]=[] body.bytes=[]} http.response
-- [ ]   get url option.. = call url {method="get" option..}
-- [ ]   post url option.. = call url {method="post" option..}
-- [ ]   request:
-        method  :: string
-        path    :: string
-        header  :: string string
-        headers :: string list[string]
-        get     :: string string
-        gets    :: string list[string]
-        post    :: string string
-        posts   :: string list[string]
-        body    :: bytes
-- [ ]   response:
-        status  :: int
-        headers :: list[tuple[string string]]
-        body    :: bytes
-
-# bcrypt
+# std.bcrypt
 - [ ] encrypt :: string
 - [ ] eq      :: string string bool
 
-# math
+# std.math
 - [ ] acos acosh asin asinh atan atan2 atanh cbrt cos cosh erf erfc exp gamma log log10 log2 sin sinh sqrt tan tanh :: float float
 - [ ] e, pi, inf, nan :: float
 - [ ] hypot, logn :: float float float
