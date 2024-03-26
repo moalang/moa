@@ -13,14 +13,14 @@ exec $SHELL
 
 Hello World
 ```
-$ echo 'def main: io.puts "Hello World"' > main.moa
+$ echo 'def main: pr "Hello World"' > main.moa
 $ moa run
 Hello World
 ```
 
 Compile
 ```
-$ echo 'def main: io.puts "Hello world"' > main.moa
+$ echo 'def main: pr "Hello world"' > main.moa
 $ moa build
 $ ./a
 Hello world
@@ -43,7 +43,7 @@ $ tree .
 ┣.gitignore
 ┣main.moa
 ┣test.moa
-┣resource/
+┣template/
 ┃ ┣route.mt
 ┃ ┗common.mt
 ┗public/
@@ -55,7 +55,7 @@ $ tree .
 
 You can see created files.
 ```# .gitignore
-/app
+/a
 /*.mdb
 ```
 
@@ -76,12 +76,12 @@ record scheme:
     memo  string
 
 def main:
-  let public @io.mount("public")
-  let template @std.html5(io.file.cat("template/*.mt"))
+  let template std.html5(io.file.cat("template/*.mt"))
   let cookie_sid = "sid"
   {request response} <- io.http.listen
   db <- io.db scheme
   let user db.sessions.get(request.cookie(cookie_sid)).default
+
   def html body status=200:
     let headers = [
       "cache-control","private, max-age=0"
@@ -94,10 +94,13 @@ def main:
       "x-content-type-options","nosniff"
     ]
     response.new status headers body
+
   def location loc:
     response.new 301 ["location",loc] ""
+
   def notfound:
     html template.render.notfound({request}) status=404
+
   def handle_post:
     def start_session user loc:
       let sid = io.rand.bytes(128).base64
@@ -122,14 +125,15 @@ def main:
       location "/"
     _:
       notfound
+
   if:
     request.method == "post":
       handle_post
     request.path == "/signout":
       db.sessions.delete request.cookie(cookie_sid)
       location("/").cookie(cookie_sid "" ttl=0)
-    public.has(path):
-      response.file path public headers=["cache-control","public, max-age=3600"]
+    io.dir("public").exists(path):
+      response.file path headers=["cache-control","public, max-age=3600"]
     template.match(path):
       html template.dispatch({request user})
     notfound
@@ -154,9 +158,9 @@ test t:
   t.eq [{id=0 title="Hello" memo="world"}] user.todos
 ```
 
-```# route.t
+```# route.mt
 /
-  layout(`Todos ($user.todos.size)`):
+  layout(`Todos ($user.todos.size)`)
     a@new href=/todo | New Todo
     - if user:
       h2 "Todos"
@@ -168,7 +172,7 @@ test t:
       a@signup href=/signup | Signup
 
 /todos
-  layout("New Todo"):
+  layout("New Todo")
     form@new action=/api/todos method=post
       | Title
       input type=text name=title
@@ -178,7 +182,7 @@ test t:
 
 /todos/:id.int
   - guard todo = user.todos.get(id) notfound
-  layout(todo.title):
+  layout(todo.title)
     h1 | $todo.title
     pre $todo.memo
     form@update action=/api/todos/$todo.id method=post
@@ -190,7 +194,7 @@ test t:
       button | Update
 
 /signin
-  layout("Signin"):
+  layout("Signin")
     - if get("error")
       p | Failed to signin
     form@signin action=/api/signin method=post
@@ -201,7 +205,7 @@ test t:
       button | Signin
 
 /signup
-  layout("Signup"):
+  layout("Signup")
     - if get("error")
       p | Email already registered
     form@signup action=/api/signup method=post
@@ -212,27 +216,29 @@ test t:
       button | Signup
 ```
 
-```# common.t
+```# common.mt
 notfound
-  layout("Not found"):
+  layout("Not found")
     | Not found content.
     a href=/ | Back to top
 
 layout title body
+  - description ||= "Example of Moa programming language"
   !doctype html
   html lang=ja
     head
       meta charset=utf-8
       title $title
+      meta name=viewport content=width=device-width,initial-scale=1,shrink-to-fit=no,viewport-fit=cover
       link rel=icon type=image/svg+xml href=/favicon.svg
       link rel=apple-touch-icon type=image/png href=apple-touch-icon.png sizes=180x180
-      meta name=viewport content=width=device-width,initial-scale=1,shrink-to-fit=no,viewport-fit=cover
       meta name=theme-color content=#ffffff
+      meta name=description content=$description
       meta property=og:image content=$request.origin/og.png
       meta property=og:locale content=ja_JP
       meta property=og:site_name content="Moa Todo App"
-      meta property=og:title content="Moa Todo App - Example"
-      meta property=og:description content="Example of Moa programming language"
+      meta property=og:title content=$title
+      meta property=og:description content=$description
       meta property=og:url content=$request.url
       meta property=og:type content=website
       meta name=twitter:card content=summary_large_image
