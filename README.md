@@ -60,7 +60,7 @@ You can see created files.
 ```
 
 ```# main.moa
-let ttl_session = 90days
+let ttl_session 90days
 
 record scheme:
   sessions dict string ref(user) ttl=ttl_session
@@ -77,13 +77,13 @@ record scheme:
 
 def main:
   let template std.html5(io.file.cat("template/*.mt"))
-  let cookie_sid = "sid"
+  let cookie_sid "sid"
   {request response} <- io.http.listen
   db <- io.db scheme
   let user db.sessions.get(request.cookie(cookie_sid)).default
 
   def html body status=200:
-    let headers = [
+    let headers [
       "cache-control","private, max-age=0"
       "expires","-1"
       "permissions-policy","unload=()"
@@ -103,18 +103,18 @@ def main:
 
   def handle_post:
     def start_session user loc:
-      let sid = io.rand.bytes(128).base64
+      let sid io.rand.bytes(128).base64
       db.sessions.tie sid user
       location(loc).cookie(cookie_sid sid ttl=ttl_session) # by default, secure; httponly; samesite=lax; path=/
-    case request.method:
+    case request.path:
     "/api/signup":
-      let {email password} = request.post
+      let {email password} request.post
       guard db.users.find(u => u.email != email) location("/signup?error=existed")
       let u user(email std.bcrypt("password")
       db.users.push(u)
       start_session u "/"
     "/api/signin":
-      let {email password} = request.post
+      let {email password} request.post
       guard u = db.users.find(u => u.email == email && u.pwd.eq(password)) location("/signin?error=notfound")
       start_session u "/"
     "/api/todos":
