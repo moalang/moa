@@ -4,14 +4,14 @@
 - [ ] throw a b :: a b
 - [ ] catch a   :: (error a) a
 - [ ] pr        :: a ... a
-- [ ] assert    :: a a void
+- [ ] assert    :: bool void
 
 # num a
 - [ ] + - * ** / % | & ^ :: a a a
 - [ ] abs, neg :: a
 
 # int.num
-- [ ] char   :: string
+- [ ] char :: string
 
 # float.num
 - [ ] floor  :: int
@@ -30,7 +30,7 @@
 - [ ] starts  :: string bool
 - [ ] ends    :: string bool
 - [ ] has     :: string bool
-- [ ] encode  :: string string? bytes @error
+- [ ] encode  :: string string? opt[bytes]
 
 # regexp
 - [ ] match   :: string bool
@@ -46,8 +46,8 @@
 - [ ] size    :: int
 - [ ] get     :: int opt[a]
 - [ ] set     :: int a bool
-- [ ] at      :: int a @error
-- [ ] tie     :: int a a @error
+- [ ] at      :: int opt[a]
+- [ ] tie     :: int a opt[a]
 - [ ] push    :: a a
 - [ ] map b   :: (a b) list[b]
 - [ ] mapi b  :: (a int b) list[b]
@@ -93,6 +93,7 @@
 - ...
 
 # struct
+- [ ]
 
 # time
 - [ ] year, month, day, hour, min, sec, wday, yday, offset :: int
@@ -103,42 +104,40 @@
 
 # bytes
 - [ ] size   :: int
-- [ ] at     :: int a @error
-- [ ] tie    :: int a a @error
+- [ ] at     :: int opt[a]
+- [ ] tie    :: int a opt[a]
 - [ ] slice  :: int int? bytes
-- [ ] fill a :: a int? int? bytes @error
+- [ ] fill a :: a int? int? opt[bytes]
 - [ ] tr     :: string string
 - [ ] io     :: io
 
-
-# ---( standard module )-------------------------------
-
 # std
 - [ ] argv       :: list[string]
+- [ ] env        :: string string
+- [ ] now        :: time
+- [ ] rand       :: rand
 - [ ] db t u     :: (t u) u
-- [-] env        :: string string
-- [-] now        :: time
-- [ ] fs         :: string string std.fs
-- [-] rand       :: rand
-- [ ] shell      :: string ...string bytes @error
-- [-] http       :: http
-- [-] stdin      :: io
-- [-] stdout     :: io
-- [-] stderr     :: io
+- [ ] fs         :: string? std.fs
+- [ ] shell      :: string ...string opt[bytes]
+- [ ] http       :: http
+- [ ] stdin      :: io
+- [ ] stdout     :: io
+- [ ] stderr     :: io
 
 # std.fs
 - [ ] path    :: string
-- [ ] open t  :: string? (io t) a @error
-- [ ] read    :: bytes @error
-- [ ] reads   :: string @error
-- [ ] write   :: ... int @error
-- [ ] append  :: ... int @error
-- [ ] rm      :: bool @error
-- [ ] exists  :: bool @error
+- [ ] cd      :: string std.fs
+- [ ] open t  :: string? (io t) opt[a]
+- [ ] read    :: opt[bytes]
+- [ ] reads   :: opt[string]
+- [ ] write   :: ... opt[int]
+- [ ] append  :: ... opt[int]
+- [ ] rm      :: opt[bool]
+- [ ] exists  :: opt[bool]
 - [ ] glob    :: list[std.fs]
 
 # std.http
-- [ ] listen (http.request http.response) _ @error
+- [ ] listen (http.request http.response) opt[_]
 - [ ] call string {method.string="get" headers.list[tuple[string list[string]]]=[] body.bytes=[]} http.response
 - [ ] request
       method  :: string
@@ -155,35 +154,42 @@
       status  :: int
       has     :: string bool
       header  :: string string
-      headers :: list[tuple[string string]]
+      headers :: string list[string]
       body    :: bytes
 
 # std.rand
-- [-] int        :: int? int? int
-- [-] float      :: float? float? float
-- [-] bytes      :: int bytes
+- [ ] int   :: int? int? int
+- [ ] float :: float? float? float
+- [ ] bytes :: int bytes
 
 # std.io
-- [ ] offset           :: int
-- [ ] seek             :: int io @error
-- [ ] read             :: int? bytes @error
-- [ ] write            :: ... int @error
-- [ ] deserialize a    :: a @error
-- [ ] flush            :: ... int @error
-- [ ] close            :: bool @error
-- [ ] closed           :: bool
-- [ ] peek             :: bytes
-- [ ] le               :: io
-- [ ] be               :: io
-- [ ] i8,i16,i32,i64   :: i8,i16,i32,i64 @error
-- [ ] u8,u16,u32,u64   :: u8,u16,u32,u64 @error
-- [ ] f32,f64          :: f32,f64        @error
-- [ ] utf8             :: string @error
-- [ ] decode           :: string string @error
+- [ ] offset :: int
+- [ ] seek   :: int opt[io]
+- [ ] read   :: int? opt[bytes]
+- [ ] write  :: ... opt[int]
+- [ ] flush  :: ... opt[int]
+- [ ] close  :: opt[bool]
+- [ ] closed :: bool
+- [ ] peek   :: bytes
+- [ ] le     :: io
+- [ ] be     :: io
+- [ ] i8     :: opt[i8]
+- [ ] i16    :: opt[i16]
+- [ ] i32    :: opt[i32]
+- [ ] i64    :: opt[i64]
+- [ ] u8     :: opt[u8]
+- [ ] u16    :: opt[u16]
+- [ ] u32    :: opt[u32]
+- [ ] u64    :: opt[u64]
+- [ ] f32    :: opt[f32]
+- [ ] f64    :: opt[f64]
+- [ ] utf8   :: opt[string]
+- [ ] utf16  :: opt[string]
+- [ ] decode :: string opt[string]
 
 # std.bcrypt
-- [ ] encrypt :: string
-- [ ] eq      :: string string bool
+- [ ] :: string std.bcrypt
+- [ ] eq :: string string bool
 
 # std.math
 - [ ] acos acosh asin asinh atan atan2 atanh cbrt cos cosh erf erfc exp gamma log log10 log2 sin sinh sqrt tan tanh :: float float

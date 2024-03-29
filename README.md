@@ -60,11 +60,12 @@ You can see created files.
 ```
 
 ```# main.moa
-ttl_session = 90days
+let ttl_session 90days
 
-record scheme:
-  sessions dict string ref(user) ttl=ttl_session
-  users dict string user
+record:
+  scheme
+    sessions dict string ref(user) ttl=ttl_session
+    users    dict string user
   user
     id    int
     email string
@@ -75,18 +76,18 @@ record scheme:
     title string
     memo  string
 
-main =
+def main:
   {request response} <- std.http.listen
   db <- std.db(scheme)
-  | mp == "post /signup"          -> signup
-  | mp == "post /signin"          -> signin
-  | mp == "post /new/todo"        -> new_todo
-  | mp == "post /up/todo"         -> update_todo
-  | mp == "get /signout"          -> signout
-  | std.fs("public" path).exists  -> response.file(path headers=["cache-control","public, max-age=3600"])
-  | template.match(path)          -> html(template.dispatch({request user}))
+  | mp == "post /signup"         : signup
+  | mp == "post /signin"         : signin
+  | mp == "post /new/todo"       : new_todo
+  | mp == "post /up/todo"        : update_todo
+  | mp == "get /signout"         : signout
+  | std.fs("public").exists(path): response.file(path headers=["cache-control","public, max-age=3600"])
+  | template.match(path)         : html(template.dispatch({request user}))
   | html(template.render.notfound({request}) status:404)
-with:
+helper:
   template
     std.html5(std.fs.cat("template/*.mt"))
   mp
