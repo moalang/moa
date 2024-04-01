@@ -1,18 +1,7 @@
 # Syntax
 ```
-top: def | exp+
-def: id id+ exp
-exp:
-| id ("," id+ )* "=>" exp | block
-| op1? atom (op2 exp)?
-| ":" block
-block: ("\n  " line)+ | line
-
-
-func: id arg* ":" exp+ | block
-declare: id+ "::" arg+ type
-struct: id+ "::" ("\n  " id exp)+
-enum: id+ ":|" ("\n  " id exp)+
+top: line+
+line: exp+ (":" block)?
 block: ("\n  " line)+ | line
 exp:
 | id ("," id+ )* "=>" exp | block
@@ -32,14 +21,6 @@ bottom:
 op1: [!-] | ".."
 op2: [+-*/%<>|&^~=!]+ | ","
 id: [A-Za-z_][A-Za-z0-9_]*
-arg:
-| id
-| id "?"
-| id "=" exp
-type:
-| id ("[" type+ "]")?
-| "(" type+ ")"
-| "[" type+ "]"
 ```
 
 Key word
@@ -63,6 +44,10 @@ num
 ref
 io
 
+def
+dec
+record
+enum
 interface
 extern
 
@@ -133,7 +118,7 @@ def f ...a,: a.max.1   # f(), f(1 "a"), f(1 "a" 2 "b")
 
 - Pass through
 ```
-def show ...a: print ...a
+def show ...a: print(...a)
 ```
 
 - Named argument
@@ -208,29 +193,4 @@ def f a b: a + b  # t.num => t t t
 
 dec f t: list(t) t? t
 def f lst alt?: if lst.size == 0 alt.or(t()) lst[0] 
-```
-
-- Core syntax
-```
-top: list | atom
-list: "(" top* ")"
-atom: id | num | string | op
-id: [_A-Za-z][0-9_A-Za-z]*
-num: "-"? [0-9] ("." [0-9])?
-string: '"' [^"]* '"'
-op: [-+*/%|&<>!=^~]+ | ":="
-```
-
-- Syntax sugar
-```
-a b        # 50%: (a b)
-a.b        # 60%: (. a b)
-a.b c d    # 55%: ((. a b) c d)
-a.b(c d)   # 77%: ((. a b) c d)
-a + b      # 60%: (+ a b)
-a: b       # 50%: (a (b))
-a b: c d   # 62%: (a b (c d))
-a:         # 52%: (a (b (c d)))
-  b
-  c d
 ```
