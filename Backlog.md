@@ -7,7 +7,7 @@
 - Allow by default
 
 # Backlog
-- [ ] Define syntax
+- [x] Define syntax
 - [ ] Compile to executable file via go
 - [ ] Type inference
 - [ ] REPL
