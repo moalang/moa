@@ -23,7 +23,7 @@
 - [ ] size    :: int
 - [ ] reverse :: string
 - [ ] slice   :: int int? string
-- [ ] split   :: string int? list[string]
+- [ ] split   :: string int? array[string]
 - [ ] index   :: string opt[int]
 - [ ] replace :: string string string
 - [ ] trim    :: string
@@ -34,31 +34,31 @@
 
 # regexp
 - [ ] match   :: string bool
-- [ ] capture :: string list[string]
-- [ ] split   :: string list[string]
-- [ ] replace :: string (list[string] string) string
+- [ ] capture :: string array[string]
+- [ ] split   :: string array[string]
+- [ ] replace :: string (array[string] string) string
 
 # lambda[a b ...]
 - [ ]
 
-# list[a]
-- [ ] ++ a    :: list[a] list[a]
+# array[a]
+- [ ] ++ a    :: array[a] array[a]
 - [ ] size    :: int
 - [ ] get     :: int opt[a]
 - [ ] set     :: int a bool
 - [ ] at      :: int opt[a]
 - [ ] tie     :: int a opt[a]
 - [ ] push    :: a a
-- [ ] map b   :: (a b) list[b]
-- [ ] mapi b  :: (a int b) list[b]
-- [ ] fmap b  :: (a list[b]) list[b]
-- [ ] keep    :: (a bool) list[a]
+- [ ] map b   :: (a b) array[b]
+- [ ] mapi b  :: (a int b) array[b]
+- [ ] fmap b  :: (a array[b]) array[b]
+- [ ] keep    :: (a bool) array[a]
 - [ ] all     :: (a bool) bool
 - [ ] any     :: (a bool) bool
-- [ ] slice   :: int int? list[a]
-- [ ] sort    :: (a a bool)? list[a]
-- [ ] reverse :: list[a]
-- [ ] zip b   :: list[b] list[tuple[a b]]
+- [ ] slice   :: int int? array[a]
+- [ ] sort    :: (a a bool)? array[a]
+- [ ] reverse :: array[a]
+- [ ] zip b   :: array[b] array[tuple[a b]]
 - [ ] fold b  :: b (a b b) b
 - [ ] find    :: (a bool) opt[a]
 - [ ] index   :: (a bool) opt[int]
@@ -72,9 +72,9 @@
 - [ ] get    :: k opt[v]
 - [ ] set    :: k v bool
 - [ ] has    :: k bool
-- [ ] keys   :: list[k]
-- [ ] values :: list[v]
-- [ ] list   :: list[tuple[k v]]
+- [ ] keys   :: array[k]
+- [ ] values :: array[v]
+- [ ] array   :: array[tuple[k v]]
 
 # set[a]
 - [ ] size   :: int
@@ -85,7 +85,7 @@
 - [ ] has    :: a bool
 - [ ] add    :: a bool
 - [ ] rid    :: a bool
-- [ ] list   :: list[a]
+- [ ] array   :: array[a]
 
 # tuple[a b ...]
 - [ ] 0 :: a
@@ -112,7 +112,7 @@
 - [ ] io     :: io
 
 # std
-- [ ] argv       :: list[string]
+- [ ] argv       :: array[string]
 - [ ] env        :: string string
 - [ ] now        :: time
 - [ ] rand       :: rand
@@ -134,27 +134,27 @@
 - [ ] append  :: ... opt[int]
 - [ ] rm      :: opt[bool]
 - [ ] exists  :: opt[bool]
-- [ ] glob    :: list[std.fs]
+- [ ] glob    :: array[std.fs]
 
 # std.http
-- [ ] listen (http.request http.response) opt[_]
-- [ ] call string {method.string="get" headers.list[tuple[string list[string]]]=[] body.bytes=[]} http.response
+- [ ] arrayen (http.request http.response) opt[_]
+- [ ] call string {method.string="get" headers.array[tuple[string array[string]]]=[] body.bytes=[]} http.response
 - [ ] request
       method  :: string
       path    :: string
       has     :: string bool
       header  :: string string
-      headers :: string list[string]
+      headers :: string array[string]
       get     :: string string
-      gets    :: string list[string]
+      gets    :: string array[string]
       post    :: string string
-      posts   :: string list[string]
+      posts   :: string array[string]
       body    :: bytes
 - [ ] response
       status  :: int
       has     :: string bool
       header  :: string string
-      headers :: string list[string]
+      headers :: string array[string]
       body    :: bytes
 
 # std.rand

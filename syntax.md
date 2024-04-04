@@ -36,7 +36,7 @@ bytes
 
 tuple
 struct
-list
+array
 dict
 set
 
@@ -69,7 +69,7 @@ _                part of id
 "                string
 #                comment
 ( )              priority
-[ ]              list?
+[ ]              array?
 { }              struct?
 ! -              singular operator
 && ||            boolean operator
@@ -143,7 +143,7 @@ pattern: matcher ("if" exp) "=>" block
 matcher:
 | '"' [^"]* '"'                 # string
 | "-"? [0-9]+ ("." [0-9]+)?     # number
-| "[" matcher* ("..." id?)? "]" # list
+| "[" matcher* ("..." id?)? "]" # array
 | "{" capture+ "}"              # struct
 | capture
 capture:
@@ -159,10 +159,10 @@ enum tree t:
 def validate t:
   case t:
     leaf: true
-    _.node(m _.leaf _.leaf) => true
-    _.node(m l.node _.leaf) => l.0 <= m
-    _.node(m _.leaf r.leaf) => m <= r.0
-    _.node(m l.node r.node) => l.0 <= m <= r.0 && validate(l) && validate(r)
+    _.node(m _.leaf _.leaf): true
+    _.node(m l.node _.leaf): l.0 <= m
+    _.node(m _.leaf r.leaf): m <= r.0
+    _.node(m l.node r.node): l.0 <= m <= r.0 && validate(l) && validate(r)
 
 enum tree t:
   leaf
@@ -173,10 +173,10 @@ enum tree t:
 def validate t:
   case t:
     leaf: true
-    {value left.leaf right.leaf} => true
-    {value left.node right.leaf} => left.value <= value && validate(left)
-    {value left.leaf right.node} => value <= right.value && validate(right)
-    {value left.node right.node} => left.value <= value && value <= right.value && validate(left) && validate(right)
+    {value left.leaf right.leaf}: true
+    {value left.node right.leaf}: left.value <= value && validate(left)
+    {value left.leaf right.node}: value <= right.value && validate(right)
+    {value left.node right.node}: left.value <= value && value <= right.value && validate(left) && validate(right)
 ```
 
 
@@ -191,6 +191,6 @@ def f a b: a / b  # float float float
 dec f t.num: t t t
 def f a b: a + b  # t.num => t t t
 
-dec f t: list(t) t? t
+dec f t: array(t) t? t
 def f lst alt?: if lst.size == 0 alt.or(t()) lst[0] 
 ```

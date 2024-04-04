@@ -65,7 +65,7 @@ record scheme:
     id    int
     email string
     pwd   std.bcrypt
-    todos list todo
+    todos array todo
   record todo:
     id    int
     title string
@@ -189,7 +189,7 @@ let template std.html5::
   
   layout title body:
     var description "Example of Moa programming language"
-    !doctype html
+    <!doctype html>
     html lang=ja:
       head:
         meta charset=utf-8
