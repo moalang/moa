@@ -1,38 +1,59 @@
 # The Moa Programming Language
-Moa is an open source programming language which helps programming for fun!
+Moa is an open source programming language that enhances your development experience, especially for web development.
 
+
+## Why Moa?
+If some of the following are bothering you, Moa can help.
+
+- Struggle with debugging  
+  → Type error reporting during compilation  
+  → Highly flexible debugger
+- Slow compilation speed  
+  → Fast compiler
+- Complex environment setup  
+  → Integrated setup for development, staging, and production environments
 
 
 ## Getting started
 
-Install
+### Install
 ```
 bash -c "$(curl -fsS https://github.com/moalang/moa/install.sh)"
 exec $SHELL
 ```
 
-Hello World
+### Hello World
 ```
-$ echo 'main: pr "Hello World"' > main.moa
-$ moa run
+echo 'main: pr "Hello World"' > main.moa
+moa run
+```
+
+Output
+```
 Hello World
 ```
 
-Compile
+### Compile
 ```
-$ echo 'main: pr "Hello world"' > main.moa
-$ moa build
-$ ./a
+echo 'main: pr "Hello world"' > main.moa
+moa build
+./a
+```
+
+Output
+```
 Hello world
 ```
 
-Launch REPL
+### Launch REPL
 ```
-$ moa
+moa
+```
+
+Intaractive console
+```
 > 1 + 2
 3
-> main()
-Hello world
 ```
 
 ## Example: ToDo app
@@ -234,18 +255,24 @@ test t:
 
 Execute the program, then you can access `http://localhost:8000`.
 ```
-$ moa run
-http://localhost:8000
+moa run
+```
+
+```
+Listen http://localhost:8000
 ```
 
 Run test
 ```
-$ moa test
+moa test
 ```
 
 See mdb file
 ```
-$ moa cat test.mdb
+moa cat test.mdb
+```
+
+```
 # 2024/01/01 00:00:00
 users.push {id=0 email="foo@example.com" pwd="..."}
 sessions.set "..." ref(0)
@@ -267,6 +294,7 @@ The commands are:
   moa build [os] [arch] # compile to executable file
   moa new [template]    # create a new project
   moa run               # run the program
+  moa test [path] ...   # run tests
   moa test [path] ...   # run tests
   moa cat [path] ...    # show mdb file as text
 ```
