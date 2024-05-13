@@ -2,6 +2,7 @@
 Moa is an open source programming language that enhances your development experience, especially for web development.
 
 
+
 ## Why Moa?
 If some of the following are bothering you, Moa can help.
 
@@ -11,7 +12,10 @@ If some of the following are bothering you, Moa can help.
 - Slow compilation speed  
   → Fast compiler
 - Complex environment setup  
-  → Integrated setup for development, staging, and production environments
+  → Integrated setup for development, staging, and production environments  
+  → Hot deployment  
+  → Embedded dashboard for developer
+
 
 
 ## Getting started
@@ -55,6 +59,17 @@ Intaractive console
 > 1 + 2
 3
 ```
+
+### Deployment
+```
+moa deploy 127.0.0.1 # same as ssh://127.0.0.1/home/username
+```
+
+```
+moa deploy ssh://localhost:8022/path/to
+```
+
+
 
 ## Example: ToDo app
 Create a new project for web
@@ -292,9 +307,9 @@ Usage:
 The commands are:
   moa                   # launch REPL
   moa build [os] [arch] # compile to executable file
+  moa deploy [target]   # deploy to serer
   moa new [template]    # create a new project
   moa run               # run the program
-  moa test [path] ...   # run tests
   moa test [path] ...   # run tests
   moa cat [path] ...    # show mdb file as text
 ```
