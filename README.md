@@ -62,11 +62,12 @@ Hello world
 
 ### Deployment
 ```
-moa deploy 127.0.0.1 # same as ssh://127.0.0.1/home/username/app
+moa deploy localhost
 ```
 
+Output
 ```
-moa deploy ssh://localhost:8022/path/to
+deploying to ssh://localhost:~/app/
 ```
 
 
@@ -94,16 +95,14 @@ record scheme:
 
 def main io:
   {request response} <- io.http.listen
-  db <- io.db scheme
-  if
+  db <- io.db(scheme)
+  if:
     request.path == "/":
-      response.html "count " ++ db.counter.string ++ " <a href=/up id=up>up</a>"
+      response.html "count " db.counter " <a href=/up id=up>up</a>"
     request.path == "/up":
       db.counter += 1
-      response.redirect "/"
-    request.path.starts("/admin/"):
-      response.admin request "admin" "password"
-    response.file "static" request.path
+      response.redirect("/")
+    response.file("static" request.path)
 ```
 
 ```# test.moa
@@ -116,10 +115,6 @@ test t:
   b.click("#up")
   b.has("count 1")
   t.eq(1 db.counter)
-
-  t.browse("/admin/") r =>
-    r.status(401)
-    r.header("www-authentication" "Basic realm=\"admin\"")
 ```
 
 Execute the program, then you can access `http://localhost:8000`.
