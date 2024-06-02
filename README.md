@@ -1,20 +1,25 @@
 # The Moa Programming Language
-Moa is an open source programming language that enhances your development experience, especially for web development.
+Moa is an open source programming language that enhances your development experience for all development environments.
 
 
 
 ## Why Moa?
 If some of the following are bothering you, Moa can help.
 
+- Long waits to verify code changes  
+  → Fast compiler and hot-loading
 - Struggle with debugging  
-  → Type error reporting during compilation  
   → Highly flexible debugger
-- Slow compilation speed  
-  → Fast compiler
-- Complex environment setup  
-  → Integrated setup for development, staging, and production environments  
-  → Hot deployment  
-  → Embedded dashboard for developer
+- Technical dept and legacy code  
+  → Enhance each part without affecting the whole
+
+
+
+## How to enhance?
+Moa is independent of specific operating system and programming langauges, but also provides numerous unique features to enhance your productivity:
+- Allows modifying and running code on the fly
+- Visualizes function calling and their side effects, including the time consumed
+- Generates codes in JavaScript and so on(in the future...)
 
 
 
@@ -26,114 +31,59 @@ bash -c "$(curl -fsS https://github.com/moalang/moa/install.sh)"
 exec $SHELL
 ```
 
-### Hello World
+### Generate and execute code
 ```
-echo 'main: pr "Hello World"' > main.moa
-moa run
+echo 'inc a: a + 1' > main.moa
+moa js | node 
+```
+
+Input
+```
+moa().inc(2)
 ```
 
 Output
 ```
-Hello World
-```
-
-### Launch REPL
-```
-moa
-```
-
-Intaractive console
-```
-> 1 + 2
 3
 ```
 
-### Compile
+
+
+### Trace
 ```
-echo 'main: pr "Hello world"' > main.moa
-moa build
-./a
+echo 'inc a: a + 1' > main.moa
+moa js | node
+```
+
+Input
+```
+moa("inc 2")
 ```
 
 Output
 ```
-Hello world
-```
-
-### Deployment
-```
-moa deploy 127.0.0.1 # same as ssh://127.0.0.1/home/username/app
-```
-
-```
-moa deploy ssh://localhost:8022/path/to
+inc 2     # 3
+# inc a:  # 2
+#   a + 1 # 2 -> 3
 ```
 
 
+### Modify
 
-## Create a new project for api server
+Input
 ```
-$ moa new api
-$ tree .
-┣ .gitignore
-┣ main.moa
-┣ test.moa
-┗ static/
-  ┗ favicon.ico
+moa("add a b: a + b; inc a: add a 3; inc 2").inc(2)
 ```
 
-You can see created files.
-```# .gitignore
-/a
-/*.db
+Output
 ```
+inc 2       # 5
+# inc a:    # 2
+#   add a 3 # 2 -> 5
+# add a b:  # 2, 3
+#   a + b   # 2, 3 -> 5
 
-```# main.moa
-record scheme:
-  counter int
-
-def main io:
-  {request response} <- io.http.listen
-  db <- io.db scheme
-  if
-    request.path == "/":
-      response.html "count " ++ db.counter.string ++ " <a href=/up id=up>up</a>"
-    request.path == "/up":
-      db.counter += 1
-      response.redirect "/"
-    request.path.starts("/admin/"):
-      response.admin request "admin" "password"
-    response.file "static" request.path
-```
-
-```# test.moa
-test t:
-  db <- t.db(scheme)
-  b <- t.browse("/")
-  t.eq(0 db.counter)
-  b.has("count 0")
-
-  b.click("#up")
-  b.has("count 1")
-  t.eq(1 db.counter)
-
-  t.browse("/admin/") r =>
-    r.status(401)
-    r.header("www-authentication" "Basic realm=\"admin\"")
-```
-
-Execute the program, then you can access `http://localhost:8000`.
-```
-moa run
-```
-
-```
-Listen http://localhost:8000
-```
-
-Run test
-```
-moa test
+5
 ```
 
 
@@ -141,13 +91,12 @@ moa test
 ## Manual for moa command
 ```
 Usage:
-  moa <command> [arguments]
+  moa <language> [options]
 
-The commands are:
-  moa                   # launch REPL
-  moa build [os] [arch] # compile to executable file
-  moa deploy [target]   # deploy to serer
-  moa new [template]    # create a new project
-  moa run               # run the program
-  moa test [path] ...   # run tests
+The language is:
+  moa js
+
+The options are:
+  prod  # disable all extra features
+  trace # disable trace
 ```
