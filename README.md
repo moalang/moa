@@ -7,7 +7,7 @@ Moa is an open source programming language that enhances your development experi
 If some of the following are bothering you, Moa can help.
 
 - Long waits to verify code changes  
-  → Fast compiler and hot-loading
+  → Hot-loading
 - Struggle with debugging  
   → Highly flexible debugger
 - Technical dept and legacy code  
@@ -25,21 +25,24 @@ Moa is independent of specific operating system and programming langauges, but a
 
 ## Getting started
 
+
 ### Install
 ```
 bash -c "$(curl -fsS https://github.com/moalang/moa/install.sh)"
 exec $SHELL
 ```
 
-### Generate and execute code
+
+### REPL
 ```
-echo 'inc a: a + 1' > main.moa
-moa js | node 
+moa
 ```
 
 Input
 ```
-moa().inc(2)
+inc a:
+  a + 1
+inc 2
 ```
 
 Output
@@ -47,43 +50,30 @@ Output
 3
 ```
 
+Trace
+```
+trace
+```
+
+Output
+```
+inc 2   # 3
+inc a:  # 2
+  a + 1 # 2 -> 3
+```
 
 
-### Trace
+### Generate and execute code
 ```
 echo 'inc a: a + 1' > main.moa
-moa js | node
-```
-
-Input
-```
-moa("inc 2")
+moa js
 ```
 
 Output
 ```
-inc 2     # 3
-# inc a:  # 2
-#   a + 1 # 2 -> 3
-```
-
-
-### Modify
-
-Input
-```
-moa("add a b: a + b; inc a: add a 3; inc 2").inc(2)
-```
-
-Output
-```
-inc 2       # 5
-# inc a:    # 2
-#   add a 3 # 2 -> 5
-# add a b:  # 2, 3
-#   a + b   # 2, 3 -> 5
-
-5
+function inc(a) {
+  return a;
+}
 ```
 
 
@@ -91,12 +81,9 @@ inc 2       # 5
 ## Manual for moa command
 ```
 Usage:
-  moa <language> [options]
+  moa <commands> [arguments]
 
-The language is:
-  moa js
-
-The options are:
-  prod  # disable all extra features
-  trace # disable trace
+The commands are:
+  moa    # launch REPL
+  moa js # print JavaScript
 ```
