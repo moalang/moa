@@ -8,15 +8,28 @@ import (
 	"os"
 )
 
-func fileExists(filename string) bool {
-	_, err := os.Stat(filename)
-	if os.IsNotExist(err) {
-		return false
+func main() {
+	errChan := make(chan error, 2)
+	go func() { errChan <- launchHttpServer() }()
+	go func() { errChan <- launchHttpsServer() }()
+	err := <-errChan
+	if err != nil {
+		log.Fatalf("server failed to start: %v", err)
 	}
-	return err == nil
+	os.Exit(1)
 }
 
-func main() {
+func launchHttpServer() error {
+	server := &http.Server{
+		Addr: ":80",
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Location", "https://"+r.Host+r.URL.RequestURI())
+			w.WriteHeader(301)
+		})}
+	return server.ListenAndServe()
+}
+
+func launchHttpsServer() error {
 	certs := make(map[string]*tls.Certificate)
 	tlsConfig := &tls.Config{
 		GetCertificate: func(clientHello *tls.ClientHelloInfo) (*tls.Certificate, error) {
@@ -33,16 +46,11 @@ func main() {
 			}
 		},
 	}
-
 	server := &http.Server{
 		Addr:      ":443",
 		TLSConfig: tlsConfig,
-	}
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "Hello, you've hit %s\n", r.Host)
-	})
-	err := server.ListenAndServeTLS("", "")
-	if err != nil {
-		log.Fatalf("server failed to start: %v", err)
-	}
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, "%v", r)
+		})}
+	return server.ListenAndServeTLS("", "")
 }
