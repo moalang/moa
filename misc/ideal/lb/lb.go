@@ -29,6 +29,11 @@ func launchHttpServer() error {
 	return server.ListenAndServe()
 }
 
+type Service struct {
+	Domain string
+	Script string
+}
+
 func launchHttpsServer() error {
 	certs := make(map[string]*tls.Certificate)
 	tlsConfig := &tls.Config{
@@ -46,11 +51,26 @@ func launchHttpsServer() error {
 			}
 		},
 	}
+	services := make(map[string]*Service)
+	services["localhost"] = &Service{
+		Domain: "localhost",
+		Script: "hello script",
+	}
 	server := &http.Server{
 		Addr:      ":443",
 		TLSConfig: tlsConfig,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprintf(w, "%v", r)
+			if service, ok := services[r.Host]; ok {
+				path := fmt.Sprintf("static/%s/%s", r.Host, r.URL.Path)
+				if r.URL.Path == "/" { // TODO: check the result of script evaluation
+					http.ServeFile(w, r, path)
+				} else {
+					fmt.Fprintf(w, "%s", service.Script)
+				}
+			} else {
+				w.WriteHeader(404)
+				fmt.Fprintf(w, "%v", r.Host)
+			}
 		})}
 	return server.ListenAndServeTLS("", "")
 }
