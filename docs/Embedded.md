@@ -3,12 +3,13 @@
 - [ ] false     :: bool
 - [ ] throw a b :: a b
 - [ ] catch a   :: (error a) a
-- [ ] pr        :: a ... a
+- [ ] log       :: ... a a
 - [ ] assert    :: bool void
 
 # num a
 - [ ] + - * ** / % | & ^ :: a a a
 - [ ] abs, neg :: a
+- [ ] string :: string
 
 # int.num
 - [ ] char :: string
@@ -23,42 +24,42 @@
 - [ ] size    :: int
 - [ ] reverse :: string
 - [ ] slice   :: int int? string
-- [ ] split   :: string int? array[string]
+- [ ] split   :: string int? list[string]
 - [ ] index   :: string opt[int]
 - [ ] replace :: string string string
 - [ ] trim    :: string
 - [ ] starts  :: string bool
 - [ ] ends    :: string bool
 - [ ] has     :: string bool
-- [ ] encode  :: string string? opt[bytes]
+- [ ] encode  :: string opt[buffer]
 
 # regexp
 - [ ] match   :: string bool
-- [ ] capture :: string array[string]
-- [ ] split   :: string array[string]
-- [ ] replace :: string (array[string] string) string
+- [ ] capture :: string list[string]
+- [ ] split   :: string list[string]
+- [ ] replace :: string (list[string] string) string
 
 # lambda[a b ...]
-- [ ]
+...
 
-# array[a]
-- [ ] ++ a    :: array[a] array[a]
+# list[a]
+- [ ] ++ a    :: list[a] list[a]
 - [ ] size    :: int
 - [ ] get     :: int opt[a]
 - [ ] set     :: int a bool
 - [ ] at      :: int opt[a]
 - [ ] tie     :: int a opt[a]
 - [ ] push    :: a a
-- [ ] map b   :: (a b) array[b]
-- [ ] mapi b  :: (a int b) array[b]
-- [ ] fmap b  :: (a array[b]) array[b]
-- [ ] keep    :: (a bool) array[a]
+- [ ] map b   :: (a b) list[b]
+- [ ] mapi b  :: (a int b) list[b]
+- [ ] fmap b  :: (a list[b]) list[b]
+- [ ] keep    :: (a bool) list[a]
 - [ ] all     :: (a bool) bool
 - [ ] any     :: (a bool) bool
-- [ ] slice   :: int int? array[a]
-- [ ] sort    :: (a a bool)? array[a]
-- [ ] reverse :: array[a]
-- [ ] zip b   :: array[b] array[tuple[a b]]
+- [ ] slice   :: int int? list[a]
+- [ ] sort    :: (a a bool)? list[a]
+- [ ] reverse :: list[a]
+- [ ] zip b   :: list[b] list[tuple[a b]]
 - [ ] fold b  :: b (a b b) b
 - [ ] find    :: (a bool) opt[a]
 - [ ] index   :: (a bool) opt[int]
@@ -72,9 +73,9 @@
 - [ ] get    :: k opt[v]
 - [ ] set    :: k v bool
 - [ ] has    :: k bool
-- [ ] keys   :: array[k]
-- [ ] values :: array[v]
-- [ ] array   :: array[tuple[k v]]
+- [ ] keys   :: list[k]
+- [ ] values :: list[v]
+- [ ] list   :: list[tuple[k v]]
 
 # set[a]
 - [ ] size   :: int
@@ -85,15 +86,12 @@
 - [ ] has    :: a bool
 - [ ] add    :: a bool
 - [ ] rid    :: a bool
-- [ ] array   :: array[a]
+- [ ] list   :: list[a]
 
 # tuple[a b ...]
 - [ ] 0 :: a
 - [ ] 1 :: b
 - ...
-
-# struct
-- [ ]
 
 # time
 - [ ] year, month, day, hour, min, sec, wday, yday, offset :: int
@@ -102,77 +100,21 @@
 - [ ] string :: string
 - [ ] tick   :: int time
 
-# bytes
+# buffer
 - [ ] size   :: int
-- [ ] at     :: int opt[a]
-- [ ] tie    :: int a opt[a]
-- [ ] slice  :: int int? bytes
-- [ ] fill a :: a int? int? opt[bytes]
-- [ ] tr     :: string string
-- [ ] io     :: io
-
-# std
-- [ ] argv       :: array[string]
-- [ ] env        :: string string
-- [ ] now        :: time
-- [ ] rand       :: rand
-- [ ] db t u     :: (t u) u
-- [ ] fs         :: string? std.fs
-- [ ] shell      :: string ...string opt[bytes]
-- [ ] http       :: http
-- [ ] stdin      :: io
-- [ ] stdout     :: io
-- [ ] stderr     :: io
-
-# std.fs
-- [ ] path    :: string
-- [ ] cd      :: string std.fs
-- [ ] open t  :: string? (io t) opt[a]
-- [ ] read    :: opt[bytes]
-- [ ] reads   :: opt[string]
-- [ ] write   :: ... opt[int]
-- [ ] append  :: ... opt[int]
-- [ ] rm      :: opt[bool]
-- [ ] exists  :: opt[bool]
-- [ ] glob    :: array[std.fs]
-
-# std.http
-- [ ] arrayen (http.request http.response) opt[_]
-- [ ] call string {method.string="get" headers.array[tuple[string array[string]]]=[] body.bytes=[]} http.response
-- [ ] request
-      method  :: string
-      path    :: string
-      has     :: string bool
-      header  :: string string
-      headers :: string array[string]
-      get     :: string string
-      gets    :: string array[string]
-      post    :: string string
-      posts   :: string array[string]
-      body    :: bytes
-- [ ] response
-      status  :: int
-      has     :: string bool
-      header  :: string string
-      headers :: string array[string]
-      body    :: bytes
-
-# std.rand
-- [ ] int   :: int? int? int
-- [ ] float :: float? float? float
-- [ ] bytes :: int bytes
-
-# std.io
+- [ ] resize :: int int
 - [ ] offset :: int
-- [ ] seek   :: int opt[io]
-- [ ] read   :: int? opt[bytes]
+- [ ] seek   :: int int
+- [ ] at     :: int opt[u8]
+- [ ] tie    :: int u8 opt[u8]
+- [ ] fill   :: int int? int? opt[int]
+- [ ] read   :: int? opt[list[u8]]
 - [ ] write  :: ... opt[int]
 - [ ] flush  :: ... opt[int]
 - [ ] close  :: opt[bool]
 - [ ] closed :: bool
-- [ ] peek   :: bytes
-- [ ] le     :: io
-- [ ] be     :: io
+- [ ] le     :: opt[_]
+- [ ] be     :: opt[_]
 - [ ] i8     :: opt[i8]
 - [ ] i16    :: opt[i16]
 - [ ] i32    :: opt[i32]
@@ -183,9 +125,63 @@
 - [ ] u64    :: opt[u64]
 - [ ] f32    :: opt[f32]
 - [ ] f64    :: opt[f64]
-- [ ] utf8   :: opt[string]
-- [ ] utf16  :: opt[string]
-- [ ] decode :: string opt[string]
+- [ ] decode :: string? opt[string]
+- [ ] tr     :: string string
+
+
+Below is ideas
+----------------------------------------------------------------------------
+
+# std
+- [ ] argv   :: list[string]
+- [ ] env    :: string string
+- [ ] now    :: time
+- [ ] rand   :: rand
+- [ ] db t u :: (t u) u
+- [ ] fs     :: string? std.fs
+- [ ] shell  :: string ...string opt[bytes]
+- [ ] http   :: http
+- [ ] stdin  :: buffer
+- [ ] stdout :: buffer
+- [ ] stderr :: buffer
+
+# std.fs
+- [ ] path    :: string
+- [ ] cd      :: string std.fs
+- [ ] open t  :: string? (buffer t) opt[a]
+- [ ] read    :: opt[bytes]
+- [ ] reads   :: opt[string]
+- [ ] write   :: ... opt[int]
+- [ ] append  :: ... opt[int]
+- [ ] rm      :: opt[bool]
+- [ ] exists  :: opt[bool]
+- [ ] glob    :: list[std.fs]
+
+# std.http
+- [ ] listen {port=3000} (http.request http.response) opt[_]
+- [ ] call string {method="get" headers.list[tuple[string list[string]]] body.bytes} http.response
+- [ ] request
+      method  :: string
+      path    :: string
+      has     :: string bool
+      header  :: string string
+      headers :: string list[string]
+      get     :: string string
+      gets    :: string list[string]
+      post    :: string string
+      posts   :: string list[string]
+      body    :: bytes
+- [ ] response
+      status  :: int
+      has     :: string bool
+      header  :: string string
+      headers :: string list[string]
+      body    :: bytes
+
+# std.rand
+- [ ] int   :: int? int? int
+- [ ] float :: float? float? float
+- [ ] bytes :: int bytes
 
 # std.bcrypt
 - [ ] :: string std.bcrypt

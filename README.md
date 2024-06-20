@@ -35,8 +35,8 @@ struct schema:
   pv int
 
 def main:
-  io.http.listen req =>
-    io.db[schema] db =>
+  std.http.listen {port=3000} req =>
+    std.db[schema] db =>
       db.pv += 1
       {body=$"hello {req.name?}, pv is {db.pv}"}
 ```
@@ -157,13 +157,14 @@ Output
 ## Moa command usage
 ```
 Usage:
-  moa                       # launch interactive shell
-  moa build [<os>] [<arch>] # compile Moa program
-  moa dev [<port>]          # launch developer console as http sever
-  moa env [+/-] [<version>] # list versions; use, install or remove a version
-  moa help                  # show usage of moa command
-  moa run                   # run Moa program
-  moa test [<regexp> ...]   # test Moa program
+  moa                           # launch interactive shell
+  moa build [<os>] [<arch>]     # compile Moa program
+  moa dev [<port>] [<ssh://..>] # launch developer console as http sever
+  moa deploy [<ssh://..> ...]   # compile, deploy, and run on remote hosts
+  moa env [+/-] [<version>]     # list versions; use, install or remove a version
+  moa help                      # show usage of moa command
+  moa run [<exp>]               # run Moa program
+  moa test [<regexp> ...]       # test Moa program
 ```
 
 

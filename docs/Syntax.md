@@ -35,6 +35,7 @@ float
 string
 time
 bytes
+buffer
 
 tuple
 list
@@ -43,7 +44,6 @@ set
 
 num
 ref
-io
 
 def
 dec
