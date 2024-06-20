@@ -1,4 +1,4 @@
-echo "Installer is under development..."
+#!/bin/bash
 
 # Create ~/moa/ and set ~/moa/bin/moa
 if ! [[ -d "~/moa" ]]
@@ -6,6 +6,7 @@ then
   mkdir -p ~/moa/bin
   curl https://raw.githubusercontent.com/moalang/moa/main/bin/moa > ~/moa/bin/moa
   chmod +x ~/moa/bin/moa
+  echo "Downloaded ~/moa/bin/moa"
 fi
 
 # Add ~/moa/bin to PATH
@@ -31,5 +32,6 @@ then
   then
     [ -f ${RC} ] && echo "${EXPORT} # Moa installer added" >> "${RC}"
     export PATH=~/moa/bin:$PATH
+    echo "Added ~/moa/bin to PATH"
   fi
 fi

@@ -12,8 +12,7 @@ For powerful type inference, smooth scripting, high speed, and great debugging, 
 
 Install
 ```
-bash -c "$(curl -fsS https://github.com/moalang/moa/install.sh)"
-exec $SHELL
+bash -c "$(curl -fsS https://raw.githubusercontent.com/moalang/moa/main/bin/install.sh)" && exec $SHELL
 ```
 
 Hello World
