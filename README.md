@@ -156,9 +156,9 @@ Output
 ## Moa command usage
 ```
 Usage:
-  moa                   # launch interactive shell
-  moa build [os] [arch] # compile
-  moa run [exp]         # run
-  moa test [regexp] ... # test
-  moa watch             # run, re-run on changes
+  moa                          # launch interactive shell
+  moa build [os] [arch]        # compile
+  moa run [exp]                # run
+  moa test [regexp] ...        # test
+  moa watch                    # run, re-run on changes
 ```
