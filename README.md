@@ -2,6 +2,7 @@
 Moa is an open source programming language that enhances your development experience.
 
 
+
 ## Why Moa?
 For powerful type inference, smooth scripting, high speed, and great debugging, Moa is the way to go.
 
@@ -42,13 +43,11 @@ def main:
 ```
 
 ```
-moa run
-```
-
-```
+moa watch
 curl -d 'name=Alice' http://localhost:3000/
 ```
 
+Output
 ```
 hello Alice, pv is 1
 ```
@@ -153,11 +152,13 @@ Output
 ```
 
 
-## Manual for moa command
+
+## Moa command usage
 ```
 Usage:
   moa                   # launch interactive shell
-  moa build [os] [arch] # compile to executable file
-  moa run [exp]         # run program
-  moa test [regexp] ... # run tests
+  moa build [os] [arch] # compile
+  moa run [exp]         # run
+  moa test [regexp] ... # test
+  moa watch             # run, re-run on changes
 ```
