@@ -41,8 +41,13 @@ def main:
       {body=$"hello {req.name?}, pv is {db.pv}"}
 ```
 
+Start the server
 ```
-moa watch
+moa run
+```
+
+Request to the server
+```
 curl -d 'name=Alice' http://localhost:3000/
 ```
 
@@ -50,8 +55,6 @@ Output
 ```
 hello Alice, pv is 1
 ```
-
-You can also access developer console via `http://localhost:3001`.
 
 
 
@@ -61,9 +64,9 @@ main.moa
 ```
 enum lisp:
   atom string
-  list array lisp
+  pairs list lisp
   lambda:
-    args array string
+    args list string
     body lisp
   
 def main:
@@ -77,7 +80,7 @@ def parse tokens:
   var pos (-1)
   def consume:
     tokens[pos+=1]
-  def slist a:
+  def items a:
     iif:
       pos >= tokens.size: throw "'(' is not closed"
       tokens[pos] == ")": pos += 1; a
@@ -85,39 +88,38 @@ def parse tokens:
   def unit:
     s = consume()
     case s:
-      "(": list slist([])
+      "(": pairs items([])
       ")": throw "unexpected ')'"
       _: atom s
-  slist []
+  items []
 
 def show node:
   case node:
     atom a: a
-    list []: "NIL"
-    list l: (++ "(" l.map(show).join(" ") ")")
+    pairs []: "NIL"
+    pairs l: (++ "(" l.map(show).join(" ") ")")
     lambda f: (++ "(lambda " f.args.map(show).join(" ") show(f.body) ")")
 
 def run env node:
   t = atom "T"
-  nil = list []
+  nil = pairs []
   case node:
     atom "t": t
     atom: node
     lambda: node
-    list ["quote" x]                             : list x
-    list ["atom" v.list([_ ...])]                : nil
-    list ["atom" _]                              : t
-    list ["eq" a b]                              : atom iif(show(a) == show(b) t f)
-    list ["car" l.list([head ...])]              : head
-    list ["cdr" l.list([_ ...tail])]             : list tail
-    list ["cons" a b.list]                       : list [a] ++ b
-    list ["if" a b c]                            : run env iif(run(env a) == nil c b)
-    list ["lambda" args.list[atom] body]         : lambda args body
-    list ["define" name.atom body]               : env.set name body
-    list ["+" l.atom r.atom]                     : atom l.int + r.int
-    list [f.lambda ...a] if f.args.size == a.size: run env ++ f.args.zip(a).dict f.body
-    _                                            : throw $"{show node} is invalid"
-
+    pairs ["quote" x]                             : pairs x
+    pairs ["atom" v.pairs([_ ...])]               : nil
+    pairs ["atom" _]                              : t
+    pairs ["eq" a b]                              : atom iif(show(a) == show(b) t f)
+    pairs ["car" l.pairs([head ...])]             : head
+    pairs ["cdr" l.pairs([_ ...tail])]            : pairs tail
+    pairs ["cons" a b.pairs]                      : pairs [a] ++ b
+    pairs ["if" a b c]                            : run env iif(run(env a) == nil c b)
+    pairs ["lambda" args.pairs[atom] body]        : lambda args body
+    pairs ["define" name.atom body]               : env.set name body
+    pairs ["+" l.atom r.atom]                     : atom l.int + r.int
+    pairs [f.lambda ...a] if f.args.size == a.size: run env ++ f.args.zip(a).dict f.body
+    _                                             : throw $"{show node} is invalid"
 
 test {eq}:
   def t expect code:
@@ -155,9 +157,20 @@ Output
 ## Moa command usage
 ```
 Usage:
-  moa                          # launch interactive shell
-  moa build [os] [arch]        # compile
-  moa run [exp]                # run
-  moa test [regexp] ...        # test
-  moa watch                    # run, re-run on changes
+  moa                       # launch interactive shell
+  moa build [<os>] [<arch>] # compile Moa program
+  moa dev [<port>]          # launch developer console as http sever
+  moa run                   # run Moa program
+  moa test [<regexp> ...]   # test Moa program
+  moa env [+/-] [<version>] # list versions; use, install or remove a version
+```
+
+
+## Interactive shell commands 
+```
+:         -- repeat last command
+:q        -- quit
+:t <expr> -- show a type of <expr>
+:p <expr> -- show consumed time for each functions of <expr>
+:s <expr> -- show a summary of loops, branches, and thrown exceptions of <exprs>
 ```

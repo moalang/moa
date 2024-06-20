@@ -37,7 +37,7 @@ time
 bytes
 
 tuple
-array
+list
 dict
 set
 
@@ -77,7 +77,7 @@ _                part of id
 "                string
 #                comment
 ( )              priority
-[ ]              array
+[ ]              list
 { }              struct
 ! -              singular operator
 && ||            boolean operator
@@ -139,7 +139,7 @@ case: pattern ("," pattern)*
 pattern:
 | '"' [^"]* '"'                    # string
 | "-"? [0-9]+ ("." [0-9]+)?        # number
-| "[" case* ("..." id?)? case* "]" # array
+| "[" case* ("..." id?)? case* "]" # list
 | "{" ((id "=" exp) | type)+ "}"   # struct
 | type
 type: id ("." id)* ("[" type+ "]")? ("(" case ")")?
@@ -173,6 +173,6 @@ def f a b: a / b
 dec f t.num: t t t
 def f a b: a + b
 
-dec f t: array(t) t? t
+dec f t: list(t) t? t
 def f lst alt?: if lst.size == 0 alt lst[0]
 ```
