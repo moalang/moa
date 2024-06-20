@@ -1,1 +1,8 @@
-echo "dummy"
+echo "Usage:
+  moa                       # launch interactive shell
+  moa build [<os>] [<arch>] # compile Moa program
+  moa dev [<port>]          # launch developer console as http sever
+  moa env [+/-] [<version>] # list versions; use, install or remove a version
+  moa help                  # show usage of moa command
+  moa run                   # run Moa program
+  moa test [<regexp> ...]   # test Moa program"
