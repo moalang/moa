@@ -9,17 +9,18 @@ exp:
 atom:
 | "(" exp ")"
 | bottom (prop | call | index | slice)*
-prop: "." (id | [0-9]+) "?"?       # property access or key access
-call: "(" exp* ")"                 # call function
-index: "[" exp+ "]"                # index access or generic type
-slice: "{" id* (id "=" atom)* "}"  # copy with some values
+prop: "." (id | [0-9]+) "?"?                     # property access or key access
+call: "(" exp* ")"                               # call function
+index: "[" exp+ "]"                              # index access or generic type
+slice: "{" id* (id "=" atom)* (id ":" atom)* "}" # copy with some values
 bottom:
-| "(" exp ")"                # 1 * (2 + 3)
-| "{" id* (id "=" atom)* "}" # {x y z=0}
-| "[" exp* "]"               # [1 2 3]
-| "-"? [0-9]+ ("." [0-9]+)?  # -1.2
-| [r$]? '"' [^"]* '"'        # "string"
-| [r$]? '"""' [^"]* '"""'    # """string"""
+| "(" exp ")"                    # 1 * (2 + 3)
+| "{" id* (id "=" atom)* "}"     # {x y=0}
+| "{" ":" | (atom ":" atom)+ "}" # {x:0 "y":0}
+| "[" exp* "]"                   # [1 2 3]
+| "-"? [0-9]+ ("." [0-9]+)?      # -1.2
+| [r$]? '"' [^"]* '"'            # "string"
+| [r$]? '"""' [^"]* '"""'        # """string"""
 | id
 op1: [!-] | "..."
 op2: [+-*/%<>|&^~=!,]+
@@ -50,7 +51,6 @@ dec
 struct
 enum
 interface
-extern
 test
 
 if
@@ -64,9 +64,11 @@ catch
 
 true
 false
-std
 
-reserved: use module decimal array duration i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
+use
+module
+
+reserved: decimal array duration i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
 ```
 
 Symbols

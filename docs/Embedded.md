@@ -32,6 +32,7 @@
 - [ ] ends    :: string bool
 - [ ] has     :: string bool
 - [ ] encode  :: string opt[buffer]
+- [ ] copy    :: string
 
 # regexp
 - [ ] match   :: string bool
@@ -49,15 +50,15 @@
 - [ ] set     :: int a bool
 - [ ] at      :: int opt[a]
 - [ ] tie     :: int a opt[a]
+- [ ] fill    :: a int? int? int
 - [ ] push    :: a a
-- [ ] map b   :: (a b) list[b]
-- [ ] mapi b  :: (a int b) list[b]
-- [ ] fmap b  :: (a list[b]) list[b]
-- [ ] keep    :: (a bool) list[a]
-- [ ] all     :: (a bool) bool
-- [ ] any     :: (a bool) bool
+- [ ] map b   :: (a int? b) list[b]
+- [ ] fmap b  :: (a int? list[b]) list[b]
+- [ ] keep    :: (a int? bool) list[a]
+- [ ] all     :: (a int? bool) bool
+- [ ] any     :: (a int? bool) bool
 - [ ] slice   :: int int? list[a]
-- [ ] sort    :: (a a bool)? list[a]
+- [ ] sort b  :: (a a? b)? list[a]
 - [ ] reverse :: list[a]
 - [ ] zip b   :: list[b] list[tuple[a b]]
 - [ ] fold b  :: b (a b b) b
@@ -67,6 +68,7 @@
 - [ ] has     :: a bool
 - [ ] min     :: a
 - [ ] max     :: a
+- [ ] copy    :: list[a]
 
 # dict[k v]
 - [ ] size   :: int
@@ -76,6 +78,7 @@
 - [ ] keys   :: list[k]
 - [ ] values :: list[v]
 - [ ] list   :: list[tuple[k v]]
+- [ ] copy   :: dict[k v]
 
 # set[a]
 - [ ] size   :: int
@@ -87,11 +90,13 @@
 - [ ] add    :: a bool
 - [ ] rid    :: a bool
 - [ ] list   :: list[a]
+- [ ] copy   :: set[a]
 
 # tuple[a b ...]
 - [ ] 0 :: a
 - [ ] 1 :: b
 - ...
+- [ ] copy :: tuple[a b]
 
 # time
 - [ ] year, month, day, hour, min, sec, wday, yday, offset :: int
@@ -107,7 +112,6 @@
 - [ ] seek   :: int int
 - [ ] at     :: int opt[u8]
 - [ ] tie    :: int u8 opt[u8]
-- [ ] fill   :: int int? int? opt[int]
 - [ ] read   :: int? opt[list[u8]]
 - [ ] write  :: ... opt[int]
 - [ ] flush  :: ... opt[int]
@@ -127,6 +131,7 @@
 - [ ] f64    :: opt[f64]
 - [ ] decode :: string? opt[string]
 - [ ] tr     :: string string
+- [ ] bytes  :: list[u8]
 
 
 Below is ideas
@@ -139,7 +144,7 @@ Below is ideas
 - [ ] rand   :: rand
 - [ ] db t u :: (t u) u
 - [ ] fs     :: string? std.fs
-- [ ] shell  :: string ...string opt[bytes]
+- [ ] shell  :: string ...string opt[buffer]
 - [ ] http   :: http
 - [ ] stdin  :: buffer
 - [ ] stdout :: buffer
@@ -149,7 +154,7 @@ Below is ideas
 - [ ] path    :: string
 - [ ] cd      :: string std.fs
 - [ ] open t  :: string? (buffer t) opt[a]
-- [ ] read    :: opt[bytes]
+- [ ] read    :: opt[buffer]
 - [ ] reads   :: opt[string]
 - [ ] write   :: ... opt[int]
 - [ ] append  :: ... opt[int]
@@ -159,7 +164,7 @@ Below is ideas
 
 # std.http
 - [ ] listen {port=3000} (http.request http.response) opt[_]
-- [ ] call string {method="get" headers.list[tuple[string list[string]]] body.bytes} http.response
+- [ ] call string {method="get" headers.list[tuple[string list[string]]] body.buffer} http.response
 - [ ] request
       method  :: string
       path    :: string
@@ -170,18 +175,18 @@ Below is ideas
       gets    :: string list[string]
       post    :: string string
       posts   :: string list[string]
-      body    :: bytes
+      body    :: buffer
 - [ ] response
       status  :: int
       has     :: string bool
       header  :: string string
       headers :: string list[string]
-      body    :: bytes
+      body    :: buffer
 
 # std.rand
 - [ ] int   :: int? int? int
 - [ ] float :: float? float? float
-- [ ] bytes :: int bytes
+- [ ] buffer :: int buffer
 
 # std.bcrypt
 - [ ] :: string std.bcrypt

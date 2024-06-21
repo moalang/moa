@@ -31,12 +31,14 @@ Hello World
 
 main.moa
 ```
+use io
+
 struct schema:
   pv int
 
 def main:
-  std.http.listen {port=3000} req =>
-    std.db[schema] db =>
+  io.http.listen {port=3000} req =>
+    io.db[schema] db =>
       db.pv += 1
       {body=$"hello {req.name?}, pv is {db.pv}"}
 ```
