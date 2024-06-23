@@ -4,11 +4,7 @@ Moa is an open source programming language that enhances your development experi
 
 
 ## Why Moa?
-By keeping your preferred development environment, you can enable highly powerful development support:
-- Static type checking
-- Powerful type inference
-- Fast test execution
-- Launch a debug shell on test failures
+For powerful type inference, smooth scripting, high speed, and great debugging, Moa is the way to go.
 
 
 
@@ -31,60 +27,23 @@ Hello World
 
 
 
-## Code generation for Go
+## HTTP server with transactional database
 
-handle.moa
+main.moa
 ```
-struct Request:
-  form dict string list[string]
+struct schema:
+  pv int
 
-struct Response:
-  body bytes
-
-export handle req.Request Response:
-  {body=$"Hello {req.form:name}"}
-```
-
-handle.go
-```
-package main
-
-# From handle.moa
-type Request struct {
-	form map[string][]string
-}
-type Response struct {
-	body []byte
-}
-func handle(request Request) Response {
-	body := []byte(fmt.Sprintf("Hello %s\n", request.form["name"]))
-	return Response{body: body}
-}
-```
-
-main.go
-```
-package main
-
-import (
-	"fmt"
-	"log"
-	"net/http"
-)
-
-func main() {
-	log.Fatal(http.ListenAndServe(":3000", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		req.ParseForm()
-		resp := handle(Request{req.Form})
-		w.Write(resp.body)
-	})))
-}
+def main:
+  std.http.listen {port=3000} req =>
+    std.db[schema] db =>
+      db.pv += 1
+      {body=$"hello {req.name?}, pv is {db.pv}"}
 ```
 
 Start the server
 ```
-moa go > handle.go
-go run
+moa run
 ```
 
 Request to the server
@@ -94,7 +53,7 @@ curl -d 'name=Alice' http://localhost:3000/
 
 Output
 ```
-hello Alice
+hello Alice, pv is 1
 ```
 
 
@@ -110,10 +69,9 @@ enum lisp:
     args list string
     body lisp
   
-def main code:
-  env = dict string lisp
-  nodes = parse tokenize(code) 
-  nodes.each node => log(show(run(env node)))
+def main:
+  var env dict string lisp
+  parse(tokenize(std.stdin.utf8)).each(node => log(show(run(env node))))
 
 def tokenize code:
   r"([^ \r\n()]+|.)".split(code).filter(s => s.trim())
@@ -186,7 +144,7 @@ Output
 ```
 
 ```
-moa run main "(+ 1 2)"
+echo "(+ 1 2)" | moa run
 ```
 
 Output
@@ -200,11 +158,13 @@ Output
 ```
 Usage:
   moa                           # launch interactive shell
+  moa build [<os>] [<arch>]     # compile Moa program
+  moa dev [<port>] [<ssh://..>] # launch developer console as http sever
+  moa deploy [<ssh://..> ...]   # compile, deploy, and run on remote hosts
   moa env [+/-] [<version>]     # list versions; use, install or remove a version
-  moa run [<func>] [<arg> ...]  # run Moa program
+  moa help                      # show usage of moa command
+  moa run [<exp>]               # run Moa program
   moa test [<regexp> ...]       # test Moa program
-  moa go [<package>]            # print Go
-  moa js                        # print JavaScript
 ```
 
 
