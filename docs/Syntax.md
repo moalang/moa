@@ -8,16 +8,17 @@ exp:
 | op1? atom (op2 exp)?
 atom:
 | "(" exp ")"
-| bottom (prop | call | index | slice)*
-prop: "." (id | [0-9]+) "?"?                     # property access or key access
-call: "(" exp* ")"                               # call function
-index: "[" exp+ "]"                              # index access or generic type
-slice: "{" id* (id "=" atom)* (id ":" atom)* "}" # copy with some values
+| bottom (prop | key | call | index | slice)*
+prop: "." (id | [0-9]+)              # property access
+key: ":" (id | [0-9]+ | "(" exp ")") # key access, a:b is a["b"]
+call: "(" exp* ")"                   # call function
+index: "[" ":"? exp+ "]"             # index access, or generic type
+slice: "{" id* (id "=" atom)* "}"    # copy with some values
 bottom:
 | "(" exp ")"                    # 1 * (2 + 3)
 | "{" id* (id "=" atom)* "}"     # {x y=0}
-| "{" ":" | (atom ":" atom)+ "}" # {x:0 "y":0}
 | "[" exp* "]"                   # [1 2 3]
+| "[" ":" | (atom ":" atom)+ "]" # ["x":0 ("y"):0]
 | "-"? [0-9]+ ("." [0-9]+)?      # -1.2
 | [r$]? '"' [^"]* '"'            # "string"
 | [r$]? '"""' [^"]* '"""'        # """string"""
@@ -26,6 +27,11 @@ op1: [!-] | "..."
 op2: [+-*/%<>|&^~=!,]+
 id: [A-Za-z_][A-Za-z0-9_]*
 ```
+
+dict?"foo"
+dict?[var]
+dict?name
+dict?name("")
 
 Keywords
 ```
@@ -55,7 +61,7 @@ test
 
 if
 else
-match
+switch
 for
 continue
 break
@@ -136,7 +142,7 @@ def f {a b=0}: a  # f(a=1), f(a=1 b=2) or f(b=2 a=1)
 
 - Pattern matching
 ```
-match: "match" exp ":" ("\n  " type? case ("if" exp) ":" block)+
+switch: "switch" exp ":" ("\n  " type? case ("if" exp) ":" block)+
 case: pattern ("," pattern)*
 pattern:
 | '"' [^"]* '"'                    # string
@@ -157,10 +163,10 @@ enum tree t:
 
 def validate t:
   match t:
-    node[ord] {value left.node right.leaf}: left.value <= value
-    node[ord] {value left.leaf right.node}: value <= right.value
-    node[ord] {value left.node right.node}: left.value <= value <= right.value && validate(left) && validate(right)
-    _: true
+    leaf: true
+    node {value left.node right.leaf}: left.value <= value
+    node {value left.leaf right.node}: value <= right.value
+    node {value left.node right.node}: left.value <= value <= right.value && validate(left) && validate(right)
 ```
 
 

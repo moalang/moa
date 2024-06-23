@@ -5,6 +5,7 @@
 - [ ] catch a   :: (error a) a
 - [ ] log       :: ... a a
 - [ ] assert    :: bool void
+- [ ] iif a     :: bool a ...bool,a a
 
 # num a
 - [ ] + - * ** / % | & ^ :: a a a
@@ -31,8 +32,7 @@
 - [ ] starts  :: string bool
 - [ ] ends    :: string bool
 - [ ] has     :: string bool
-- [ ] encode  :: string opt[buffer]
-- [ ] copy    :: string
+- [ ] encode  :: string opt[bytes]
 
 # regexp
 - [ ] match   :: string bool
@@ -68,7 +68,6 @@
 - [ ] has     :: a bool
 - [ ] min     :: a
 - [ ] max     :: a
-- [ ] copy    :: list[a]
 
 # dict[k v]
 - [ ] size   :: int
@@ -78,7 +77,6 @@
 - [ ] keys   :: list[k]
 - [ ] values :: list[v]
 - [ ] list   :: list[tuple[k v]]
-- [ ] copy   :: dict[k v]
 
 # set[a]
 - [ ] size   :: int
@@ -90,13 +88,11 @@
 - [ ] add    :: a bool
 - [ ] rid    :: a bool
 - [ ] list   :: list[a]
-- [ ] copy   :: set[a]
 
 # tuple[a b ...]
 - [ ] 0 :: a
 - [ ] 1 :: b
 - ...
-- [ ] copy :: tuple[a b]
 
 # time
 - [ ] year, month, day, hour, min, sec, wday, yday, offset :: int
@@ -105,20 +101,24 @@
 - [ ] string :: string
 - [ ] tick   :: int time
 
-# buffer
+# bytes
 - [ ] size   :: int
-- [ ] resize :: int int
-- [ ] offset :: int
-- [ ] seek   :: int int
 - [ ] at     :: int opt[u8]
 - [ ] tie    :: int u8 opt[u8]
-- [ ] read   :: int? opt[list[u8]]
-- [ ] write  :: ... opt[int]
+- [ ] decode :: string? opt[string]
+- [ ] tr     :: string string
+- [ ] stream :: stream
+
+# stream
+- [ ] size   :: int
+- [ ] resize :: int int
+- [ ] le     :: bool
+- [ ] be     :: bool
 - [ ] flush  :: ... opt[int]
 - [ ] close  :: opt[bool]
 - [ ] closed :: bool
-- [ ] le     :: opt[_]
-- [ ] be     :: opt[_]
+- [ ] read   :: int? opt[bytes]
+- [ ] write  :: ... opt[int]
 - [ ] i8     :: opt[i8]
 - [ ] i16    :: opt[i16]
 - [ ] i32    :: opt[i32]
@@ -130,7 +130,6 @@
 - [ ] f32    :: opt[f32]
 - [ ] f64    :: opt[f64]
 - [ ] decode :: string? opt[string]
-- [ ] tr     :: string string
 - [ ] bytes  :: list[u8]
 
 
@@ -139,22 +138,22 @@ Below is ideas
 
 # std
 - [ ] argv   :: list[string]
-- [ ] env    :: string string
+- [ ] env    :: dict[string string]
 - [ ] now    :: time
-- [ ] rand   :: rand
+- [ ] random :: int? random
 - [ ] db t u :: (t u) u
 - [ ] fs     :: string? std.fs
-- [ ] shell  :: string ...string opt[buffer]
+- [ ] shell  :: string ...string opt[stream]
 - [ ] http   :: http
-- [ ] stdin  :: buffer
-- [ ] stdout :: buffer
-- [ ] stderr :: buffer
+- [ ] stdin  :: stream
+- [ ] stdout :: stream
+- [ ] stderr :: stream
 
 # std.fs
 - [ ] path    :: string
 - [ ] cd      :: string std.fs
-- [ ] open t  :: string? (buffer t) opt[a]
-- [ ] read    :: opt[buffer]
+- [ ] open t  :: string? (stream t) opt[t]
+- [ ] read    :: opt[stream]
 - [ ] reads   :: opt[string]
 - [ ] write   :: ... opt[int]
 - [ ] append  :: ... opt[int]
@@ -164,29 +163,28 @@ Below is ideas
 
 # std.http
 - [ ] listen {port=3000} (http.request http.response) opt[_]
-- [ ] call string {method="get" headers.list[tuple[string list[string]]] body.buffer} http.response
+- [ ] call string {method="get" headers.list[tuple[string list[string]]] body.stream} http.response
 - [ ] request
       method  :: string
       path    :: string
-      has     :: string bool
       header  :: string string
       headers :: string list[string]
+      query   :: string
       get     :: string string
       gets    :: string list[string]
       post    :: string string
       posts   :: string list[string]
-      body    :: buffer
+      body    :: stream
 - [ ] response
       status  :: int
-      has     :: string bool
       header  :: string string
       headers :: string list[string]
-      body    :: buffer
+      body    :: stream
 
-# std.rand
+# std.random
 - [ ] int   :: int? int? int
 - [ ] float :: float? float? float
-- [ ] buffer :: int buffer
+- [ ] stream :: int bytes
 
 # std.bcrypt
 - [ ] :: string std.bcrypt
