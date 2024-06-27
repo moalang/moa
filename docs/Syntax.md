@@ -9,11 +9,11 @@ exp:
 atom:
 | "(" exp ")"
 | bottom (prop | key | call | index | slice)*
-prop: "." (id | [0-9]+)              # property access
-key: ":" (id | [0-9]+ | "(" exp ")") # key access, a:b is a["b"]
-call: "(" exp* ")"                   # call function
-index: "[" ":"? exp+ "]"             # index access, or generic type
-slice: "{" id* (id "=" atom)* "}"    # copy with some values
+prop: "." (id | [0-9]+)           # property access
+key: "." (id | [0-9]+) [!?] type? # key access
+call: "(" exp* ")"                # call function
+index: "[" ":"? exp+ "]"          # index access, or generic type
+slice: "{" id* (id "=" atom)* "}" # copy with some values
 bottom:
 | "(" exp ")"                    # 1 * (2 + 3)
 | "{" id* (id "=" atom)* "}"     # {x y=0}
@@ -28,53 +28,14 @@ op2: [+-*/%<>|&^~=!,]+
 id: [A-Za-z_][A-Za-z0-9_]*
 ```
 
-dict?"foo"
-dict?[var]
-dict?name
-dict?name("")
-
 Keywords
 ```
-void
-bool
-int
-float
-string
-time
-bytes
-buffer
-
-tuple
-list
-dict
-set
-
-num
-ref
-
-def
-dec
-struct
-enum
-interface
-test
-
-if
-else
-switch
-for
-continue
-break
-throw
-catch
-
-true
-false
-
-use
-module
-
-reserved: decimal array duration i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
+primitive: _ true false bool int float string bytes stream i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
+container: opt tuple list dict set
+declar   : let var dec def struct enum test
+branch   : iif if else switch
+flow     : return for while continue break throw catch
+reserved : num ref time duration decimal array use module
 ```
 
 Symbols
