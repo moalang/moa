@@ -4,7 +4,14 @@ Moa is an open source programming language that enhances your development experi
 
 
 ## Why Moa?
-For powerful type inference, smooth scripting, high speed, and great debugging, Moa is the way to go.
+If you have any frustrations, Moa can help you solve them.
+For example:
+- Runtime type error  
+  →Static type check, type annotation is optional
+- Slow tests  
+  →Parallel fast tests
+- Duplicated logic across applications  
+  →Write once, generate different programming language code
 
 
 
@@ -15,164 +22,274 @@ Install
 bash -c "$(curl -fsS https://raw.githubusercontent.com/moalang/moa/main/bin/install.sh)" && exec $SHELL
 ```
 
-Hello World
+Hello world
 ```
-echo 'def main: log "Hello World"' > main.moa
-moa run
-```
-
-```
-Hello World
+echo '"Hello world"' | moa
 ```
 
-
-
-## HTTP server with transactional database
-
-main.moa
 ```
-struct schema:
-  pv int
+Hello world
+```
 
-def main:
-  std.http.listen {port=3000} req =>
-    std.db[schema] db =>
-      db.pv += 1
-      {body=$"hello {req.name?}, pv is {db.pv}"}
+Access to web IDE
+```
+moa ide
+listen http://127.0.0.1:3000
+```
+
+
+
+## Example: HTTP server with Go
+
+handle.moa
+```
+struct request:
+  path string
+
+struct response:
+  body string
+
+def handle req:
+  response req.path.slice(1)
+
+test t:
+  def eq expect path:
+    t.eq expect handle(request(path)).body
+  eq "" "/"
+  eq "path/to" "/path/to"
+```
+
+main.go
+```
+package main
+
+import "net/http"
+
+func main() {
+  http.ListenAndServe("127.0.0.1:3000", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+    w.Write([]byte(handle(Request{path: r.URL.Path}).body))
+  }))
+}
+```
+
+Compile Moa to Go
+```
+moa to go
+```
+
+moa.go (generated)
+```
+package main
+
+type request struct {
+	path string
+}
+
+type response struct {
+	body string
+}
+
+func handle(req request) response {
+	return response{body: req.path[1:]}
+}
+```
+
+moa_test.go (generated)
+```
+package main
+
+import "testing"
+
+func TestHandle(t *testing.T) {
+	if handle(request{path: "/"}).body != "" {
+		t.Fatal("not equal")
+	}
+	if handle(request{path: "/path/to"}).body != "path/to" {
+		t.Fatal("not equal")
+	}
+}
+```
+
+Run test
+```
+go test moa.go moa_test.go
+```
+
+```
+ok  	command-line-arguments	0.120s
 ```
 
 Start the server
 ```
-moa run
+go run
 ```
 
 Request to the server
 ```
-curl -d 'name=Alice' http://localhost:3000/
+curl http://localhost:3000/hello
 ```
 
 Output
 ```
-hello Alice, pv is 1
+hello
 ```
 
 
 
-## LISP interpriter
+### Example: HTTP server with Node
 
-main.moa
+handle.moa
 ```
-enum lisp:
-  atom string
-  pairs list lisp
-  lambda:
-    args list string
-    body lisp
-  
-def main:
-  var env dict string lisp
-  parse(tokenize(std.stdin.utf8)).each(node => log(show(run(env node))))
+struct request:
+  path string
 
-def tokenize code:
-  r"([^ \r\n()]+|.)".split(code).filter(s => s.trim())
+struct response:
+  body string
 
-def parse tokens:
-  var pos (-1)
-  def consume:
-    tokens[pos+=1]
-  def items a:
-    iif:
-      pos >= tokens.size: throw "'(' is not closed"
-      tokens[pos] == ")": pos += 1; a
-      _: a ++ [unit()]
-  def unit:
-    s = consume()
-    case s:
-      "(": pairs items([])
-      ")": throw "unexpected ')'"
-      _: atom s
-  items []
+def handle req:
+  response req.path.slice(1)
 
-def show node:
-  case node:
-    atom a: a
-    pairs []: "NIL"
-    pairs l: (++ "(" l.map(show).join(" ") ")")
-    lambda f: (++ "(lambda " f.args.map(show).join(" ") show(f.body) ")")
+test t:
+  def eq expect path:
+    t.eq expect handle(request(path)).body
+  eq "" "/"
+  eq "path/to" "/path/to"
+```
 
-def run env node:
-  t = atom "T"
-  nil = pairs []
-  case node:
-    atom "t": t
-    atom: node
-    lambda: node
-    pairs ["quote" x]                             : pairs x
-    pairs ["atom" v.pairs([_ ...])]               : nil
-    pairs ["atom" _]                              : t
-    pairs ["eq" a b]                              : atom iif(show(a) == show(b) t f)
-    pairs ["car" l.pairs([head ...])]             : head
-    pairs ["cdr" l.pairs([_ ...tail])]            : pairs tail
-    pairs ["cons" a b.pairs]                      : pairs [a] ++ b
-    pairs ["if" a b c]                            : run env iif(run(env a) == nil c b)
-    pairs ["lambda" args.pairs[atom] body]        : lambda args body
-    pairs ["define" name.atom body]               : env.set name body
-    pairs ["+" l.atom r.atom]                     : atom l.int + r.int
-    pairs [f.lambda ...a] if f.args.size == a.size: run env ++ f.args.zip(a).dict f.body
-    _                                             : throw $"{show node} is invalid"
+main.mjs
+```
+import { handle } from './moa.mjs'
+import { createServer } from 'node:http'
+createServer((req, res) => res.end(handle({path: req.url}).body)).listen(3000)
+```
 
-test {eq}:
-  def t expect code:
-    eq expect show(run(dict() parse(code)))
-  t "NIL" "(atom ())" 
-  t "T" "(eq 1 1)" 
-  t "1" "(car (quote (1 2 3)))"
-  t "(2 3)" "(cdr (quote (1 2 3)))"
-  t "(1 2 3)" "(cons 1 (quote (2 3)))"
-  t "1" "(if t 1 2)"
-  t "3" "((lambda (a b) (+ a b)) 1 2)"
-  t "5" "(define a 2)(+ a 3)"
+Compile Moa to mjs
+```
+moa to mjs
+```
+
+moa.mjs (generated)
+```
+export const request = path => ({path})
+export const response = body => ({body})
+export const handle = req => response(req.path.slice(1))
+```
+
+moa.test.js (generated)
+```
+import test from 'node:test'
+import assert from 'node:assert'
+import { request, response, handle } from './moa.mjs'
+
+test('handle.moa', t => {
+  assert.strictEqual('', handle(request('/')).body)
+  assert.strictEqual('path/to', handle(request('/path/to')).body)
+})
+```
+
+Run test
+```
+node --test
 ```
 
 ```
-moa test
+✔ handle.moa (0.561792ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 56.09625
 ```
 
-Output
+Start the server
 ```
-........ok
+node main.mjs
 ```
 
+Request to the server
 ```
-echo "(+ 1 2)" | moa run
+curl http://localhost:3000/hello
 ```
 
 Output
 ```
-3
+hello
 ```
+
+
+
+### For JavaScript in web browser
+add.moa
+```
+def add a b:
+  a + b
+
+test t:
+  t.eq 3 add(1 2)
+```
+
+Compile to JavaScript
+```
+moa to mjs
+```
+
+moa.mjs (generated)
+```
+export const add = (a, b) => a + b
+```
+
+moa.test.mjs (generated)
+```
+import test from 'node:test'
+import assert from 'node:assert'
+import { add } from './moa.mjs'
+
+test('add.moa', t => {
+  assert.strictEqual(3, add(1, 2))
+})
+
+```
+
+Test
+```
+node --test
+```
+
+```
+✔ add.moa (0.524792ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 53.017208
+```
+
 
 
 
 ## Moa command usage
 ```
 Usage:
-  moa                           # launch interactive shell
-  moa build [<os>] [<arch>]     # compile Moa program
-  moa dev [<port>] [<ssh://..>] # launch developer console as http sever
-  moa deploy [<ssh://..> ...]   # compile, deploy, and run on remote hosts
-  moa env [+/-] [<version>]     # list versions; use, install or remove a version
-  moa help                      # show usage of moa command
-  moa run [<exp>]               # run Moa program
-  moa test [<regexp> ...]       # test Moa program
+    moa                       # launch interactive shell
+    moa env [+/-] [<version>] # list versions; use, install or remove a version
+    moa ide [<port>]          # launch web IDE
+    moa to [<language>]       # compile to a programming language
+
+The languages are:
+    go                        # generate moa.go and moa_test.go
+    mjs                       # generate moa.mjs and moa_test.mjs
 ```
 
 
 ## Interactive shell commands 
 ```
-:         -- repeat last command
-:q        -- quit
-:t <expr> -- show a type of <expr>
-:p <expr> -- show consumed time for each functions of <expr>
-:s <expr> -- show a summary of loops, branches, and thrown exceptions of <exprs>
+:             -- repeat last command
+:q            -- quit the shell
+:u <language> -- use a programming language
 ```
