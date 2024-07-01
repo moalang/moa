@@ -30,9 +30,9 @@ id: [A-Za-z_][A-Za-z0-9_]*
 
 Keywords
 ```
-primitive: _ true false bool int float string bytes stream i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
-container: opt tuple list dict set
-declar   : let var dec def struct enum test
+primitive: _ true false bool int float string bytes regexp fn stream i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
+container: option struct tuple list set dict
+declare  : let var dec def class enum assert
 branch   : iif if else switch
 flow     : return for while continue break throw catch
 reserved : num ref time duration decimal array use module
@@ -47,7 +47,7 @@ _                part of id
 #                comment
 ( )              priority
 [ ]              list
-{ }              struct
+{ }              class
 ! -              singular operator
 && ||            boolean operator
 + - * / % **     number operator
@@ -109,7 +109,7 @@ pattern:
 | '"' [^"]* '"'                    # string
 | "-"? [0-9]+ ("." [0-9]+)?        # number
 | "[" case* ("..." id?)? case* "]" # list
-| "{" ((id "=" exp) | type)+ "}"   # struct
+| "{" ((id "=" exp) | type)+ "}"   # class
 | type
 type: id ("." id)* ("[" type+ "]")? ("(" case ")")?
 ```

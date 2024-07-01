@@ -1,20 +1,9 @@
-# Do not
-- Inheritance
-
-# Do
-- Helps programming enjoy
-- Infer type error
-- Allow by default
-
 # Backlog
 - [x] Define syntax
-- [ ] Compile to executable file via go
-- [ ] Type inference
-- [ ] REPL
-- [ ] HTTP server
-- [ ] Transactional database
-- [ ] Debugger
-- [ ] Profiler
+- [ ] Define test
+- [ ] Compile to Go
+- [ ] Compile to JavaScript
+- [ ] Web IDE
 
 # Memo
 https://www.swift.org/
