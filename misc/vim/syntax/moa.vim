@@ -10,23 +10,18 @@ syn match  Comment /#.*$/
 syn region String start=+\z(["']\)+  skip=+\\\%(\z1\|$\)+  end=+\z1+ end=+$+
 syn region String start=+\z(```\|"""\|'''\)+  skip=+\\\%(\z1\|$\)+  end=+\z1+ end=+$+
 syn region String start=+r\z([`"'/]\)+  skip=+\\\%(\z1\|$\)+  end=+\z1+ end=+$+
-syn match Number /\%([A-Za-z_]\)\@<![0-9]\+\(\.[0-9]\+\)\?/
+syn match Number /\%([A-Za-z_]\)\@<![0-9]\+[xob]\?[A-Fa-f0-9_hmsun]*\(\.[A-Fa-f0-9_]\+\)\?/
 syn keyword Boolean true false
 
 " Statement
-syn keyword Define      def dec let var record enum interface extern
-syn keyword Conditional if case throw catch
+syn keyword Define      def dec let var struct class enum
 syn keyword Boolean     true false
-syn keyword Type        void bool int float string time re bytes
-syn keyword Type        tuple struct list dict set
-syn keyword Type        fn num ref serial stream
-syn keyword Type        void bool int float string tuple struct list set dict time re bytes fn num
-syn keyword Type        array i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 num interface implement decimal assert
-syn keyword Keyword     use module
-syn keyword Constant    math io
-"syn keyword Repeat      for while
-"syn keyword keyword     return continue break yield
-"syn keyword PreProc     catch
+syn keyword Type        _ bool int float string bytes stream fn time duration
+syn keyword Type        tuple struct option some none set list dict
+syn keyword Conditional iif if else switch
+syn keyword Repeat      for while
+syn keyword keyword     continue break return throw catch assert
+syn keyword Keyword     use module math array nume decimal i8 i16 i32 i64 u8 u16 u32 u64 f32 f64
 syn match Operator /[+\-\*/|&]=\=/
 syn match Operator /[<>]=\=/
 syn match Operator /[=!]=/

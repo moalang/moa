@@ -30,12 +30,13 @@ id: [A-Za-z_][A-Za-z0-9_]*
 
 Keywords
 ```
-primitive: _ true false bool int float string bytes regexp fn stream i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
-container: option struct tuple list set dict
-declare  : let var dec def class enum assert
+global   : log true false some none
+primitive: _ bool int float string bytes stream fn time duration
+container: tuple struct option set list dict
+declare  : let var def dec class enum assert
 branch   : iif if else switch
 flow     : return for while continue break throw catch
-reserved : num ref time duration decimal array use module
+reserved : num decimal array use module i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
 ```
 
 Symbols
@@ -81,7 +82,7 @@ $ undefined
 
 - Duration
 ```
-"-"? ([0-9]+ ("d" | "h" | "m" | "s" | "ms" | "us"))+ # 1h2m3s -> duration(hour=1 minute=30 second=3)
+"-"? ([0-9]+ ("d" | "h" | "m" | "s" | "ms" | "us" | "ns"))+ # 1h2m3s -> duration(hour=1 minute=30 second=3)
 ```
 
 - Variadic function
