@@ -1,31 +1,46 @@
-# Syntax
+# Minimal Syntax
 ```
 top: line+
-line: exp+ (":" block)? "\n"
+line: exp+ (":" block)? comment? "\n"
 block: ("\n  " line)+ | line
+exp: op1? atom (op2 exp)?
+ato:
+| "(" exp ")"
+| bottom (prop | call)*
+prop: "." (id | [0-9]+)     # property access
+call: "(" exp* ")"          # call function
+bottom:
+| "(" exp ")"               # 1 * (2 + 3)
+| "-"? [0-9]+ ("." [0-9]+)? # -1.2
+| '"' [^"]* '"'             # "string"
+| id
+op1: [!-] | "..."
+op2: [+-*/%<>|&^~=!]+
+id: [A-Za-z_][A-Za-z0-9_]*
+comment: "//" [^\n]*
+```
+
+# Syntax sugar
+```
 exp:
-| id ("," id+ )* "=>" exp | block
+| id ("," id+ )* "=>" exp | block  # a,b => c        -> fn(a b c)
 | op1? atom (op2 exp)?
 atom:
 | "(" exp ")"
-| bottom (prop | key | call | index | slice)*
-prop: "." (id | [0-9]+)           # property access
-key: "." (id | [0-9]+) [!?] type? # key access
-call: "(" exp* ")"                # call function
-index: "[" ":"? exp+ "]"          # index access, or generic type
-slice: "{" id* (id "=" atom)* "}" # copy with some new values
+| bottom (prop | call | index | slice | key)*
+key: "." (id | [0-9]+) [!?] type?  # a.b!            -> a.at("b"), a.b? -> a.get("b")
+index: "[" ":"? exp+ "]"           # a[1]            -> a.at(1)
+slice: "{" id* (id "=" atom)* "}"  # a{b c=1}        -> struct.copy(a b c=1)
 bottom:
-| "(" exp ")"                    # 1 * (2 + 3)
-| "{" id* (id "=" atom)* "}"     # {x y=0}
-| "[" exp* "]"                   # [1 2 3]
-| "[" ":" | (atom ":" atom)+ "]" # ["x":0 ("y"):0]
-| "-"? [0-9]+ ("." [0-9]+)?      # -1.2
-| [r$]? '"' [^"]* '"'            # "string"
-| [r$]? '"""' [^"]* '"""'        # """string"""
-| id
-op1: [!-] | "..."
-op2: [+-*/%<>|&^~=!,]+
-id: [A-Za-z_][A-Za-z0-9_]*
+| "{" id* (id "=" atom)* "}"       # {x y=1}         -> struct(x y=1)
+| "[" exp* "]"                     # [1 2 3]         -> list(1 2 3)
+| "[" ":" | (atom ":" atom)+ "]"   # ["x":1 ("y"):2] -> dict("x" 1 "y" 2)
+| '"""' [^"]* '"""'                # """a="b""""     -> "a=\"b\""
+| "-"? [0-9]+ "e" [0-9]+           # 1e3             -> 100
+| "-"? "0x" [0-9a-fA-F_]+          # 0xff            -> 255
+| "-"? "0o" [0-7_]+                # 0o11            -> 9
+| "-"? "0b" [0-1_]+                # 0b11            -> 3
+| "-"? [0-9][0-9_]+ ("." [0-9_]+)? # 10_000.1_002    -> 10000.1002
 ```
 
 Keywords
@@ -48,40 +63,28 @@ Operators
 != == < <= >= > <=> # Compare
 ++                  # Concat
 =                   # Update
-=>                  # Lambda
 ```
 
 Symbols
 ```
-( )              priority
-[ ]              list
-{ }              class
-.                field access
-_                part of id
-...              variadic function or there are zero or more
-"                string
-#                comment
-,                seperator of arguments for lambda expression
-:                block
-;                break line
-? undefined
-\ undefined
-' undefined
-$ undefined
-@ undefined
-` undefined
-```
-
-
-
-# Syntax sugar
-Number
-```
-"-"? [0-9]+ "e" [0-9]+           # 1e3          -> 100
-"-"? "0x" [0-9a-fA-F_]+          # 0xff         -> 255
-"-"? "0o" [0-7_]+                # 0o11         -> 9
-"-"? "0b" [0-1_]+                # 0b11         -> 3
-"-"? [0-9][0-9_]+ ("." [0-9_]+)? # 10_000.1_002 -> 10000.1002
+( )  # priority
+[ ]  # list
+{ }  # class
+=>   # Lambda
+.    # field access
+_    # part of id
+...  # variadic function or there are zero or more
+"    # string
+#    # comment
+,    # seperator of arguments for lambda expression
+:    # block
+;    # break line
+?    # undefined
+\    # undefined
+'    # undefined
+$    # undefined
+@    # undefined
+`    # undefined
 ```
 
 

@@ -288,7 +288,7 @@ assert [tuple(1 2)]      dict(1 2).list
 # ---( declare )----------------------------------------------
 assert 1                            (let a 1)
 assert 2                            (var a 1: a = 2)
-assert 1                            (let _ f: def f 1)
+assert 1                            (let _ f(): def f 1)
 assert 1                            (let _ f(1): def f a a)
 assert 2                            (let _ f(1 2): def f _ a a)
 assert 5                            (var a 1: let _ (f; f): def f: a += 2)
@@ -364,9 +364,12 @@ assert 10:
 
 # ---( flow )------------------------------------------------------
 # return
-assert 1 fn((return 1; 2))
-assert 1 (def: (return 1; 2))
-assert 1 (def f: (return 1; 2); f)
+assert 1 (fn: return 1; 2)()
+assert 1:
+  def f:
+    return 1
+    2
+  f()
 
 # for
 assert 3 (var a 1: for b 2: a += b)
@@ -398,6 +401,9 @@ assert      9    0o11
 assert      3   0b111
 assert  10000  10_000
 assert 0.1002 0.1_002
+
+assert 1 (a => a)(1)
+assert 3 (a,b => a+b)(1 2)
 
 
 

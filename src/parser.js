@@ -25,7 +25,7 @@ const parse = source => {
   const consume = () => (t => ++pos && t)(read() || fail('out of index', pos, tokens))
   const indent = t => t.code.includes('\n') ? t.code.split('\n').at(-1).length : fail('not break line', t)
   const squash = a => a.length === 1 ? a[0] : a
-  const pack = a => a.length === 1 ? a[0] : a.length > 1 ? [{code: '__pack'}, ...a] : a
+  const block = a => a.length === 1 ? a[0] : a.length > 1 ? [{code: '__block'}, ...a] : a
   const parse_unit = () => {
     const suffix = t => {
       const close = tokens[pos] || {code: ''}
@@ -64,9 +64,9 @@ const parse = source => {
     while (read().code === ";" && ++pos) {
       remain.push(squash(many(t => !is_stop(t.code) && parse_exp())))
     }
-    return remain.length ? pack([squash(a), ...remain]) : a.length === 0 ? null : a.length === 1 ? a[0] : a
+    return remain.length ? block([squash(a), ...remain]) : a.length === 0 ? null : a.length === 1 ? a[0] : a
   }
-  const parse_lines = n => pack(many(t => (t.code.includes('\n') && indent(t) === n && ++pos, parse_line())))
+  const parse_lines = n => block(many(t => (t.code.includes('\n') && indent(t) === n && ++pos, parse_line())))
   return parse_lines(0)
 }
 
@@ -89,11 +89,6 @@ if (require.main === module) {
   test('r"\\t"', 'r"\\t"')
   test("r'\\t'", "r'\\t'")
   test('(=> a b)', 'a => b')
-
-  // container
-  test('(list)', '[]')
-  test('(list 1)', '[1]')
-  test('(list 1 2)', '[1 2]')
 
   // property access
   test('(. a b)', 'a.b')
@@ -129,27 +124,21 @@ if (require.main === module) {
   test('((. f m) a b)', 'f.m(a b)')
   test('((. ((. a f) 1) g) 2)', 'a.f(1).g(2)')
 
-  // index access
-  test('([ x 1)', 'x[1]')
-  test('(x (list 1))', 'x [1]')
-  test('([ x 1 2)', 'x[1 2]')
-  test('(. ([ x a) b)', 'x[a].b')
-
   // indent
   test('(a b)', 'a:\n  b')
   test('(a (b c))', 'a:\n  b:\n    c')
-  test('(a (b (__pack c d)))', 'a:\n  b:\n    c\n    d')
-  test('(a (__pack (b c) d))', 'a:\n  b:\n    c\n  d')
-  test('(__pack (a (b c)) d)', 'a:\n  b:\n    c\nd')
-  test('(__pack (a (__pack b (c d) e)) f)', 'a:\n  b\n  c:\n    d\n  e\nf')
+  test('(a (b (__block c d)))', 'a:\n  b:\n    c\n    d')
+  test('(a (__block (b c) d))', 'a:\n  b:\n    c\n  d')
+  test('(__block (a (b c)) d)', 'a:\n  b:\n    c\nd')
+  test('(__block (a (__block b (c d) e)) f)', 'a:\n  b\n  c:\n    d\n  e\nf')
 
-  // statement
-  test('(__pack a b)', 'a\nb')
-  test('(__pack (a b) c)', 'a b\nc')
-  test('(__pack a (b c))', 'a\nb c')
-  test('(__pack a b)', 'a;b')
-  test('(__pack (a b) (c d) (e f))', 'a b; c d; e f')
-  test('(a (__pack b c))', 'a: b; c')
+  // block
+  test('(__block a b)', 'a\nb')
+  test('(__block (a b) c)', 'a b\nc')
+  test('(__block a (b c))', 'a\nb c')
+  test('(__block a b)', 'a;b')
+  test('(__block (a b) (c d) (e f))', 'a b; c d; e f')
+  test('(a (__block b c))', 'a: b; c')
 
   // priority of operators
   test('(&& (< a b) c)', 'a < b && c')
@@ -159,7 +148,7 @@ if (require.main === module) {
 
   // comment
   test('(= a 1)', '#comment\na = 1 # comment\n#comment')
-  test('(a (__pack b c))', 'a:\n  #comment\n  b\n  #comment\n  c\n  # comment')
+  test('(a (__block b c))', 'a:\n  #comment\n  b\n  #comment\n  c\n  # comment')
 
   // combinations
   test('(! (a b))', '!a(b)')
@@ -173,13 +162,26 @@ if (require.main === module) {
   test('((. (list 1) m) a)', '[1].m a')
   test('((. (list 1) m) a)', '[1].m(a)')
   test('((. (list 1) m) (=> x (>= x 1)))', '[1].m(x => x >= 1)')
+
+  // syntax sugar: list
+  test('(list)', '[]')
+  test('(list 1)', '[1]')
+  test('(list 1 2)', '[1 2]')
+
+  // syntax sugar: index access
+  test('([ x 1)', 'x[1]')
+  test('(x (list 1))', 'x [1]')
+  test('([ x 1 2)', 'x[1 2]')
+  test('(. ([ x a) b)', 'x[a].b')
+
+  // syntax sugar: arrow function
   test('(=> p (+ (. p x) (. p y)))', 'p => p.x + p.y')
   test('(=> (a b) c)', 'a,b => c')
   test('(=> (a b c) d)', 'a,b,c => d')
   test('(=> a (b c))', 'a => b c')
   test('(=> a (+ 1 2))', 'a => 1 + 2')
   test('(=> a 1)', 'a =>\n  1')
-  test('(=> a (__pack 1 2))', 'a =>\n  1\n  2')
+  test('(=> a (__block 1 2))', 'a =>\n  1\n  2')
 
   // edge case
   test('1', '1\n')
