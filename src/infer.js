@@ -20,14 +20,16 @@ const until = (f, g) => {
 const infer = nodes => {
   let tvarSequence = 0
   const cache = {}
-  const tvar = () => (name => ({name, var: true}))((++tvarSequence).toString())
+  const tvar = (label, cap) => (name => ({name, label, cap, var: true}))((++tvarSequence).toString())
   const tdot3 = () => ({dot3: true, ref: tvar()})
   const tfn = (...types) => types.length === 1 ? types[0] : ({types})
   const tinf = props => ({props})
   const ttype = name => ({name})
   const ttuple = types => ({name: 'tuple', types})
   const tint = ttype('int')
+  const tfloat = ttype('float')
   const tbool = ttype('bool')
+  const tnum1 = tvar('num', [tint, tfloat])
   const tcon = (t, constrains) => ({...t, constrains})
   const fresh = (type, nonGeneric) => {
     const d = {}
@@ -40,7 +42,7 @@ const infer = nodes => {
         return t
       }
       const p = prune(t)
-      return p.var ?  (nonGeneric.includes(p.name) ? p : d[p.name] ||= tvar()) : copy(p)
+      return p.var ? (nonGeneric.includes(p.name) ? p : d[p.name] ||= tvar(p.label, p.cap)) : copy(p)
     }
     return rec(type)
   }
@@ -49,7 +51,19 @@ const infer = nodes => {
     b = prune(b)
     if (a.var) {
       if (a.name !== b.name) {
-        a.instance = b
+        if (a.cap) {
+          if (b.cap && str(a.cap) !== str(b.cap)) {
+            fail(`cap of type miss match`, {a,b})
+          }
+          if (!b.var && a.cap && !a.cap.find(c => c.name === b.name)) {
+            fail(`cap of type miss match`, {a,b})
+          }
+        }
+        if (a.cap && b.var) {
+          b.instance = a
+        } else {
+          a.instance = b
+        }
       }
     } else if (b.var) {
       unify(b, a)
@@ -114,7 +128,8 @@ const infer = nodes => {
       }
     } else {
       const v = node.code
-      return v.match(/^[0-9]/) ? tint :
+      return v.match(/^[0-9]+\.[0-9]+/) ? tfloat :
+        v.match(/^[0-9]/) ? tint :
         v in env ? fresh(env[v], nonGeneric) :
         fail(`Not found ${v} in env`, {v,node,env})
     }
@@ -122,13 +137,17 @@ const infer = nodes => {
   const top = {
     '...': tdot3(),
     'int': tint,
+    'float': tfloat,
     'bool': tbool,
     'true': tbool,
     'false': tbool,
-    '+': tfn(tint, tint, tint),
-    '<': tfn(tint, tint, tbool),
-    'if': tfn(tbool, v1, v1, v1),
+    '!': tfn(tbool, tbool),
+    'iif': tfn(tbool, v1, v1, v1),
   }
+  '|| &&'.split(' ').map(op => top[op] = tfn(tbool, tbool, tbool))
+  '+ - * ** / %'.split(' ').map(op => top[op] = tfn(tnum1, tnum1, tnum1))
+  '& | ^ ~ << >>'.split(' ').map(op => top[op] = tfn(tint, tint, tint))
+  '!= == < <= >= >'.split(' ').map(op => top[op] = tfn(v1, v1, tbool))
   return nodes.map(node => analyse(node, top, []))
 }
 
@@ -138,7 +157,7 @@ const showType = type => {
     t.name && t.types ? t.name + '[' + t.types.map(show).join(' ') + ']' :
     t.types ? '(' + t.types.map(show).join(' ') + ')' :
     t.props ? '(' + t.props.map(([f,t]) => `${f}.${show(t)}`).join(' ') + ')' :
-    t.name
+    t.label || t.name
   const s = show(type)
   const o = {}
   const r = s.replace(/\d+/g, t => o[t] ||= Object.keys(o).length + 1)
@@ -199,24 +218,26 @@ const testType = () => {
   }
 
   // primitives
-  inf('int', '1')
   inf('bool', 'true')
   inf('bool', 'false')
+  inf('int', '1')
+  inf('float', '1.0')
 
   // exp
   inf('int', '+ 1 1')
+  inf('float', '+ 1.0 1.0')
   inf('bool', '< 1 1')
 
   // branch
-  inf('int', 'if true 1 2')
-  inf('bool', 'if true true true')
+  inf('int', 'iif true 1 2')
+  inf('bool', 'iif true true true')
 
   // value
   inf('int', 'def _ 1')
 
   // simple function
   inf('(int int)', 'def _ a (+ a 1)')
-  inf('(int int int)', 'def _ a b (+ a b)')
+  inf('(num num num)', 'def _ a b (+ a b)')
 
   // generics
   inf('(1 1)', 'def _ a a')
@@ -229,18 +250,18 @@ const testType = () => {
   inf('int',                           'def f x (+ x 1); def g x (+ x 2); + (f 1) (g 1)')
   inf('((1 2) (2 3) 1 3)',             'def _ f g x (g (f x))')
   inf('((1 2 3) (1 2) 1 3)',           'def _ x y z (x z (y z))')
-  inf('(1 (1 bool) (1 1))',            'def _ b x (if (x b) x (def _ x b))')
-  inf('(bool bool)',                   'def _ x (if true x (if x true false))')
-  inf('(bool bool bool)',              'def _ x y (if x x y)')
+  inf('(1 (1 bool) (1 1))',            'def _ b x (iif (x b) x (def _ x b))')
+  inf('(bool bool)',                   'def _ x (iif true x (iif x true false))')
+  inf('(bool bool bool)',              'def _ x y (iif x x y)')
   inf('(1 1)',                         'def _ n ((def _ x (x (def _ y y))) (def _ f (f n)))')
   inf('((1 2) 1 2)',                   'def _ x y (x y)')
   inf('((1 2) ((1 2) 1) 2)',           'def _ x y (x (y x))')
   inf('(1 ((1 2 3) 4 2) (1 2 3) 4 3)', 'def _ h t f x (f h (t f x))')
   inf('((1 1 2) ((1 1 2) 1) 2)',       'def _ x y (x (y x) (y x))')
   inf('(((1 1) 2) 2)',                 'def id x x; def f y (id (y id))')
-  inf('int',                           'def id x x; def f (if (id true) (id 1) (id 2))')
+  inf('int',                           'def id x x; def f (iif (id true) (id 1) (id 2))')
   inf('int',                           'def f x (3); def g (+ (f true) (f 4))')
-  inf('(bool (1 1))',                  'def f x x; def g y y; def h b (if b (f g) (g f))')
+  inf('(bool (1 1))',                  'def f x x; def g y y; def h b (iif b (f g) (g f))')
 
   // declare function
   inf('bool', 'dec f bool; f')

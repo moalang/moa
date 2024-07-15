@@ -31,17 +31,17 @@ const parse = source => {
       const close = tokens[pos] || {code: ''}
       const next = read()
       return close.code === '('  ? ++pos && suffix([t, ...until(')')]) :
-             close.code === '['  ? ++pos && suffix([close, t, ...until(']')]) :
-             next.code  === ','  ? suffix([t, ...many(t => t.code === ',' && ++pos && consume())]) :
+//             close.code === '['  ? ++pos && suffix([close, t, ...until(']')]) :
+//             next.code  === ','  ? suffix([t, ...many(t => t.code === ',' && ++pos && consume())]) :
              next.code  === '.'  ? ++pos && suffix([next, t, consume()]) :
-             next.code  === '=>' ? ++pos && [next, t, parse_block()] :
+//             next.code  === '=>' ? ++pos && [next, t, parse_block()] :
              t
     }
     const t = consume()
     return suffix(
       t.code === '!' ? [t, parse_unit()] :
       t.code === '-' ? [t, parse_unit()] :
-      t.code === '[' ? [{...t, code:'list'}, ...until(']')] :
+//      t.code === '[' ? [{...t, code:'list'}, ...until(']')] :
       t.code === '(' ? squash(until(')')) :
       t.code === ':' ? parse_block() :
       t)
@@ -154,34 +154,34 @@ if (require.main === module) {
   test('(! (a b))', '!a(b)')
   test('(&& true (! false))', 'true && !false')
   test('(+ (a b) c)', 'a(b) + c')
-  test('(. ([ a b) c)', 'a[b].c')
-  test('((. ([ a b) c) d)', 'a[b].c(d)')
-  test('(. (list) a)', '[].a')
   test('((. a b) c)', 'a.b c')
-  test('(. (list) size)', '[].size')
-  test('((. (list 1) m) a)', '[1].m a')
-  test('((. (list 1) m) a)', '[1].m(a)')
-  test('((. (list 1) m) (=> x (>= x 1)))', '[1].m(x => x >= 1)')
+//  test('(. ([ a b) c)', 'a[b].c')
+//  test('((. ([ a b) c) d)', 'a[b].c(d)')
+//  test('(. (list) a)', '[].a')
+//  test('(. (list) size)', '[].size')
+//  test('((. (list 1) m) a)', '[1].m a')
+//  test('((. (list 1) m) a)', '[1].m(a)')
+//  test('((. (list 1) m) (=> x (>= x 1)))', '[1].m(x => x >= 1)')
 
-  // syntax sugar: list
-  test('(list)', '[]')
-  test('(list 1)', '[1]')
-  test('(list 1 2)', '[1 2]')
-
-  // syntax sugar: index access
-  test('([ x 1)', 'x[1]')
-  test('(x (list 1))', 'x [1]')
-  test('([ x 1 2)', 'x[1 2]')
-  test('(. ([ x a) b)', 'x[a].b')
-
-  // syntax sugar: arrow function
-  test('(=> p (+ (. p x) (. p y)))', 'p => p.x + p.y')
-  test('(=> (a b) c)', 'a,b => c')
-  test('(=> (a b c) d)', 'a,b,c => d')
-  test('(=> a (b c))', 'a => b c')
-  test('(=> a (+ 1 2))', 'a => 1 + 2')
-  test('(=> a 1)', 'a =>\n  1')
-  test('(=> a (__block 1 2))', 'a =>\n  1\n  2')
+//  // syntax sugar: list
+//  test('(list)', '[]')
+//  test('(list 1)', '[1]')
+//  test('(list 1 2)', '[1 2]')
+//
+//  // syntax sugar: index access
+//  test('([ x 1)', 'x[1]')
+//  test('(x (list 1))', 'x [1]')
+//  test('([ x 1 2)', 'x[1 2]')
+//  test('(. ([ x a) b)', 'x[a].b')
+//
+//  // syntax sugar: arrow function
+//  test('(=> p (+ (. p x) (. p y)))', 'p => p.x + p.y')
+//  test('(=> (a b) c)', 'a,b => c')
+//  test('(=> (a b c) d)', 'a,b,c => d')
+//  test('(=> a (b c))', 'a => b c')
+//  test('(=> a (+ 1 2))', 'a => 1 + 2')
+//  test('(=> a 1)', 'a =>\n  1')
+//  test('(=> a (__block 1 2))', 'a =>\n  1\n  2')
 
   // edge case
   test('1', '1\n')

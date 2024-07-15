@@ -56,13 +56,12 @@ reserved  : num decimal array use module i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f
 
 Operators
 ```
-! -                 # Unray
-|| &&               # Boolean
-+ - * ** / %        # Arithmetic
-& | ^ ~ << >>       # Bit
-!= == < <= >= > <=> # Compare
-++                  # Concat
-=                   # Update
+! -             # Unray
+|| &&           # Boolean
++ - * ** / %    # Arithmetic
+& | ^ ~ << >>   # Bit
+!= == < <= >= > # Compare
+=               # Update
 ```
 
 Symbols
