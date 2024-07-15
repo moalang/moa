@@ -1,4 +1,4 @@
-# Minimal Syntax
+# Core Syntax
 ```
 top: line+
 line: exp+ (":" block)? comment? "\n"
