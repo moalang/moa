@@ -4,11 +4,12 @@ top: line+
 line: exp+ (":" block)? comment? "\n"
 block: ("\n  " line)+ | line
 exp: op1? atom (op2 exp)?
-ato:
+atom:
 | "(" exp ")"
 | bottom (prop | call)*
 prop: "." (id | [0-9]+)     # property access
 call: "(" exp* ")"          # call function
+index: "[" exp+ "]"         # index access or generic
 bottom:
 | "(" exp ")"               # 1 * (2 + 3)
 | "-"? [0-9]+ ("." [0-9]+)? # -1.2
@@ -29,7 +30,6 @@ atom:
 | "(" exp ")"
 | bottom (prop | call | index | slice | key)*
 key: "." (id | [0-9]+) [!?] type?  # a.b!            -> a.at("b"), a.b? -> a.get("b")
-index: "[" ":"? exp+ "]"           # a[1]            -> a.at(1)
 slice: "{" id* (id "=" atom)* "}"  # a{b c=1}        -> struct.copy(a b c=1)
 bottom:
 | "{" id* (id "=" atom)* "}"       # {x y=1}         -> struct(x y=1)
@@ -48,7 +48,7 @@ Keywords
 global    : true false some none time duration regexp log assert
 primitive : bool int float string bytes stream fn
 container : tuple struct option set list dict
-declare   : let var def dec class enum
+declare   : let var def dec class enum interface
 branch    : iif if else switch
 flow      : return for while continue break try throw catch
 reserved  : num decimal array use module i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
@@ -109,40 +109,6 @@ def f {a b=0}: a  # f(a=1), f(a=1 b=2) or f(b=2 a=1)
 def f {a b}? : a  # f() or f(a=1 b=2)
 ```
 
-Typed argument
-```
-dec f: int int
-def f a: a
-
-dec f: float float float
-def f a b: a / b
-
-dec f t.num: t t t
-def f a b: a + b
-
-dec f t: list(t) t? t
-def f lst alt?: if lst.size == 0 alt lst[0]
-
-# variadic argument with type declaration
-dec f a: a? a
-def f a: a.value
-
-dec f: a?int a
-def f a=1: a
-
-dec f: ...int int
-def f ...a: a.sum 
-
-dec f a: ...int,a int
-def f ...a: a.max.1
-
-dec f a b: ...int,a,b int
-def f ...a: a.max.1
-
-dec f ...a: ...a a
-def f ...a: g(...a)
-```
-
 Pattern matching
 ```
 switch: "switch" exp ":" ("\n  " type? case ("if" exp) ":" block)+
@@ -192,6 +158,24 @@ def seconds.milliseconds n:
 
 def f:
   seconds(3).milliseconds # 3000
+```
+
+Interface
+```
+interface num t:
+  (+ - * / % **) t t t
+
+class vector2:
+  x int
+  y int
+
+class vector2.num:
+   + l r: vector2 (l.x  + r.x) (l.y  + r.y)
+   - l r: vector2 (l.x  - r.x) (l.y  - r.y)
+   * l r: vector2 (l.x  * r.x) (l.y  * r.y)
+   / l r: vector2 (l.x  / r.x) (l.y  % r.y)
+   % l r: vector2 (l.x  / r.x) (l.y  % r.y)
+  ** l r: vector2 (l.x ** r.x) (l.y ** r.y)
 ```
 
 Duration

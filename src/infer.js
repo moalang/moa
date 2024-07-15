@@ -4,11 +4,13 @@
 // https://github.com/reki2000/hyndley-milner-kotlin/blob/master/HindleyMilner.kt
 // http://www.fos.kuis.kyoto-u.ac.jp/~igarashi/class/isle4-10w/testcases.html
 
+class TypeError extends Error {}
 const log = o => { console.dir(o, {depth: null}); return o }
 const print = (...a) => console.log(...a)
 const str = o => JSON.stringify(o, null, '  ')
 const eq = (x, y) => str(x) === str(y)
 const fail = (m, ...a) => { const e = new Error(m); a && (e.detail = a); throw e }
+const failUnify = (m, ...a) => { const e = new TypeError(m); a && (e.detail = a); throw e }
 const until = (f, g) => {
   const l = []
   while (f()) {
@@ -20,7 +22,7 @@ const until = (f, g) => {
 const infer = nodes => {
   let tvarSequence = 0
   const cache = {}
-  const tvar = (label, cap) => (name => ({name, label, cap, var: true}))((++tvarSequence).toString())
+  const tvar = (label, interfaces) => (name => ({name, label, interfaces, var: true}))((++tvarSequence).toString())
   const tdot3 = () => ({dot3: true, ref: tvar()})
   const tfn = (...types) => types.length === 1 ? types[0] : ({types})
   const tinf = props => ({props})
@@ -42,7 +44,7 @@ const infer = nodes => {
         return t
       }
       const p = prune(t)
-      return p.var ? (nonGeneric.includes(p.name) ? p : d[p.name] ||= tvar(p.label, p.cap)) : copy(p)
+      return p.var ? (nonGeneric.includes(p.name) ? p : d[p.name] ||= tvar(p.label, p.interfaces)) : copy(p)
     }
     return rec(type)
   }
@@ -51,15 +53,15 @@ const infer = nodes => {
     b = prune(b)
     if (a.var) {
       if (a.name !== b.name) {
-        if (a.cap) {
-          if (b.cap && str(a.cap) !== str(b.cap)) {
-            fail(`cap of type miss match`, {a,b})
+        if (a.interfaces) {
+          if (b.interfaces && str(a.interfaces) !== str(b.interfaces)) {
+            failUnify(`interfaces of type miss match`, {a,b})
           }
-          if (!b.var && a.cap && !a.cap.find(c => c.name === b.name)) {
-            fail(`cap of type miss match`, {a,b})
+          if (!b.var && !a.interfaces.find(c => c.name === b.name)) {
+            failUnify(`interfaces of type miss match`, {a,b})
           }
         }
-        if (a.cap && b.var) {
+        if (a.interfaces && b.var) {
           b.instance = a
         } else {
           a.instance = b
@@ -71,7 +73,7 @@ const infer = nodes => {
       const as = a.types || []
       const bs = b.types || []
       if (a.name !== b.name || (as.length !== bs.length && !as.find(t => t.dot3))) {
-        fail(`type miss match`, {a,b})
+        failUnify(`type miss match`, {a,b})
       }
       for (let i=0; i<as.length; i++) {
         if (as[i].dot3) {
@@ -112,7 +114,7 @@ const infer = nodes => {
         const local = {...env, ...Object.fromEntries(tvars)}
         const args = tail.at(-1)[0].map(arg => local[arg.code])
         return env[name] = args.length === 1 ? args[0] : tfn(...args)
-      } else if (head.code === 'interface') {
+      } else if (head.code === 'class') {
         const tvars = tail.slice(0, -1).map(t => [t.code, tvar()])
         const name = tvars[0][0]
         const local = {...env, ...Object.fromEntries(tvars)}
@@ -188,7 +190,7 @@ const testType = () => {
     try {
       infer(srcs.map(parse).flat(1))
     } catch (e) {
-      if (e.message.match(/^type miss match/)) {
+      if (e instanceof TypeError) {
         process.stdout.write('.')
         return
       }
@@ -272,11 +274,11 @@ const testType = () => {
   inf('(1 1)', 'dec _ a: a a')
   inf('(1 1 2)', 'dec _ a b: a a b')
 
-  // declare object
-  inf('(x.int)', 'interface _: x int')
-  inf('(x.1)', 'interface _ a: x a')
-  inf('(f.(int int))', 'interface _: f int int')
-  inf('(x.1 f.(1 2 int))', 'interface _ a b: x a; f a b int')
+  // declare class
+  inf('(x.int)', 'class _: x int')
+  inf('(x.1)', 'class _ a: x a')
+  inf('(f.(int int))', 'class _: f int int')
+  inf('(x.1 f.(1 2 int))', 'class _ a b: x a; f a b int')
 
   // variadic arguments
   inf('(... int)', 'def f ...: 1')
@@ -290,7 +292,9 @@ const testType = () => {
   inf('tuple[int bool int bool]', 'def f[t u] ...a[t u]: a', 'f 1 true 2 false')
 
   // type errors
+  reject('(+ true true)')
   reject('(+ 1 true)')
+  reject('(+ 1 1.0)')
   reject('def f[t] ...[t]: true', 'f 1 true')
   reject('def f[t u] ...[t u]: true', 'f 1 true true')
 
