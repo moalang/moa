@@ -91,7 +91,7 @@ $    # undefined
 # Idea
 Variadic function
 ```
-def f a?: a           # f(1) is opt[int], f() is opt[void]
+def f a?: a           # f(1) is option[int], f() is option[void]
 def f a=1: a          # f() is f(1)
 def f ...a: a.max     # f(), f(1) or f(1 2)
 def f ...a,: a.max.1  # f(), f(1 "a"), f(1 "a" 2 "b")

@@ -107,16 +107,17 @@ const infer = nodes => {
         const ft = tfn(...args.map(([_, t]) => t), rt)
         return env[name] = ft
       } else if (head.code === 'dec') {
-        const tvars = (Array.isArray(tail[0]) ? tail[0] : [tail[0]]).map(t => [t.code, tvar()])
+        const tvars = tail.slice(0, -1).map(t => [t.code, tvar()])
         const name = tvars[0][0]
         const local = {...env, ...Object.fromEntries(tvars)}
-        if (Array.isArray(tail.at(-1))) {
-          const props = tail.at(-1).map(a => [a[0].code, tfn(...a.slice(1).map(t => local[t.code]))])
-          return env[name] = tinf(props)
-        } else {
-          const args = tail.slice(1).map(arg => local[arg.code])
-          return env[name] = args.length === 1 ? args[0] : tfn(...args)
-        }
+        const args = tail.at(-1)[0].map(arg => local[arg.code])
+        return env[name] = args.length === 1 ? args[0] : tfn(...args)
+      } else if (head.code === 'interface') {
+        const tvars = tail.slice(0, -1).map(t => [t.code, tvar()])
+        const name = tvars[0][0]
+        const local = {...env, ...Object.fromEntries(tvars)}
+        const props = tail.at(-1).map(a => [a[0].code, tfn(...a.slice(1).map(t => local[t.code]))])
+        return env[name] = tinf(props)
       } else if (tail.length) {
         const ft = analyse(head, env, nonGeneric)
         const argv = tail.map(t => analyse(t, env, nonGeneric))
@@ -157,7 +158,7 @@ const showType = type => {
     t.name && t.types ? t.name + '[' + t.types.map(show).join(' ') + ']' :
     t.types ? '(' + t.types.map(show).join(' ') + ')' :
     t.props ? '(' + t.props.map(([f,t]) => `${f}.${show(t)}`).join(' ') + ')' :
-    t.label || t.name
+    t.name + (t.label ? '.' + t.label : '')
   const s = show(type)
   const o = {}
   const r = s.replace(/\d+/g, t => o[t] ||= Object.keys(o).length + 1)
@@ -183,9 +184,9 @@ const testType = () => {
     return block([top()])
   }
 
-  const reject = src => {
+  const reject = (...srcs) => {
     try {
-      infer(parse(src))
+      infer(srcs.map(parse).flat(1))
     } catch (e) {
       if (e.message.match(/^type miss match/)) {
         process.stdout.write('.')
@@ -193,12 +194,12 @@ const testType = () => {
       }
     }
     print('Invalid')
-    print('src:', src)
+    print('src:', srcs.join('\n'))
     process.exit(1)
   }
-  const inf = (expect, src) => {
+  const inf = (expect, ...srcs) => {
     try {
-      let types = infer(parse(src))
+      let types = infer(srcs.map(parse).flat(1))
       const actual = showType(types.slice(-1)[0])
       if (eq(actual, expect)) {
         process.stdout.write('.')
@@ -206,12 +207,12 @@ const testType = () => {
         print('Failed')
         print('expect:', expect)
         print('actual:', actual)
-        print('   src:', src)
+        print('   src:', srcs.join('\n'))
         process.exit(1)
       }
     } catch (e) {
       print('Failed')
-      print('  src:', src)
+      print('   src:', srcs.join('\n'))
       console.dir(e, {depth: null})
       process.exit(1)
     }
@@ -233,65 +234,65 @@ const testType = () => {
   inf('bool', 'iif true true true')
 
   // value
-  inf('int', 'def _ 1')
+  inf('int', 'def _: 1')
 
   // simple function
-  inf('(int int)', 'def _ a (+ a 1)')
-  inf('(num num num)', 'def _ a b (+ a b)')
+  inf('(int int)', 'def _ a: + a 1')
+  inf('(1.num 1.num 1.num)', 'def _ a b: + a b')
 
   // generics
-  inf('(1 1)', 'def _ a a')
-  inf('(1 2 1)', 'def _ a b a')
-  inf('(1 2 2)', 'def _ a b b')
-  inf('int', 'def f a a; f 1')
-  inf('bool', 'def f a a; f 1; f true')
+  inf('(1 1)', 'def _ a: a')
+  inf('(1 2 1)', 'def _ a b: a')
+  inf('(1 2 2)', 'def _ a b: b')
+  inf('int', 'def f a: a', 'f 1')
+  inf('bool', 'def f a: a', 'f 1; f true')
 
   // combinations
-  inf('int',                           'def f x (+ x 1); def g x (+ x 2); + (f 1) (g 1)')
-  inf('((1 2) (2 3) 1 3)',             'def _ f g x (g (f x))')
-  inf('((1 2 3) (1 2) 1 3)',           'def _ x y z (x z (y z))')
-  inf('(1 (1 bool) (1 1))',            'def _ b x (iif (x b) x (def _ x b))')
-  inf('(bool bool)',                   'def _ x (iif true x (iif x true false))')
-  inf('(bool bool bool)',              'def _ x y (iif x x y)')
-  inf('(1 1)',                         'def _ n ((def _ x (x (def _ y y))) (def _ f (f n)))')
-  inf('((1 2) 1 2)',                   'def _ x y (x y)')
-  inf('((1 2) ((1 2) 1) 2)',           'def _ x y (x (y x))')
-  inf('(1 ((1 2 3) 4 2) (1 2 3) 4 3)', 'def _ h t f x (f h (t f x))')
-  inf('((1 1 2) ((1 1 2) 1) 2)',       'def _ x y (x (y x) (y x))')
-  inf('(((1 1) 2) 2)',                 'def id x x; def f y (id (y id))')
-  inf('int',                           'def id x x; def f (iif (id true) (id 1) (id 2))')
-  inf('int',                           'def f x (3); def g (+ (f true) (f 4))')
-  inf('(bool (1 1))',                  'def f x x; def g y y; def h b (iif b (f g) (g f))')
+  inf('int',                           'def f x: + x 1', 'def g x: + x 2', '+ (f 1) (g 1)')
+  inf('((1 2) (2 3) 1 3)',             'def _ f g x: g (f x)')
+  inf('((1 2 3) (1 2) 1 3)',           'def _ x y z: x z (y z)')
+  inf('(1 (1 bool) (1 1))',            'def _ b x: iif (x b) x (def _ x: b)')
+  inf('(bool bool)',                   'def _ x: iif true x (iif x true false)')
+  inf('(bool bool bool)',              'def _ x y: iif x x y')
+  inf('(1 1)',                         'def _ n: (def _ x: x (def _ y y)) (def _ f: f n)')
+  inf('((1 2) 1 2)',                   'def _ x y: x y')
+  inf('((1 2) ((1 2) 1) 2)',           'def _ x y: x (y x)')
+  inf('(1 ((1 2 3) 4 2) (1 2 3) 4 3)', 'def _ h t f x: f h (t f x)')
+  inf('((1 1 2) ((1 1 2) 1) 2)',       'def _ x y: x (y x) (y x)')
+  inf('(((1 1) 2) 2)',                 'def id x: x', 'def f y: id (y id)')
+  inf('int',                           'def id x x', 'def f (iif (id true) (id 1) (id 2))')
+  inf('int',                           'def f x (3)', 'def g (+ (f true) (f 4))')
+  inf('(bool (1 1))',                  'def f x x', 'def g y y', 'def h b (iif b (f g) (g f))')
 
   // declare function
-  inf('bool', 'dec f bool; f')
-  inf('int', 'dec _ int')
-  inf('(int bool)', 'dec _ int bool')
-  inf('(... int)', 'dec _ ... int')
-  inf('(1 1)', 'dec _[a] a a')
-  inf('(1 1 2)', 'dec _[a b] a a b')
+  inf('bool', 'dec _: bool')
+  inf('int', 'dec _: int')
+  inf('(int bool)', 'dec _: int bool')
+  inf('(... int)', 'dec _: ... int')
+  inf('(1 1)', 'dec _ a: a a')
+  inf('(1 1 2)', 'dec _ a b: a a b')
 
   // declare object
-  inf('(x.int)', 'dec _: x int')
-  inf('(x.1)', 'dec _[a]: x a')
-  inf('(f.(int int))', 'dec _: f int int')
-  inf('(x.1 f.(1 2 int))', 'dec _[a b]: x a; f a b int')
+  inf('(x.int)', 'interface _: x int')
+  inf('(x.1)', 'interface _ a: x a')
+  inf('(f.(int int))', 'interface _: f int int')
+  inf('(x.1 f.(1 2 int))', 'interface _ a b: x a; f a b int')
 
   // variadic arguments
-  inf('(... int)', 'def f ... 1')
-  inf('int', 'def f ... 1; f 1')
-  inf('int', 'def f ... 1; f 1 true')
-  inf('(... 1)', 'def f ...a a')
-  inf('tuple[int]', 'def f ...a a; f 1')
-  inf('tuple[int bool]', 'def f ...a a; f 1 bool')
-  inf('bool', 'def f[t] ...[t] true; f 1 2')
-  inf('int', 'def f[t] ...[t] t; f 1 2')
-  inf('tuple[int bool int bool]', 'def f[t u] ...a[t u] a; f 1 true 2 false')
+  inf('(... int)', 'def f ...: 1')
+  inf('int', 'def f ...: 1', 'f 1')
+  inf('int', 'def f ...: 1', 'f 1 true')
+  inf('(... 1)', 'def f ...a: a')
+  inf('tuple[int]', 'def f ...a: a', 'f 1')
+  inf('tuple[int bool]', 'def f ...a: a', 'f 1 bool')
+  inf('bool', 'def f[t] ...[t]: true', 'f 1 2')
+  inf('int', 'def f[t] ...[t]: t', 'f 1 2')
+  inf('tuple[int bool int bool]', 'def f[t u] ...a[t u]: a', 'f 1 true 2 false')
 
   // type errors
   reject('(+ 1 true)')
-  reject('def f[t] ...[t] true; f 1 true')
-  reject('def f[t u] ...[t u] true; f 1 true true')
+  reject('def f[t] ...[t]: true', 'f 1 true')
+  reject('def f[t u] ...[t u]: true', 'f 1 true true')
 
   print('ok')
 }
