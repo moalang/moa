@@ -39,23 +39,28 @@ flow      : return for while continue break try throw catch
 reserved  : num decimal array use module i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
 ```
 
+Operators
+```
+! -                 # Unray
+|| &&               # Boolean
++ - * ** / %        # Arithmetic
+& | ^ ~ << >>       # Bit
+!= == < <= >= > <=> # Compare
+++                  # Concat
+=                   # Update
+=>                  # Lambda
+```
+
 Symbols
 ```
-_                part of id
-.                field access
-...              variadic function or there are zero or more
-"                string
-#                comment
 ( )              priority
 [ ]              list
 { }              class
-! -              singular operator
-&& ||            boolean operator
-+ - * / % **     number operator
-| & ^ ~ << >>    bit operator
-< <= > >= == !=  comparing operator
-=                constant
-=>               lambda
+.                field access
+_                part of id
+...              variadic function or there are zero or more
+"                string
+#                comment
 ,                seperator of arguments for lambda expression
 :                block
 ;                break line
