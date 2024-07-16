@@ -8,6 +8,7 @@ assert "a" "a"
 assert bytes() bytes()
 assert stream() stream()
 assert fn(1) fn(1)
+assert fn(a: a) fn(b: b)
 assert time() time()
 assert duration() duration()
 assert none() none()
@@ -38,29 +39,35 @@ assert 1 3 - 2
 assert 6 2 * 3
 assert 2 4 / 2
 assert 1 5 % 2
+assert 8 2 ** 3
+assert (-2) (~1)
 assert 3 1 | 2
 assert 2 3 & 2
 assert 1 3 ^ 2
-assert 8 2 ** 3
+assert 4 1 << 2
+assert 1 4 >> 2
 assert true  1 == 1
 assert false 1 != 1
 assert false 1 >  1
 assert true  1 >= 1
 assert false 1 <  1
 assert true  1 <= 1
-assert 2 (var a 1: a +=  1)
-assert 1 (var a 3: a -=  2)
-assert 6 (var a 2: a *=  3)
-assert 2 (var a 4: a /=  2)
-assert 1 (var a 5: a %=  2)
-assert 3 (var a 1: a |=  2)
-assert 2 (var a 3: a &=  2)
-assert 1 (var a 3: a ^=  2)
-assert 8 (var a 2: a **= 3)
-assert 1 (-1).abs
-assert 1 (-1).neg
+assert 2    (var a 1: a +=  1)
+assert 1    (var a 3: a -=  2)
+assert 6    (var a 2: a *=  3)
+assert 2    (var a 4: a /=  2)
+assert 1    (var a 5: a %=  2)
+assert (-2) (var a 1: a ~=  1)
+assert 3    (var a 1: a |=  2)
+assert 2    (var a 3: a &=  2)
+assert 1    (var a 3: a ^=  2)
+assert 4    (var a 1: a <<= 2)
+assert 1    (var a 4: a >>= 2)
+assert 8    (var a 2: a **= 3)
+assert 1    (-1).abs
+assert 1    (-1).neg
 assert (-1) 1.neg
-assert "A" 65.char
+assert "A"  65.char
 assert "65" 65.string
 
 # float
@@ -69,9 +76,6 @@ assert 1.0 3.0 -  2
 assert 6.0 2.0 *  3
 assert 2.5 5.0 /  2
 assert 1.0 5.0 %  2
-assert 3.0 1.0 |  2
-assert 2.0 3.0 &  2
-assert 1.0 3.0 ^  2
 assert 8.0 2.0 ** 3
 assert true  1.0 == 1.0
 assert false 1.0 != 1.0
@@ -95,7 +99,7 @@ assert 2 1.5.round
 assert "2.5" (5/2).string
 
 # string
-assert "ab" "a" ++ "b"
+assert "ab"    "a".concat("b")
 assert 2       "ab".size
 assert "ba"    "ab".reverse
 assert "ba"    "aba".slice(1)
@@ -116,18 +120,18 @@ assert bytes(0x30 0x42)           "あ".utf16
 assert bytes(0x00 0x00 0x30 0x42) "あ".utf32
 
 # bytes
-assert bytes(0 1) bytes(0) ++ bytes(1)
-assert 2          bytes(1 2).size
-assert 1          bytes(1 2).at(0)
-assert 2          bytes(1 2).at(-1)
-assert some(1)    bytes(1 2).get(0)
-assert some(2)    bytes(1 2).get(-1)
-assert none       bytes(1 2).get(2)
-assert 2          (var b bytes(1): b.tie(0 2)).at(0)
-assert "あ"       bytes(0xE3 0x81 0x82).utf8
-assert "あ"       bytes(0x30 0x42).utf16
-assert "あ"       bytes(0x00 0x00 0x30 0x42).utf32
-assert stream     bytes.stream
+assert bytes(1 2)  bytes(1).concat(bytes(2))
+assert 2           bytes(1 2).size
+assert 1           bytes(1 2).at(0)
+assert 2           bytes(1 2).at(-1)
+assert some(1)     bytes(1 2).get(0)
+assert some(2)     bytes(1 2).get(-1)
+assert none        bytes(1 2).get(2)
+assert 2           (var b bytes(1): b.tie(0 2)).at(0)
+assert "あ"        bytes(0xE3 0x81 0x82).utf8
+assert "あ"        bytes(0x30 0x42).utf16
+assert "あ"        bytes(0x00 0x00 0x30 0x42).utf32
+assert stream      bytes.stream
 
 # stream
 assert 0                 stream.in_cap
@@ -155,7 +159,7 @@ assert 42.0              bytes(66 40 0 0).stream.le.float(4)
 assert 42.0              bytes(0 0 0 1 0 0 0 0).stream.le.float(8)
 assert 0                 stream.flush
 assert true              stream.close
-assert "closed"          catch((var s stream: s.close; s.write("a"); "") fn(_ "closed"))
+assert "closed"          catch((var s stream: s.close; s.write("a"); "") fn(_: "closed"))
 assert false             stream.closed
 assert true              (var s stream: s.close).closed
 assert 1                 stream.write("a")
@@ -168,8 +172,8 @@ assert bytes(1)          bytes(1).stream.bytes
 
 # fn
 assert 1 fn(1)()
-assert 1 fn(a a)(1)
-assert 2 fn(_ a a)(1 2)
+assert 1 fn(a: a)(1)
+assert 2 fn(_ a: a)(1 2)
 assert 1 (var a 1: fn(a += 2))
 assert 3 (var a 1: fn(a += 2)())
 
@@ -213,7 +217,7 @@ assert 1 struct(a 1).a
 assert none    none    || none
 assert some(1) some(1) || none
 assert some(1) none    || some(1)
-assert some(3) some(1).and(fn(a (+ a 2)))
+assert some(3) some(1).and(fn(a: a + 2))
 assert 1 some(1).or(2)
 assert 2 none.or(2)
 assert true some(0).bool
@@ -234,7 +238,7 @@ assert false    (var a set(1): a.rid(1)).has(1)
 assert [1 2]    set(1 2).list
 
 # list
-assert [1 2]        [1] ++ [2]
+assert [1 2]        [1].concat([2])
 assert 1            [1][0]
 assert [2]          (var a [1]: a[0] = 2)
 assert 1            [1].at(0)
@@ -252,20 +256,20 @@ assert [0 9 0]      [0 0 0].fill 9 1 1
 assert [2 1]        [1 2].reverse
 assert [2]          [1 2].slice(1)
 assert [1]          [1 2].slice(0 1)
-assert [2]          [1].map(fn(a a + 1))
-assert [1 3]        [1 2].mapi(fn(a i a + i))
-assert [1 2]        [1].fmap(fn(a [a] a + 1))
-assert [1]          [1 2].keep(fn(a a == 1))
-assert false        [1 2].all(fn(a a < 2))
-assert true         [1 2].any(fn(a a < 2))
+assert [2]          [1].map(fn(a: a + 1))
+assert [1 3]        [1 2].mapi(fn(a i: a + i))
+assert [1 2]        [1].fmap(fn(a: [a a + 1]))
+assert [1]          [1 2].keep(fn(a: a == 1))
+assert false        [1 2].all(fn(a: a < 2))
+assert true         [1 2].any(fn(a: a < 2))
 assert [1 2]        [2 1].sort
-assert [1 2]        [1 2].sort(fn(a b a > b))
+assert [1 2]        [1 2].sort(fn(a b: a > b))
 assert [tuple(1 2)] [1].zip([2])
-assert 3            [1 2].fold(0 fn(a b (+ a b)))
-assert some(1)      [1].find(fn(a a == 1))
-assert none         [1].find(fn(a a == 2))
-assert some(0)      [1].index(fn(a a == 1))
-assert none         [1].index(fn(a a == 2))
+assert 3            [1 2].fold(0 fn(a b: a + b))
+assert some(1)      [1].find(fn(a: a == 1))
+assert none         [1].find(fn(a: a == 2))
+assert some(0)      [1].index(fn(a: a == 1))
+assert none         [1].index(fn(a: a == 2))
 assert "a,b"        ["a" "b"].join(",")
 assert true         [1].has(1)
 assert 1            [1 2].min
@@ -288,9 +292,9 @@ assert [tuple(1 2)]      dict(1 2).list
 # ---( declare )----------------------------------------------
 assert 1                            (let a 1)
 assert 2                            (var a 1: a = 2)
-assert 1                            (let _ f(): def f 1)
-assert 1                            (let _ f(1): def f a a)
-assert 2                            (let _ f(1 2): def f _ a a)
+assert 1                            (let _ f(): def f: 1)
+assert 1                            (let _ f(1): def f a: a)
+assert 2                            (let _ f(1 2): def f _ a: a)
 assert 5                            (var a 1: let _ (f; f): def f: a += 2)
 assert "bool"                       (dec f bool)
 assert "(bool)"                     (dec f (bool))
@@ -389,7 +393,7 @@ assert 4:
       a += b
 
 # throw and catch
-assert "a" catch(throw("a") fn(e e.message))
+assert "a" catch(throw("a") fn(e: e.message))
 
 
 

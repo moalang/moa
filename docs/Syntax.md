@@ -12,11 +12,12 @@ call: "(" exp* ")"          # call function
 index: "[" exp+ "]"         # index access or generic
 bottom:
 | "(" exp ")"               # 1 * (2 + 3)
+| "[" exp* "]"              # [1 2 3] -> list(1 2 3)
 | "-"? [0-9]+ ("." [0-9]+)? # -1.2
 | '"' [^"]* '"'             # "string"
 | id
-op1: [!-] | "..."
-op2: [+-*/%<>|&^~=!]+
+op1: [!-~] | "..."
+op2: [+-*/%<>|&^=!]+
 id: [A-Za-z_][A-Za-z0-9_]*
 comment: "//" [^\n]*
 ```
@@ -33,7 +34,6 @@ key: "." (id | [0-9]+) [!?] type?  # a.b!            -> a.at("b"), a.b? -> a.get
 slice: "{" id* (id "=" atom)* "}"  # a{b c=1}        -> struct.copy(a b c=1)
 bottom:
 | "{" id* (id "=" atom)* "}"       # {x y=1}         -> struct(x y=1)
-| "[" exp* "]"                     # [1 2 3]         -> list(1 2 3)
 | "[" ":" | (atom ":" atom)+ "]"   # ["x":1 ("y"):2] -> dict("x" 1 "y" 2)
 | '"""' [^"]* '"""'                # """a="b""""     -> "a=\"b\""
 | "-"? [0-9]+ "e" [0-9]+           # 1e3             -> 100
@@ -45,13 +45,13 @@ bottom:
 
 Keywords
 ```
-global    : true false some none time duration regexp log assert
+global    : true false some none time duration log assert
 primitive : bool int float string bytes stream fn
 container : tuple struct option set list dict
 declare   : let var def dec class enum interface
 branch    : iif if else switch
 flow      : return for while continue break try throw catch
-reserved  : num decimal array use module i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
+reserved  : regexp num decimal array use module i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
 ```
 
 Operators
