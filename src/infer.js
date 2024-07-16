@@ -25,7 +25,7 @@ const infer = nodes => {
   const tvar = (label, interfaces) => (name => ({name, label, interfaces, var: true}))((++tvarSequence).toString())
   const tdot3 = () => ({dot3: true, ref: tvar()})
   const tfn = (...types) => types.length === 1 ? types[0] : ({types})
-  const tinf = props => ({props})
+  const tclass = (name, props) => ({name, props})
   const ttype = name => ({name})
   const ttuple = types => ({name: 'tuple', types})
   const tint = ttype('int')
@@ -55,10 +55,10 @@ const infer = nodes => {
       if (a.name !== b.name) {
         if (a.interfaces) {
           if (b.interfaces && str(a.interfaces) !== str(b.interfaces)) {
-            failUnify(`interfaces of type miss match`, {a,b})
+            failUnify(`interfaces miss match`, {a,b})
           }
           if (!b.var && !a.interfaces.find(c => c.name === b.name)) {
-            failUnify(`interfaces of type miss match`, {a,b})
+            failUnify(`interfaces miss match`, {a,b})
           }
         }
         if (a.interfaces && b.var) {
@@ -73,7 +73,7 @@ const infer = nodes => {
       const as = a.types || []
       const bs = b.types || []
       if (a.name !== b.name || (as.length !== bs.length && !as.find(t => t.dot3))) {
-        failUnify(`type miss match`, {a,b})
+        failUnify(`length miss match`, {a,b})
       }
       for (let i=0; i<as.length; i++) {
         if (as[i].dot3) {
@@ -119,13 +119,23 @@ const infer = nodes => {
         const name = tvars[0][0]
         const local = {...env, ...Object.fromEntries(tvars)}
         const props = tail.at(-1).map(a => [a[0].code, tfn(...a.slice(1).map(t => local[t.code]))])
-        return env[name] = tinf(props)
+        return env[name] = tclass(name, props)
+      } else if (head.code === '.') {
+        return analyse(tail.slice(0, -1), env, nonGeneric)[tail.at(-1).code]
       } else if (tail.length) {
         const ft = analyse(head, env, nonGeneric)
         const argv = tail.map(t => analyse(t, env, nonGeneric))
-        const rt = cache[str(argv)] ||= tvar() // fix tvar
-        unify(ft, tfn(...argv, rt))
-        return rt
+        if (ft.props) {
+          if (ft.props.length !== argv.length) {
+            failUnify('length miss match', {ft, argv, node})
+          }
+          ft.props.map((prop, i) => unify(prop[1], argv[i]))
+          return Object.fromEntries(ft.props)
+        } else {
+          const rt = cache[str(argv)] ||= tvar() // TODO: fix tvar
+          unify(ft, tfn(...argv, rt))
+          return rt
+        }
       } else {
         return analyse(head, env, nonGeneric)
       }
@@ -170,7 +180,7 @@ const showType = type => {
 const testType = () => {
   const parse = src => {
     const line = src => {
-      const tokens = src.split(/([()\[\]:;]|\s+)/).filter(x => x.trim()).map(code => ({code}))
+      const tokens = src.split(/([()\[\]:;]|(?=[ \n])\.(?= )|\s+)/).filter(x => x.trim()).map(code => ({code}))
       let pos = 0
       const check = f => pos < tokens.length && f(tokens[pos].code)
       const list = a => (t => t.code === ')' ? a : list(a.concat([t])))(unit())
@@ -277,12 +287,6 @@ const testType = () => {
   inf('(1 1)', 'dec _ a: a a')
   inf('(1 1 2)', 'dec _ a b: a a b')
 
-  // declare class
-  inf('(x.int)', 'class _: x int')
-  inf('(x.1)', 'class _ a: x a')
-  inf('(f.(int int))', 'class _: f int int')
-  inf('(x.1 f.(1 2 int))', 'class _ a b: x a; f a b int')
-
   // variadic arguments
   inf('(... int)', 'def f ...: 1')
   inf('int', 'def f ...: 1\nf 1')
@@ -293,6 +297,15 @@ const testType = () => {
   inf('bool', 'def f[t] ...[t]: true\nf 1 2')
   inf('int', 'def f[t] ...[t]: t\nf 1 2')
   inf('tuple[int bool int bool]', 'def f[t u] ...a[t u]: a\nf 1 true 2 false')
+
+  // class
+  inf('(x.int)', 'class _: x int')
+  inf('int', 'class c: x int\n. c(1) x')
+  inf('(x.1)', 'class _ a: x a')
+  inf('int', 'class c a: x a\n. c(1) x')
+  inf('bool', 'class c a: x a\n. c(true) x')
+  inf('(f.(int int))', 'class _: f int int')
+  inf('(x.1 f.(1 2 int))', 'class _ a b: x a; f a b int')
 
   // type errors
   reject('(+ true true)')
