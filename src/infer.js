@@ -169,26 +169,29 @@ const showType = type => {
 
 const testType = () => {
   const parse = src => {
-    const tokens = src.split(/([()\[\]:;]|\s+)/).filter(x => x.trim()).map(code => ({code}))
-    let pos = 0
-    const check = f => pos < tokens.length && f(tokens[pos].code)
-    const list = a => (t => t.code === ')' ? a : list(a.concat([t])))(unit())
-    const bracket = a => (t => t.code === ']' ? a : bracket(a.concat([t])))(unit())
-    const suffix = t =>
-      check(s => s === '[') && ++pos ? bracket([t]) :
-      t
-    const unit = () => (t =>
-      t.code === '(' ? list([]) :
-      t.code === ':' ? block([top()]) :
-      suffix(t))(tokens[pos++])
-    const block = a => check(s => s === ';') ? (++pos, block([...a, top()])) : a
-    const top = () => until(() => check(s => s !== ')' && s !== ';'), unit)
-    return block([top()])
+    const line = src => {
+      const tokens = src.split(/([()\[\]:;]|\s+)/).filter(x => x.trim()).map(code => ({code}))
+      let pos = 0
+      const check = f => pos < tokens.length && f(tokens[pos].code)
+      const list = a => (t => t.code === ')' ? a : list(a.concat([t])))(unit())
+      const bracket = a => (t => t.code === ']' ? a : bracket(a.concat([t])))(unit())
+      const suffix = t =>
+        check(s => s === '[') && ++pos ? bracket([t]) :
+        t
+      const unit = () => (t =>
+        t.code === '(' ? list([]) :
+        t.code === ':' ? block([top()]) :
+        suffix(t))(tokens[pos++])
+      const block = a => check(s => s === ';') ? (++pos, block([...a, top()])) : a
+      const top = () => until(() => check(s => s !== ')' && s !== ';'), unit)
+      return block([top()])
+    }
+    return src.split('\n').map(line).flat(1)
   }
 
-  const reject = (...srcs) => {
+  const reject = src => {
     try {
-      infer(srcs.map(parse).flat(1))
+      infer(parse(src))
     } catch (e) {
       if (e instanceof TypeError) {
         process.stdout.write('.')
@@ -196,12 +199,12 @@ const testType = () => {
       }
     }
     print('Invalid')
-    print('src:', srcs.join('\n'))
+    print('src:', src)
     process.exit(1)
   }
-  const inf = (expect, ...srcs) => {
+  const inf = (expect, src) => {
     try {
-      let types = infer(srcs.map(parse).flat(1))
+      let types = infer(parse(src))
       const actual = showType(types.slice(-1)[0])
       if (eq(actual, expect)) {
         process.stdout.write('.')
@@ -209,12 +212,12 @@ const testType = () => {
         print('Failed')
         print('expect:', expect)
         print('actual:', actual)
-        print('   src:', srcs.join('\n'))
+        print('   src:', src)
         process.exit(1)
       }
     } catch (e) {
       print('Failed')
-      print('   src:', srcs.join('\n'))
+      print('   src:', src)
       console.dir(e, {depth: null})
       process.exit(1)
     }
@@ -246,11 +249,11 @@ const testType = () => {
   inf('(1 1)', 'def _ a: a')
   inf('(1 2 1)', 'def _ a b: a')
   inf('(1 2 2)', 'def _ a b: b')
-  inf('int', 'def f a: a', 'f 1')
-  inf('bool', 'def f a: a', 'f 1; f true')
+  inf('int', 'def f a: a\nf 1')
+  inf('bool', 'def f a: a\nf 1\nf true')
 
   // combinations
-  inf('int',                           'def f x: + x 1', 'def g x: + x 2', '+ (f 1) (g 1)')
+  inf('int',                           'def f x: + x 1\ndef g x: + x 2\n+ (f 1) (g 1)')
   inf('((1 2) (2 3) 1 3)',             'def _ f g x: g (f x)')
   inf('((1 2 3) (1 2) 1 3)',           'def _ x y z: x z (y z)')
   inf('(1 (1 bool) (1 1))',            'def _ b x: iif (x b) x (def _ x: b)')
@@ -261,10 +264,10 @@ const testType = () => {
   inf('((1 2) ((1 2) 1) 2)',           'def _ x y: x (y x)')
   inf('(1 ((1 2 3) 4 2) (1 2 3) 4 3)', 'def _ h t f x: f h (t f x)')
   inf('((1 1 2) ((1 1 2) 1) 2)',       'def _ x y: x (y x) (y x)')
-  inf('(((1 1) 2) 2)',                 'def id x: x', 'def f y: id (y id)')
-  inf('int',                           'def id x x', 'def f (iif (id true) (id 1) (id 2))')
-  inf('int',                           'def f x (3)', 'def g (+ (f true) (f 4))')
-  inf('(bool (1 1))',                  'def f x x', 'def g y y', 'def h b (iif b (f g) (g f))')
+  inf('(((1 1) 2) 2)',                 'def id x: x\ndef f y: id (y id)')
+  inf('int',                           'def id x x\ndef f (iif (id true) (id 1) (id 2))')
+  inf('int',                           'def f x (3)\ndef g (+ (f true) (f 4))')
+  inf('(bool (1 1))',                  'def f x x\ndef g y y\ndef h b (iif b (f g) (g f))')
 
   // declare function
   inf('bool', 'dec _: bool')
@@ -282,21 +285,21 @@ const testType = () => {
 
   // variadic arguments
   inf('(... int)', 'def f ...: 1')
-  inf('int', 'def f ...: 1', 'f 1')
-  inf('int', 'def f ...: 1', 'f 1 true')
+  inf('int', 'def f ...: 1\nf 1')
+  inf('int', 'def f ...: 1\nf 1 true')
   inf('(... 1)', 'def f ...a: a')
-  inf('tuple[int]', 'def f ...a: a', 'f 1')
-  inf('tuple[int bool]', 'def f ...a: a', 'f 1 bool')
-  inf('bool', 'def f[t] ...[t]: true', 'f 1 2')
-  inf('int', 'def f[t] ...[t]: t', 'f 1 2')
-  inf('tuple[int bool int bool]', 'def f[t u] ...a[t u]: a', 'f 1 true 2 false')
+  inf('tuple[int]', 'def f ...a: a\nf 1')
+  inf('tuple[int bool]', 'def f ...a: a\nf 1 bool')
+  inf('bool', 'def f[t] ...[t]: true\nf 1 2')
+  inf('int', 'def f[t] ...[t]: t\nf 1 2')
+  inf('tuple[int bool int bool]', 'def f[t u] ...a[t u]: a\nf 1 true 2 false')
 
   // type errors
   reject('(+ true true)')
   reject('(+ 1 true)')
   reject('(+ 1 1.0)')
-  reject('def f[t] ...[t]: true', 'f 1 true')
-  reject('def f[t u] ...[t u]: true', 'f 1 true true')
+  reject('def f[t] ...[t]: true\nf 1 true')
+  reject('def f[t u] ...[t u]: true\nf 1 true true')
 
   print('ok')
 }
