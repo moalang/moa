@@ -1,23 +1,19 @@
-# TODO: log
 # ---( primitive )---------------------------------------------------
 assert true true
 assert false false
 assert 1 1
 assert 1.1 1.1
 assert "a" "a"
-assert bytes() bytes()
-assert stream() stream()
-assert fn(1) fn(1)
-assert fn(a: a) fn(b: b)
-assert time() time()
+assert bytes()    bytes()
+assert fn(1)      fn(1)
+assert fn(a: a)   fn(b: b)
+assert tuple()    tuple()
+assert struct()   struct()
+assert set()      set()
+assert list()     list()
+assert dict()     dict()
+assert time()     time()
 assert duration() duration()
-assert none() none()
-assert some(1) some(1)
-assert tuple() tuple()
-assert struct() struct()
-assert set() set()
-assert list() list()
-assert dict() dict()
 
 
 
@@ -34,13 +30,13 @@ assert true true || true
 assert true true && true
 
 # int
+assert (-2) (~1)
 assert 3 1 + 2
 assert 1 3 - 2
 assert 6 2 * 3
 assert 2 4 / 2
 assert 1 5 % 2
 assert 8 2 ** 3
-assert (-2) (~1)
 assert 3 1 | 2
 assert 2 3 & 2
 assert 1 3 ^ 2
@@ -64,11 +60,11 @@ assert 1    (var a 3: a ^=  2)
 assert 4    (var a 1: a <<= 2)
 assert 1    (var a 4: a >>= 2)
 assert 8    (var a 2: a **= 3)
-assert 1    (-1).abs
-assert 1    (-1).neg
-assert (-1) 1.neg
-assert "A"  65.char
-assert "65" 65.string
+assert 1    (-1).abs()
+assert 1    (-1).neg()
+assert (-1) 1.neg()
+assert "A"  65.char()
+assert "65" 65.string()
 
 # float
 assert 3.0 1.0 +  2
@@ -92,21 +88,23 @@ assert 3.0 (var a 1.0: a |=  2)
 assert 2.0 (var a 3.0: a &=  2)
 assert 1.0 (var a 3.0: a ^=  2)
 assert 8.0 (var a 2.0: a **= 3)
-assert 1 1.9.floor
-assert 2 1.1.ceil
-assert 1 1.4.round
-assert 2 1.5.round
-assert "2.5" (5/2).string
+assert 1 1.9.floor()
+assert 2 1.1.ceil()
+assert 1 1.4.round()
+assert 2 1.5.round()
+assert "2.5" (5/2).string()
 
 # string
-assert "ab"    "a".concat("b")
 assert 2       "ab".size
-assert "ba"    "ab".reverse
+assert "ab"    "a".concat("b")
+assert "ba"    "ab".reverse()
 assert "ba"    "aba".slice(1)
 assert "b"     "aba".slice(1 2)
+assert 2       "a b".split(" ")
+assert 1       "ab".index("b")
+assertError    "ab".index("c")
 assert "_b_"   "aba".replace("a" "_")
-assert some(1) "ab".index("b")
-assert none    "ab".index("c")
+assert "ab"    "\t\r\n ab \t\r\n".trim()
 assert true    "ab".starts("a")
 assert false   "ab".starts("b")
 assert true    "\\"".starts("\\"")
@@ -114,61 +112,6 @@ assert false   "ab".ends("a")
 assert true    "ab".ends("b")
 assert true    "a".has("a")
 assert false   "a".has("b")
-assert "ab"    "\t\r\n ab \t\r\n".trim
-assert bytes(0xE3 0x81 0x82)      "あ".utf8
-assert bytes(0x30 0x42)           "あ".utf16
-assert bytes(0x00 0x00 0x30 0x42) "あ".utf32
-
-# bytes
-assert bytes(1 2)  bytes(1).concat(bytes(2))
-assert 2           bytes(1 2).size
-assert 1           bytes(1 2).at(0)
-assert 2           bytes(1 2).at(-1)
-assert some(1)     bytes(1 2).get(0)
-assert some(2)     bytes(1 2).get(-1)
-assert none        bytes(1 2).get(2)
-assert 2           (var b bytes(1): b.tie(0 2)).at(0)
-assert "あ"        bytes(0xE3 0x81 0x82).utf8
-assert "あ"        bytes(0x30 0x42).utf16
-assert "あ"        bytes(0x00 0x00 0x30 0x42).utf32
-assert stream      bytes.stream
-
-# stream
-assert 0                 stream.in_cap
-assert 0                 stream.out_cap
-assert 0                 stream.in_size
-assert 0                 stream.out_size
-assert 1                 stream(1 2).rcap
-assert 2                 stream(1 2).wcap
-assert stream(3 4)       stream(1 2).resize(3 4)
-assert bytes(1)          bytes(1).stream.read
-assert bytes(1 2)        bytes(1 2).stream.read
-assert bytes(1)          bytes(1 2).stream.read(1)
-assert bytes(2 3)        (var s bytes(1 2 3).stream: s.read(1)).read
-assert 1                 bytes(0 0 0 1 2).stream.int(4)
-assert 1                 bytes(0 0 0 1 2).stream.be.int(4)
-assert 16777216          bytes(0 0 0 1 2).stream.le.int(4)
-assert 1                 bytes(0 0 0 0 0 0 0 1).stream.int(8)
-assert 1                 bytes(0 0 0 0 0 0 0 1).stream.be.int(8)
-assert 72057594037927936 bytes(0 0 0 0 0 0 0 1).stream.le.int(8)
-assert 42.0              bytes(0 0 40 66).stream.float(4)
-assert 42.0              bytes(0 0 0 0 1 0 0 0).stream.float(8)
-assert 42.0              bytes(0 0 40 66).stream.be.float(4)
-assert 42.0              bytes(0 0 0 0 1 0 0 0).stream.be.float(8)
-assert 42.0              bytes(66 40 0 0).stream.le.float(4)
-assert 42.0              bytes(0 0 0 1 0 0 0 0).stream.le.float(8)
-assert 0                 stream.flush
-assert true              stream.close
-assert "closed"          catch((var s stream: s.close; s.write("a"); "") fn(_: "closed"))
-assert false             stream.closed
-assert true              (var s stream: s.close).closed
-assert 1                 stream.write("a")
-assert 3                 stream.write("あ")
-assert "あ"              bytes(0xE3 0x81 0x82).stream.utf8
-assert "あ"              bytes(0x30 0x42).stream.utf16
-assert "あ"              bytes(0x00 0x00 0x30 0x42).stream.utf32
-assert bytes             bytes.stream.bytes
-assert bytes(1)          bytes(1).stream.bytes
 
 # fn
 assert 1 fn(1)()
@@ -177,115 +120,105 @@ assert 2 fn(_ a: a)(1 2)
 assert 1 (var a 1: fn(a += 2))
 assert 3 (var a 1: fn(a += 2)())
 
-# time
-assert time(2000 1 2) time(2000 1 1) + duration("1d")
-assert duration("1h") time(2000 1 2 1) - time(2000 1 2 0)
-assert 2024 time(2024  1 2 3 4 5 6).year
-assert    1 time(2024  1 2 3 4 5 6).month
-assert    2 time(2024  1 2 3 4 5 6).day
-assert    3 time(2024  1 2 3 4 5 6).hour
-assert    4 time(2024  1 2 3 4 5 6).min
-assert    5 time(2024  1 2 3 4 5 6).sec
-assert    6 time(2024  1 2 3 4 5 6).offset
-assert    2 time(2024  1 2 3 4 5 6).wday
-assert  337 time(2024 12 2 3 4 5 6).yday
-assert("2024-01-02T03:04:05Z"    , time(2024, 1, 2, 3, 4, 5, 0).string)
-assert("2024/1/2 3:4:5 -0006"    , time(2024, 1, 2, 3, 4, 5, -6).format("yyyy/m/d H:M:S z"))
-assert("2024/01/02 03:04:05+0006", time(2024, 1, 2, 3, 4, 5, 6).format("yyyy/mm/dd HH:MM:SSz"))
-assert("2024/01/02 03:03:59+0000", time(2024, 1, 2, 3, 4, 5, 6).utc.format("yyyy/mm/dd HH:MM:SSz"))
-
-# duration
-assert "1m30s" duration("1m") + duration("30s")
-assert "1m"    duration("1m").string
-assert 60      duration("1m").second
-assert 1000    duration("1s").msecond
-assert 1000    duration("1ms").usecond
-assert 1000    duration("1us").nsecond
-assert 1       duration("1d").day
-assert duration("1Y2M3D4h5m6s7ms8us9ns")  duration("1Y2M3D4h5m6s7ms8us9ns")
-assert duration("2Y3M4D5h5m6s8ms9us10ns") duration("1Y2M3D4h5m6s7ms8us9ns") + duration("1Y1M1D1m1s1ms1us1ns")
-assert duration("1M2D3h4m5s6ms7us8ns")    duration("1Y2M3D4h5m6s7ms8us9ns") - duration("1Y1M1D1m1s1ms1us1ns")
-
 # tuple
 assert 1   tuple(1 "a").0
 assert "a" tuple(1 "a").1
 
 # struct
-assert 1 struct(a 1).a
+assert 1 struct(a=1).a
+assert 3:
+  let a 1
+  let s struct(a b=2)
+  s.a + s.b
 
-# option
-assert none    none    || none
-assert some(1) some(1) || none
-assert some(1) none    || some(1)
-assert some(3) some(1).and(fn(a: a + 2))
-assert 1 some(1).or(2)
-assert 2 none.or(2)
-assert true some(0).bool
-assert false none.bool
+# list
+assert 1            [1].size
+assert [1 2]        [1].concat([2])
+assert [2]          [1 2].slice(1)
+assert [1]          [1 2].slice(0 1)
+assert 1            [1][0]
+assert [2]          (var a [1]: a[0] = 2)
+assert 1            [1].get(0)
+assert 1            [1].get((-1))
+assert 2            [1 2].get((-1))
+assert 2            [1].set(0 2)
+assert [1]          (var a []: a.push 1)
+assert [2]          [1].map(fn(a: a + 1))
+assert [1 3]        [1 2].map(fn(a i: a + i))
+assert [1 2 2 3]    [1 2].fmap(fn(a: [a a + 1]))
+assert [1 2 3 4]    [1 2].fmap(fn(a i: [a a + i]))
+assert [1]          [1 2].keep(fn(a: a == 1))
+assert [1]          [1 1].keep(fn(a i: a < i))
+assert false        [1 2].all(fn(a: a < 2))
+assert true         [1 2].all(fn(a i: a > i))
+assert true         [1 2].any(fn(a: a < 2))
+assert false        [1 2].any(fn(a i: a > i))
+assert [1 2]        [1 2].sort(fn(a b: a > b))
+assert [2 1]        [1 2].reverse()
+assert [tuple(1 2)] [1].zip([2])
+assert 3            [1 2].fold(0 fn(a b: a + b))
+assert 1            [1].find(fn(a: a == 1))
+assertError         [1].find(fn(a: a == 2))
+assert 0            [1].index(fn(a: a == 1))
+assertError         [1].index(fn(a: a == 2))
+assert "a,b"        ["a" "b"].join(",")
+assert true         [1].has(1)
+assert false        [1].has(2)
+assert 1            [1 2].min
+assert 2            [1 2].max
+assert [1 1]        list.repeat(2 1)
 
 # set
 assert set(1)   set(1 2) - set(2)
 assert set(1 2) set(1)   | set(2)
 assert set(2)   set(1 2) & set(2)
-assert set(1)   set(1 2) ^ set(2)
+assert set(1 3) set(1 2) ^ set(2 3)
 assert 1        set(1).size
 assert true     set(1).has(1)
 assert false    set(1).add(1)
 assert true     set(1).add(2)
 assert true     set(1).rid(1)
 assert false    set(1).rid(2)
-assert false    (var a set(1): a.rid(1)).has(1)
+assert set(2)   (var a set(1 2): a.rid(1))
 assert [1 2]    set(1 2).list
 
-# list
-assert [1 2]        [1].concat([2])
-assert 1            [1][0]
-assert [2]          (var a [1]: a[0] = 2)
-assert 1            [1].at(0)
-assert 1            [1].at((-1))
-assert 2            [1 2].at((-1))
-assert 2            [1].tie(0 2)
-assert [2]          (var a [1]: a.tie 0 2)
-assert [1]          (var a []: a.push 1)
-assert some(1)      [1].get(0)
-assert none         [1].get(1)
-assert 1            [1].size
-assert [9 9 9]      [0 0 0].fill 9
-assert [0 9 9]      [0 0 0].fill 9 1
-assert [0 9 0]      [0 0 0].fill 9 1 1
-assert [2 1]        [1 2].reverse
-assert [2]          [1 2].slice(1)
-assert [1]          [1 2].slice(0 1)
-assert [2]          [1].map(fn(a: a + 1))
-assert [1 3]        [1 2].mapi(fn(a i: a + i))
-assert [1 2]        [1].fmap(fn(a: [a a + 1]))
-assert [1]          [1 2].keep(fn(a: a == 1))
-assert false        [1 2].all(fn(a: a < 2))
-assert true         [1 2].any(fn(a: a < 2))
-assert [1 2]        [2 1].sort
-assert [1 2]        [1 2].sort(fn(a b: a > b))
-assert [tuple(1 2)] [1].zip([2])
-assert 3            [1 2].fold(0 fn(a b: a + b))
-assert some(1)      [1].find(fn(a: a == 1))
-assert none         [1].find(fn(a: a == 2))
-assert some(0)      [1].index(fn(a: a == 1))
-assert none         [1].index(fn(a: a == 2))
-assert "a,b"        ["a" "b"].join(",")
-assert true         [1].has(1)
-assert 1            [1 2].min
-assert 2            [1 2].max
-
 # dict
-assert dict(3 4)         dict(1 2 3 4) & dict(3 4)
-assert dict(1 2 3 4 5 6) dict(1 2 3 4) | dict(3 9 5 6)
-assert some(2)           dict(1 2).get(1)
-assert none              dict(1 2).get(2)
 assert 1                 dict(1 2).size
 assert true              dict(1 2).has(1)
-assert 2                 dict.set(1 2)
-assert [1]               dict(1 2).keys
-assert [2]               dict(1 2).values
-assert [tuple(1 2)]      dict(1 2).list
+assert 2                 dict(1 2).get(1)
+assertError              dict(1 2).get(2)
+assert 2                 dict().set(1 2)
+assert [1]               dict(1 2).keys()
+assert [2]               dict(1 2).values()
+assert [tuple(1 2)]      dict(1 2).items()
+assert dict(1 2 3 4 5 6) dict(1 2 3 4).concat(dict(3 9 5 6))
+
+# duration
+assert 1 duration("1ns").ns
+assert "1d" duration("1d").string()
+assert "1 02:03:04.0005" duration("1d2h3m4s5ms").format("{day} {hour 00}:{minute 00}:{second 00}.{ms 04}")
+assert duration("4d5h5m6s8ms9us10ns") duration("3d4h5m6s7ms8us9ns") + duration("1d1m1s1ms1us1ns")
+assert duration("2d3h4m5s6ms7us8ns")  duration("3d4h5m6s7ms8us9ns") - duration("1d1m1s1ms1us1ns")
+
+# time
+assert time(2000 1 2) time(2000 1 1) + duration("1d")
+assert duration("1h") time(2000 1 2 1) - time(2000 1 2 0)
+assert  2024 time(2024  1 2 3 4 5).year
+assert     1 time(2024  1 2 3 4 5).month
+assert     2 time(2024  1 2 3 4 5).day
+assert     3 time(2024  1 2 3 4 5).hour
+assert     4 time(2024  1 2 3 4 5).min
+assert     5 time(2024  1 2 3 4 5).sec
+assert     2 time(2024  1 2 3 4 5).wday
+assert   337 time(2024 12 2 3 4 5).yday
+assert "UTC" time(2024  1 2 3 4 5).zone
+assert     6 time(2024  1 2 3 4 5 6).offset
+assert ""    time(2024  1 2 3 4 5 6).zone
+assert "TZ"  time(2024  1 2 3 4 5 6 "TZ").zone
+assert "2024-01-02T03:04:05Z"      time(2024 1 2 3 4 5 0).string()
+assert "2024/1/2 3:4:5 -0006"      time(2024 1 2 3 4 5 (-6)).format("{year}/{month}/{day} {hour}:{minute}:{second} {zone}")
+assert "2024/01/02 03:04:05+0006"  time(2024 1 2 3 4 5 6).format("{year}/{month 00}/{day 00} {hour 00}:{minute 00}:{second 00}{zone}")
+assert "2024/01/02 03:03:59+0000"  time(2024 1 2 3 4 5 6).utc.format("{year}/{month 00}/{day 00} {hour 00}:{minute 00}:{second 00}{zone}")
 
 
 
@@ -309,45 +242,36 @@ assert "a.b"                        (let _ b.string: enum a: b)
 
 # ---( branch )------------------------------------------------------
 # short circuit evaluation
-assert false false && [][0]
-assert true  true || [][0]
+assert false false && throw("")
+assert true  true || throw("")
 
 # iif
-assert 1 iif(true 1 throw)
-assert 2 iif(false throw 2)
-assert 2 iif(false throw true 2 throw)
-assert 3 iif(false throw false throw 3)
+assert 1 iif(true 1 throw(""))
+assert 2 iif(false throw("") 2)
+assert 2 iif(false throw("") true 2 throw(""))
+assert 3 iif(false throw("") false throw("") 3)
 
 # if and else
 assert 3 (var a 1: if true : a += 2)
 assert 1 (var a 1: if false: a += 2)
 assert 3:
   var a 1:
-    if true:
-      a += 2
-    else:
-      a += 3
+    if true: a += 2
+    else   : a += 3
 assert 4:
   var a 1:
-    if true:
-      a += 2
-    else:
-      a += 3
+    if true: a += 2
+    else   : a += 3
 assert 4:
   var a 1:
-    if false:
-      a += 2
-    else if true:
-      a += 3
-    else: a += 4
+    if false    : a += 2
+    else if true: a += 3
+    else        : a += 4
 assert 5:
   var a 1:
-    if false:
-      a += 2
-    else if false:
-      a += 3
-    else:
-      a += 4
+    if false     : a += 2
+    else if false: a += 3
+    else         : a += 4
 
 # switch
 assert 10:
@@ -393,9 +317,19 @@ assert 4:
       a += b
 
 # throw and catch
-assert "a" catch(throw("a") fn(e: e.message))
-
-
+assertError throw("a")
+assert "int":
+  catch throw(1):
+    int: "int"
+assert 1:
+  catch throw(1):
+    int n: n
+assert 1:
+  catch throw(1):
+    int n if n == 1: 1
+assertError:
+  catch throw(2):
+    int n if n == 1: 1
 
 # ---( syntax sugar )-------------------------------------------------
 assert    100     1e3
@@ -406,12 +340,47 @@ assert      3   0b111
 assert  10000  10_000
 assert 0.1002 0.1_002
 
-assert 1 (a => a)(1)
-assert 3 (a,b => a+b)(1 2)
-
-
-
 # ---( reserved )----------------------------------------------------
+#assert bytes(0xE3 0x81 0x82)      "あ".encode("utf8")
+#assert bytes(0x30 0x42)           "あ".encode("utf16")
+#assert bytes(0x00 0x00 0x30 0x42) "あ".encode("utf32")
+#
+#assert 1 (a => a)(1)
+#assert 3 (a,b => a+b)(1 2)
+## bytes
+#assert 2                 bytes(1 2).size
+#assert some(1)           bytes(1 2).get(0)
+#assert some(2)           bytes(1 2).get(-1)
+#assert none              bytes(1 2).get(2)
+#assert bytes(1 2)        bytes(1).concat(bytes(2))
+#assert bytes(1 0 0 1)    bytes(1).append(false).append(i16(1))
+#assert 2                 (var b bytes(1): b[0] = 2)[0]
+#assert "あ"              bytes(0xE3 0x81 0x82).decode("utf8")
+#assert "あ"              bytes(0x30 0x42).decode("utf16")
+#assert "あ"              bytes(0x00 0x00 0x30 0x42).decode("utf32")
+#assert some(1)           bytes.from(int(1)).to[int]
+#assert some("hi")        bytes.from("hi").to[string]
+#assert bytes(1 1 1 1)    bytes.fill(1 4)
+#assert 1                 bytes(              1).i8
+#assert 1                 bytes(            0 1).i16
+#assert 1                 bytes(        0 0 0 1).i32
+#assert 1                 bytes(0 0 0 0 0 0 0 1).i64
+#assert 1                 bytes(              1).u8
+#assert 1                 bytes(            0 1).u16
+#assert 1                 bytes(        0 0 0 1).u32
+#assert 1                 bytes(0 0 0 0 0 0 0 1).u64
+#assert 42.0              bytes(      0 0 40 66).f32
+#assert 42.0              bytes(0 0 0 0 1 0 0 0).f64
+#assert 1                 bytes(               ).li8
+#assert 1                 bytes(               ).li16
+#assert 1                 bytes(               ).li32
+#assert 1                 bytes(               ).li64
+#assert 1                 bytes(               ).lu8
+#assert 1                 bytes(               ).lu16
+#assert 1                 bytes(               ).lu32
+#assert 1                 bytes(               ).lu64
+#assert 42.0              bytes(               ).lf32
+#assert 42.0              bytes(               ).lf64
 #reserved : num decimal array use module i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
 #assert 93784005006007 1d2h3m4s5ms6us7ns.ns
 # std

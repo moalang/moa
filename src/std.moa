@@ -1,0 +1,162 @@
+dec log a         : ... a a
+dec throw a b     : a b
+dec assert a      : a a bool
+dec assertError a : a bool
+dec iif a         : ...bool,a a
+# return
+# if
+# else
+# switch
+# catch
+# for
+# while
+# continue
+# break
+# fn
+# tuple
+
+enum bool:
+  true
+  false
+  !  : bool bool
+  || : bool bool bool
+  && : bool bool bool
+
+interface num a:
+  +      : a a a
+  -      : a a a
+  *      : a a a
+  /      : a a a
+  %      : a a a
+  **     : a a a
+  abs    : a
+  neg    : a
+  string : string
+
+extern int:
+  num
+  ~    : int int
+  &    : int int int
+  |    : int int int
+  ^    : int int int
+  <<   : int int int
+  >>   : int int int
+  char : string
+
+extern float:
+  num
+  floor : int
+  ceil  : int
+  round : int
+
+extern string:
+  size    int
+  concat  : string string
+  reverse : string
+  slice   : int? int? int? string
+  split   : string int? list[string]
+  index   : string int!
+  replace : string string string
+  trim    : string
+  starts  : string bool
+  ends    : string bool
+  has     : string bool
+
+extern list a:
+  size    int
+  concat   : list[a] list[a]
+  slice    : int? int? int? list[a]
+  get      : int a!
+  set      : int a a!
+  push     : a a
+  map b    : (a int? b) list[b]
+  fmap b   : (a int? list[b]) list[b]
+  keep     : (a int? bool) list[a]
+  all      : (a int? bool) bool
+  any      : (a int? bool) bool
+  sort b   : (a a? b)? list[a]
+  reverse  : list[a]
+  zip b    : list[b] list[tuple[a b]]
+  fold b   : b (a b b) b
+  find     : (a bool) a!
+  index    : (a bool) int!
+  join     : string string
+  has      : a bool
+  min      : a
+  max      : a
+  .repeat  : int a list[a]
+
+extern set a:
+  size int
+  -    : set[a] set[a]
+  |    : set[a] set[a]
+  &    : set[a] set[a]
+  ^    : set[a] set[a]
+  has  : a bool
+  add  : a bool
+  rid  : a bool
+  list : list[a]
+
+extern dict k v:
+  size   int
+  get    : k v!
+  set    : k v v
+  has    : k bool
+  keys   : list[k]
+  values : list[v]
+  items  : list[tuple[k v]]
+  concat : dict[k v] dict[k v]
+
+extern time:
+  year    int
+  month   int
+  day     int
+  hour    int
+  min     int
+  sec     int
+  wday    int
+  yday    int
+  offset  int
+  format  : string string
+  utc     : time
+  string  : string
+  tick    : int time
+
+class duration:
+  ns i64
+  format : string string
+  string : string
+
+# Ideas
+#extern string:
+#  encode  : string opt[bytes]
+#extern bytes:
+#  size   int
+#  get      : int opt[u8]
+#  set      : int u8 opt[u8]
+#  concat   : bytes bytes
+#  append a : a bytes
+#  decode   : string opt[string]
+#  to a.type: a
+#  .from a  : bytes
+#  .fill    : u8? int bytes
+#extern regexp:
+#  match   : string bool
+#  capture : string list[string]
+#  split   : string list[string]
+#  replace : string (list[string] string) string
+#extern random:
+#  int   (int? int? int)
+#  float (float? float? float)
+#  bytes (int bytes)
+#
+#extern bcrypt:
+#  string (std.bcrypt)
+#  eq     string string bool
+#
+#extern math:
+#  (acos acosh asin asinh atan atan2 atanh cbrt cos cosh erf erfc exp gamma log log10 log2 sin sinh sqrt tan tanh) float float
+#  (e pi inf nan) float
+#  (hypot logn)   float float float
+#  (lgamma frexp) float (float, int)
+#  ldexp          float int float
