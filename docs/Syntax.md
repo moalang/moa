@@ -7,9 +7,9 @@ exp: op1? atom (op2 exp)?
 atom:
 | "(" exp ")"
 | bottom (prop | call | copy)*
-prop: "." (id | [0-9]+)           # property access
-call: "(" exp* ")"                # call function
-index: "[" exp+ "]"               # index access or generic
+prop: "." (id | [0-9]+)       # property access
+call: "(" exp* ")"            # call function
+index: "[" exp+ "]"           # index access or generic
 bottom:
 | "(" exp ")"                 # 1 * (2 + 3)
 | "[" exp* "]"                # [1 2 3] -> list(1 2 3)
@@ -26,15 +26,18 @@ comment: "//" [^\n]*
 
 Keywords
 ```
-global    : true false log assert
-primitive : bool int float string fn
+global    : true false log assert assertError
+primitive : bool int float string fn i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
 container : tuple set list dict
 declare   : let var def dec class enum interface extern
 branch    : iif if else switch
-flow      : return for while continue break throw catch
-memory    : i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
-standard  : bytes regexp time duration stream num decimal array
-reserved  : use module
+flow      : return throw catch for while continue break
+```
+
+Reserved
+```
+bytes regexp time duration stream num decimal array
+use module
 ```
 
 Operators

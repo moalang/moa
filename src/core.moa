@@ -33,23 +33,35 @@ interface num a:
   abs    : a
   neg    : a
 
-extern int:
+interface _int a:
   num
-  ~    : int int
-  &    : int int int
-  |    : int int int
-  ^    : int int int
-  <<   : int int int
-  >>   : int int int
+  ~    : a a
+  &    : a a a
+  |    : a a a
+  ^    : a a a
+  <<   : a a a
+  >>   : a a a
   char : string
+extern int: _int
+extern  i8: _int
+extern i16: _int
+extern i32: _int
+extern i64: _int
+extern  u8: _int
+extern u16: _int
+extern u32: _int
+extern u64: _int
 
-extern float:
+interface _float a:
   num
   floor : int
   ceil  : int
   round : int
-  .inf  float
-  .nan  float
+  .inf  a
+  .nan  a
+extern float: _float
+extern   f32: _float
+extern   f64: _float
 
 extern string:
   size    : int
