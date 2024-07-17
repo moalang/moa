@@ -1,22 +1,19 @@
-dec assert a      : a a _
-dec assertError a : a _
-# fn
-# tuple
-# log
+dec log ...a b : ...a b b
+dec assert a   : a a _
 # iif
 # if
 # else
 # switch
+# throw
 # catch
+# return
 # for
 # while
 # continue
 # break
-# throw
-# catch
-# return
 
 enum bool:
+  .new : _ bool
   true
   false
   !  : bool bool
@@ -24,23 +21,25 @@ enum bool:
   && : bool bool bool
 
 interface num a:
-  +      : a a a
-  -      : a a a
-  *      : a a a
-  /      : a a a
-  %      : a a a
-  **     : a a a
-  abs    : a
-  neg    : a
+  +   a a a
+  -   a a a
+  *   a a a
+  /   a a a
+  %   a a a
+  **  a a a
+  abs : a
+  neg : a
 
 interface _int a:
+  .new   : _int a
+  .parse : string a
   num
-  ~    : a a
-  &    : a a a
-  |    : a a a
-  ^    : a a a
-  <<   : a a a
-  >>   : a a a
+  ~    a a
+  &    a a a
+  |    a a a
+  ^    a a a
+  <<   a a a
+  >>   a a a
   char : string
 extern int: _int
 extern  i8: _int
@@ -53,18 +52,20 @@ extern u32: _int
 extern u64: _int
 
 interface _float a:
+  .inf  a
+  .nan  a
+  .parse : string a
   num
   floor : int
   ceil  : int
   round : int
-  .inf  a
-  .nan  a
 extern float: _float
 extern   f32: _float
 extern   f64: _float
 
 extern string:
-  size    : int
+  .new    : _ string
+  size    int
   concat  : string string
   reverse : string
   slice   : int? int? int? string
@@ -77,8 +78,17 @@ extern string:
   has     : string bool
   repeat  : int string
 
+# fn
+
+class error a:
+  message   string
+  backtrace string
+  detail    a
+
+# tuple
+
 extern list a:
-  size    : int
+  size    int
   concat  : list[a] list[a]
   slice   : int? int? int? list[a]
   get     : int a!
@@ -102,7 +112,7 @@ extern list a:
   repeat  : int list[a]
 
 extern set a:
-  size : int
+  size int
   -    : set[a] set[a]
   |    : set[a] set[a]
   &    : set[a] set[a]
@@ -113,7 +123,7 @@ extern set a:
   list : list[a]
 
 extern dict k v:
-  size   : int
+  size   int
   get    : k v!
   set    : k v v
   has    : k bool

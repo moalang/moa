@@ -31,7 +31,7 @@ const parse = source => {
       const close = tokens[pos] || {code: ''}
       const next = read()
       return close.code === '('  ? ++pos && suffix([t, ...until(')')]) :
-//             close.code === '['  ? ++pos && suffix([close, t, ...until(']')]) :
+             close.code === '['  ? ++pos && suffix([close, t, ...until(']')]) :
 //             next.code  === ','  ? suffix([t, ...many(t => t.code === ',' && ++pos && consume())]) :
              next.code  === '.'  ? ++pos && suffix([next, t, consume()]) :
 //             next.code  === '=>' ? ++pos && [next, t, parse_block()] :
@@ -41,7 +41,7 @@ const parse = source => {
     return suffix(
       t.code === '!' ? [t, parse_unit()] :
       t.code === '-' ? [t, parse_unit()] :
-//      t.code === '[' ? [{...t, code:'list'}, ...until(']')] :
+      t.code === '[' ? [{...t, code:'list'}, ...until(']')] :
       t.code === '(' ? squash(until(')')) :
       t.code === ':' ? parse_block() :
       t)
@@ -124,6 +124,17 @@ if (require.main === module) {
   test('((. f m) a b)', 'f.m(a b)')
   test('((. ((. a f) 1) g) 2)', 'a.f(1).g(2)')
 
+  // list
+  test('(list)', '[]')
+  test('(list 1)', '[1]')
+  test('(list 1 2)', '[1 2]')
+
+  // index access
+  test('([ x 1)', 'x[1]')
+  test('(x (list 1))', 'x [1]')
+  test('([ x 1 2)', 'x[1 2]')
+  test('(. ([ x a) b)', 'x[a].b')
+
   // indent
   test('(a b)', 'a:\n  b')
   test('(a (b c))', 'a:\n  b:\n    c')
@@ -155,25 +166,14 @@ if (require.main === module) {
   test('(&& true (! false))', 'true && !false')
   test('(+ (a b) c)', 'a(b) + c')
   test('((. a b) c)', 'a.b c')
-//  test('(. ([ a b) c)', 'a[b].c')
-//  test('((. ([ a b) c) d)', 'a[b].c(d)')
-//  test('(. (list) a)', '[].a')
-//  test('(. (list) size)', '[].size')
-//  test('((. (list 1) m) a)', '[1].m a')
-//  test('((. (list 1) m) a)', '[1].m(a)')
+  test('(. ([ a b) c)', 'a[b].c')
+  test('((. ([ a b) c) d)', 'a[b].c(d)')
+  test('(. (list) a)', '[].a')
+  test('(. (list) size)', '[].size')
+  test('((. (list 1) m) a)', '[1].m a')
+  test('((. (list 1) m) a)', '[1].m(a)')
 //  test('((. (list 1) m) (=> x (>= x 1)))', '[1].m(x => x >= 1)')
 
-//  // syntax sugar: list
-//  test('(list)', '[]')
-//  test('(list 1)', '[1]')
-//  test('(list 1 2)', '[1 2]')
-//
-//  // syntax sugar: index access
-//  test('([ x 1)', 'x[1]')
-//  test('(x (list 1))', 'x [1]')
-//  test('([ x 1 2)', 'x[1 2]')
-//  test('(. ([ x a) b)', 'x[a].b')
-//
 //  // syntax sugar: arrow function
 //  test('(=> p (+ (. p x) (. p y)))', 'p => p.x + p.y')
 //  test('(=> (a b) c)', 'a,b => c')

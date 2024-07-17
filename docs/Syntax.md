@@ -26,12 +26,13 @@ comment: "//" [^\n]*
 
 Keywords
 ```
-global    : true false log assert assertError
-primitive : bool int float string fn i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
-container : tuple set list dict
+literal   : true false
+primitive : bool int float string fn error i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
+container : tuple list set dict
 declare   : let var def dec class enum interface extern
 branch    : iif if else switch
 flow      : return throw catch for while continue break
+global    : log assert
 ```
 
 Reserved

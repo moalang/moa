@@ -274,16 +274,4 @@ assert 4:
       a += b
 
 # throw and catch
-assertError throw("a")
-assert "int":
-  catch throw(1):
-    int: "int"
-assert 1:
-  catch throw(1):
-    int n: n
-assert 1:
-  catch throw(1):
-    int n if n == 1: 1
-assertError:
-  catch throw(2):
-    int n if n == 1: 1
+assert "b" catch(throw("a") fn(e: e.message))
