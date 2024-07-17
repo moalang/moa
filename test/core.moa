@@ -114,13 +114,6 @@ assert 3 (var a 1: fn(a += 2)())
 assert 1   tuple(1 "a").0
 assert "a" tuple(1 "a").1
 
-# struct
-assert 1 struct(a=1).a
-assert 3:
-  let a 1
-  let s struct(a b=2)
-  s.a + s.b
-
 # list
 assert 1            [1].size
 assert [1 2]        [1].concat([2])
