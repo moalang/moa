@@ -55,13 +55,13 @@ Symbols
 ```
 ( )  # priority
 [ ]  # list
-{ }  # class
 .    # field access
 _    # part of id
 ...  # variadic function or there are zero or more
 "    # string
 #    # comment
 :    # block
+{ }  # reserved for class
 =>   # reserved for lambda
 ,    # reserved for argument separator of lambda
 ;    # undefined
@@ -81,7 +81,118 @@ for i 1 4 2: log i # 1 3
 while a < b: c
 ```
 
-Pattern matching
+Enum switching
+```
+switch: "switch" exp ":" ("\n  " type id? ":" block)+
+type: id ("." id)* ("[" type+ "]")? ("(" case ")")?
+
+enum ab t:
+  a
+  b int
+
+def show t:
+  switch t:
+    a: "a"
+    b n: b.string
+```
+
+
+
+# Ideas
+
+idea: Variadic function
+```
+def f a?: a         # f(1) is tuple[bool int], f() is tuple[bool void]
+def f a=1: a        # f() is f(1)
+def f ...a: a       # f(), f(1) or f(1 2)
+def f ...a,: a      # f(), f(1 "a"), f(1 "a" 2 "b")
+def f ...a,,: a     # f(), f(1 "a" true), f(1 "a" true 2 "b" false)
+def f ...a: g(...a) # f(1 2) will call g(1 2)
+```
+
+idea: Named argument
+```
+def f a{}    : a  # f(a=1 b=2) returns list[tuple[string int]]
+def f {a}    : a  # f(a=1)
+def f {a?}   : a  # f() or f(a=1)
+def f {a=0}  : a  # f() or f(a=1)
+def f {a b}  : a  # f(a=1 b=2) or f(b=2 a=1)
+def f {a b=0}: a  # f(a=1), f(a=1 b=2) or f(b=2 a=1)
+def f {a b}? : a  # f() or f(a=1 b=2)
+```
+
+idea: Method
+```
+class vector2:
+  x int
+  y iny
+
+def vector2.show v:
+  "({}, {})".format v.x v.y
+
+def f:
+  vector2(1 2).show # (1, 2)
+```
+
+idea: Type alias
+```
+class seconds: int
+
+def seconds.milliseconds n:
+  n * 1000
+
+def f:
+  seconds(3).milliseconds # 3000
+```
+
+idea: Interface
+```
+interface num t:
+  (+ - * / % **) t t t
+
+class vector2:
+  x int
+  y int
+
+class vector2.num:
+   + l r: vector2 (l.x  + r.x) (l.y  + r.y)
+   - l r: vector2 (l.x  - r.x) (l.y  - r.y)
+   * l r: vector2 (l.x  * r.x) (l.y  * r.y)
+   / l r: vector2 (l.x  / r.x) (l.y  % r.y)
+   % l r: vector2 (l.x  / r.x) (l.y  % r.y)
+  ** l r: vector2 (l.x ** r.x) (l.y ** r.y)
+```
+
+idea: Duration
+```
+"-"? ([0-9]+ ("d" | "h" | "m" | "s" | "ms" | "us" | "ns"))+ # 1h2m3s -> duration(hour=1 minute=30 second=3)
+```
+
+idea: Regexp
+```
+re"[0-9]+"
+```
+
+idea: Sugar
+```
+exp:
+| id ("," id+ )* "=>" exp | block  # a,b => c        -> fn(a b c)
+| op1? atom (op2 exp)?
+atom:
+| "(" exp ")"
+| bottom (prop | call | index | copy | key)*
+copy: "{" id* (id "=" atom)* "}"   # copy with updates
+key: "." (id | [0-9]+) [!?] type?  # a.b!            -> a.at("b"), a.b? -> a.get("b")
+bottom:
+| "[" ":" | (atom ":" atom)+ "]"   # ["x":1 ("y"):2] -> dict("x" 1 "y" 2)
+| "{" id* (id "=" atom)* "}"  # {x y=1}
+| "-"? [0-9]+ "e" [0-9]+           # 1e3             -> 100
+| "-"? "0o" [0-7_]+                # 0o11            -> 9
+| "-"? "0b" [0-1_]+                # 0b11            -> 3
+| "-"? [0-9][0-9_]+ ("." [0-9_]+)? # 10_000.1_002    -> 10000.1002
+```
+
+idea: Pattern matching
 ```
 switch: "switch" exp ":" ("\n  " type? case ("if" exp) ":" block)+
 case: pattern ("," pattern)*
@@ -108,7 +219,7 @@ def validate t:
     node {value left.node right.node}: left.value <= value <= right.value && validate(left) && validate(right)
 ```
 
-Error handling
+idea: Error handling
 ```
 catch: "catch" exp id? ":" ("\n  " type id? ("if" exp) ":" block)+
 type: id ("." id)* ("[" type+ "]")? ("(" case ")")?
@@ -118,99 +229,4 @@ def calc f:
     int n if n == 0: "zero"
     int n: n.string()
     _: ""
-```
-
-
-
-# Idea
-Variadic function
-```
-def f a?: a         # f(1) is tuple[bool int], f() is tuple[bool void]
-def f a=1: a        # f() is f(1)
-def f ...a: a       # f(), f(1) or f(1 2)
-def f ...a,: a      # f(), f(1 "a"), f(1 "a" 2 "b")
-def f ...a,,: a     # f(), f(1 "a" true), f(1 "a" true 2 "b" false)
-def f ...a: g(...a) # f(1 2) will call g(1 2)
-```
-
-Named argument
-```
-def f a{}    : a  # f(a=1 b=2) returns list[tuple[string int]]
-def f {a}    : a  # f(a=1)
-def f {a?}   : a  # f() or f(a=1)
-def f {a=0}  : a  # f() or f(a=1)
-def f {a b}  : a  # f(a=1 b=2) or f(b=2 a=1)
-def f {a b=0}: a  # f(a=1), f(a=1 b=2) or f(b=2 a=1)
-def f {a b}? : a  # f() or f(a=1 b=2)
-```
-
-Method
-```
-class vector2:
-  x int
-  y iny
-
-def vector2.show v:
-  "({}, {})".format v.x v.y
-
-def f:
-  vector2(1 2).show # (1, 2)
-```
-
-Type alias
-```
-class seconds: int
-
-def seconds.milliseconds n:
-  n * 1000
-
-def f:
-  seconds(3).milliseconds # 3000
-```
-
-Interface
-```
-interface num t:
-  (+ - * / % **) t t t
-
-class vector2:
-  x int
-  y int
-
-class vector2.num:
-   + l r: vector2 (l.x  + r.x) (l.y  + r.y)
-   - l r: vector2 (l.x  - r.x) (l.y  - r.y)
-   * l r: vector2 (l.x  * r.x) (l.y  * r.y)
-   / l r: vector2 (l.x  / r.x) (l.y  % r.y)
-   % l r: vector2 (l.x  / r.x) (l.y  % r.y)
-  ** l r: vector2 (l.x ** r.x) (l.y ** r.y)
-```
-
-Duration
-```
-"-"? ([0-9]+ ("d" | "h" | "m" | "s" | "ms" | "us" | "ns"))+ # 1h2m3s -> duration(hour=1 minute=30 second=3)
-```
-
-Regexp
-```
-re"[0-9]+"
-```
-
-Sugar
-```
-exp:
-| id ("," id+ )* "=>" exp | block  # a,b => c        -> fn(a b c)
-| op1? atom (op2 exp)?
-atom:
-| "(" exp ")"
-| bottom (prop | call | index | copy | key)*
-copy: "{" id* (id "=" atom)* "}"   # copy with updates
-key: "." (id | [0-9]+) [!?] type?  # a.b!            -> a.at("b"), a.b? -> a.get("b")
-bottom:
-| "[" ":" | (atom ":" atom)+ "]"   # ["x":1 ("y"):2] -> dict("x" 1 "y" 2)
-| "{" id* (id "=" atom)* "}"  # {x y=1}
-| "-"? [0-9]+ "e" [0-9]+           # 1e3             -> 100
-| "-"? "0o" [0-7_]+                # 0o11            -> 9
-| "-"? "0b" [0-1_]+                # 0b11            -> 3
-| "-"? [0-9][0-9_]+ ("." [0-9_]+)? # 10_000.1_002    -> 10000.1002
 ```

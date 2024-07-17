@@ -1,16 +1,16 @@
 dec log ...a b : ...a b b
 dec assert a   : a a _
-# iif
-# if
-# else
-# switch
-# throw
-# catch
-# return
-# for
-# while
-# continue
-# break
+dec iif a      : ...bool,a a
+dec if a b     : a b _
+dec else a     : a _
+dec switch a b : a ... b
+dec throw a b  : string a? b
+dec catch a    : a (error a) a
+dec return a   : a a
+dec for a      : _id int int? int? a _
+dec while a    : bool a _
+dec continue   : _
+dec break      : _
 
 enum bool:
   true
@@ -86,7 +86,8 @@ extern string:
   has     : string bool
   repeat  : int string
 
-# fn
+extern fn ...a:
+  _cmp
 
 class error a:
   _cmp
@@ -94,7 +95,8 @@ class error a:
   backtrace string
   detail    a
 
-# tuple
+extern tuple ...a:
+  _cmp
 
 extern list a:
   _cmp

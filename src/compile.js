@@ -223,7 +223,6 @@ const testCompile = () => {
   check('(() => { try { return f(1) } catch (e) { return g(moa.error(e)) } })()', 'catch (f 1) g')
 
   // return
-  check('return', 'return')
   check('return(a)', 'return a')
 
   // for
