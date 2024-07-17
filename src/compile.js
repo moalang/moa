@@ -19,10 +19,10 @@ const compile = nodes => {
     'float inf',
     'float nan',
   ])
-  const iifjs = xs =>
-    xs.length === 0 ? fail(`invalid the number of arguments of iif`) :
-    xs.length === 1 ? xs[0] :
-    `${xs[0]} ? ${xs[1]} : ${iifjs(xs.slice(2))}`
+  const iifjs = a =>
+    a.length === 0 ? fail(`invalid the number of arguments of iif`) :
+    a.length === 1 ? a[0] :
+    `${a[0]} ? ${a[1]} : ${iifjs(a.slice(2))}`
   const tojs = (node) => {
     if (Array.isArray(node)) {
       const [head,...tail] = node
@@ -53,6 +53,56 @@ const compile = nodes => {
             const body = tojs(tail.at(-1))
             return `else {\n  ${body}\n}`
           }
+        } else if (head.code === 'switch') {
+          const target = tojs(tail.slice(0, -1))
+          const name = tail[0].type
+          const switchjs = a =>
+            a.length === 2 ? `__s.__tag === "${name}.${a[0].code}" ? ${tojs(a[1])} :` :
+            a.length === 3 ? `__s.__tag === "${name}.${a[0].code}" ? (${a[1].code} => ${tojs(a[2])})(__s.__val) :` :
+            fail(`Unknown switch ${str(tail)}`)
+          const body = tail.at(-1).map(switchjs).join('\n')
+          return `(__s => ${body} moa.throw("switch", __s))(${target})`
+        } else if (head.code === 'for') {
+          const a = tail[0].code
+          const b = tail[1]?.code
+          const c = tail[2]?.code
+          const d = tail[3]?.code
+          const body = tail.at(-1).map(tojs).join('\n  ')
+          return tail.length === 3 ? `for (let ${a}=0; ${a}<${b}; ++${a}) {\n  ${body}\n}` :
+            tail.length === 4 ? `for (let ${a}=${b}; ${a}<${c}; ++${a}) {\n  ${body}\n}` :
+            tail.length === 5 ? `for (let ${a}=${b}; ${a}<${c}; ${a}+=${d}) {\n  ${body}\n}` :
+            fail(`Unknown for ${str(tail)}`)
+        } else if (head.code === 'while') {
+          const cond = tojs(tail.slice(0, -1))
+          const body = tail.at(-1).map(tojs).join('\n  ')
+          return `while (${cond}) {\n  ${body}\n}`
+        } else if (head.code === 'let') {
+          return `const ${tail[0].code} = ${tojs(tail.slice(1))}`
+        } else if (head.code === 'var') {
+          return `let ${tail[0].code} = ${tojs(tail.slice(1))}`
+        } else if (head.code === 'def') {
+          const name = tail[0].code
+          const args = tail.slice(1).map(x => x.code).join(', ')
+          const lines = tail.at(-1).map(tojs)
+          const body = [...lines.slice(0, -1), 'return ' + lines.at(-1)].join('\n  ')
+          return `function ${name}(${args}) {\n  ${body}\n}`
+        } else if (head.code === 'class') {
+          const name = tail[0].code
+          const fields = tail.at(-1).map(x => x[0].code).join(', ')
+          return `function ${name}(${fields}) { return {${fields}} }`
+        } else if (head.code === 'enum') {
+          const name = tail[0].code
+          const enumjs = a => a.length === 1 ? `const ${a[0].code} = {__tag: "${name}.${a[0].code}"}` :
+            a.length === 2 && Array.isArray(a[1]) ? `function ${a[0].code}(${a[1].map(x => x[0].code).join(', ')}) { return {__tag: "${name}.${a[0].code}", __val: {${a[1].map(x => x[0].code).join(', ')}}} }` :
+            a.length === 2 ? `function ${a[0].code}(__val) { return {__tag: "${name}.${a[0].code}", __val} }` :
+            fail(`Unknown enum ${str(name)} with ${str(a)}`)
+          return tail.at(-1).map(enumjs).join('\n')
+        } else if (head.code === 'catch') {
+          const target = tojs(tail[0])
+          const handle = tojs(tail[1])
+          return `(() => { try { return ${target} } catch (e) { return ${handle}(moa.error(e)) } })()`
+        } else if (head.code === 'dec' || head.code === 'interface' || head.code === 'extern') {
+          return ''
         } else if (tail.length === 1 && tail[0].length === 0) {
           return tojs(head) + '()'
         } else {
@@ -129,7 +179,6 @@ const testCompile = () => {
   check('1.1', '1.1')
   check('"a"', '"a"')
   check('id', 'id')
-  check('f()', 'f()')
 
   // embedded
   checkEmbedded('bool int float string i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 tuple list set dict log assert')
@@ -142,14 +191,14 @@ const testCompile = () => {
   check('__moa.int(1)', 'int 1')
 
   // static
-  check('__moa.float_inf', '. float inf')            // TODO: optimize to Infinity
-  check('__moa.float_nan', '. float nan')            // TODO: optimize to NaN
+  check('__moa.float_inf', '. float inf')
+  check('__moa.float_nan', '. float nan')
 
   // property
-  check('__moa.string_size(s)', '. s@string size')   // TODO: optimize to s.length
+  check('__moa.string_size(s)', '. s@string size')
 
   // method
-  check('__moa.int_char(97)()', '(. 97@int char)()') // TODO: optimize to String.fromCharCode(97)
+  check('__moa.int_char(97)()', '(. 97@int char)()')
 
   // iif
   check('(1 ? 2 : 3)', 'iif 1 2 3')
@@ -163,23 +212,29 @@ const testCompile = () => {
   check('if (a) {\n  b\n}\nelse if (c) {\n  d\n}\nelse {\n  e\n}', 'if a: b\nelse if c: d\nelse: e')
 
   // switch
-  // TODO: impl
+  check('(__s => __s.__tag === "t.b" ? c : moa.throw("switch", __s))(a)', 'switch a@t: b: c')
+  check('(__s => __s.__tag === "t.b" ? (c => c)(__s.__val) : moa.throw("switch", __s))(a)', 'switch a@t: b c: c')
+  // TODO: advanced pattern matching
 
   // throw
   check('__moa.throw(a)', 'throw a')
 
   // catch
-  // TODO: impl
+  check('(() => { try { return f(1) } catch (e) { return g(moa.error(e)) } })()', 'catch (f 1) g')
 
   // return
   check('return', 'return')
   check('return(a)', 'return a')
 
   // for
-  // TODO: impl
+  check('for (let i=0; i<4; ++i) {\n  a\n}',      'for i 4: a')
+  check('for (let i=0; i<4; ++i) {\n  a\n  b\n}', 'for i 4: a; b')
+  check('for (let i=1; i<4; ++i) {\n  a\n}',      'for i 1 4: a')
+  check('for (let i=1; i<4; i+=2) {\n  a\n}',     'for i 1 4 2: a')
 
   // while
-  // TODO: impl
+  check('while (a) {\n  b\n}',      'while a: b')
+  check('while (a) {\n  b\n  c\n}', 'while a: b; c')
 
   // continue
   check('continue', 'continue')
@@ -188,13 +243,35 @@ const testCompile = () => {
   check('break', 'break')
 
   // let
+  check('const a = 1', 'let a 1')
+
   // var
+  check('let a = 1', 'var a 1')
+
   // def
-  // dec
+  check('function f() {\n  return 1\n}', 'def f: 1')
+  check('function f() {\n  1\n  return 2\n}', 'def f: 1; 2')
+
   // class
+  check('function a(b) { return {b} }', 'class a: b int')
+  check('function a(b, c) { return {b, c} }', 'class a: b int; c string')
+  check('function a(b, c) { return {b, c} }', 'class a t: b int; c string')
+
   // enum
+  check('const b = {__tag: "a.b"}', 'enum a: b')
+  check('const b = {__tag: "a.b"}\nconst c = {__tag: "a.c"}', 'enum a: b; c')
+  check('function b(__val) { return {__tag: "a.b", __val} }', 'enum a: b int')
+  check('function b(c) { return {__tag: "a.b", __val: {c}} }', 'enum a: b: c int')
+
+  // dec
+  check('', 'dec f a')
+
   // interface
+  check('', 'interface a: b')
+
   // extern
+  check('', 'extern a: b')
+
   print('ok')
 }
 

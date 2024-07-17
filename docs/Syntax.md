@@ -29,7 +29,7 @@ Keywords
 literal   : true false
 primitive : bool int float string fn error i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
 container : tuple list set dict
-declare   : let var def dec class enum interface extern
+declare   : let var def class enum dec interface extern
 branch    : iif if else switch
 flow      : return throw catch for while continue break
 global    : log assert
@@ -71,6 +71,14 @@ _    # part of id
 $    # undefined
 @    # undefined
 `    # undefined
+```
+
+Loop
+```
+for i 4: log i     # 0 1 2 3
+for i 1 4: log i   # 1 2 3
+for i 1 4 2: log i # 1 3
+while a < b: c
 ```
 
 Pattern matching
