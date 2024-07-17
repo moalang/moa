@@ -1,0 +1,10 @@
+const fs = require('fs')
+const {parse} = require('./parser.js')
+const {infer} = require('./infer.js')
+const {compile} = require('./compile.js')
+
+const src = fs.readFileSync('/dev/stdin', 'utf-8')
+const nodes = infer(parse(src))
+console.dir(nodes, {depth: null})
+//const js = compile(src)
+//console.log(js)

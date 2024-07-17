@@ -38,10 +38,11 @@ interface num a:
   abs : a
   neg : a
 
+interface _num a:
+  .new b._num : b a
+
 interface _int a:
-  .new   : _int a
-  .parse : string a
-  num
+  _num
   ~    a a
   &    a a a
   |    a a a
@@ -62,7 +63,7 @@ extern u64: _int
 interface _float a:
   .inf  a
   .nan  a
-  num
+  _num
   floor : int
   ceil  : int
   round : int
@@ -85,6 +86,8 @@ extern string:
   ends    : string bool
   has     : string bool
   repeat  : int string
+  int     : int!
+  float   : int!
 
 extern fn ...a:
   _cmp

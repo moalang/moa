@@ -23,15 +23,33 @@ const infer = nodes => {
   let tvarSequence = 0
   const cache = {}
   const tvar = (label, interfaces) => (name => ({name, label, interfaces, var: true}))((++tvarSequence).toString())
+  const v1 = tvar()
+  const v2 = tvar()
   const tdot3 = () => ({dot3: true, ref: tvar()})
-  const tfn = (...types) => types.length === 1 ? types[0] : ({types})
-  const tclass = (name, props) => ({name, props})
-  const ttype = name => ({name})
-  const ttuple = types => ({name: 'tuple', types})
+  const tfn = (...types) => ({types})
+  const ttype = (name, ...tvs) => ({name, tvs})
   const tint = ttype('int')
+  const ti8 = ttype('ti8')
+  const ti16 = ttype('ti16')
+  const ti32 = ttype('ti32')
+  const ti64 = ttype('ti64')
+  const tu8 = ttype('tu8')
+  const tu16 = ttype('iu16')
+  const tu32 = ttype('iu32')
+  const tu64 = ttype('iu64')
+  const tints1 = tvar('ints', [tint, ti8, ti16, ti32, ti64, tu8, tu16, tu32, tu64])
   const tfloat = ttype('float')
+  const tf32 = ttype('f32')
+  const tf64 = ttype('f64')
+  const tfloats1 = tvar('floats', [tfloat, tf32, tf64])
+  const tnum1 = tvar('num', [...tints1.interfaces, ...tfloats1.interfaces])
   const tbool = ttype('bool')
-  const tnum1 = tvar('num', [tint, tfloat])
+  const tstring = ttype('string')
+  const terror = ttype('error', v1)
+  const ttuple = ttype('tuple')
+  const tlist = ttype('list', v1)
+  const tset = ttype('set', v1)
+  const tdict = ttype('dict', v1, v2)
   const tcon = (t, constrains) => ({...t, constrains})
   const fresh = (type, nonGeneric) => {
     const d = {}
@@ -79,7 +97,7 @@ const infer = nodes => {
         if (as[i].dot3) {
           const cs = as[i].constrains
           cs && [...Array(bs.length-i-1)].map((_, j) => unify(cs[j%cs.length], bs[i+j]))
-          as[i].ref.instance = ttuple(bs.slice(i, -1))
+          as[i].ref.instance = {...ttuple, types: bs.slice(i, -1)}
           unify(as.at(-1), bs.at(-1))
           break
         } else {
@@ -88,7 +106,6 @@ const infer = nodes => {
       }
     }
   }
-  const v1 = tvar()
   const prune = t => (t.var && t.instance) ? t.instance = prune(t.instance) : t
   const analyse = (node, env, nonGeneric) => node.type = _analyse(node, env, nonGeneric)
   const _analyse = (node, env, nonGeneric) => {
@@ -117,9 +134,12 @@ const infer = nodes => {
       } else if (head.code === 'class') {
         const tvars = tail.slice(0, -1).map(t => [t.code, tvar()])
         const name = tvars[0][0]
-        const local = {...env, ...Object.fromEntries(tvars)}
-        const props = tail.at(-1).map(a => [a[0].code, tfn(...a.slice(1).map(t => local[t.code]))])
-        return env[name] = tclass(name, props)
+        const field = (x, e) => Array.isArray(x) ? tfn(...x.flat().map(t => e[t.code])) : e[x.code]
+        const props = tail.at(-1).map(a => [
+          a[0].code,
+          field(a.at(-1), {...Object.fromEntries(a.slice(1, -1).map(t => [t.code, tvar()]).concat(tvars)), ...env})
+          ])
+        return env[name] = {name, props}
       } else if (head.code === '.') {
         return analyse(tail.slice(0, -1), env, nonGeneric)[tail.at(-1).code]
       } else if (tail.length) {
@@ -149,18 +169,17 @@ const infer = nodes => {
   }
   const top = {
     '...': tdot3(),
-    'int': tint,
-    'float': tfloat,
-    'bool': tbool,
     'true': tbool,
     'false': tbool,
     '!': tfn(tbool, tbool),
+    '~': tfn(tint, tint),
     'iif': tfn(tbool, v1, v1, v1),
   }
   '|| &&'.split(' ').map(op => top[op] = tfn(tbool, tbool, tbool))
   '+ - * ** / %'.split(' ').map(op => top[op] = tfn(tnum1, tnum1, tnum1))
-  '& | ^ ~ << >>'.split(' ').map(op => top[op] = tfn(tint, tint, tint))
-  '!= == < <= >= >'.split(' ').map(op => top[op] = tfn(v1, v1, tbool))
+  '& | ^ ~ << >>'.split(' ').map(op => top[op] = tfn(tints1, tints1, tints1))
+  '== != < <= >= >'.split(' ').map(op => top[op] = tfn(v1, v1, tbool))
+  ; [tint, ti8, ti16, ti32, ti64, tu8, tu16, tu32, tu64, tf32, tf64, tbool, ttuple].map(t => top[t.name] = t)
   return nodes.map(node => analyse(node, top, []))
 }
 
@@ -177,10 +196,12 @@ const showType = type => {
   return r
 }
 
-const testType = () => {
+module.exports = { infer }
+
+if (require.main === module) {
   const parse = src => {
     const line = src => {
-      const tokens = src.split(/([()\[\]:;]|(?=[ \n])\.(?= )|\s+)/).filter(x => x.trim()).map(code => ({code}))
+      const tokens = src.split(/([()\[\]:]|(?=[ \n])\.(?= )|\s+)/).filter(x => x.trim()).map(code => ({code}))
       let pos = 0
       const check = f => pos < tokens.length && f(tokens[pos].code)
       const list = a => (t => t.code === ')' ? a : list(a.concat([t])))(unit())
@@ -190,11 +211,10 @@ const testType = () => {
         t
       const unit = () => (t =>
         t.code === '(' ? list([]) :
-        t.code === ':' ? block([top()]) :
+        t.code === ':' ? [top()] :
         suffix(t))(tokens[pos++])
-      const block = a => check(s => s === ';') ? (++pos, block([...a, top()])) : a
-      const top = () => until(() => check(s => s !== ')' && s !== ';'), unit)
-      return block([top()])
+      const top = () => until(() => check(s => s !== ')'), unit)
+      return [top()]
     }
     return src.split('\n').map(line).flat(1)
   }
@@ -232,7 +252,7 @@ const testType = () => {
     }
   }
 
-  // primitives
+  // literal
   inf('bool', 'true')
   inf('bool', 'false')
   inf('int', '1')
@@ -248,7 +268,7 @@ const testType = () => {
   inf('bool', 'iif true true true')
 
   // value
-  inf('int', 'def _: 1')
+  inf('(int)', 'def _: 1')
 
   // simple function
   inf('(int int)', 'def _ a: + a 1')
@@ -274,8 +294,8 @@ const testType = () => {
   inf('(1 ((1 2 3) 4 2) (1 2 3) 4 3)', 'def _ h t f x: f h (t f x)')
   inf('((1 1 2) ((1 1 2) 1) 2)',       'def _ x y: x (y x) (y x)')
   inf('(((1 1) 2) 2)',                 'def id x: x\ndef f y: id (y id)')
-  inf('int',                           'def id x x\ndef f (iif (id true) (id 1) (id 2))')
-  inf('int',                           'def f x (3)\ndef g (+ (f true) (f 4))')
+  inf('(int)',                         'def id x x\ndef f: iif (id true) (id 1) (id 2)')
+  inf('(int)',                         'def f x (3)\ndef g: + (f true) (f 4)')
   inf('(bool (1 1))',                  'def f x x\ndef g y y\ndef h b (iif b (f g) (g f))')
 
   // declare function
@@ -303,8 +323,11 @@ const testType = () => {
   inf('(x.1)', 'class _ a: x a')
   inf('int', 'class c a: x a\n. c(1) x')
   inf('bool', 'class c a: x a\n. c(true) x')
-  inf('(f.(int int))', 'class _: f int int')
-  inf('(x.1 f.(1 2 int))', 'class _ a b: x a; f a b int')
+  inf('(x.1)', 'class _ a: x a')
+  inf('(f.(int))', 'class _: f : int')
+  inf('(f.(int int))', 'class _: f : int int')
+  inf('(f.(1 2 int))', 'class _ a: f b : a b int')
+  inf('(f.(1 2 3 4))', 'class _ a b: f c d : a b c d')
 
   // type errors
   reject('(+ true true)')
@@ -315,5 +338,3 @@ const testType = () => {
 
   print('ok')
 }
-
-testType()

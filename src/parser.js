@@ -14,7 +14,7 @@ const parse = source => {
     return []
   }
   // operator | symbols | string | number | id | white spaces
-  const regexp = /([!+\-*/%<>:!=^|&]+|[()\[\]{}]|r?"[^]*?(?<!\\)"|r?'[^]*?(?<!\\)'|-?[0-9]+(?:\.[0-9]+)|[0-9A-Za-z_]+|(?:#[^\n]*|[ \n])+)/
+  const regexp = /([!+\-*/%<>:!=^|&]+|[()\[\]{}]|""".*?"""|"[^]*?(?<!\\)"|-?[0-9]+(?:\.[0-9]+)|[0-9A-Za-z_]+|(?:#[^\n]*|[ \n])+)/
   let offset = 0
   const tokens = source.trim().split(regexp).flatMap(code => code.length ? [{code, offset: offset+=code.length}] : [])
   let pos = 0
@@ -44,6 +44,7 @@ const parse = source => {
       t.code === '[' ? [{...t, code:'list'}, ...until(']')] :
       t.code === '(' ? squash(until(')')) :
       t.code === ':' ? parse_block() :
+      t.code.startsWith('"""') ? {...t, code: '"' + t.code.slice(3, -3).replaceAll(/"/g, '\\"') + '"'} :
       t)
   }
   const parse_exp = () => {
@@ -85,10 +86,8 @@ if (require.main === module) {
   test('"hi"', '"hi"')
   test('"h\\"i"', '"h\\"i"')
   test('"h\\"i"', "\"h\\\"i\"")
-  test('"\\\\""', '"\\\\""')
-  test('r"\\t"', 'r"\\t"')
-  test("r'\\t'", "r'\\t'")
-  test('(=> a b)', 'a => b')
+  test('" \\\\" "', '" \\\\" "')
+  test('" \\" "', '""" " """')
 
   // property access
   test('(. a b)', 'a.b')
@@ -175,6 +174,9 @@ if (require.main === module) {
 //  test('((. (list 1) m) (=> x (>= x 1)))', '[1].m(x => x >= 1)')
 
 //  // syntax sugar: arrow function
+//  test('r"\\t"', 'r"\\t"')
+//  test("r'\\t'", "r'\\t'")
+//  test('(=> a b)', 'a => b')
 //  test('(=> p (+ (. p x) (. p y)))', 'p => p.x + p.y')
 //  test('(=> (a b) c)', 'a,b => c')
 //  test('(=> (a b c) d)', 'a,b,c => d')

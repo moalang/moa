@@ -118,7 +118,9 @@ const compile = nodes => {
   return nodes.map(node => tojs(node)).join('\n')
 }
 
-const testCompile = () => {
+module.exports = { compile }
+
+if (require.main === module) {
   const parse = src => {
     const line = src => {
       const decompose = s => {
@@ -214,7 +216,6 @@ const testCompile = () => {
   // switch
   check('(__s => __s.__tag === "t.b" ? c : moa.throw("switch", __s))(a)', 'switch a@t: b: c')
   check('(__s => __s.__tag === "t.b" ? (c => c)(__s.__val) : moa.throw("switch", __s))(a)', 'switch a@t: b c: c')
-  // TODO: advanced pattern matching
 
   // throw
   check('__moa.throw(a)', 'throw a')
@@ -273,5 +274,3 @@ const testCompile = () => {
 
   print('ok')
 }
-
-testCompile()
