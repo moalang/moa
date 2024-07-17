@@ -1,0 +1,111 @@
+dec assert a      : a a _
+dec assertError a : a _
+# fn
+# tuple
+# log
+# iif
+# if
+# else
+# switch
+# catch
+# for
+# while
+# continue
+# break
+# throw
+# catch
+# return
+
+enum bool:
+  true
+  false
+  !  : bool bool
+  || : bool bool bool
+  && : bool bool bool
+
+interface num a:
+  +      : a a a
+  -      : a a a
+  *      : a a a
+  /      : a a a
+  %      : a a a
+  **     : a a a
+  abs    : a
+  neg    : a
+
+extern int:
+  num
+  ~    : int int
+  &    : int int int
+  |    : int int int
+  ^    : int int int
+  <<   : int int int
+  >>   : int int int
+  char : string
+
+extern float:
+  num
+  floor : int
+  ceil  : int
+  round : int
+  .inf  float
+  .nan  float
+
+extern string:
+  size    : int
+  concat  : string string
+  reverse : string
+  slice   : int? int? int? string
+  split   : string int? list[string]
+  index   : string int!
+  replace : string string string
+  trim    : string
+  starts  : string bool
+  ends    : string bool
+  has     : string bool
+  repeat  : int string
+
+extern list a:
+  size    : int
+  concat  : list[a] list[a]
+  slice   : int? int? int? list[a]
+  get     : int a!
+  set     : int a a!
+  push    : a a
+  map b   : (a int? b) list[b]
+  fmap b  : (a int? list[b]) list[b]
+  keep    : (a int? bool) list[a]
+  all     : (a int? bool) bool
+  any     : (a int? bool) bool
+  sort b  : (a a? b)? list[a]
+  reverse : list[a]
+  zip b   : list[b] list[tuple[a b]]
+  fold b  : b (a b b) b
+  find    : (a bool) a!
+  index   : (a bool) int!
+  join    : string string
+  has     : a bool
+  min     : a
+  max     : a
+  repeat  : int list[a]
+
+extern set a:
+  size : int
+  -    : set[a] set[a]
+  |    : set[a] set[a]
+  &    : set[a] set[a]
+  ^    : set[a] set[a]
+  has  : a bool
+  add  : a bool
+  rid  : a bool
+  list : list[a]
+
+extern dict k v:
+  size   : int
+  get    : k v!
+  set    : k v v
+  has    : k bool
+  keys   : list[k]
+  values : list[v]
+  items  : list[tuple[k v]]
+  concat : dict[k v] dict[k v]

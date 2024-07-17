@@ -1,0 +1,88 @@
+# time
+assert  2024 time(2024  1 2 3 4 5).year()
+assert     1 time(2024  1 2 3 4 5).month()
+assert     2 time(2024  1 2 3 4 5).day()
+assert     3 time(2024  1 2 3 4 5).hour()
+assert     4 time(2024  1 2 3 4 5).min()
+assert     5 time(2024  1 2 3 4 5).sec()
+assert     2 time(2024  1 2 3 4 5).wday()
+assert   337 time(2024 12 2 3 4 5).yday()
+assert "UTC" time(2024  1 2 3 4 5).zone()
+assert     6 time(2024  1 2 3 4 5).offset()
+assert ""    time(2024  1 2 3 4 5).zone()
+assert "TZ"  time(2024  1 2 3 4 5).zone()
+assert "2024/1/2 3:4:5 -0006"      time(2024 1 2 3 4 5 (-6)).format("{year}/{month}/{day} {hour}:{minute}:{second} {zone}")
+assert "2024/01/02 03:04:05+0006"  time(2024 1 2 3 4 5 6).format("{year}/{month 00}/{day 00} {hour 00}:{minute 00}:{second 00}{zone}")
+assert "2024/01/02 03:03:59+0000"  time(2024 1 2 3 4 5 6).utc.format("{year}/{month 00}/{day 00} {hour 00}:{minute 00}:{second 00}{zone}")
+
+# ---( reserved )----------------------------------------------------
+# duration
+#assert "1 02:03:04.0005" duration("1d2h3m4s5ms").format("{day} {hour 00}:{minute 00}:{second 00}.{ms 04}")
+#assert duration("4d5h5m6s8ms9us10ns") duration("3d4h5m6s7ms8us9ns") + duration("1d1m1s1ms1us1ns")
+#assert duration("2d3h4m5s6ms7us8ns")  duration("3d4h5m6s7ms8us9ns") - duration("1d1m1s1ms1us1ns")
+#assert bytes(0xE3 0x81 0x82)      "あ".encode("utf8")
+#assert bytes(0x30 0x42)           "あ".encode("utf16")
+#assert bytes(0x00 0x00 0x30 0x42) "あ".encode("utf32")
+#
+#assert 1 (a => a)(1)
+#assert 3 (a,b => a+b)(1 2)
+## bytes
+#assert 2                 bytes(1 2).size
+#assert some(1)           bytes(1 2).get(0)
+#assert some(2)           bytes(1 2).get(-1)
+#assert none              bytes(1 2).get(2)
+#assert bytes(1 2)        bytes(1).concat(bytes(2))
+#assert bytes(1 0 0 1)    bytes(1).append(false).append(i16(1))
+#assert 2                 (var b bytes(1): b[0] = 2)[0]
+#assert "あ"              bytes(0xE3 0x81 0x82).decode("utf8")
+#assert "あ"              bytes(0x30 0x42).decode("utf16")
+#assert "あ"              bytes(0x00 0x00 0x30 0x42).decode("utf32")
+#assert some(1)           bytes.from(int(1)).to[int]
+#assert some("hi")        bytes.from("hi").to[string]
+#assert bytes(1 1 1 1)    bytes.fill(1 4)
+#assert 1                 bytes(              1).i8
+#assert 1                 bytes(            0 1).i16
+#assert 1                 bytes(        0 0 0 1).i32
+#assert 1                 bytes(0 0 0 0 0 0 0 1).i64
+#assert 1                 bytes(              1).u8
+#assert 1                 bytes(            0 1).u16
+#assert 1                 bytes(        0 0 0 1).u32
+#assert 1                 bytes(0 0 0 0 0 0 0 1).u64
+#assert 42.0              bytes(      0 0 40 66).f32
+#assert 42.0              bytes(0 0 0 0 1 0 0 0).f64
+#assert 1                 bytes(               ).li8
+#assert 1                 bytes(               ).li16
+#assert 1                 bytes(               ).li32
+#assert 1                 bytes(               ).li64
+#assert 1                 bytes(               ).lu8
+#assert 1                 bytes(               ).lu16
+#assert 1                 bytes(               ).lu32
+#assert 1                 bytes(               ).lu64
+#assert 42.0              bytes(               ).lf32
+#assert 42.0              bytes(               ).lf64
+#reserved : num decimal array use module i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
+#assert 93784005006007 1d2h3m4s5ms6us7ns.ns
+# std
+#- [ ] argv   :: list[string]
+#- [ ] env    :: dict[string string]
+#- [ ] now    :: time
+#- [ ] random :: int? random
+#- [ ] stdin  :: stream
+#- [ ] stdout :: stream
+#- [ ] stderr :: stream
+#
+## std.random
+#- [ ] int    :: int? int? int
+#- [ ] float  :: float? float? float
+#- [ ] string :: string string
+#
+## std.bcrypt
+#- [ ] :: string std.bcrypt
+#- [ ] eq :: string string bool
+#
+## std.math
+#- [ ] acos acosh asin asinh atan atan2 atanh cbrt cos cosh erf erfc exp gamma log log10 log2 sin sinh sqrt tan tanh :: float float
+#- [ ] e, pi, inf, nan :: float
+#- [ ] hypot, logn :: float float float
+#- [ ] lgamma, frexp :: float (float, int)
+#- [ ] ldexp :: float int float

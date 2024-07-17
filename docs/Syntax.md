@@ -6,16 +6,17 @@ block: ("\n  " line)+ | line
 exp: op1? atom (op2 exp)?
 atom:
 | "(" exp ")"
-| bottom (prop | call)*
-prop: "." (id | [0-9]+)     # property access
-call: "(" exp* ")"          # call function
-index: "[" exp+ "]"         # index access or generic
+| bottom (prop | call | copy)*
+prop: "." (id | [0-9]+)           # property access
+call: "(" exp* ")"                # call function
+index: "[" exp+ "]"               # index access or generic
 bottom:
-| "(" exp ")"               # 1 * (2 + 3)
-| "[" exp* "]"              # [1 2 3]         -> list(1 2 3)
-| "-"? [0-9]+ ("." [0-9]+)? # -1.2
-| "-"? "0x" [0-9a-fA-F_]+   # 0xff            -> 255
-| '"' [^"]* '"'             # "string"
+| "(" exp ")"                 # 1 * (2 + 3)
+| "[" exp* "]"                # [1 2 3] -> list(1 2 3)
+| "-"? [0-9]+ ("." [0-9]+)?   # -1.2
+| "-"? "0x" [0-9a-fA-F_]+     # 0xff    -> 255
+| '"' [^"]* '"'               # "string"
+| '"""' [^"]* '"""'           # """a="b""""     -> "a=\"b\""
 | id
 op1: [!-~] | "..."
 op2: [+-*/%<>|&^=!?]+
@@ -25,13 +26,14 @@ comment: "//" [^\n]*
 
 Keywords
 ```
-global    : true false time duration log assert
-primitive : bool int float string fn
+global    : true false log assert
+primitive : bool int float string fn i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
 container : tuple set list dict
 declare   : let var def dec class enum interface extern
 branch    : iif if else switch
 flow      : return for while continue break throw catch
-reserved  : bytes regexp stream num decimal array use module i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
+standard  : bytes regexp time duration stream num decimal array
+reserved  : use module
 ```
 
 Operators
@@ -49,15 +51,15 @@ Symbols
 ( )  # priority
 [ ]  # list
 { }  # class
-=>   # Lambda
 .    # field access
 _    # part of id
 ...  # variadic function or there are zero or more
 "    # string
 #    # comment
-,    # seperator of arguments for lambda expression
 :    # block
-;    # break line
+=>   # reserved for lambda
+,    # reserved for argument separator of lambda
+;    # undefined
 ?    # undefined
 \    # undefined
 '    # undefined
@@ -120,7 +122,7 @@ def f ...a: g(...a) # f(1 2) will call g(1 2)
 
 Named argument
 ```
-def f a{}    : a.tuples # f(a=1 b=2) is list[tuple[string int]]
+def f a{}    : a  # f(a=1 b=2) returns list[tuple[string int]]
 def f {a}    : a  # f(a=1)
 def f {a?}   : a  # f() or f(a=1)
 def f {a=0}  : a  # f() or f(a=1)
@@ -189,12 +191,11 @@ exp:
 atom:
 | "(" exp ")"
 | bottom (prop | call | index | copy | key)*
+copy: "{" id* (id "=" atom)* "}"   # copy with updates
 key: "." (id | [0-9]+) [!?] type?  # a.b!            -> a.at("b"), a.b? -> a.get("b")
-copy: "{" id* (id "=" atom)* "}"   # a{b c=1}        -> struct.copy(a b c=1)
 bottom:
-| "{" id* (id "=" atom)* "}"       # {x y=1}         -> struct(x y=1)
 | "[" ":" | (atom ":" atom)+ "]"   # ["x":1 ("y"):2] -> dict("x" 1 "y" 2)
-| '"""' [^"]* '"""'                # """a="b""""     -> "a=\"b\""
+| "{" id* (id "=" atom)* "}"  # {x y=1}
 | "-"? [0-9]+ "e" [0-9]+           # 1e3             -> 100
 | "-"? "0o" [0-7_]+                # 0o11            -> 9
 | "-"? "0b" [0-1_]+                # 0b11            -> 3
