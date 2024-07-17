@@ -26,23 +26,22 @@ const infer = nodes => {
   const v1 = tvar()
   const v2 = tvar()
   const tdot3 = () => ({dot3: true, ref: tvar()})
+  const tdot3_1 = tdot3()
   const tfn = (...types) => ({types})
-  const ttype = (name, ...tvs) => ({name, tvs})
+  const ttype = (name, ...types) => types.length ? ({name, types}) : ({name})
+
   const tint = ttype('int')
-  const ti8 = ttype('ti8')
-  const ti16 = ttype('ti16')
-  const ti32 = ttype('ti32')
-  const ti64 = ttype('ti64')
-  const tu8 = ttype('tu8')
-  const tu16 = ttype('iu16')
-  const tu32 = ttype('iu32')
-  const tu64 = ttype('iu64')
-  const tints1 = tvar('ints', [tint, ti8, ti16, ti32, ti64, tu8, tu16, tu32, tu64])
+  const ti8 = ttype('i8')
+  const ti16 = ttype('i16')
+  const ti32 = ttype('i32')
+  const ti64 = ttype('i64')
+  const tu8 = ttype('u8')
+  const tu16 = ttype('u16')
+  const tu32 = ttype('u32')
+  const tu64 = ttype('u64')
   const tfloat = ttype('float')
   const tf32 = ttype('f32')
   const tf64 = ttype('f64')
-  const tfloats1 = tvar('floats', [tfloat, tf32, tf64])
-  const tnum1 = tvar('num', [...tints1.interfaces, ...tfloats1.interfaces])
   const tbool = ttype('bool')
   const tstring = ttype('string')
   const terror = ttype('error', v1)
@@ -50,6 +49,17 @@ const infer = nodes => {
   const tlist = ttype('list', v1)
   const tset = ttype('set', v1)
   const tdict = ttype('dict', v1, v2)
+
+  const tints1 = tvar('ints', [tint, ti8, ti16, ti32, ti64, tu8, tu16, tu32, tu64])
+  const tfloats1 = tvar('floats', [tfloat, tf32, tf64])
+  const tnum1 = tvar('num', [...tints1.interfaces, ...tfloats1.interfaces])
+
+  const constructors = {
+    list: tfn(v1, {name: 'list', types: [v1]}),         // TODO: variadic arguments
+    set: tfn(v1, {name: 'set', types: [v1]}),           // TODO: variadic arguments
+    dict: tfn(v1, v2, {name: 'dict', types: [v1, v2]}), // TODO: variadic arguments
+    ...Object.fromEntries(tnum1.interfaces.map(t => [t.name, tfn(tnum1, t)]))
+  }
   const tcon = (t, constrains) => ({...t, constrains})
   const fresh = (type, nonGeneric) => {
     const d = {}
@@ -151,6 +161,10 @@ const infer = nodes => {
           }
           ft.props.map((prop, i) => unify(prop[1], argv[i]))
           return Object.fromEntries(ft.props)
+        } else if (ft.name in constructors) {
+          const rt = cache[str(argv)] ||= tvar() // TODO: fix tvar
+          unify(constructors[ft.name], tfn(...argv, rt))
+          return rt
         } else {
           const rt = cache[str(argv)] ||= tvar() // TODO: fix tvar
           unify(ft, tfn(...argv, rt))
@@ -179,7 +193,8 @@ const infer = nodes => {
   '+ - * ** / %'.split(' ').map(op => top[op] = tfn(tnum1, tnum1, tnum1))
   '& | ^ ~ << >>'.split(' ').map(op => top[op] = tfn(tints1, tints1, tints1))
   '== != < <= >= >'.split(' ').map(op => top[op] = tfn(v1, v1, tbool))
-  ; [tint, ti8, ti16, ti32, ti64, tu8, tu16, tu32, tu64, tf32, tf64, tbool, ttuple].map(t => top[t.name] = t)
+  const primitives = [tint, ti8, ti16, ti32, ti64, tu8, tu16, tu32, tu64, tfloat, tf32, tf64, tbool, ttuple, tlist, tset, tdict]
+  primitives.map(t => top[t.name] = t)
   return nodes.map(node => analyse(node, top, []))
 }
 
@@ -192,7 +207,7 @@ const showType = type => {
     t.name + (t.label ? '.' + t.label : '')
   const s = show(type)
   const o = {}
-  const r = s.replace(/\d+/g, t => o[t] ||= Object.keys(o).length + 1)
+  const r = s.replaceAll(/\b\d+/g, t => o[t] ||= Object.keys(o).length + 1)
   return r
 }
 
@@ -247,7 +262,7 @@ if (require.main === module) {
     } catch (e) {
       print('Failed')
       print('   src:', src)
-      console.dir(e, {depth: null})
+      log(e)
       process.exit(1)
     }
   }
@@ -257,6 +272,14 @@ if (require.main === module) {
   inf('bool', 'false')
   inf('int', '1')
   inf('float', '1.0')
+
+  // constructor of numbers
+  'int i8 i16 i32 i64 u8 u16 u32 u64 float f32 f64'.split(' ').map(t => inf(t, `${t} 0`))
+
+  // constructor of collections
+  inf('list[int]', 'list 1')
+  inf('set[int]', 'set 1')
+  inf('dict[int bool]', 'dict 1 true')
 
   // exp
   inf('int', '+ 1 1')
