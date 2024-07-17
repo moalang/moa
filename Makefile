@@ -2,7 +2,7 @@ t test:
 	clear
 	node src/parser.js
 	node src/infer.js
-	#node src/compile.js
+	node src/compile.js
 	#cat test/*.moa | node src/test.js
 
 watch:

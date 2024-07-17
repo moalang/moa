@@ -198,7 +198,6 @@ const testType = () => {
     }
     return src.split('\n').map(line).flat(1)
   }
-
   const reject = src => {
     try {
       infer(parse(src))

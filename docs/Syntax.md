@@ -43,11 +43,11 @@ use module
 
 Operators
 ```
-! -             # Unray
+! - ~           # Unray
 || &&           # Boolean
 + - * ** / %    # Arithmetic
-& | ^ ~ << >>   # Bit
-!= == < <= >= > # Compare
+& | ^ << >>     # Bit
+== != < <= > >= # Compare
 =               # Update
 ```
 

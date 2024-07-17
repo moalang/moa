@@ -13,14 +13,22 @@ dec assert a   : a a _
 # break
 
 enum bool:
-  .new : _ bool
   true
   false
   !  : bool bool
   || : bool bool bool
   && : bool bool bool
 
+interface _cmp a:
+  == a a bool
+  != a a bool
+  <  a a bool
+  <= a a bool
+  >  a a bool
+  >= a a bool
+
 interface num a:
+  _cmp
   +   a a a
   -   a a a
   *   a a a
@@ -54,7 +62,6 @@ extern u64: _int
 interface _float a:
   .inf  a
   .nan  a
-  .parse : string a
   num
   floor : int
   ceil  : int
@@ -64,6 +71,7 @@ extern   f32: _float
 extern   f64: _float
 
 extern string:
+  _cmp
   .new    : _ string
   size    int
   concat  : string string
@@ -81,6 +89,7 @@ extern string:
 # fn
 
 class error a:
+  _cmp
   message   string
   backtrace string
   detail    a
@@ -88,6 +97,7 @@ class error a:
 # tuple
 
 extern list a:
+  _cmp
   size    int
   concat  : list[a] list[a]
   slice   : int? int? int? list[a]
@@ -112,6 +122,7 @@ extern list a:
   repeat  : int list[a]
 
 extern set a:
+  _cmp
   size int
   -    : set[a] set[a]
   |    : set[a] set[a]
@@ -123,6 +134,7 @@ extern set a:
   list : list[a]
 
 extern dict k v:
+  _cmp
   size   int
   get    : k v!
   set    : k v v
