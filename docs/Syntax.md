@@ -27,11 +27,12 @@ comment: "//" [^\n]*
 Keywords
 ```
 global    : true false log assert
-primitive : bool int float string fn i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
+primitive : bool int float string fn
 container : tuple set list dict
 declare   : let var def dec class enum interface extern
 branch    : iif if else switch
 flow      : return for while continue break throw catch
+memory    : i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
 standard  : bytes regexp time duration stream num decimal array
 reserved  : use module
 ```
