@@ -1,9 +1,13 @@
 # Backlog
 - [x] Define syntax
-- [ ] Define test
-- [ ] Compile to Go
+- [x] Define core
+- [x] Define test
 - [ ] Compile to JavaScript
+- [ ] Compile to Go
+- [ ] UI framework for compiled JavaScript
+- [ ] Backend framework for compiled Go
 - [ ] Web IDE
+- [ ] Define standard libraries
 
 # Memo
 https://www.swift.org/
