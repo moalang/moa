@@ -19,7 +19,7 @@ const until = (f, g) => {
   return l
 }
 
-const infer = nodes => {
+const infer = root => {
   let tvarSequence = 0
   const cache = {}
   const tvar = (label, interfaces) => (name => ({name, label, interfaces, var: true}))((++tvarSequence).toString())
@@ -30,6 +30,7 @@ const infer = nodes => {
   const tfn = (...types) => ({types})
   const ttype = (name, ...types) => types.length ? ({name, types}) : ({name})
 
+  const tvoid = ttype('_')
   const tint = ttype('int')
   const ti8 = ttype('i8')
   const ti16 = ttype('i16')
@@ -120,38 +121,40 @@ const infer = nodes => {
   const analyse = (node, env, nonGeneric) => node.type = _analyse(node, env, nonGeneric)
   const _analyse = (node, env, nonGeneric) => {
     if (Array.isArray(node)) {
-      let [head,...tail] = node
+      const [head,...tail] = node
+      const is_block = tail.at(-1)?.[0]?.code === '__block'
+      const is_typed_name = Array.isArray(tail[0])
+      const name = is_typed_name ? tail[0]?.[0]?.code : tail[0]?.code
+      const tvars = is_block ?
+        is_typed_name ? tail[0].concat(tail.slice(1, -1)).map(t => [t.code, tvar()]) :
+        tail.slice(0, -1).map(t => [t.code, tvar()]) : []
+      const body = is_block ? tail.at(-1).slice(1) : tail.at(-1)
       if (head.code === 'def') {
-        const tvars = (Array.isArray(tail[0]) ? tail[0] : [tail[0]]).map(t => [t.code, tvar()])
-        const name = tvars[0][0]
         const tenv = {...env, ...Object.fromEntries(tvars)}
         const argument = arg => Array.isArray(arg) ?
           [arg[0].code.replace('...', ''), arg[0].type = tcon(arg[0].code.startsWith('...') ? tdot3() : tvar(), arg.slice(1).map(t => tenv[t.code]))] :
           [arg.code.replace('...', ''), arg.type = arg.code.startsWith('...') ? tdot3() : tvar()]
         const args = tail.slice(1, -1).map(argument)
-        const body = tail.slice(-1)[0]
         const local = {...tenv, ...Object.fromEntries(args.map(([name, t]) => [name, t.dot3 ? t.ref : t]))}
         const ng = [...nonGeneric, ...[...tvars, ...args].map(([_, t]) => t.dot3 ? t.ref.name : t.name)]
         const rt = analyse(body, local, ng)
         const ft = tfn(...args.map(([_, t]) => t), rt)
         return env[name] = ft
       } else if (head.code === 'dec') {
-        const tvars = tail.slice(0, -1).map(t => [t.code, tvar()])
-        const name = tvars[0][0]
         const local = {...env, ...Object.fromEntries(tvars)}
-        const args = tail.at(-1)[0].map(arg => local[arg.code])
-        return env[name] = args.length === 1 ? args[0] : tfn(...args)
+        const args = is_block ? Array.isArray(body[0]) ? body[0] : body : [body]
+        return env[name] = is_block ? tfn(...args.map(arg => local[arg.code])) : local[args[0].code]
       } else if (head.code === 'class') {
-        const tvars = tail.slice(0, -1).map(t => [t.code, tvar()])
-        const name = tvars[0][0]
-        const field = (x, e) => Array.isArray(x) ? tfn(...x.flat().map(t => e[t.code])) : e[x.code]
-        const props = tail.at(-1).map(a => [
+        const field = (x, e) => Array.isArray(x) ? tfn(...x.slice(1).flat().map(t => e[t.code])) : e[x.code]
+        const props = body.map(a => [
           a[0].code,
           field(a.at(-1), {...Object.fromEntries(a.slice(1, -1).map(t => [t.code, tvar()]).concat(tvars)), ...env})
           ])
         return env[name] = {name, props}
       } else if (head.code === '.') {
         return analyse(tail.slice(0, -1), env, nonGeneric)[tail.at(-1).code]
+      } else if (head.code === '__block') {
+        return tail.map(x => analyse(x, env, nonGeneric)).at(-1)
       } else if (tail.length) {
         const ft = analyse(head, env, nonGeneric)
         const argv = tail.map(t => analyse(t, env, nonGeneric))
@@ -178,7 +181,7 @@ const infer = nodes => {
       return v.match(/^[0-9]+\.[0-9]+/) ? tfloat :
         v.match(/^[0-9]/) ? tint :
         v in env ? fresh(env[v], nonGeneric) :
-        fail(`Not found ${v} in env`, {v,node,env})
+        fail(`Not found ${v} in env`, {v,node,env: Object.keys(env)})
     }
   }
   const top = {
@@ -188,6 +191,7 @@ const infer = nodes => {
     '!': tfn(tbool, tbool),
     '~': tfn(tint, tint),
     'iif': tfn(tbool, v1, v1, v1),
+    'assert': tfn(v1, v1, tvoid),
   }
   '|| &&'.split(' ').map(op => top[op] = tfn(tbool, tbool, tbool))
   '+ - * ** / %'.split(' ').map(op => top[op] = tfn(tnum1, tnum1, tnum1))
@@ -195,7 +199,7 @@ const infer = nodes => {
   '== != < <= >= >'.split(' ').map(op => top[op] = tfn(v1, v1, tbool))
   const primitives = [tint, ti8, ti16, ti32, ti64, tu8, tu16, tu32, tu64, tfloat, tf32, tf64, tbool, ttuple, tlist, tset, tdict]
   primitives.map(t => top[t.name] = t)
-  return nodes.map(node => analyse(node, top, []))
+  return analyse(root, top, [])
 }
 
 const showType = type => {
@@ -215,23 +219,23 @@ module.exports = { infer }
 
 if (require.main === module) {
   const parse = src => {
+    const block = (a) => [{code: '__block'}, ...a]
     const line = src => {
       const tokens = src.split(/([()\[\]:]|(?=[ \n])\.(?= )|\s+)/).filter(x => x.trim()).map(code => ({code}))
       let pos = 0
       const check = f => pos < tokens.length && f(tokens[pos].code)
       const list = a => (t => t.code === ')' ? a : list(a.concat([t])))(unit())
       const bracket = a => (t => t.code === ']' ? a : bracket(a.concat([t])))(unit())
-      const suffix = t =>
-        check(s => s === '[') && ++pos ? bracket([t]) :
-        t
+      const suffix = t => check(s => s === '[') && ++pos ? bracket([t]) : t
       const unit = () => (t =>
         t.code === '(' ? list([]) :
-        t.code === ':' ? [top()] :
+        t.code === ':' ? block([top()]) :
         suffix(t))(tokens[pos++])
-      const top = () => until(() => check(s => s !== ')'), unit)
-      return [top()]
+      const top = () => simplify(until(() => check(s => s !== ')' && s !== ';'), unit))
+      const simplify = a => a.length === 1 ? a[0] : a
+      return top()
     }
-    return src.split('\n').map(line).flat(1)
+    return block(src.split('\n').map(line))
   }
   const reject = src => {
     try {
@@ -248,8 +252,7 @@ if (require.main === module) {
   }
   const inf = (expect, src) => {
     try {
-      let types = infer(parse(src))
-      const actual = showType(types.slice(-1)[0])
+      const actual = showType(infer(parse(src)))
       if (eq(actual, expect)) {
         process.stdout.write('.')
       } else {
@@ -322,8 +325,8 @@ if (require.main === module) {
   inf('(bool (1 1))',                  'def f x x\ndef g y y\ndef h b (iif b (f g) (g f))')
 
   // declare function
-  inf('bool', 'dec _: bool')
-  inf('int', 'dec _: int')
+  inf('(bool)', 'dec _: bool')
+  inf('(int)', 'dec _: int')
   inf('(int bool)', 'dec _: int bool')
   inf('(... int)', 'dec _: ... int')
   inf('(1 1)', 'dec _ a: a a')

@@ -11,7 +11,7 @@ const until = (f, g) => {
   return l
 }
 
-const compile = nodes => {
+const compile = root => {
   const op1 = new Set('! ~'.split(' '))
   const op2 = new Set('|| && + - * ** / %  & | ^ ~ << >> != == < <= >= > = '.split(' '))
   const embedded = new Set('bool int float string i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 tuple list set dict log assert throw'.split(' '))
@@ -27,11 +27,7 @@ const compile = nodes => {
     if (Array.isArray(node)) {
       const [head,...tail] = node
       if (tail.length) {
-        if (op1.has(head.code)) {
-          return `(${head.code}${tojs(tail)})`
-        } else if (op2.has(head.code)) {
-          return `(${tojs(tail[0])} ${head.code} ${tojs(tail[1])})`
-        } else if (head.code === '.') {
+        if (head.code === '.') {
           if (static.has(tail.map(t => t.code).join(' '))) {
             return `__moa.${tail[0].code}_${tail[1].code}`
           } else {
@@ -67,15 +63,15 @@ const compile = nodes => {
           const b = tail[1]?.code
           const c = tail[2]?.code
           const d = tail[3]?.code
-          const body = tail.at(-1).map(tojs).join('\n  ')
+          const body = tojs(tail.at(-1))
           return tail.length === 3 ? `for (let ${a}=0; ${a}<${b}; ++${a}) {\n  ${body}\n}` :
             tail.length === 4 ? `for (let ${a}=${b}; ${a}<${c}; ++${a}) {\n  ${body}\n}` :
             tail.length === 5 ? `for (let ${a}=${b}; ${a}<${c}; ${a}+=${d}) {\n  ${body}\n}` :
             fail(`Unknown for ${str(tail)}`)
         } else if (head.code === 'while') {
           const cond = tojs(tail.slice(0, -1))
-          const body = tail.at(-1).map(tojs).join('\n  ')
-          return `while (${cond}) {\n  ${body}\n}`
+          const body = tojs(tail.at(-1))
+          return `while (${cond}) {${body}}`
         } else if (head.code === 'let') {
           return `const ${tail[0].code} = ${tojs(tail.slice(1))}`
         } else if (head.code === 'var') {
@@ -101,8 +97,14 @@ const compile = nodes => {
           const target = tojs(tail[0])
           const handle = tojs(tail[1])
           return `(() => { try { return ${target} } catch (e) { return ${handle}(moa.error(e)) } })()`
+        } else if (head.code === '__block') {
+          return '\n  ' + tail.map(tojs).join('\n  ') + '\n'
         } else if (head.code === 'dec' || head.code === 'interface' || head.code === 'extern') {
           return ''
+        } else if (op1.has(head.code)) {
+          return `(${head.code}${tojs(tail)})`
+        } else if (op2.has(head.code)) {
+          return `(${tojs(tail[0])} ${head.code} ${tojs(tail[1])})`
         } else if (tail.length === 1 && tail[0].length === 0) {
           return tojs(head) + '()'
         } else {
@@ -115,7 +117,7 @@ const compile = nodes => {
       return embedded.has(node.code) ?  `__moa.${node.code}` : node.code
     }
   }
-  return nodes.map(node => tojs(node)).join('\n')
+  return tojs(root)
 }
 
 module.exports = { compile }
@@ -132,16 +134,16 @@ if (require.main === module) {
       const check = f => pos < tokens.length && f(tokens[pos].code)
       const list = a => (t => t.code === ')' ? a : list(a.concat([t])))(unit())
       const bracket = a => (t => t.code === ']' ? a : bracket(a.concat([t])))(unit())
-      const suffix = t =>
-        check(s => s === '[') && ++pos ? bracket([t]) :
-        t
+      const suffix = t => check(s => s === '[') && ++pos ? bracket([t]) : t
       const unit = () => (t =>
         t.code === '(' ? list([]) :
-        t.code === ':' ? block([top()]) :
+        t.code === ':' ? block(top()) :
         suffix(t))(tokens[pos++])
-      const block = a => check(s => s === ';') ? (++pos, block([...a, top()])) : a
-      const top = () => until(() => check(s => s !== ')' && s !== ';'), unit)
-      return block([top()])
+      const block = x => check(s => s === ';') ? _block([x]) : x
+      const _block = a => check(s => s === ';') ? (++pos, _block(a.concat([top()]))) : [{code: '__block'}, ...a]
+      const top = () => simplify(until(() => check(s => s !== ')' && s !== ';'), unit))
+      const simplify = a => a.length === 1 ? a[0] : a
+      return block(top())
     }
     return src.split('\n').map(line).flat(1)
   }
@@ -164,6 +166,8 @@ if (require.main === module) {
       process.exit(1)
     }
   }
+  check('while (a) {\n  b\n  c\n}', 'while a: b; c')
+  return
   const checkOp1 = (x, ops) => ops.split(' ').map(op => check(`(${op}${x})`, `${op} ${x}`))
   const checkOp2 = (l, r, ops) => ops.split(' ').map(op => check(`(${l} ${op} ${r})`, `${op} ${l} ${r}`))
   const checkOp2Ex = (l, r, ops) => Object.entries(ops).map(([k, v]) => check(`(${l} ${v} ${r})`, `${k} ${l} ${r}`))
