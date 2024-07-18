@@ -24,95 +24,99 @@ const compile = root => {
     a.length === 0 ? fail(`invalid the number of arguments of iif`) :
     a.length === 1 ? a[0] :
     `${a[0]} ? ${a[1]} : ${iifjs(a.slice(2))}`
+  const nest = x => !Array.isArray(x) ? [[x]] :
+    x[0]?.code === '__block' ? x.slice(1).map(x => Array.isArray(x) ? x : [x]) :
+    [x]
   const tojs = (node) => {
     if (Array.isArray(node)) {
       const [head,...tail] = node
-      if (tail.length) {
-        if (head.code === '.') {
-          if (static.has(tail.map(t => t.code).join(' '))) {
-            return `${prefix}${tail[0].code}_${tail[1].code}`
-          } else {
-            const type = tail[0].type
-            const target = tojs(tail[0])
-            const method = tail[1].code
-            return `${prefix}${type}_${method}(${target})`
-          }
-        } else if (head.code === 'iif') {
-          return '(' + iifjs(tail.map(tojs)) + ')'
-        } else if (head.code === 'if') {
-          const cond = tojs(tail.slice(0, -1))
-          const body = tojs(tail.at(-1))
-          return `if (${cond}) {${body}}`
-        } else if (head.code === 'else') {
-          if (tail[0].code === 'if') {
-            return `else ${tojs(tail)}`
-          } else {
-            const body = tojs(tail.at(-1))
-            return `else {${body}}`
-          }
-        } else if (head.code === 'switch') {
-          const target = tojs(tail.slice(0, -1))
-          const name = tail[0].type
-          const switchjs = a =>
-            a.length === 2 ? `__s.__tag === "${name}.${a[0].code}" ? ${tojs(a[1])} :` :
-            a.length === 3 ? `__s.__tag === "${name}.${a[0].code}" ? (${a[1].code} => ${tojs(a[2])})(__s.__val) :` :
-            fail(`Unknown switch ${str(tail)}`)
-          const body = tail.at(-1)[1].map(switchjs).join('\n')
-          return `(__s => ${body} moa.throw("switch", __s))(${target})`
-        } else if (head.code === 'for') {
-          const a = tail[0].code
-          const b = tail[1]?.code
-          const c = tail[2]?.code
-          const d = tail[3]?.code
-          const body = tojs(tail.at(-1))
-          return tail.length === 3 ? `for (let ${a}=0; ${a}<${b}; ++${a}) {${body}}` :
-            tail.length === 4 ? `for (let ${a}=${b}; ${a}<${c}; ++${a}) {${body}}` :
-            tail.length === 5 ? `for (let ${a}=${b}; ${a}<${c}; ${a}+=${d}) {${body}}` :
-            fail(`Unknown for ${str(tail)}`)
-        } else if (head.code === 'while') {
-          const cond = tojs(tail.slice(0, -1))
-          const body = tojs(tail.at(-1))
-          return `while (${cond}) {${body}}`
-        } else if (head.code === 'let') {
-          return `const ${tail[0].code} = ${tojs(tail.slice(1))}`
-        } else if (head.code === 'var') {
-          return `let ${tail[0].code} = ${tojs(tail.slice(1))}`
-        } else if (head.code === 'def') {
-          const name = tail[0].code
-          const args = tail.slice(1).map(x => x.code).join(', ')
-          const lines = tail.at(-1).slice(1).map(tojs)
-          const body = [...lines.slice(0, -1), 'return ' + lines.at(-1)].join('\n')
-          return `function ${name}(${args}) {${body}}`
-        } else if (head.code === 'class') {
-          const name = tail[0].code
-          const fields = tail.at(-1).slice(1).flat(1).map(x => x[0].code).join(', ')
-          return `function ${name}(${fields}) { return {${fields}} }`
-        } else if (head.code === 'enum') {
-          const name = tail[0].code
-          const enumjs = a => a.length === 1 ? `const ${a[0].code} = {__tag: "${name}.${a[0].code}"}` :
-            a.length === 2 && Array.isArray(a[1]) ? `function ${a[0].code}(${a[1].map(x => x[0].code).join(', ')}) { return {__tag: "${name}.${a[0].code}", __val: {${a[1].map(x => x[0].code).join(', ')}}} }` :
-            a.length === 2 ? `function ${a[0].code}(__val) { return {__tag: "${name}.${a[0].code}", __val} }` :
-            fail(`Unknown enum ${str(name)} with ${str(a)}`)
-          return tail.at(-1).slice(1).map(enumjs).join('\n')
-        } else if (head.code === 'catch') {
-          const target = tojs(tail[0])
-          const handle = tojs(tail[1])
-          return `(() => { try { return ${target} } catch (e) { return ${handle}(${prefix}error(e)) } })()`
-        } else if (head.code === '__block') {
-          return tail.map(tojs).join('\n')
-        } else if (head.code === 'dec' || head.code === 'interface' || head.code === 'extern') {
-          return ''
-        } else if (op1.has(head.code)) {
-          return `(${head.code}${tojs(tail)})`
-        } else if (op2.has(head.code)) {
-          return `(${tojs(tail[0])} ${head.code} ${tojs(tail[1])})`
-        } else if (tail.length === 1 && tail[0].length === 0) {
-          return tojs(head) + '()'
+      if (head.code === '.') {
+        if (static.has(tail.map(t => t.code).join(' '))) {
+          return `${prefix}${tail[0].code}_${tail[1].code}`
         } else {
-          return `${tojs(head)}(${tail.map(tojs).join(', ')})`
+          const type = tail[0].type
+          const target = tojs(tail[0])
+          const method = tail[1].code
+          return `${prefix}${type}_${method}(${target})`
         }
+      } else if (head.code === 'iif') {
+        return '(' + iifjs(tail.map(tojs)) + ')'
+      } else if (head.code === 'if') {
+        const cond = tojs(tail.length === 2 ? tail[0] : tail.slice(0, -1))
+        const body = tojs(tail.at(-1))
+        return `if (${cond}) {${body}}`
+      } else if (head.code === 'else') {
+        if (tail[0].code === 'if') {
+          return `else ${tojs(tail)}`
+        } else {
+          const body = tojs(tail.at(-1))
+          return `else {${body}}`
+        }
+      } else if (head.code === 'switch') {
+        const cond = tojs(tail.length === 2 ? tail[0] : tail.slice(0, -1))
+        const name = tail[0].type
+        const switchjs = a =>
+          a.length === 2 ? `__s.__tag === "${name}.${a[0].code}" ? ${tojs(a[1])} :` :
+          a.length === 3 ? `__s.__tag === "${name}.${a[0].code}" ? (${a[1].code} => ${tojs(a[2])})(__s.__val) :` :
+          fail(`Unknown switch ${str(a)}`)
+        const x = tail.at(-1)
+        const body = (Array.isArray(x[0]) ? x : [x]).map(switchjs).join('\n')
+        return `(__s => ${body} moa.throw("switch", __s))(${cond})`
+      } else if (head.code === 'for') {
+        const a = tail[0].code
+        const b = tail[1]?.code
+        const c = tail[2]?.code
+        const d = tail[3]?.code
+        const body = tojs(tail.at(-1))
+        return tail.length === 3 ? `for (let ${a}=0; ${a}<${b}; ++${a}) {${body}}` :
+          tail.length === 4 ? `for (let ${a}=${b}; ${a}<${c}; ++${a}) {${body}}` :
+          tail.length === 5 ? `for (let ${a}=${b}; ${a}<${c}; ${a}+=${d}) {${body}}` :
+          fail(`Unknown for ${str(tail)}`)
+      } else if (head.code === 'while') {
+        const cond = tojs(tail.length === 2 ? tail[0] : tail.slice(0, -1))
+        const body = tojs(tail.at(-1))
+        return `while (${cond}) {${body}}`
+      } else if (head.code === 'let') {
+        const value = tojs(tail.length === 2 ? tail[1] : tail.slice(1, -1))
+        return `const ${tail[0].code} = ${value}`
+      } else if (head.code === 'var') {
+        const value = tojs(tail.length === 2 ? tail[1] : tail.slice(1, -1))
+        return `let ${tail[0].code} = ${value}`
+      } else if (head.code === 'def') {
+        const name = tail[0].code
+        const args = tail.slice(1, -1).map(x => x.code).join(', ')
+        const last = tail.at(-1)
+        const lines = (last[0]?.code === '__block' ? last.slice(1) : [last]).map(tojs)
+        const body = [...lines.slice(0, -1), 'return ' + lines.at(-1)].join('\n')
+        return `function ${name}(${args}) {${body}}`
+      } else if (head.code === 'class') {
+        const name = tail[0].code
+        const fields = nest(tail.at(-1)).map(x => x[0].code).join(', ')
+        return `function ${name}(${fields}) { return {${fields}} }`
+      } else if (head.code === 'enum') {
+        const name = tail[0].code
+        const enumjs = a => a.length === 1 ? `const ${a[0].code} = {__tag: "${name}.${a[0].code}"}` :
+          a.length === 2 && Array.isArray(a[1]) ?
+          (a1 => `function ${a[0].code}(${a1.map(x => x[0].code).join(', ')}) { return {__tag: "${name}.${a[0].code}", __val: {${a1.map(x => x[0].code).join(', ')}}} }`)(nest(a[1])) :
+          a.length === 2 ? `function ${a[0].code}(__val) { return {__tag: "${name}.${a[0].code}", __val} }` :
+          fail(`Unknown enum ${str(name)} with ${str(a)}`)
+        return nest(tail.at(-1)).map(enumjs).join('\n')
+      } else if (head.code === 'catch') {
+        const target = tojs(tail[0])
+        const handle = tojs(tail[1])
+        return `(() => { try { return ${target} } catch (e) { return ${handle}(${prefix}error(e)) } })()`
+      } else if (head.code === '__block') {
+        return tail.map(tojs).join('\n')
+      } else if (head.code === 'dec' || head.code === 'interface' || head.code === 'extern') {
+        return ''
+      } else if (op1.has(head.code)) {
+        return `(${head.code}${tojs(tail[0])})`
+      } else if (op2.has(head.code)) {
+        return `(${tojs(tail[0])} ${head.code} ${tojs(tail[1])})`
+      } else if (tail.length === 1 && tail[0].length === 0) {
+        return tojs(head) + '()'
       } else {
-        return tojs(head)
+        return `${tojs(head)}(${tail.map(tojs).join(', ')})`
       }
     } else {
       return embedded.has(node.code) ?  `${prefix}${node.code}` : node.code
@@ -124,33 +128,14 @@ const compile = root => {
 module.exports = { compile }
 
 if (require.main === module) {
-  const parse = src => {
-    const block = (a) => [{code: '__block'}, ...a]
-    const line = src => {
-      const decompose = s => {
-        let [code, type] = s.split('@')
-        return {code, type}
-      }
-      const tokens = src.split(/([()\[\]:;]|(?=[ \n])\.(?= )|\s+)/).filter(x => x.trim()).map(decompose)
-      let pos = 0
-      const check = f => pos < tokens.length && f(tokens[pos].code)
-      const list = a => (t => t.code === ')' ? a : list(a.concat([t])))(unit())
-      const bracket = a => (t => t.code === ']' ? a : bracket(a.concat([t])))(unit())
-      const suffix = t => check(s => s === '[') && ++pos ? bracket([t]) : t
-      const unit = () => (t =>
-        t.code === '(' ? list([]) :
-        t.code === ':' ? block(lines([[top()]])) :
-        suffix(t))(tokens[pos++])
-      const lines = a => check(s => s === ';') ? (++pos, lines(a.concat([[top()]]))) : a
-      const top = () => simplify(until(() => check(s => s !== ')' && s !== ';'), unit))
-      const simplify = a => a.length === 1 ? a[0] : a
-      return top()
-    }
-    return block(src.split('\n').map(line))
-  }
+  const { parse } = require('./parse.js')
+  const hint = x => Array.isArray(x) ? rec([], x) : x
+  const rec = (acc, a) => a.length === 0 ? acc :
+    a[1]?.code === '@' ? rec(acc.concat((a[0].type = a[2].code, a[0])), a.slice(3)) :
+    rec(acc.concat([ Array.isArray(a[0]) ? hint(a[0]) : a[0] ]), a.slice(1))
   const check = (expect, src) => {
     try {
-      const actual = compile(parse(src))
+      const actual = compile(hint(parse(src)))
       if (eq(actual, expect)) {
         process.stdout.write('.')
       } else {
@@ -167,9 +152,6 @@ if (require.main === module) {
       process.exit(1)
     }
   }
-  const checkOp1 = (x, ops) => ops.split(' ').map(op => check(`(${op}${x})`, `${op} ${x}`))
-  const checkOp2 = (l, r, ops) => ops.split(' ').map(op => check(`(${l} ${op} ${r})`, `${op} ${l} ${r}`))
-  const checkOp2Ex = (l, r, ops) => Object.entries(ops).map(([k, v]) => check(`(${l} ${v} ${r})`, `${k} ${l} ${r}`))
 
   // literal
   check('true', 'true')
@@ -182,13 +164,18 @@ if (require.main === module) {
   // embedded
   for (const name of 'bool int float string i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 tuple list set dict log assert'.split(' ')) {
     check(`___${name}`, `${name}`)
-    check(`___${name}()`, `(${name})()`)
+    check(`___${name}()`, `${name}()`)
     check(`___${name}(1)`, `${name} 1`)
     check(`___${name}(1, a)`, `${name} 1 a`)
   }
 
   // operator
-  checkOp2('1', '2', '|| && + - * ** / % & | ^ << >> == != < <= > >=')
+  check('(~1)', '~1')
+  check('(!true)', '!true')
+  for (const op of '|| && + - * ** / % & | ^ << >> == != < <= > >='.split(' ')) {
+    check(`(1 ${op} 2)`, `1${op}2`)
+    check(`(1 ${op} 2)`, `1 ${op} 2`)
+  }
 
   // function
   check('f(1)', 'f 1')
@@ -260,10 +247,10 @@ if (require.main === module) {
   check('function a(b, c) { return {b, c} }', 'class a t: b int; c string')
 
   // enum
-  //check('const b = {__tag: "a.b"}', 'enum a: b')
+  check('const b = {__tag: "a.b"}', 'enum a: b')
   check('const b = {__tag: "a.b"}\nconst c = {__tag: "a.c"}', 'enum a: b; c')
-  //check('function b(__val) { return {__tag: "a.b", __val} }', 'enum a: b int')
-  //check('function b(c) { return {__tag: "a.b", __val: {c}} }', 'enum a: b: c int')
+  check('function b(__val) { return {__tag: "a.b", __val} }', 'enum a: b int')
+  check('function b(c) { return {__tag: "a.b", __val: {c}} }', 'enum a: b: c int')
 
   // dec
   check('', 'dec f a')
