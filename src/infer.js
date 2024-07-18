@@ -231,7 +231,7 @@ if (require.main === module) {
         t.code === '(' ? list([]) :
         t.code === ':' ? block([top()]) :
         suffix(t))(tokens[pos++])
-      const top = () => simplify(until(() => check(s => s !== ')' && s !== ';'), unit))
+      const top = () => simplify(until(() => check(s => s !== ')'), unit))
       const simplify = a => a.length === 1 ? a[0] : a
       return top()
     }
