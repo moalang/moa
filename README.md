@@ -156,30 +156,31 @@ test t:
   eq "path/to" "/path/to"
 ```
 
-main.mjs
+main.js
 ```
-import { handle } from './moa.mjs'
-import { createServer } from 'node:http'
+const { handle } = require('./moa.js')
+const { createServer } = require('node:http')
 createServer((req, res) => res.end(handle({path: req.url}).body)).listen(3000)
 ```
 
-Compile Moa to mjs
+Compile Moa to JavaScript (CommonJS)
 ```
-moa to mjs
+moa to js
 ```
 
-moa.mjs (generated)
+moa.js (generated)
 ```
-export const request = path => ({path})
-export const response = body => ({body})
-export const handle = req => response(req.path.slice(1))
+const request = path => ({path})
+const response = body => ({body})
+const handle = req => response(req.path.slice(1))
+module.exports = { request, response, handle }
 ```
 
 moa.test.js (generated)
 ```
-import test from 'node:test'
-import assert from 'node:assert'
-import { request, response, handle } from './moa.mjs'
+const test = require('node:test')
+const assert = require('node:assert')
+const { request, response, handle } = require('./moa.js')
 
 test('handle.moa', t => {
   assert.strictEqual('', handle(request('/')).body)
@@ -233,24 +234,24 @@ test t:
 
 Compile to JavaScript
 ```
-moa to mjs
+moa to js
 ```
 
-moa.mjs (generated)
+moa.js (generated)
 ```
-export const add = (a, b) => a + b
+const add = (a, b) => a + b
+module.exports = { add }
 ```
 
-moa.test.mjs (generated)
+moa.test.js (generated)
 ```
-import test from 'node:test'
-import assert from 'node:assert'
-import { add } from './moa.mjs'
+const test = require('node:test')
+const assert = require('node:assert')
+const { add } = require('./moa.js')
 
 test('add.moa', t => {
   assert.strictEqual(3, add(1, 2))
 })
-
 ```
 
 Test
@@ -283,13 +284,14 @@ Usage:
 
 The languages are:
     go                        # generate moa.go and moa_test.go
-    mjs                       # generate moa.mjs and moa_test.mjs
+    js                        # generate moa.js and moa_test.js
 ```
 
 
 ## Interactive shell commands 
 ```
-:             -- repeat last command
-:q            -- quit the shell
-:u <language> -- use a programming language
+:          -- repeat last command
+:q         -- quit the shell
+:js <expr> -- show expression as JavaScript
+:go <expr> -- show expression as Go
 ```
