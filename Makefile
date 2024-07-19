@@ -3,7 +3,7 @@ t test:
 	node src/parse.js
 	node src/infer.js
 	node src/compile.js
-	cat test/*.moa | head -n 5 | node src/moa.js js
+	cat test/*.moa | head -n 5 | node src/moa.js
 
 watch:
 	-make t

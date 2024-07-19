@@ -1,15 +1,6 @@
 const log = o => { console.dir(o, {depth: null}); return o }
-const print = (...a) => console.log(...a)
 const str = o => JSON.stringify(o, null, '  ')
-const eq = (x, y) => str(x) === str(y)
 const fail = (m, ...a) => { const e = new Error(m); a && (e.detail = a); throw e }
-const until = (f, g) => {
-  const l = []
-  while (f()) {
-    l.push(g())
-  }
-  return l
-}
 
 const compile = root => {
   const prefix = '___'
@@ -136,18 +127,18 @@ if (require.main === module) {
   const check = (expect, src) => {
     try {
       const actual = compile(hint(parse(src)))
-      if (eq(actual, expect)) {
+      if (str(actual) === str(expect)) {
         process.stdout.write('.')
       } else {
-        print('Failed')
-        print('expect:', expect)
-        print('actual:', actual)
-        print('   src:', src)
+        console.log('Failed')
+        console.log('expect:', expect)
+        console.log('actual:', actual)
+        console.log('   src:', src)
         process.exit(1)
       }
     } catch (e) {
-      print('Failed')
-      print('   src:', src)
+      console.log('Failed')
+      console.log('   src:', src)
       console.dir(e, {depth: null})
       process.exit(1)
     }
@@ -261,5 +252,5 @@ if (require.main === module) {
   // extern
   check('', 'extern a: b')
 
-  print('ok')
+  console.log('ok')
 }

@@ -6,9 +6,7 @@
 
 class TypeError extends Error {}
 const log = o => { console.dir(o, {depth: null}); return o }
-const print = (...a) => console.log(...a)
 const str = o => JSON.stringify(o, null, '  ')
-const eq = (x, y) => str(x) === str(y)
 const fail = (m, ...a) => { const e = new Error(m); a && (e.detail = a); throw e }
 const failUnify = (m, ...a) => { const e = new TypeError(m); a && (e.detail = a); throw e }
 const until = (f, g) => {
@@ -246,25 +244,25 @@ if (require.main === module) {
         return
       }
     }
-    print('Invalid')
-    print('src:', src)
+    console.log('Invalid')
+    console.log('src:', src)
     process.exit(1)
   }
   const inf = (expect, src) => {
     try {
       const actual = showType(infer(parse(src)))
-      if (eq(actual, expect)) {
+      if (str(actual) === str(expect)) {
         process.stdout.write('.')
       } else {
-        print('Failed')
-        print('expect:', expect)
-        print('actual:', actual)
-        print('   src:', src)
+        console.log('Failed')
+        console.log('expect:', expect)
+        console.log('actual:', actual)
+        console.log('   src:', src)
         process.exit(1)
       }
     } catch (e) {
-      print('Failed')
-      print('   src:', src)
+      console.log('Failed')
+      console.log('   src:', src)
       log(e)
       process.exit(1)
     }
@@ -362,5 +360,5 @@ if (require.main === module) {
   reject('def f[t] ...[t]: true\nf 1 true')
   reject('def f[t u] ...[t u]: true\nf 1 true true')
 
-  print('ok')
+  console.log('ok')
 }

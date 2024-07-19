@@ -5,8 +5,6 @@ const string = o =>
   typeof o === 'string' ? o :
   Array.isArray(o) ? `(${o.map(string).join(' ')})` :
   JSON.stringify(o)
-const put = s => process.stdout.write(s)
-const puts = (...a) => { console.log(a.map(string).join(' ')); return a[0] }
 const log = o => { console.dir(o, {depth: null}); return o }
 const fail = (m, ...a) => { throw new Error(m + ': ' + a.map(string).join(' ')) }
 const parse = source => {
@@ -75,7 +73,7 @@ module.exports = { parse }
 
 if (require.main === module) {
   const stringify = a => Array.isArray(a) ? `(${a.map(stringify).join(' ')})` : string(a.code)
-  const assert = (expect, fact, src) => expect === fact ? put('.') : fail(`Expected: '${expect}'\n         Actual: '${fact}' source='${src}'`)
+  const assert = (expect, fact, src) => expect === fact ? process.stdout.write('.') : fail(`Expected: '${expect}'\n         Actual: '${fact}' source='${src}'`)
   const test = (expect, src) => assert(expect, stringify(parse(src)), src)
 
   // primitives
@@ -191,5 +189,5 @@ if (require.main === module) {
   test('()', '\n')
   test('(f a b)', 'f(a\nb\n)')
 
-  puts('ok')
+  console.log('ok')
 }
