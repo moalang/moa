@@ -5,11 +5,11 @@ assert 1 1
 assert 1.1 1.1
 assert "a" "a"
 assert " \" " """ " """
-assert    100     1e3
+assert   1000     1e3
 assert    255    0xff
 assert    255    0xFF
 assert      9    0o11
-assert      3   0b111
+assert      7   0b111
 assert  10000  10_000
 assert 0.1002 0.1_002
 

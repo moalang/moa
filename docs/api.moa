@@ -77,7 +77,7 @@ extern string:
   size    int
   concat  : string string
   reverse : string
-  slice   : int? int? int? string
+  slice   : int int? int? string
   split   : string int? list[string]
   index   : string int!
   replace : string string string
@@ -105,7 +105,7 @@ extern list a:
   _cmp
   size    int
   concat  : list[a] list[a]
-  slice   : int? int? int? list[a]
+  slice   : int int? int? list[a]
   get     : int a!
   set     : int a a!
   push    : a a
@@ -114,7 +114,7 @@ extern list a:
   keep    : (a int? bool) list[a]
   all     : (a int? bool) bool
   any     : (a int? bool) bool
-  sort b  : (a a? b)? list[a]
+  sort    : (a a? _)? list[a]
   reverse : list[a]
   zip b   : list[b] list[tuple[a b]]
   fold b  : b (a b b) b

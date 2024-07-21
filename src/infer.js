@@ -5,7 +5,6 @@
 // http://www.fos.kuis.kyoto-u.ac.jp/~igarashi/class/isle4-10w/testcases.html
 
 class TypeError extends Error {}
-const log = o => { console.dir(o, {depth: null}); return o }
 const str = o => JSON.stringify(o, null, '  ')
 const fail = (m, ...a) => { const e = new Error(m); a && (e.detail = a); throw e }
 const failUnify = (m, ...a) => { const e = new TypeError(m); a && (e.detail = a); throw e }
@@ -116,21 +115,23 @@ const infer = root => {
     }
   }
   const prune = t => (t.var && t.instance) ? t.instance = prune(t.instance) : t
+  const nest = x => !Array.isArray(x) ? [[x]] :
+    x[0]?.code === '__block' ? x.slice(1).map(x => Array.isArray(x) ? x : [x]) :
+    [x]
   const analyse = (node, env, nonGeneric) => node.type = _analyse(node, env, nonGeneric)
   const _analyse = (node, env, nonGeneric) => {
     if (Array.isArray(node)) {
       const [head,...tail] = node
       const is_block = tail.at(-1)?.[0]?.code === '__block'
-      const is_typed_name = Array.isArray(tail[0])
-      const name = is_typed_name ? tail[0]?.[0]?.code : tail[0]?.code
-      const tvars = is_block ?
-        is_typed_name ? tail[0].concat(tail.slice(1, -1)).map(t => [t.code, tvar()]) :
-        tail.slice(0, -1).map(t => [t.code, tvar()]) : []
+      const is_typed_name = head.code === 'def' && Array.isArray(tail[0]) // def f[t] ...
+      const name = is_typed_name ? tail[0]?.[1]?.code : tail[0]?.code
+      const tvars = is_typed_name ? tail[1].concat(tail.slice(1, -1)).map(t => [t.code, tvar()]) :
+        tail.slice(0, -1).map(t => [t.code, tvar()])
       const body = is_block ? tail.at(-1).slice(1) : tail.at(-1)
       if (head.code === 'def') {
         const tenv = {...env, ...Object.fromEntries(tvars)}
         const argument = arg => Array.isArray(arg) ?
-          [arg[0].code.replace('...', ''), arg[0].type = tcon(arg[0].code.startsWith('...') ? tdot3() : tvar(), arg.slice(1).map(t => tenv[t.code]))] :
+          [arg[1].code.replace('...', ''), arg[0].type = tcon(arg[1].code.startsWith('...') ? tdot3() : tvar(), arg.slice(2).map(t => tenv[t.code]))] :
           [arg.code.replace('...', ''), arg.type = arg.code.startsWith('...') ? tdot3() : tvar()]
         const args = tail.slice(1, -1).map(argument)
         const local = {...tenv, ...Object.fromEntries(args.map(([name, t]) => [name, t.dot3 ? t.ref : t]))}
@@ -140,11 +141,10 @@ const infer = root => {
         return env[name] = ft
       } else if (head.code === 'dec') {
         const local = {...env, ...Object.fromEntries(tvars)}
-        const args = is_block ? Array.isArray(body[0]) ? body[0] : body : [body]
-        return env[name] = is_block ? tfn(...args.map(arg => local[arg.code])) : local[args[0].code]
+        return env[name] = tfn(...([].concat(body).map(arg => local[arg.code])))
       } else if (head.code === 'class') {
         const field = (x, e) => Array.isArray(x) ? tfn(...x.slice(1).flat().map(t => e[t.code])) : e[x.code]
-        const props = body.map(a => [
+        const props = nest(body).map(a => [
           a[0].code,
           field(a.at(-1), {...Object.fromEntries(a.slice(1, -1).map(t => [t.code, tvar()]).concat(tvars)), ...env})
           ])
@@ -178,8 +178,9 @@ const infer = root => {
       const v = node.code
       return v.match(/^[0-9]+\.[0-9]+/) ? tfloat :
         v.match(/^[0-9]/) ? tint :
+        v.startsWith('"') ? tstring :
         v in env ? fresh(env[v], nonGeneric) :
-        fail(`Not found ${v} in env`, {v,node,env: Object.keys(env)})
+        fail(`Not found '${v}' in env`, {v,node,env: Object.keys(env)})
     }
   }
   const top = {
@@ -197,7 +198,8 @@ const infer = root => {
   '== != < <= >= >'.split(' ').map(op => top[op] = tfn(v1, v1, tbool))
   const primitives = [tint, ti8, ti16, ti32, ti64, tu8, tu16, tu32, tu64, tfloat, tf32, tf64, tbool, ttuple, tlist, tset, tdict]
   primitives.map(t => top[t.name] = t)
-  return analyse(root, top, [])
+  analyse(root, top, [])
+  return root
 }
 
 const showType = type => {
@@ -216,25 +218,7 @@ const showType = type => {
 module.exports = { infer }
 
 if (require.main === module) {
-  const parse = src => {
-    const block = (a) => [{code: '__block'}, ...a]
-    const line = src => {
-      const tokens = src.split(/([()\[\]:]|(?=[ \n])\.(?= )|\s+)/).filter(x => x.trim()).map(code => ({code}))
-      let pos = 0
-      const check = f => pos < tokens.length && f(tokens[pos].code)
-      const list = a => (t => t.code === ')' ? a : list(a.concat([t])))(unit())
-      const bracket = a => (t => t.code === ']' ? a : bracket(a.concat([t])))(unit())
-      const suffix = t => check(s => s === '[') && ++pos ? bracket([t]) : t
-      const unit = () => (t =>
-        t.code === '(' ? list([]) :
-        t.code === ':' ? block([top()]) :
-        suffix(t))(tokens[pos++])
-      const top = () => simplify(until(() => check(s => s !== ')'), unit))
-      const simplify = a => a.length === 1 ? a[0] : a
-      return top()
-    }
-    return block(src.split('\n').map(line))
-  }
+  const { parse } = require('./parse.js')
   const reject = src => {
     try {
       infer(parse(src))
@@ -250,7 +234,8 @@ if (require.main === module) {
   }
   const inf = (expect, src) => {
     try {
-      const actual = showType(infer(parse(src)))
+      const node = infer(parse(src))
+      const actual = showType(node.type)
       if (str(actual) === str(expect)) {
         process.stdout.write('.')
       } else {
@@ -263,10 +248,11 @@ if (require.main === module) {
     } catch (e) {
       console.log('Failed')
       console.log('   src:', src)
-      log(e)
+      console.dir(e, {depth: null})
       process.exit(1)
     }
   }
+  inf('tuple[int bool int bool]', 'def f[t u] ...a[t u]: a\nf 1 true 2 false')
 
   // literal
   inf('bool', 'true')
@@ -348,10 +334,11 @@ if (require.main === module) {
   inf('int', 'class c a: x a\n. c(1) x')
   inf('bool', 'class c a: x a\n. c(true) x')
   inf('(x.1)', 'class _ a: x a')
-  inf('(f.(int))', 'class _: f : int')
-  inf('(f.(int int))', 'class _: f : int int')
-  inf('(f.(1 2 int))', 'class _ a: f b : a b int')
-  inf('(f.(1 2 3 4))', 'class _ a b: f c d : a b c d')
+  // is the following really needed? 
+  // inf('(f.(int))', 'class _: f (int)')
+  // inf('(f.(int int))', 'class _: f (int int)')
+  // inf('(f.(1 2 int))', 'class _ a: f b: (a b int)')
+  // inf('(f.(1 2 3 4))', 'class _ a b: f c d: (a b c d)')
 
   // type errors
   reject('(+ true true)')

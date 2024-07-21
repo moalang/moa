@@ -12,7 +12,7 @@ const parse = source => {
     return []
   }
   // operator | symbols | string | number | id | white spaces
-  const regexp = /([!+\-*/%<>:!=^|&]+|[()\[\]{}]|""".*?"""|"[^]*?(?<!\\)"|-?[0-9]+(?:\.[0-9]+)|[0-9A-Za-z_]+|(?:#[^\n]*|[ \n])+)/
+  const regexp = /(\.\.\.[A-Za-z_]*|[!+\-*/%<>:!=^|&]+|[()\[\]{}]|""".*?"""|"[^]*?(?<!\\)"|-?[0-9]+[0-9_]*(?:\.[0-9_]+)|[0-9A-Za-z_]+|(?:#[^\n]*|[ \n])+)/
   let offset = 0
   const tokens = source.trim().split(regexp).flatMap(code => code.length ? [{code, offset: offset+=code.length}] : [])
   let pos = 0
@@ -43,6 +43,7 @@ const parse = source => {
       t.code === '(' ? squash(until(')')) :
       t.code === ':' ? parse_block() :
       t.code.startsWith('"""') ? {...t, code: '"' + t.code.slice(3, -3).replaceAll(/"/g, '\\"') + '"'} :
+      t.code.match(/^[0-9]+[0-9.]*[xobe_]/) ? {...t, code: Number(t.code.replaceAll(/_/g, '')).toString()} :
       t)
   }
   const parse_exp = () => {
@@ -76,16 +77,28 @@ if (require.main === module) {
   const assert = (expect, fact, src) => expect === fact ? process.stdout.write('.') : fail(`Expected: '${expect}'\n         Actual: '${fact}' source='${src}'`)
   const test = (expect, src) => assert(expect, stringify(parse(src)), src)
 
-  // primitives
+  // literal
   test('1', '1')
   test('(- 1)', '-1')
   test('1.0', '1.0')
   test('id', 'id')
+  test('(f)', 'f()')
   test('"hi"', '"hi"')
   test('"h\\"i"', '"h\\"i"')
   test('"h\\"i"', "\"h\\\"i\"")
   test('" \\\\" "', '" \\\\" "')
   test('" \\" "', '""" " """')
+  test('...', '...')
+  test('...a', '...a')
+
+  // syntax sugar for number
+  test(  '1000',     '1e3')
+  test(   '255',    '0xff')
+  test(   '255',    '0xFF')
+  test(     '9',    '0o11')
+  test(     '7',   '0b111')
+  test( '10000',  '10_000')
+  test('0.1002', '0.1_002')
 
   // property access
   test('(. a b)', 'a.b')
@@ -97,7 +110,10 @@ if (require.main === module) {
 
   // binary operators
   test('(+ a b)', 'a + b')
-  test('((+ a b) c)', 'a + b c')
+  for (const op2 of '|| && + - * ** / % & | ^ << >> == != < <= > >= ='.split(' ')) {
+    test(`(${op2} a b)`, `a ${op2} b`)
+    test(`(a (${op2} b c) d)`, `a b ${op2} c d`)
+  }
 
   // parentheses
   test('1', '(1)')
