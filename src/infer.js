@@ -115,7 +115,7 @@ const infer = root => {
     }
   }
   const prune = t => (t.var && t.instance) ? t.instance = prune(t.instance) : t
-  const nest = x => !Array.isArray(x) ? [[x]] :
+  const lines = x => !Array.isArray(x) ? [[x]] :
     x[0]?.code === '__block' ? x.slice(1).map(x => Array.isArray(x) ? x : [x]) :
     [x]
   const analyse = (node, env, nonGeneric) => node.type = _analyse(node, env, nonGeneric)
@@ -144,7 +144,7 @@ const infer = root => {
         return env[name] = tfn(...([].concat(body).map(arg => local[arg.code])))
       } else if (head.code === 'class') {
         const field = (x, e) => Array.isArray(x) ? tfn(...x.slice(1).flat().map(t => e[t.code])) : e[x.code]
-        const props = nest(body).map(a => [
+        const props = lines(body).map(a => [
           a[0].code,
           field(a.at(-1), {...Object.fromEntries(a.slice(1, -1).map(t => [t.code, tvar()]).concat(tvars)), ...env})
           ])

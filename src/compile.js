@@ -18,8 +18,8 @@ const compile = root => {
     a.length === 0 ? fail(`invalid the number of arguments of iif`) :
     a.length === 1 ? a[0] :
     `${a[0]} ? ${a[1]} : ${iifjs(a.slice(2))}`
-  const nest = x => !Array.isArray(x) ? [[x]] :
-    x[0]?.code === ':' ? nest(x[1]) :
+  const lines = x => !Array.isArray(x) ? [[x]] :
+    x[0]?.code === ':' ? lines(x[1]) :
     x[0]?.code === '__block' ? x.slice(1).map(x => Array.isArray(x) ? x : [x]) :
     [x]
   const tojs = (node) => {
@@ -83,21 +83,21 @@ const compile = root => {
         const name = tail[0].code
         const args = tail.slice(1, -1).map(x => x.code).join(', ')
         const last = tail.at(-1)[0]?.code === ':' ? tail.at(-1)[1] : tail.at(-1)
-        const lines = (last[0]?.code === '__block' ? last.slice(1) : [last]).map(tojs)
-        const body = [...lines.slice(0, -1), 'return ' + lines.at(-1)].join('\n')
+        const steps = (last[0]?.code === '__block' ? last.slice(1) : [last]).map(tojs)
+        const body = [...steps.slice(0, -1), 'return ' + steps.at(-1)].join('\n')
         return `function ${name}(${args}) {${body}}`
       } else if (head.code === 'class') {
         const name = tail[0].code
-        const fields = nest(tail.at(-1)).map(x => x[0].code).join(', ')
+        const fields = lines(tail.at(-1)).map(x => x[0].code).join(', ')
         return `function ${name}(${fields}) { return {${fields}} }`
       } else if (head.code === 'enum') {
         const name = tail[0].code
         const enumjs = a => a.length === 1 ? `const ${a[0].code} = {__tag: "${name}.${a[0].code}"}` :
           a.length === 2 && Array.isArray(a[1]) ?
-          (a1 => `function ${a[0].code}(${a1.map(x => x[0].code).join(', ')}) { return {__tag: "${name}.${a[0].code}", __val: {${a1.map(x => x[0].code).join(', ')}}} }`)(nest(a[1])) :
+          (a1 => `function ${a[0].code}(${a1.map(x => x[0].code).join(', ')}) { return {__tag: "${name}.${a[0].code}", __val: {${a1.map(x => x[0].code).join(', ')}}} }`)(lines(a[1])) :
           a.length === 2 ? `function ${a[0].code}(__val) { return {__tag: "${name}.${a[0].code}", __val} }` :
           fail(`Unknown enum ${str(name)} with ${str(a)}`)
-        return nest(tail.at(-1)).map(enumjs).join('\n')
+        return lines(tail.at(-1)).map(enumjs).join('\n')
       } else if (head.code === 'catch') {
         const target = tojs(tail[0])
         const handle = tojs(tail[1])
