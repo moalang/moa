@@ -74,17 +74,17 @@ const infer = root => {
     }
     return rec(type)
   }
-  const unify = (a, b) => {
+  const unify = (a, b, node) => {
     a = prune(a)
     b = prune(b)
     if (a.var) {
       if (a.name !== b.name) {
         if (a.interfaces) {
           if (b.interfaces && str(a.interfaces) !== str(b.interfaces)) {
-            failUnify(`interfaces miss match`, {a,b})
+            failUnify(`interfaces miss match`, {a,b,node})
           }
           if (!b.var && !a.interfaces.find(c => c.name === b.name)) {
-            failUnify(`interfaces miss match`, {a,b})
+            failUnify(`interfaces miss match`, {a,b,node})
           }
         }
         if (a.interfaces && b.var) {
@@ -94,22 +94,22 @@ const infer = root => {
         }
       }
     } else if (b.var) {
-      unify(b, a)
+      unify(b, a, node)
     } else {
       const as = a.types || []
       const bs = b.types || []
       if (a.name !== b.name || (as.length !== bs.length && !as.find(t => t.dot3))) {
-        failUnify(`length miss match`, {a,b})
+        failUnify(`length miss match`, {a,b,node})
       }
       for (let i=0; i<as.length; i++) {
         if (as[i].dot3) {
           const cs = as[i].constrains
-          cs && [...Array(bs.length-i-1)].map((_, j) => unify(cs[j%cs.length], bs[i+j]))
+          cs && [...Array(bs.length-i-1)].map((_, j) => unify(cs[j%cs.length], bs[i+j], node))
           as[i].ref.instance = {...ttuple, types: bs.slice(i, -1)}
-          unify(as.at(-1), bs.at(-1))
+          unify(as.at(-1), bs.at(-1), node)
           break
         } else {
-          unify(as[i], bs[i])
+          unify(as[i], bs[i], node)
         }
       }
     }
@@ -153,6 +153,10 @@ const infer = root => {
         return analyse(tail.slice(0, -1), env, nonGeneric)[tail.at(-1).code]
       } else if (head.code === '__block') {
         return tail.map(x => analyse(x, env, nonGeneric)).at(-1)
+      } else if (head.code === '-' && tail.length === 1) {
+        const rt = analyse(tail[0], env, nonGeneric)
+        unify(rt, fresh(tnum1, nonGeneric), node)
+        return rt
       } else if (tail.length) {
         const ft = analyse(head, env, nonGeneric)
         const argv = tail.map(t => analyse(t, env, nonGeneric))
@@ -160,15 +164,11 @@ const infer = root => {
           if (ft.props.length !== argv.length) {
             failUnify('length miss match', {ft, argv, node})
           }
-          ft.props.map((prop, i) => unify(prop[1], argv[i]))
+          ft.props.map((prop, i) => unify(prop[1], argv[i]), node)
           return Object.fromEntries(ft.props)
-        } else if (ft.name in constructors) {
-          const rt = cache[str(argv)] ||= tvar() // TODO: fix tvar
-          unify(constructors[ft.name], tfn(...argv, rt))
-          return rt
         } else {
-          const rt = cache[str(argv)] ||= tvar() // TODO: fix tvar
-          unify(ft, tfn(...argv, rt))
+          const rt = argv.find(x => x.var) ? cache[argv.map(x => x.name).join(' ')] ||= tvar() : tvar() // Give signle reference in single context
+          unify(constructors[ft.name] || ft, tfn(...argv, rt), node)
           return rt
         }
       } else {
@@ -194,7 +194,7 @@ const infer = root => {
   }
   '|| &&'.split(' ').map(op => top[op] = tfn(tbool, tbool, tbool))
   '+ - * ** / %'.split(' ').map(op => top[op] = tfn(tnum1, tnum1, tnum1))
-  '& | ^ ~ << >>'.split(' ').map(op => top[op] = tfn(tints1, tints1, tints1))
+  '& | ^ << >>'.split(' ').map(op => top[op] = tfn(tints1, tints1, tints1))
   '== != < <= >= >'.split(' ').map(op => top[op] = tfn(v1, v1, tbool))
   const primitives = [tint, ti8, ti16, ti32, ti64, tu8, tu16, tu32, tu64, tfloat, tf32, tf64, tbool, ttuple, tlist, tset, tdict]
   primitives.map(t => top[t.name] = t)
@@ -252,7 +252,6 @@ if (require.main === module) {
       process.exit(1)
     }
   }
-  inf('tuple[int bool int bool]', 'def f[t u] ...a[t u]: a\nf 1 true 2 false')
 
   // literal
   inf('bool', 'true')
@@ -269,6 +268,7 @@ if (require.main === module) {
   inf('dict[int bool]', 'dict 1 true')
 
   // exp
+  inf('int', '- 1')
   inf('int', '+ 1 1')
   inf('float', '+ 1.0 1.0')
   inf('bool', '< 1 1')
