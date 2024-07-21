@@ -1,3 +1,6 @@
+'use strict'
+// Compile AST to code
+
 const log = o => { console.dir(o, {depth: null}); return o }
 const str = o => JSON.stringify(o, null, '  ')
 const fail = (m, ...a) => { const e = new Error(m); a && (e.detail = a); throw e }
@@ -7,7 +10,7 @@ const compile = root => {
   const op1 = new Set('! ~'.split(' '))
   const op2 = new Set('|| && + - * ** / %  & | ^ ~ << >> != == < <= >= > = '.split(' '))
   const embedded = new Set('bool int float string i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 tuple list set dict log assert throw'.split(' '))
-  const static = new Set([
+  const global = new Set([
     'float inf',
     'float nan',
   ])
@@ -23,7 +26,7 @@ const compile = root => {
     if (Array.isArray(node)) {
       const [head,...tail] = node
       if (head.code === '.') {
-        if (static.has(tail.map(t => t.code).join(' '))) {
+        if (global.has(tail.map(t => t.code).join(' '))) {
           return `${prefix}${tail[0].code}_${tail[1].code}`
         } else {
           const type = tail[0].type
@@ -175,7 +178,7 @@ if (require.main === module) {
   check('f(1)', 'f 1')
   check('___int(1)', 'int 1')
 
-  // static
+  // global
   check('___float_inf', '. float inf')
   check('___float_nan', '. float nan')
 

@@ -1,3 +1,6 @@
+#!node
+'use strict'
+// Executable file for bin/moa
 const fs = require('fs')
 const {parse} = require('./parse.js')
 const {infer} = require('./infer.js')

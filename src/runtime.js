@@ -1,3 +1,4 @@
+'use strict'
 const ___string = o => typeof o === 'string' ? o :
   o instanceof Array ? `(list ${o.map(___string).join(' ')})` :
   o instanceof Map ? `(dict ${[...o].map(___string).join(' ')})` :

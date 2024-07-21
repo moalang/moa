@@ -1,5 +1,5 @@
 'use strict'
-// Convert Moa code to internal expression which looks like LISP
+// Convert AST from Moa code
 
 const string = o =>
   typeof o === 'string' ? o :

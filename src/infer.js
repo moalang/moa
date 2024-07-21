@@ -1,10 +1,10 @@
 'use strict'
-
+// Infer type for AST
 // Thanks
 // https://github.com/reki2000/hyndley-milner-kotlin/blob/master/HindleyMilner.kt
 // http://www.fos.kuis.kyoto-u.ac.jp/~igarashi/class/isle4-10w/testcases.html
-
 class TypeError extends Error {}
+const log = o => { console.dir(o, {depth: null}); return o }
 const str = o => JSON.stringify(o, null, '  ')
 const fail = (m, ...a) => { const e = new Error(m); a && (e.detail = a); throw e }
 const failUnify = (m, ...a) => { const e = new TypeError(m); a && (e.detail = a); throw e }
