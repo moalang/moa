@@ -41,7 +41,7 @@ const parse = source => {
       t.code === '-' ? [t, parse_unit()] :
       t.code === '[' ? [{...t, code:'list'}, ...until(']')] :
       t.code === '(' ? squash(until(')')) :
-      t.code === ':' ? parse_block() :
+      t.code === ':' ? [t].concat([parse_block()]) :
       t.code.startsWith('"""') ? {...t, code: '"' + t.code.slice(3, -3).replaceAll(/"/g, '\\"') + '"'} :
       t.code.match(/^[0-9]+[0-9.]*[xobe_]/) ? {...t, code: Number(t.code.replaceAll(/_/g, '')).toString()} :
       t)
@@ -149,12 +149,12 @@ if (require.main === module) {
   test('(. ([ x a) b)', 'x[a].b')
 
   // indent
-  test('(a b)', 'a:\n  b')
-  test('(a (b c))', 'a:\n  b:\n    c')
-  test('(a (b (__block c d)))', 'a:\n  b:\n    c\n    d')
-  test('(a (__block (b c) d))', 'a:\n  b:\n    c\n  d')
-  test('(__block (a (b c)) d)', 'a:\n  b:\n    c\nd')
-  test('(__block (a (__block b (c d) e)) f)', 'a:\n  b\n  c:\n    d\n  e\nf')
+  test('(a (: b))', 'a:\n  b')
+  test('(a (: (b (: c))))', 'a:\n  b:\n    c')
+  test('(a (: (b (: (__block c d)))))', 'a:\n  b:\n    c\n    d')
+  test('(a (: (__block (b (: c)) d)))', 'a:\n  b:\n    c\n  d')
+  test('(__block (a (: (b (: c)))) d)', 'a:\n  b:\n    c\nd')
+  test('(__block (a (: (__block b (c (: d)) e))) f)', 'a:\n  b\n  c:\n    d\n  e\nf')
 
   // block
   test('(__block a b)', 'a\nb')
@@ -162,7 +162,7 @@ if (require.main === module) {
   test('(__block a (b c))', 'a\nb c')
   test('(__block a b)', 'a;b')
   test('(__block (a b) (c d) (e f))', 'a b; c d; e f')
-  test('(a (__block b c))', 'a: b; c')
+  test('(a (: (__block b c)))', 'a: b; c')
 
   // priority of operators
   test('(&& (< a b) c)', 'a < b && c')
@@ -172,7 +172,7 @@ if (require.main === module) {
 
   // comment
   test('(= a 1)', '#comment\na = 1 # comment\n#comment')
-  test('(a (__block b c))', 'a:\n  #comment\n  b\n  #comment\n  c\n  # comment')
+  test('(a (: (__block b c)))', 'a:\n  #comment\n  b\n  #comment\n  c\n  # comment')
 
   // combinations
   test('(! (a b))', '!a(b)')

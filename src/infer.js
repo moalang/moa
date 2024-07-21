@@ -122,12 +122,12 @@ const infer = root => {
   const _analyse = (node, env, nonGeneric) => {
     if (Array.isArray(node)) {
       const [head,...tail] = node
-      const is_block = tail.at(-1)?.[0]?.code === '__block'
+      const is_block = tail.at(-1)?.[0]?.code === ':'
       const is_typed_name = head.code === 'def' && Array.isArray(tail[0]) // def f[t] ...
       const name = is_typed_name ? tail[0]?.[1]?.code : tail[0]?.code
       const tvars = is_typed_name ? tail[1].concat(tail.slice(1, -1)).map(t => [t.code, tvar()]) :
         tail.slice(0, -1).map(t => [t.code, tvar()])
-      const body = is_block ? tail.at(-1).slice(1) : tail.at(-1)
+      const body = is_block ? tail.at(-1)[1] : tail.at(-1)
       if (head.code === 'def') {
         const tenv = {...env, ...Object.fromEntries(tvars)}
         const argument = arg => Array.isArray(arg) ?
@@ -334,11 +334,10 @@ if (require.main === module) {
   inf('int', 'class c a: x a\n. c(1) x')
   inf('bool', 'class c a: x a\n. c(true) x')
   inf('(x.1)', 'class _ a: x a')
-  // is the following really needed? 
-  // inf('(f.(int))', 'class _: f (int)')
-  // inf('(f.(int int))', 'class _: f (int int)')
-  // inf('(f.(1 2 int))', 'class _ a: f b: (a b int)')
-  // inf('(f.(1 2 3 4))', 'class _ a b: f c d: (a b c d)')
+  inf('(f.(int))', 'class _: f : int')
+  inf('(f.(int int))', 'class _: f : int int')
+  inf('(f.(1 2 int))', 'class _ a: f b: a b int')
+  inf('(f.(1 2 3 4))', 'class _ a b: f c d: a b c d')
 
   // type errors
   reject('(+ true true)')

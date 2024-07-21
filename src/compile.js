@@ -16,6 +16,7 @@ const compile = root => {
     a.length === 1 ? a[0] :
     `${a[0]} ? ${a[1]} : ${iifjs(a.slice(2))}`
   const nest = x => !Array.isArray(x) ? [[x]] :
+    x[0]?.code === ':' ? nest(x[1]) :
     x[0]?.code === '__block' ? x.slice(1).map(x => Array.isArray(x) ? x : [x]) :
     [x]
   const tojs = (node) => {
@@ -30,6 +31,8 @@ const compile = root => {
           const method = tail[1].code
           return `${prefix}${type}_${method}(${target})`
         }
+      } else if (head.code === ':') {
+        return tojs(tail[0])
       } else if (head.code === 'iif') {
         return '(' + iifjs(tail.map(tojs)) + ')'
       } else if (head.code === 'if') {
@@ -50,7 +53,7 @@ const compile = root => {
           a.length === 2 ? `__s.__tag === "${name}.${a[0].code}" ? ${tojs(a[1])} :` :
           a.length === 3 ? `__s.__tag === "${name}.${a[0].code}" ? (${a[1].code} => ${tojs(a[2])})(__s.__val) :` :
           fail(`Unknown switch ${str(a)}`)
-        const x = tail.at(-1)
+        const x = tail.at(-1)[1]
         const body = (Array.isArray(x[0]) ? x : [x]).map(switchjs).join('\n')
         return `(__s => ${body} moa.throw("switch", __s))(${cond})`
       } else if (head.code === 'for') {
@@ -76,7 +79,7 @@ const compile = root => {
       } else if (head.code === 'def') {
         const name = tail[0].code
         const args = tail.slice(1, -1).map(x => x.code).join(', ')
-        const last = tail.at(-1)
+        const last = tail.at(-1)[0]?.code === ':' ? tail.at(-1)[1] : tail.at(-1)
         const lines = (last[0]?.code === '__block' ? last.slice(1) : [last]).map(tojs)
         const body = [...lines.slice(0, -1), 'return ' + lines.at(-1)].join('\n')
         return `function ${name}(${args}) {${body}}`
