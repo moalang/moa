@@ -12,7 +12,7 @@ const parse = source => {
     return []
   }
   // operator | symbols | string | number | id | white spaces
-  const regexp = /(\.\.\.[A-Za-z_]*|[!+\-*/%<>:!=^|&]+|[()\[\]{}]|""".*?"""|"[^]*?(?<!\\)"|-?[0-9]+[0-9_]*(?:\.[0-9_]+)|[0-9A-Za-z_]+|(?:#[^\n]*|[ \n])+)/
+  const regexp = /(\.\.\.[A-Za-z_]*|[!~+\-*/%<>:!=^|&]+|[()\[\]{}]|""".*?"""|"[^]*?(?<!\\)"|-?[0-9]+[0-9_]*(?:\.[0-9_]+)|[0-9A-Za-z_]+|(?:#[^\n]*|[ \n])+)/
   let offset = 0
   const tokens = source.trim().split(regexp).flatMap(code => code.length ? [{code, offset: offset+=code.length}] : [])
   let pos = 0
@@ -48,7 +48,7 @@ const parse = source => {
   }
   const parse_exp = () => {
     const lhs = parse_unit()
-    const is_op2 = s => typeof s === 'string' && s.match(/^:?[!+\-*/%<>!=^~|&]/) && s !== '!'
+    const is_op2 = s => typeof s === 'string' && s.match(/^:?[!+\-*/%<>!=^~|&]/) && !'! ~ :'.split(' ').includes(s)
     const op2s = '* ** / // % + ++ - >> << ^ & | < <= > >= == != === !== && || = := += -= *= /= %= **= =>'.split(' ')
     const priority = op => op2s.findIndex(x => x === op)
     const sort = (op, lhs, rhs) =>

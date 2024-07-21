@@ -51,6 +51,7 @@ const infer = root => {
   const tints1 = tvar('ints', [tint, ti8, ti16, ti32, ti64, tu8, tu16, tu32, tu64])
   const tfloats1 = tvar('floats', [tfloat, tf32, tf64])
   const tnum1 = tvar('num', [...tints1.interfaces, ...tfloats1.interfaces])
+  const allTypes = [tvoid, ...tnum1.interfaces, tbool, tstring, terror, ttuple, tlist, tset, tdict]
 
   const constructors = {
     list: tfn(v1, {name: 'list', types: [v1]}),         // TODO: variadic arguments
@@ -58,6 +59,24 @@ const infer = root => {
     dict: tfn(v1, v2, {name: 'dict', types: [v1, v2]}), // TODO: variadic arguments
     ...Object.fromEntries(tnum1.interfaces.map(t => [t.name, tfn(tnum1, t)]))
   }
+  const methods = Object.fromEntries(allTypes.map(t => [t.name, {}]))
+  methods.string.size = tint
+  methods.string.concat = tfn(tstring, tstring)
+  methods.string.reverse = tfn(tstring)
+  methods.string.slice = tfn(tint, tint, tstring) // TODO: support variadic arguments
+  for (const t of tnum1.interfaces) {
+    methods[t.name].abs = tfn(t)
+    methods[t.name].neg = tfn(t)
+  }
+  for (const t of tints1.interfaces) {
+    methods[t.name].char = tfn(tstring)
+  }
+  for (const t of tfloats1.interfaces) {
+    methods[t.name].floor = tfn(tint)
+    methods[t.name].ceil = tfn(tint)
+    methods[t.name].round = tfn(tint)
+  }
+  const method = (t, name) => (t.__type ? t[name] : methods[t.name]?.[name]) || fail(`${str(t)} has no ${name}`)
   const tcon = (t, constrains) => ({...t, constrains})
   const fresh = (type, nonGeneric) => {
     const d = {}
@@ -122,12 +141,12 @@ const infer = root => {
   const _analyse = (node, env, nonGeneric) => {
     if (Array.isArray(node)) {
       const [head,...tail] = node
-      const is_block = tail.at(-1)?.[0]?.code === ':'
+      const has_colon = tail.at(-1)?.[0]?.code === ':'
       const is_typed_name = head.code === 'def' && Array.isArray(tail[0]) // def f[t] ...
       const name = is_typed_name ? tail[0]?.[1]?.code : tail[0]?.code
       const tvars = is_typed_name ? tail[1].concat(tail.slice(1, -1)).map(t => [t.code, tvar()]) :
         tail.slice(0, -1).map(t => [t.code, tvar()])
-      const body = is_block ? tail.at(-1)[1] : tail.at(-1)
+      const body = has_colon ? tail.at(-1)[1] : tail.at(-1)
       if (head.code === 'def') {
         const tenv = {...env, ...Object.fromEntries(tvars)}
         const argument = arg => Array.isArray(arg) ?
@@ -142,6 +161,15 @@ const infer = root => {
       } else if (head.code === 'dec') {
         const local = {...env, ...Object.fromEntries(tvars)}
         return env[name] = tfn(...([].concat(body).map(arg => local[arg.code])))
+      } else if (head.code === 'var' || head.code === 'let') {
+        const name = tail[0].code
+        const rt = tvar()
+        env[name] = rt
+        unify(rt, analyse(tail[1], env, nonGeneric))
+        if (has_colon) {
+          analyse(body, env, nonGeneric)
+        }
+        return rt
       } else if (head.code === 'class') {
         const field = (x, e) => Array.isArray(x) ? tfn(...x.slice(1).flat().map(t => e[t.code])) : e[x.code]
         const props = lines(body).map(a => [
@@ -150,7 +178,7 @@ const infer = root => {
           ])
         return env[name] = {name, props}
       } else if (head.code === '.') {
-        return analyse(tail.slice(0, -1), env, nonGeneric)[tail.at(-1).code]
+        return method(analyse(tail[0], env, nonGeneric), tail[1].code)
       } else if (head.code === '__block') {
         return tail.map(x => analyse(x, env, nonGeneric)).at(-1)
       } else if (head.code === '-' && tail.length === 1) {
@@ -165,14 +193,14 @@ const infer = root => {
             failUnify('length miss match', {ft, argv, node})
           }
           ft.props.map((prop, i) => unify(prop[1], argv[i]), node)
-          return Object.fromEntries(ft.props)
+          return {...Object.fromEntries(ft.props), __type: ft}
         } else {
           const rt = argv.find(x => x.var) ? cache[argv.map(x => x.name).join(' ')] ||= tvar() : tvar() // Give signle reference in single context
           unify(constructors[ft.name] || ft, tfn(...argv, rt), node)
           return rt
         }
       } else {
-        return analyse(head, env, nonGeneric)
+        return analyse(head, env, nonGeneric).types[0]
       }
     } else {
       const v = node.code
@@ -189,6 +217,8 @@ const infer = root => {
     'false': tbool,
     '!': tfn(tbool, tbool),
     '~': tfn(tint, tint),
+    '~=': tfn(tint, tint, tint),
+    '=': tfn(v1, v1),
     'iif': tfn(tbool, v1, v1, v1),
     'assert': tfn(v1, v1, tvoid),
   }
@@ -196,6 +226,7 @@ const infer = root => {
   '+ - * ** / %'.split(' ').map(op => top[op] = tfn(tnum1, tnum1, tnum1))
   '& | ^ << >>'.split(' ').map(op => top[op] = tfn(tints1, tints1, tints1))
   '== != < <= >= >'.split(' ').map(op => top[op] = tfn(v1, v1, tbool))
+  '|| && + - * ** / % & | ^ << >>'.split(' ').map(op => top[op+'='] = top[op])
   const primitives = [tint, ti8, ti16, ti32, ti64, tu8, tu16, tu32, tu64, tfloat, tf32, tf64, tbool, ttuple, tlist, tset, tdict]
   primitives.map(t => top[t.name] = t)
   analyse(root, top, [])
@@ -233,8 +264,9 @@ if (require.main === module) {
     process.exit(1)
   }
   const inf = (expect, src) => {
+    const node = parse(src)
     try {
-      const node = infer(parse(src))
+      infer(node)
       const actual = showType(node.type)
       if (str(actual) === str(expect)) {
         process.stdout.write('.')
@@ -243,15 +275,19 @@ if (require.main === module) {
         console.log('expect:', expect)
         console.log('actual:', actual)
         console.log('   src:', src)
+        log(node)
         process.exit(1)
       }
     } catch (e) {
       console.log('Failed')
       console.log('   src:', src)
+      log(node)
       console.dir(e, {depth: null})
       process.exit(1)
     }
   }
+  inf('(int)', '1.abs')
+  inf('int', '1.abs()')
 
   // literal
   inf('bool', 'true')
@@ -279,6 +315,12 @@ if (require.main === module) {
 
   // value
   inf('(int)', 'def _: 1')
+
+  // var and let
+  inf('int', 'let a 1')
+  inf('int', 'var a 1')
+  inf('int', 'var a 1\na')
+  inf('int', 'var a 1: a+=1\na')
 
   // simple function
   inf('(int int)', 'def _ a: + a 1')
@@ -338,6 +380,13 @@ if (require.main === module) {
   inf('(f.(int int))', 'class _: f : int int')
   inf('(f.(1 2 int))', 'class _ a: f b: a b int')
   inf('(f.(1 2 3 4))', 'class _ a b: f c d: a b c d')
+
+  // method
+  inf('(int)', '1.abs')
+  inf('int', '1.abs()')
+  inf('int', '1.neg()')
+  inf('float', '1.0.abs()')
+  inf('float', '1.0.neg()')
 
   // type errors
   reject('(+ true true)')

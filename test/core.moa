@@ -57,27 +57,24 @@ assert (-1) 1.neg()
 assert "A"  65.char()
 
 # float
-assert 3.0 1.0 +  2
-assert 1.0 3.0 -  2
-assert 6.0 2.0 *  3
-assert 2.5 5.0 /  2
-assert 1.0 5.0 %  2
-assert 8.0 2.0 ** 3
+assert 3.0 1.0 +  2.0
+assert 1.0 3.0 -  2.0
+assert 6.0 2.0 *  3.0
+assert 2.5 5.0 /  2.0
+assert 1.0 5.0 %  2.0
+assert 8.0 2.0 ** 3.0
 assert true  1.0 == 1.0
 assert false 1.0 != 1.0
 assert false 1.0 >  1.0
 assert true  1.0 >= 1.0
 assert false 1.0 <  1.0
 assert true  1.0 <= 1.0
-assert 2.0 (var a 1.0: a +=  1)
-assert 1.0 (var a 3.0: a -=  2)
-assert 6.0 (var a 2.0: a *=  3)
-assert 2.0 (var a 4.0: a /=  2)
-assert 1.0 (var a 5.0: a %=  2)
-assert 3.0 (var a 1.0: a |=  2)
-assert 2.0 (var a 3.0: a &=  2)
-assert 1.0 (var a 3.0: a ^=  2)
-assert 8.0 (var a 2.0: a **= 3)
+assert 2.0 (var a 1.0: a +=  1.0)
+assert 1.0 (var a 3.0: a -=  2.0)
+assert 6.0 (var a 2.0: a *=  3.0)
+assert 2.0 (var a 4.0: a /=  2.0)
+assert 1.0 (var a 5.0: a %=  2.0)
+assert 8.0 (var a 2.0: a **= 3.0)
 assert 1 1.9.floor()
 assert 2 1.1.ceil()
 assert 1 1.4.round()
