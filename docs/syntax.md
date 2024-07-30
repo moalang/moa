@@ -31,7 +31,7 @@ primitive : bool int float string fn error i8 i16 i32 i64 u8 u16 u32 u64 f16 f32
 container : option tuple list set dict
 declare   : let var def class enum dec interface extern
 branch    : iif if else switch
-flow      : return throw catch when for while continue break
+flow      : return throw catch for each while continue break
 global    : log assert
 ```
 
@@ -76,9 +76,12 @@ $    # undefined
 
 Loop
 ```
-for i 4: log i     # 0 1 2 3
-for i 1 4: log i   # 1 2 3
-for i 1 4 2: log i # 1 3
+for 2: log 1              # 1 1
+for 2 x => log x          # 0 1
+for 1 3 x => log x        # 1 2
+for 1 4 2 x => log x      # 1 3
+for i 2 0 (-1) x => log x # 2 1
+each [1 2] x => log x     # 1 2
 while a < b: c
 ```
 
@@ -136,19 +139,19 @@ def flatten a: a.map(x => x)
 
 dec sum t{.zero t; +: t t t}   : list[t] t
 def sum[t{.zero t; +: t t t}] a.list[t]:
-    let n t.zero: for m a: n += m
+    let n t.zero: each m a: n += m
 def sum[t] a[list[t]]:
-    let n t.zero: for m a: n += m
+    let n t.zero: each m a: n += m
 def sum a:
-    let n typeof(a).0.zero: for m a: += m
+    let n typeof(a).0.zero: each m a: += m
 
 dec product t{.one t; *: t t t}: list[t] t
 def product[t{.one t; *: t t t}] a[list[t]]:
-    let n t.one: for m a: n *= m
+    let n t.one: each m a: n *= m
 def product[t] a[list[t]]:
-    let n t.one: for m a: n *= m
+    let n t.one: each m a: n *= m
 def product a:
-    let n typeof(a).0.one: for m a: n *= m
+    let n typeof(a).0.one: each m a: n *= m
 
 dec nth t: dict[int t] int t!
 def nth[t] d[dict[int t]] n[int]:
@@ -265,10 +268,4 @@ def calc f:
     int n if n == 0: "zero"
     int n: n.string()
     _: ""
-
-def find s:
-    # return the position if s includes "!", otherwise return -1
-    when p = s.index("!"):
-        return p
-    return (-1)
 ```

@@ -5,8 +5,8 @@
 # x.0 = a  -> x.sets(0 a)
 
 dec log a      : ... a a
-dec assert a   : a a _
-dec iif a      : ...bool,a a
+dec assert a   : a a _!
+dec iif a      : ...[bool a] a
 dec if a b     : a b _
 dec else a     : a _
 dec switch a b : a ... b
@@ -35,9 +35,8 @@ enum bool:
   && : bool bool
 
 interface _num a:
-# .one  : a
-  .min  : a
-  .max  : a
+  .min  a
+  .max  a
   +     : a a
   -     : a a
   *     : a a
@@ -97,26 +96,26 @@ extern string:
   reverse : string
   slice   : int int? int? string
   split   : string int? list[string]
-  index   : string int!
-  rindex  : string int!
+  index   : string option[int]
+  rindex  : string option[int]
   replace : string string string
   trim    : string
   starts  : string bool
   ends    : string bool
   has     : string bool
   repeat  : int string
-  i8      : i8!
-  i16     : i16!
-  i32     : i32!
-  i64     : i64!
-  u8      : u8!
-  u16     : u16!
-  u32     : u32!
-  u64     : u64!
-  int     : int!
-  f32     : f32!
-  f64     : f64!
-  float   : float!
+  i8      : option[i8]
+  i16     : option[i16]
+  i32     : option[i32]
+  i64     : option[i64]
+  u8      : option[u8]
+  u16     : option[u16]
+  u32     : option[u32]
+  u64     : option[u64]
+  int     : option[int]
+  f32     : option[f32]
+  f64     : option[f64]
+  float   : option[float]
 
 extern fn ...
 
@@ -128,10 +127,10 @@ class error a:
 enum option a:
   some a
   none
-  ||     : option[a] option[a]
-  then b : fn[a b] option[b]
-  alt    : a a
-  default : a a
+  |       : option[a] option[a]
+  then b  : fn[a b] option[b]
+  alt     : a? a
+  unwrap  : a!
 
 extern tuple ...a:
   gets n : a[n]
@@ -148,13 +147,13 @@ extern list a:
   keep     : fn[a int? bool] list[a]
   all      : fn[a int? bool] bool
   any      : fn[a int? bool) bool
-  sort     : fn[a a? _]? list[a]
+  sort     : fn[a a bool]? list[a]
   reverse  : list[a]
   zip b    : list[b] list[tuple[a b]]
-  fold b   : b fn[a b b] b
-  find     : fn[a bool] a!
-  index    : fn[a bool] int!
-  rindex   : fn[a bool] int!
+  fold b   : b? fn[a b b] b
+  find     : fn[a bool] option[a]
+  index    : fn[a bool] option[a]
+  rindex   : fn[a bool] option[a]
   join     : string string
   has      : a bool
   min      : a
@@ -165,33 +164,31 @@ extern list a:
   push     : a a             # modify self
   insert   : int a a!        # modify self
   pop      : a!              # modify self
-  delete   : int a!          # modify self
-  extends  : list[a] list[a] # modify self
-#dec list.flatten t                   : list[list[t]] list[t]
-#dec list.sum t{.zero t; + : t t t}   : list[t] t
-#dec list.product t{.one t; * : t t t}: list[t] t
+  remove   : int a!          # modify self
+  discard  : int option[a]   # modify self
+  extend   : list[a] list[a] # modify self
 
 extern set a:
-  -    : set[a] set[a]
-  |    : set[a] set[a]
-  &    : set[a] set[a]
-  ^    : set[a] set[a]
-  size : int
-  add  : a bool # modify self
-  rid  : a bool # modify self
-  has  : a bool
-  list : list[a]
+  -     : set[a] set[a]
+  |     : set[a] set[a]
+  &     : set[a] set[a]
+  ^     : set[a] set[a]
+  size  : int
+  has   : a bool
+  add   : a bool  # modify self
+  rid   : a bool  # modify self
+  remove: a bool! # modify self
+  list  : list[a]
 
 extern dict k v:
+  |      : dict[k v] dict[k v]
   get    : k v!
-  set    : k v v   # modify self
+  set    : k v v       # modify self
   size   : int
   has    : k bool
-  remove : k bool  # modify self
+  remove : k v!        # modify self
+  discard: k option[v] # modify self
   keys   : list[k]
   values : list[v]
   items  : list[tuple[k v]]
   concat : dict[k v] dict[k v]
-
-#dec dict.gets t: dict[int t] t!
-#dec dict.sets t: dict[int t] t t!
