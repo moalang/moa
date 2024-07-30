@@ -17,21 +17,21 @@ bottom:
 | "-"? "0x" [0-9a-fA-F_]+     # 0xff    -> 255
 | '"' [^"]* '"'               # "string"
 | '"""' [^"]* '"""'           # """a="b""""     -> "a=\"b\""
-| id
+| id [?]?
 op1: [!-~] | "..."
-op2: [+-*/%<>|&^=!?]+
+op2: [+-*/%<>|&^=!]+
 id: [A-Za-z_][A-Za-z0-9_]*
 comment: "//" [^\n]*
 ```
 
 Keywords
 ```
-literal   : true false
+literal   : any true false some none
 primitive : bool int float string fn error i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
-container : tuple list set dict
+container : option tuple list set dict
 declare   : let var def class enum dec interface extern
 branch    : iif if else switch
-flow      : return throw catch for while continue break
+flow      : return throw catch when for while continue break
 global    : log assert
 ```
 
@@ -39,6 +39,7 @@ Reserved
 ```
 bytes regexp time duration stream num decimal array
 use module
+_ __[.*]
 ```
 
 Operators
@@ -100,9 +101,15 @@ def show t:
 
 # Ideas
 
-idea: Variadic function
+idea: Variadic argument
 ```
-def f a?: a         # f(1) is tuple[bool int], f() is tuple[bool void]
+dec string.slice: string int int?     int?     string
+dec string.slice: string int int=none int=none string
+def string.slice
+| count.int                   : ...
+| start.int count.int         : ...
+| start.int count.int step.int: ...
+def f ?a: a         # f() returns option[_], f(1) returns option[int]
 def f a=1: a        # f() is f(1)
 def f ...a: a       # f(), f(1) or f(1 2)
 def f ...a,: a      # f(), f(1 "a"), f(1 "a" 2 "b")
@@ -121,6 +128,35 @@ def f {a b=0}: a  # f(a=1), f(a=1 b=2) or f(b=2 a=1)
 def f {a b}? : a  # f() or f(a=1 b=2)
 ```
 
+idea: Typed argument
+```
+dec flatten a                 : list[list[a]] list[a]
+def flatten[t] a.list[list[t]]: a.map(x => x)
+def flatten a: a.map(x => x)
+
+dec sum t{.zero t; +: t t t}   : list[t] t
+def sum[t{.zero t; +: t t t}] a.list[t]:
+    let n t.zero: for m a: n += m
+def sum[t] a[list[t]]:
+    let n t.zero: for m a: n += m
+def sum a:
+    let n typeof(a).0.zero: for m a: += m
+
+dec product t{.one t; *: t t t}: list[t] t
+def product[t{.one t; *: t t t}] a[list[t]]:
+    let n t.one: for m a: n *= m
+def product[t] a[list[t]]:
+    let n t.one: for m a: n *= m
+def product a:
+    let n typeof(a).0.one: for m a: n *= m
+
+dec nth t: dict[int t] int t!
+def nth[t] d[dict[int t]] n[int]:
+    d[n]
+def nth d n:
+    d[n]
+```
+
 idea: Method
 ```
 class vector2:
@@ -136,7 +172,7 @@ def f:
 
 idea: Type alias
 ```
-class seconds: int
+class seconds = int
 
 def seconds.milliseconds n:
   n * 1000
@@ -229,4 +265,10 @@ def calc f:
     int n if n == 0: "zero"
     int n: n.string()
     _: ""
+
+def find s:
+    # return the position if s includes "!", otherwise return -1
+    when p = s.index("!"):
+        return p
+    return (-1)
 ```

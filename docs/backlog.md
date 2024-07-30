@@ -9,6 +9,19 @@
 - [ ] Web IDE
 - [ ] Define standard libraries
 
+# Allowed
+- exception: for unified error handling
+- variadic arguments: for "print" or function wrapper
+- optional: for user input
+
+# Rejected
+- number interface: "**" is not good match for some types, e.g, vector2
+
+# Pending
+- overload: it reduces readability, but IDE could mitigate?
+- property: no consistency, but intuitiveness
+- type level programming: flexible, but excessive
+
 # Memo
 https://www.swift.org/
 https://www.haskell.org/onlinereport/syntax-iso.html
