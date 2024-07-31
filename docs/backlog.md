@@ -2,43 +2,41 @@
 - [x] Define syntax
 - [x] Define core
 - [x] Define test
-
-# Ideas
-- [ ] Unify "let" and "var" to ":="
-- [ ] Define "while"
+- [ ] Unify "let" and "var" to something lik ":="
+- [ ] Define "while", "for", "each", "continue" and "break"
 - [ ] Compile to JavaScript
 - [ ] Compile to Go
-- [ ] Define method
-- [ ] Define typed argument
-- [ ] Define subtyping like TypeScript
 - [ ] Define UI framework for compiled JavaScript
 - [ ] Define Backend framework for compiled Go
 - [ ] Make Web IDE
+
+# Ideas
+- [ ] Define method for user defined class
+- [ ] Define typed argument
 - [ ] Define named block
 - [ ] Define standard libraries
 - [ ] Define checked and unchecked for operator of sized integers
 
 # Allowed
-- variadic arguments: for "print" and function wrapper
-- exception: for unified error handling
-- option: for input and output
+- variadic arguments: for "list"
+- exception: for error handling
+- option: result type
 - overload: for property and method type inference, functions
 
 # Rejected
-- number interface: "**" is not good match for some types, e.g, vector2
-- ";": ambiguous in class and enum, harder parsing arguments
+- number interface: "**" is not good match for "vector2"
+- ";": ambiguous in class and enum, parser would be harder
 - optional argument: low frequency
 - default argument: low frequency
-- covinient error handling: option should be more convinient
+- covinient error handling: use "option" for most case
 
 # Pending
-- "for": might be replaced with seq(n).each
-- "each": might be replaced with list.each
 - ordered dict: convinient, but slower
-- property: no consistency, but intuitiveness
+- property: intuitiveness, but no consistency
 - type level programming: flexible, but excessive
-- property, lack of consistency?
-- lazy evaluated argument, not necessary
+- property: convinient, but lack of consistency?
+- lazy argument: not essential
+- subtyping: not essential
 
 # Memo
 https://www.swift.org/
