@@ -24,18 +24,31 @@ id: [A-Za-z_][A-Za-z0-9_]*
 comment: "//" [^\n]*
 ```
 
-Keywords
+Syntax sugar
+```
+x.0      -> x.nget(0)
+x.0 = a  -> x.nset(0 a)
+x[a]     -> x.get(a)
+x[a] = b -> x.set(a b)
+x[1:]    -> x.slice(1 x.size())
+x[:1]    -> x.slice(0 1)
+x[1:2]   -> x.slice(1 2)
+
+object.method(arg ...) -> type.method(object arg ...)
+```
+
+Keyword
 ```
 literal   : any true false some none
 primitive : bool int float string fn error i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
 container : option tuple list set dict
 declare   : let var def class enum dec interface extern
-branch    : iif if else switch
+branch    : iif if else match
 flow      : return throw catch for each while continue break
 global    : log assert
 ```
 
-Reserved
+Reserved word
 ```
 bytes regexp time duration stream num decimal array
 use module
@@ -85,9 +98,9 @@ each [1 2] x => log x     # 1 2
 while a < b: c
 ```
 
-Type switching
+Pattern match
 ```
-switch: "switch" exp ":" ("\n  " type id? ":" block)+
+match: "match" exp ":" ("\n  " type id? ":" block)+
 type: id ("." id)* ("[" type+ "]")? ("(" case ")")?
 
 enum ab t:
@@ -95,21 +108,19 @@ enum ab t:
   b int
 
 def show t:
-  switch t:
+  match t:
     a: "a"
     b n: b.string
 
 def f g:
-  catch(g() fn(e: switch(e.detail
+  catch(g() fn(e: match(e.detail
     int n: "error code {}".format(n)
     _: "some error")))
 
 def f g:
   catch g():
-    int: "error code {}".format(e.detail)
-    catch g() e => switch e.detail:
-      int n: "error code {}".format(n)
-      "some error"
+    int e: "error code {}".format(e.info)
+    _: "some error"
 ```
 
 
@@ -245,7 +256,7 @@ bottom:
 
 idea: Pattern matching
 ```
-switch: "switch" exp ":" ("\n  " type? case ("if" exp) ":" block)+
+match: "match" exp ":" ("\n  " type? case ("if" exp) ":" block)+
 case: pattern ("," pattern)*
 pattern:
 | '"' [^"]* '"'                    # string
@@ -263,7 +274,7 @@ enum tree t:
     right tree t
 
 def validate t:
-  switch t:
+  match t:
     leaf: true
     node {value left.node right.leaf}: left.value <= value && validate(left)
     node {value left.leaf right.node}: value <= right.value && validate(right)

@@ -1,9 +1,3 @@
-# Syntax sugars
-# x[a]     -> x.get(a)
-# x[a] = b -> x.set(a b)
-# x.0      -> x.gets(0)
-# x.0 = a  -> x.sets(0 a)
-
 extern _
 
 extern:
@@ -12,14 +6,14 @@ extern:
   iif a      : ...[bool a] a
   if a b     : a b _
   else a     : a _
-  switch a b : a ... b
-  throw a b  : string a? b
+  throw a b  : a b
   catch a b  : a fn[error[b] a] a
   return a   : a a
-  # for a    : _id a _
-  while a    : bool a _
+  while      : bool _ _
   continue   : _
   break      : _
+  # switch
+  # for
 
 interface _ a: # for all classes and enums including user defined
   .zero : a    # can not be override
@@ -95,7 +89,7 @@ extern string:
   size    : int
   concat  : string string
   reverse : string
-  slice   : int int? int? string
+  slice   : int int string
   split   : string list[string]
   splitn  : string int list[string]
   index   : string option[int]
@@ -130,31 +124,34 @@ enum option a:
   some a
   none
   |       : option[a] option[a]
+  bool    : bool
   then b  : fn[a b] option[b]
-  alt     : a a
+  or      : a a
+  alt     : a
 
 extern tuple ...a:
-  gets n : a[n]
-  sets n : a[n] a[n]
+  nget     : a.nth
+  nset     : a.nth a.nth
 
 extern list a:
   get      : int a!
   set      : int a a!       # modify self
   size     : int
   concat   : list[a] list[a]
-  slice    : int int? int? list[a]
-  map b    : fn[a int? b] list[b]
-  fmap b   : fn[a int? list[b]] list[b]
-  keep     : fn[a int? bool] list[a]
-  all      : fn[a int? bool] bool
-  any      : fn[a int? bool) bool
-  sort     : fn[a a bool]? list[a]
-  reverse  : list[a]
-  zip b    : list[b] list[tuple[a b]]
-  fold b   : b fn[a b b] b
+  slice    : int int list[a]
+  map b    : fn[a b] list[b]
+  fmap b   : fn[a list[b]] list[b]
+  keep     : fn[a bool] list[a]
+  all      : fn[a bool] bool
+  any      : fn[a bool) bool
+  sort     : fn[a a bool] list[a]
+  fold b   : fn[b a b] b b
+  scan b   : fn[b a b] b list[b]
   find     : fn[a bool] option[a]
   index    : fn[a bool] option[a]
   rindex   : fn[a bool] option[a]
+  zip b    : list[b] list[tuple[a b]]
+  reverse  : list[a]
   join     : string string
   has      : a bool
   min      : a
@@ -170,8 +167,8 @@ extern list a:
   extend   : list[a] list[a] # modify self
 
 extern set a:
-  -     : set[a] set[a]
-  |     : set[a] set[a]
+  -     : s  et[a] set[a]
+  |     : s  et[a] set[a]
   &     : set[a] set[a]
   ^     : set[a] set[a]
   size  : int
@@ -184,6 +181,8 @@ extern dict k v:
   |      : dict[k v] dict[k v]
   get    : k v!
   set    : k v v       # modify self
+  gset   : k v v       # modify self
+  tget   : k option[v]
   size   : int
   has    : k bool
   rid    : k option[v] # modify self
