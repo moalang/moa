@@ -3,7 +3,7 @@ t test:
 	node src/parse.js
 	node src/infer.js
 	node src/compile.js
-	cat test/*.moa | node src/moa.js
+	cat test/*.moa | node src/moa.js selftest
 
 watch:
 	-make t

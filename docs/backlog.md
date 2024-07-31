@@ -3,12 +3,15 @@
 - [x] Define core
 - [x] Define test
 - [ ] Implement optional argument
+- [ ] Unify "let" and "var"
 - [ ] Define "for"
 - [ ] Define "each"
+- [ ] Define property
 - [ ] Define fallback to optional   , e.g., "a[n]?"  -> "catch(some(a[n]) _ => none)"
 - [ ] Define fallback to alternative, e.g., "a[n]?0" -> "catch(some(a[n]) _ => 0)"
 - [ ] Define fallback to zero value , e.g., "a[n]??" -> "catch(a[n] _[t] => t.zero)"
 - [ ] Define to do if no exception  , e.g., "when v = a[0]: log(n)"
+- [ ] Define lazy evaluated argument
 - [ ] Compile to JavaScript
 - [ ] Compile to Go
 - [ ] Define method
@@ -21,15 +24,15 @@
 
 # Allowed
 - exception: for unified error handling
-- variadic arguments: for "print" or function wrapper
-- optional: for user input
+- variadic arguments: for "print" and function wrapper
+- optional: for input and output
+- overload: for property and method type inference, functions
 
 # Rejected
 - number interface: "**" is not good match for some types, e.g, vector2
 
 # Pending
 - ordered dict: convinient, but slower
-- overload: it reduces readability, but IDE could mitigate?
 - property: no consistency, but intuitiveness
 - type level programming: flexible, but excessive
 

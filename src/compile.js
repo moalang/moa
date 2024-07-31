@@ -8,7 +8,7 @@ const fail = (m, ...a) => { const e = new Error(m); a && (e.detail = a); throw e
 const compile = root => {
   const prefix = '___'
   const op1 = new Set('! ~'.split(' '))
-  const op2 = new Set('|| && + - * ** / %  & | ^ ~ << >> != == < <= >= > = '.split(' '))
+  const op2 = new Set('|| && + - * ** / %  & | ^ << >> != == < <= >= > = '.split(' '))
   const embedded = new Set('bool int float string i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 tuple list set dict log assert throw'.split(' '))
   const global = new Set([
     'float inf',
@@ -106,6 +106,8 @@ const compile = root => {
         return tail.map(tojs).join('\n')
       } else if (head.code === 'dec' || head.code === 'interface' || head.code === 'extern') {
         return ''
+      } else if (head.code === '-' && tail.length === 1) {
+        return `(-${tojs(tail[0])})`
       } else if (op1.has(head.code)) {
         return `(${head.code}${tojs(tail[0])})`
       } else if (op2.has(head.code)) {
@@ -119,7 +121,12 @@ const compile = root => {
       return embedded.has(node.code) ?  `${prefix}${node.code}` : node.code
     }
   }
-  return tojs(root)
+  try {
+    return tojs(root)
+  } catch (e) {
+    e.detail = root
+    throw e
+  }
 }
 
 module.exports = { compile }
