@@ -85,7 +85,7 @@ each [1 2] x => log x     # 1 2
 while a < b: c
 ```
 
-Enum switching
+Type switching
 ```
 switch: "switch" exp ":" ("\n  " type id? ":" block)+
 type: id ("." id)* ("[" type+ "]")? ("(" case ")")?
@@ -98,6 +98,18 @@ def show t:
   switch t:
     a: "a"
     b n: b.string
+
+def f g:
+  catch(g() fn(e: switch(e.detail
+    int n: "error code {}".format(n)
+    _: "some error")))
+
+def f g:
+  catch g():
+    int: "error code {}".format(e.detail)
+    catch g() e => switch e.detail:
+      int n: "error code {}".format(n)
+      "some error"
 ```
 
 

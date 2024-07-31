@@ -96,7 +96,8 @@ extern string:
   concat  : string string
   reverse : string
   slice   : int int? int? string
-  split   : string int? list[string]
+  split   : string list[string]
+  splitn  : string int list[string]
   index   : string option[int]
   rindex  : string option[int]
   replace : string string string
@@ -121,17 +122,16 @@ extern string:
 extern fn ...
 
 class error a:
-  message   string
-  backtrace string
-  detail    a
+  message string
+  stack   string
+  data    a
 
 enum option a:
   some a
   none
   |       : option[a] option[a]
   then b  : fn[a b] option[b]
-  alt     : a? a
-  unwrap  : a!
+  alt     : a a
 
 extern tuple ...a:
   gets n : a[n]
@@ -151,7 +151,7 @@ extern list a:
   sort     : fn[a a bool]? list[a]
   reverse  : list[a]
   zip b    : list[b] list[tuple[a b]]
-  fold b   : b? fn[a b b] b
+  fold b   : b fn[a b b] b
   find     : fn[a bool] option[a]
   index    : fn[a bool] option[a]
   rindex   : fn[a bool] option[a]
@@ -178,7 +178,6 @@ extern set a:
   has   : a bool
   add   : a bool  # modify self
   rid   : a bool  # modify self
-  remove: a bool! # modify self
   list  : list[a]
 
 extern dict k v:
@@ -187,8 +186,7 @@ extern dict k v:
   set    : k v v       # modify self
   size   : int
   has    : k bool
-  remove : k v!        # modify self
-  discard: k option[v] # modify self
+  rid    : k option[v] # modify self
   keys   : list[k]
   values : list[v]
   items  : list[tuple[k v]]

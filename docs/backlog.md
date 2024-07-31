@@ -2,14 +2,11 @@
 - [x] Define syntax
 - [x] Define core
 - [x] Define test
+- [ ] Implement "var" and "let" with initialization statement
 
 # Ideas
-- [ ] Define statement
-- [ ] Implement "var" and "let" with initialization statement
-- [ ] Implement optional argument
 - [ ] Unify "let" and "var"
-- [ ] Define "for"
-- [ ] Define "each"
+- [ ] Define "while"
 - [ ] Define property
 - [ ] Define fallback to optional   , e.g., "a[n]?"  -> "catch(some(a[n]) _ => none)"
 - [ ] Define fallback to alternative, e.g., "a[n]?0" -> "catch(some(a[n]) _ => 0)"
@@ -24,7 +21,10 @@
 - [ ] Define UI framework for compiled JavaScript
 - [ ] Define Backend framework for compiled Go
 - [ ] Make Web IDE
+- [ ] Define named block
 - [ ] Define standard libraries
+- [ ] Define optional while
+- [ ] Define checked and unchecked for operator of sized integers
 
 # Allowed
 - exception: for unified error handling
@@ -35,8 +35,12 @@
 # Rejected
 - number interface: "**" is not good match for some types, e.g, vector2
 - ";": ambiguous in class and enum, harder parsing arguments
+- optional argument: low frequency
+- default argument: low frequency
 
 # Pending
+- "for": might be replaced with seq(n).each
+- "each": might be replaced with list.each
 - ordered dict: convinient, but slower
 - property: no consistency, but intuitiveness
 - type level programming: flexible, but excessive
