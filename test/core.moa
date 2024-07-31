@@ -272,3 +272,4 @@ assert 4:
 
 # throw and catch
 assert "b" catch(throw("a") fn(e: e.message))
+assert "1" catch(throw("a" 1) fn(e: string(e.detail)))

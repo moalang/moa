@@ -137,16 +137,16 @@ dec flatten a                 : list[list[a]] list[a]
 def flatten[t] a.list[list[t]]: a.map(x => x)
 def flatten a: a.map(x => x)
 
-dec sum t{.zero t; +: t t t}   : list[t] t
-def sum[t{.zero t; +: t t t}] a.list[t]:
+dec sum t{.zero[t] +[t t t]}   : list[t] t
+def sum[t{.zero[t] +[t t t]}] a.list[t]:
     let n t.zero: each m a: n += m
 def sum[t] a[list[t]]:
     let n t.zero: each m a: n += m
 def sum a:
     let n typeof(a).0.zero: each m a: += m
 
-dec product t{.one t; *: t t t}: list[t] t
-def product[t{.one t; *: t t t}] a[list[t]]:
+dec product t{.one[t] *[t t t]}: list[t] t
+def product[t{.one[t] *[t t t]}] a[list[t]]:
     let n t.one: each m a: n *= m
 def product[t] a[list[t]]:
     let n t.one: each m a: n *= m

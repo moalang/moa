@@ -2,6 +2,10 @@
 - [x] Define syntax
 - [x] Define core
 - [x] Define test
+
+# Ideas
+- [ ] Define statement
+- [ ] Implement "var" and "let" with initialization statement
 - [ ] Implement optional argument
 - [ ] Unify "let" and "var"
 - [ ] Define "for"
@@ -17,9 +21,9 @@
 - [ ] Define method
 - [ ] Define typed argument
 - [ ] Define subtyping like TypeScript
-- [ ] UI framework for compiled JavaScript
-- [ ] Backend framework for compiled Go
-- [ ] Web IDE
+- [ ] Define UI framework for compiled JavaScript
+- [ ] Define Backend framework for compiled Go
+- [ ] Make Web IDE
 - [ ] Define standard libraries
 
 # Allowed
@@ -30,6 +34,7 @@
 
 # Rejected
 - number interface: "**" is not good match for some types, e.g, vector2
+- ";": ambiguous in class and enum, harder parsing arguments
 
 # Pending
 - ordered dict: convinient, but slower

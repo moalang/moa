@@ -4,22 +4,25 @@
 # x.0      -> x.gets(0)
 # x.0 = a  -> x.sets(0 a)
 
-dec log a      : ... a a
-dec assert a   : a a _!
-dec iif a      : ...[bool a] a
-dec if a b     : a b _
-dec else a     : a _
-dec switch a b : a ... b
-dec throw a b  : string a? b
-dec catch a b  : a fn[error[b] a] a
-dec return a   : a a
-#dec for a      : _id a _
-dec while a    : bool a _
-dec continue   : _
-dec break      : _
+extern _
+
+extern:
+  log a      : ... a a
+  assert a   : a a _!
+  iif a      : ...[bool a] a
+  if a b     : a b _
+  else a     : a _
+  switch a b : a ... b
+  throw a b  : string a? b
+  catch a b  : a fn[error[b] a] a
+  return a   : a a
+  # for a    : _id a _
+  while a    : bool a _
+  continue   : _
+  break      : _
 
 interface _ a: # for all classes and enums including user defined
-  .zero a      # can not be override
+  .zero : a    # can not be override
   ==    : a bool
   !=    : a bool
   <     : a bool
@@ -35,8 +38,6 @@ enum bool:
   && : bool bool
 
 interface _num a:
-  .min  a
-  .max  a
   +     : a a
   -     : a a
   *     : a a
@@ -76,18 +77,18 @@ extern u8 : _int
 extern u16: _int
 extern u32: _int
 extern u64: _int
-extern int = i64 # new type with same implementation
+extern int: _int
 
 interface _float a:
   _num
-  .inf  a
-  .nan  a
+  .inf  : a
+  .nan  : a
   floor : int
   ceil  : int
   round : int
 extern f32: _float
 extern f64: _float
-extern float = f64 # new type with same implementation
+extern float: _float
 
 extern string:
   .new    : _ string
