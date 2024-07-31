@@ -1,20 +1,3 @@
-extern _
-
-extern:
-  log a      : ... a a
-  assert a   : a a _!
-  iif a      : ...[bool a] a
-  if a b     : a b _
-  else a     : a _
-  throw a b  : a b
-  catch a b  : a fn[error[b] a] a
-  return a   : a a
-  while      : bool _ _
-  continue   : _
-  break      : _
-  # switch
-  # for
-
 interface _ a: # for all classes and enums including user defined
   .zero : a    # can not be override
   ==    : a bool
@@ -23,6 +6,24 @@ interface _ a: # for all classes and enums including user defined
   <=    : a bool
   >     : a bool
   >=    : a bool
+
+extern _ # bottom type
+
+extern:
+  log a      : ... a a
+  assert a   : a a _!
+  iif a      : ...[bool a] a
+  guard      : bool _
+  if a b     : a b _
+  else a     : a _
+  throw a b  : a b
+  catch a b  : a fn[error[b] a] a
+  return a   : a a
+  # while    : bool _ _
+  # continue : _
+  # break    : _
+  # match
+  # for
 
 enum bool:
   true
@@ -130,12 +131,15 @@ enum option a:
   alt     : a
 
 extern tuple ...a:
-  nget     : a.nth
-  nset     : a.nth a.nth
+  nget     : int a.nth
+  nset     : int a.nth a.nth
 
 extern list a:
   get      : int a!
   set      : int a a!       # modify self
+  nget     : int a!
+  nset     : int a! a!
+  tget     : int option[a]
   size     : int
   concat   : list[a] list[a]
   slice    : int int list[a]
@@ -167,8 +171,8 @@ extern list a:
   extend   : list[a] list[a] # modify self
 
 extern set a:
-  -     : s  et[a] set[a]
-  |     : s  et[a] set[a]
+  -     : set[a] set[a]
+  |     : set[a] set[a]
   &     : set[a] set[a]
   ^     : set[a] set[a]
   size  : int
@@ -178,7 +182,6 @@ extern set a:
   list  : list[a]
 
 extern dict k v:
-  |      : dict[k v] dict[k v]
   get    : k v!
   set    : k v v       # modify self
   gset   : k v v       # modify self

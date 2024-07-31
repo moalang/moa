@@ -43,13 +43,14 @@ literal   : any true false some none
 primitive : bool int float string fn error i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
 container : option tuple list set dict
 declare   : let var def class enum dec interface extern
-branch    : iif if else match
-flow      : return throw catch for each while continue break
+branch    : iif if else guard match
+flow      : return throw catch
 global    : log assert
 ```
 
 Reserved word
 ```
+for each while continue break
 bytes regexp time duration stream num decimal array
 use module
 _ __[.*]
