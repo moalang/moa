@@ -35,7 +35,8 @@ x[1:]    -> x.slice(1 x.size())
 x[:1]    -> x.slice(0 1)
 x[1:2]   -> x.slice(1 2)
 x[::]    -> x.reverse()
-object.method(arg ...) -> __type__method(object arg ...)
+
+object.method(...) -> __type__method(object ...)
 
 fold '' s.size.times acc, i =>
     find range(i+1 s.size)[::] j =>

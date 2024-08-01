@@ -1,11 +1,10 @@
 interface _ a: # for all classes and enums including user defined
-  .zero : a    # can not be override
-  ==    : a bool
-  !=    : a bool
-  <     : a bool
-  <=    : a bool
-  >     : a bool
-  >=    : a bool
+  == : a bool
+  != : a bool
+  <  : a bool
+  <= : a bool
+  >  : a bool
+  >= : a bool
 
 extern _ # bottom type
 
@@ -78,17 +77,17 @@ extern int: _int
 
 interface _float a:
   _num
-  .inf  : a
-  .nan  : a
   floor : int
   ceil  : int
   round : int
+  isinf : bool
+  isnan : bool
 extern f32: _float
 extern f64: _float
 extern float: _float
 
 extern string:
-  .new    : _ string
+  _       : _ string # constructor
   size    : int
   concat  : string string
   slice   : int int string
@@ -103,6 +102,7 @@ extern string:
   trim    : string
   reverse : string
   repeat  : int string
+  format  : ... string
   i8      : option[i8]
   i16     : option[i16]
   i32     : option[i32]
@@ -133,10 +133,12 @@ enum option a:
   alt     : a
 
 extern tuple ...a:
+  _        : ...a tuple[...a] # constructor
   nget     : int a.nth
   nset     : int a.nth a.nth
 
 extern list a:
+  _        : ...[a] list[a] # constructor
   get      : int a!
   nget     : int a!
   nset     : int a! a!
@@ -165,14 +167,12 @@ extern list a:
   minmax   : tuple[a a]
   repeat   : int list[a]
   unique   : set[a]
-  push     : a a             # modify self
-  set      : int a a!        # modify self
-  insert   : int a a!        # modify self
-  pop      : a!              # modify self
-  remove   : int a!          # modify self
-  discard  : int option[a]   # modify self
+  set      : int a a!  # modify in-place
+  push     : a a       # modify and expand
+  pop      : a!        # modify and shurink
 
 extern set a:
+  _     : ...[a] set[a] # constructor
   -     : set[a] set[a]
   |     : set[a] set[a]
   &     : set[a] set[a]
@@ -180,10 +180,11 @@ extern set a:
   size  : int
   has   : a bool
   list  : list[a]
-  add   : a bool  # modify self
-  rid   : a bool  # modify self
+  add   : a bool  # modify in-place
+  rid   : a bool  # modify in-place
 
 extern dict k v:
+  _      : ...[k v] dict[k v] # constructor
   get    : k v!
   tget   : k option[v]
   size   : int
@@ -192,6 +193,6 @@ extern dict k v:
   values : list[v]
   items  : list[tuple[k v]]
   concat : dict[k v] dict[k v]
-  set    : k v v       # modify self
-  gset   : k v v       # modify self
-  rid    : k option[v] # modify self
+  set    : k v v       # modify and expand
+  gset   : k v v       # modify and expand
+  rid    : k option[v] # modify and shrink

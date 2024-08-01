@@ -26,6 +26,7 @@
 - ";": ambiguous in class and enum, parser would be harder
 - optional argument: low frequency
 - default argument: low frequency
+- static member of type: low frequency
 - covinient error handling: use "option" for most case
 
 # Pending
