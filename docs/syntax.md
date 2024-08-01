@@ -52,12 +52,12 @@ container : option tuple list set dict
 declare   : let var def class enum dec interface extern
 branch    : iif if else guard match
 flow      : return throw catch
+loop      : for each while continue break
 global    : log assert
 ```
 
 Reserved word
 ```
-for each while continue break
 bytes regexp time duration stream num decimal array
 use module
 _ __[.*]
@@ -103,7 +103,15 @@ for range(n-1)[::] i:
     j := range(i+2 n).fold(i+2 j,k => iif a[i] < a[j] < a[k] j k)
     a.swap(i j)
     a[i+1:].sort(<)
-else a.sort(<)
+else: a.sort(<)
+
+let n a.size
+for range(n-1)[::] i =>
+  if a[i] < a[i+1]:
+    j := range(i+2 n).fold(i+2 j,k => iif a[i] < a[j] < a[k] j k)
+    a.swap(i j)
+    a[i+1:].sort(<)
+else: a.sort(<)
 
 each ..3 n: log n       # 0 1 2
 each 1..3 n: log n      # 1 2

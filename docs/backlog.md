@@ -4,6 +4,7 @@
 - [x] Define test
 - [ ] Compile to JavaScript
 - [ ] Compile to Go
+- [ ] Define block for "while", "for", "each", "continue" and "break"
 - [ ] Define UI framework for compiled JavaScript
 - [ ] Define Backend framework for compiled Go
 - [ ] Make Web IDE
@@ -28,6 +29,7 @@
 - default argument: low frequency
 - static member of type: low frequency
 - covinient error handling: use "option" for most case
+- macro: hard to understand the result
 
 # Pending
 - ordered dict: convinient, but slower
@@ -37,7 +39,6 @@
 - lazy argument: not essential
 - subtyping: not essential
 - unify "let" and "var"
-- "while", "for", "each", "continue" and "break"
 
 # Memo
 https://www.swift.org/
