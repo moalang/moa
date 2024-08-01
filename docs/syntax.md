@@ -24,17 +24,23 @@ id: [A-Za-z_][A-Za-z0-9_]*
 comment: "//" [^\n]*
 ```
 
-Syntax sugar
+Syntax sugar [TBD]
 ```
 x.0      -> x.nget(0)
 x.0 = a  -> x.nset(0 a)
 x[a]     -> x.get(a)
 x[a] = b -> x.set(a b)
+x[:]     -> x{}
 x[1:]    -> x.slice(1 x.size())
 x[:1]    -> x.slice(0 1)
 x[1:2]   -> x.slice(1 2)
+x[::]    -> x.reverse()
+object.method(arg ...) -> __type__method(object arg ...)
 
-object.method(arg ...) -> type.method(object arg ...)
+fold '' s.size.times acc, i =>
+    find range(i+1 s.size)[::] j =>
+        let ss s[i:j+1]
+        ss == ss[::] &&& ss
 ```
 
 Keyword
@@ -90,12 +96,19 @@ $    # undefined
 
 Loop
 ```
-for 2: log 1              # 1 1
-for 2 x => log x          # 0 1
-for 1 3 x => log x        # 1 2
-for 1 4 2 x => log x      # 1 3
-for i 2 0 (-1) x => log x # 2 1
-each [1 2] x => log x     # 1 2
+let n a.size
+for range(n-1)[::] i:
+  if a[i] < a[i+1]:
+    j := range(i+2 n).fold(i+2 j,k => iif a[i] < a[j] < a[k] j k)
+    a.swap(i j)
+    a[i+1:].sort(<)
+else a.sort(<)
+
+each ..3 n: log n       # 0 1 2
+each 1..3 n: log n      # 1 2
+each 1..3 n: log n      # 1 2
+each "abc" c: log c     # a b c
+each "abc" c i: log c i # a 0 b 1 c 2
 while a < b: c
 ```
 

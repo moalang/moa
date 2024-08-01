@@ -2,8 +2,6 @@
 - [x] Define syntax
 - [x] Define core
 - [x] Define test
-- [ ] Unify "let" and "var" to something lik ":="
-- [ ] Define "while", "for", "each", "continue" and "break"
 - [ ] Compile to JavaScript
 - [ ] Compile to Go
 - [ ] Define UI framework for compiled JavaScript
@@ -37,6 +35,8 @@
 - property: convinient, but lack of consistency?
 - lazy argument: not essential
 - subtyping: not essential
+- unify "let" and "var"
+- "while", "for", "each", "continue" and "break"
 
 # Memo
 https://www.swift.org/

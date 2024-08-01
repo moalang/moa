@@ -31,6 +31,8 @@ enum bool:
   !  : bool
   || : bool bool
   && : bool bool
+  &&& a : option[a]
+  ||| a : option[a]
 
 interface _num a:
   +     : a a
@@ -89,17 +91,17 @@ extern string:
   .new    : _ string
   size    : int
   concat  : string string
-  reverse : string
   slice   : int int string
   split   : string list[string]
   splitn  : string int list[string]
   index   : string option[int]
   rindex  : string option[int]
   replace : string string string
-  trim    : string
   starts  : string bool
   ends    : string bool
   has     : string bool
+  trim    : string
+  reverse : string
   repeat  : int string
   i8      : option[i8]
   i16     : option[i16]
@@ -136,25 +138,25 @@ extern tuple ...a:
 
 extern list a:
   get      : int a!
-  set      : int a a!       # modify self
   nget     : int a!
   nset     : int a! a!
   tget     : int option[a]
   size     : int
-  concat   : list[a] list[a]
   slice    : int int list[a]
+  repeat   : int list[a]
+  concat   : list[a] list[a]
   map b    : fn[a b] list[b]
   fmap b   : fn[a list[b]] list[b]
   keep     : fn[a bool] list[a]
   all      : fn[a bool] bool
   any      : fn[a bool) bool
-  sort     : fn[a a bool] list[a]
   fold b   : fn[b a b] b b
   scan b   : fn[b a b] b list[b]
   find     : fn[a bool] option[a]
-  index    : fn[a bool] option[a]
-  rindex   : fn[a bool] option[a]
+  index    : fn[a bool] option[int]
+  rindex   : fn[a bool] option[int]
   zip b    : list[b] list[tuple[a b]]
+  sort     : fn[a a bool] list[a]
   reverse  : list[a]
   join     : string string
   has      : a bool
@@ -164,11 +166,11 @@ extern list a:
   repeat   : int list[a]
   unique   : set[a]
   push     : a a             # modify self
+  set      : int a a!        # modify self
   insert   : int a a!        # modify self
   pop      : a!              # modify self
   remove   : int a!          # modify self
   discard  : int option[a]   # modify self
-  extend   : list[a] list[a] # modify self
 
 extern set a:
   -     : set[a] set[a]
@@ -177,19 +179,19 @@ extern set a:
   ^     : set[a] set[a]
   size  : int
   has   : a bool
+  list  : list[a]
   add   : a bool  # modify self
   rid   : a bool  # modify self
-  list  : list[a]
 
 extern dict k v:
   get    : k v!
-  set    : k v v       # modify self
-  gset   : k v v       # modify self
   tget   : k option[v]
   size   : int
   has    : k bool
-  rid    : k option[v] # modify self
   keys   : list[k]
   values : list[v]
   items  : list[tuple[k v]]
   concat : dict[k v] dict[k v]
+  set    : k v v       # modify self
+  gset   : k v v       # modify self
+  rid    : k option[v] # modify self
