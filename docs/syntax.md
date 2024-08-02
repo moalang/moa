@@ -34,14 +34,10 @@ x[:]     -> x{}
 x[1:]    -> x.slice(1 x.size())
 x[:1]    -> x.slice(0 1)
 x[1:2]   -> x.slice(1 2)
-x[::]    -> x.reverse()
+x ++ y   -> x.concat(y)
+x ** y   -> x.repeat(y)
 
 object.method(...) -> __type__method(object ...)
-
-fold '' s.size.times acc, i =>
-    find range(i+1 s.size)[::] j =>
-        let ss s[i:j+1]
-        ss == ss[::] &&& ss
 ```
 
 Keyword
@@ -52,7 +48,7 @@ container : option tuple list set dict
 declare   : let var def class enum dec interface extern
 branch    : iif if else guard match
 flow      : return throw catch
-loop      : for each while continue break
+loop      : for while continue break
 global    : log assert
 ```
 
@@ -97,28 +93,17 @@ $    # undefined
 
 Loop
 ```
-let n a.size
-for range(n-1)[::] i:
-  if a[i] < a[i+1]:
-    j := range(i+2 n).fold(i+2 j,k => iif a[i] < a[j] < a[k] j k)
-    a.swap(i j)
-    a[i+1:].sort(<)
-else: a.sort(<)
-
-let n a.size
-for range(n-1)[::] i =>
-  if a[i] < a[i+1]:
-    j := range(i+2 n).fold(i+2 j,k => iif a[i] < a[j] < a[k] j k)
-    a.swap(i j)
-    a[i+1:].sort(<)
-else: a.sort(<)
-
-each ..3 n: log n       # 0 1 2
-each 1..3 n: log n      # 1 2
-each 1..3 n: log n      # 1 2
-each "abc" c: log c     # a b c
-each "abc" c i: log c i # a 0 b 1 c 2
-while a < b: c
+for i<n { ... }                          # for 0 to n - 1
+for n>i { ... }                          # for n - 1 to 0
+for i=1<n { ... }                        # for 1 to n - 1
+for n>i=1 { ... }                        # for n - 1 to 1
+for acc=0 i<n { ... }                    # for returns value
+for x:xs { ... }                         # for each
+for i<x:xs { ... }                       # for each with index
+while l<r { ... }                        # while
+while acc=0 l<r { ... }                  # while returns value
+for i<n j<m { break i }                  # nested break with label
+while acc x { while y { continue acc } } # nested continue with label
 ```
 
 Pattern match

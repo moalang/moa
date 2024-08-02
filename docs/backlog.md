@@ -2,9 +2,9 @@
 - [x] Define syntax
 - [x] Define core
 - [x] Define test
+- [x] Define block for "while", "for", "each", "continue" and "break"
 - [ ] Compile to JavaScript
 - [ ] Compile to Go
-- [ ] Define block for "while", "for", "each", "continue" and "break"
 - [ ] Define UI framework for compiled JavaScript
 - [ ] Define Backend framework for compiled Go
 - [ ] Make Web IDE
