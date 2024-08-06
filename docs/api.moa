@@ -1,24 +1,24 @@
-dec _        : _ # bottom type
-dec == a: a a bool
-dec != a: a a bool
-dec <  a: a a bool
-dec <= a: a a bool
-dec >  a: a a bool
-dec >= a: a a bool
-dec log a      : ... a a
-dec assert a   : a a _!
-dec iif a      : ...[bool a] a
-dec guard      : bool _
-dec if a       : bool a _
-dec else a     : a _
-dec throw a b  : a b
-dec catch a b  : a fn[error[b] a] a
-dec return a   : a a
-dec match a b  : a ...[bool b] b
-dec for        : _
-dec while      : bool _
-dec continue   : _
-dec break      : _
+dec _         : _ # bottom type
+dec == a      : a a bool
+dec != a      : a a bool
+dec <  a      : a a bool
+dec <= a      : a a bool
+dec >  a      : a a bool
+dec >= a      : a a bool
+dec log a     : ... a a
+dec assert a  : a a _!
+dec iif a     : ...[bool a] a
+dec guard     : bool _
+dec if a      : bool a _
+dec else a    : a _
+dec throw a b : a b
+dec catch a b : a fn[error[b] a] a
+dec return a  : a a
+dec match a b : a ...[bool b] b
+dec for       : _
+dec while     : bool _
+dec continue  : _
+dec break     : _
 
 enum bool:
   true
@@ -26,8 +26,8 @@ enum bool:
   !     : bool
   ||    : bool bool
   &&    : bool bool
-  &&& a : option[a]
-  ||| a : option[a]
+  &&& a : option[a] option[a]
+  ||| a : option[a] option[a]
 
 interface _num a:
   +     : a a
@@ -111,6 +111,8 @@ class error a:
 enum option a:
   some a
   none
+  &&&    : option[a] option[a]
+  |||    : option[a] option[a]
   bool   : bool
   then b : fn[a b] option[b]
   or     : a a
@@ -125,7 +127,6 @@ extern list a:
   _        : ...[a] list[a] # constructor
   get      : int a!
   nget     : int a!
-  nset     : int a! a!
   size     : int
   slice    : int int list[a]
   repeat   : int list[a]
@@ -151,6 +152,7 @@ extern list a:
   repeat   : int list[a]
   unique   : set[a]
   set      : int a a!  # modify in-place
+  nset     : int a! a! # modify in-place
   push     : a a       # modify and expand
   pop      : a!        # modify and shurink
 
