@@ -1,35 +1,31 @@
-interface _ a: # for all classes and enums including user defined
-  == : a bool
-  != : a bool
-  <  : a bool
-  <= : a bool
-  >  : a bool
-  >= : a bool
-
-extern _ # bottom type
-
-extern:
-  log a      : ... a a
-  assert a   : a a _!
-  iif a      : ...[bool a] a
-  guard      : bool _
-  if a b     : a b _
-  else a     : a _
-  throw a b  : a b
-  catch a b  : a fn[error[b] a] a
-  return a   : a a
-  # while    : bool _ _
-  # continue : _
-  # break    : _
-  # match
-  # for
+dec _        : _ # bottom type
+dec == a: a a bool
+dec != a: a a bool
+dec <  a: a a bool
+dec <= a: a a bool
+dec >  a: a a bool
+dec >= a: a a bool
+dec log a      : ... a a
+dec assert a   : a a _!
+dec iif a      : ...[bool a] a
+dec guard      : bool _
+dec if a       : bool a _
+dec else a     : a _
+dec throw a b  : a b
+dec catch a b  : a fn[error[b] a] a
+dec return a   : a a
+dec match a b  : a ...[bool b] b
+dec for        : _
+dec while      : bool _
+dec continue   : _
+dec break      : _
 
 enum bool:
   true
   false
-  !  : bool
-  || : bool bool
-  && : bool bool
+  !     : bool
+  ||    : bool bool
+  &&    : bool bool
   &&& a : option[a]
   ||| a : option[a]
 
@@ -42,6 +38,15 @@ interface _num a:
   **    : a a
   abs   : a
   neg   : a
+
+interface _int a:
+  _num
+  ~     : a
+  &     : a a
+  |     : a a
+  ^     : a a
+  <<    : a a
+  >>    : a a
   i8    : i8
   i16   : i16
   i32   : i32
@@ -54,17 +59,7 @@ interface _num a:
   f32   : f32
   f64   : f64
   float : float
-
-interface _int a:
-  _num
   char  : string
-  float : float
-  ~     : a
-  &     : a a
-  |     : a a
-  ^     : a a
-  <<    : a a
-  >>    : a a
 extern i8 : _int
 extern i16: _int
 extern i32: _int
@@ -103,17 +98,7 @@ extern string:
   reverse : string
   repeat  : int string
   format  : ... string
-  i8      : option[i8]
-  i16     : option[i16]
-  i32     : option[i32]
-  i64     : option[i64]
-  u8      : option[u8]
-  u16     : option[u16]
-  u32     : option[u32]
-  u64     : option[u64]
   int     : option[int]
-  f32     : option[f32]
-  f64     : option[f64]
   float   : option[float]
 
 extern fn ...
@@ -126,11 +111,10 @@ class error a:
 enum option a:
   some a
   none
-  |       : option[a] option[a]
-  bool    : bool
-  then b  : fn[a b] option[b]
-  or      : a a
-  alt     : a
+  bool   : bool
+  then b : fn[a b] option[b]
+  or     : a a
+  alt    : a
 
 extern tuple ...a:
   _        : ...a tuple[...a] # constructor
@@ -142,7 +126,6 @@ extern list a:
   get      : int a!
   nget     : int a!
   nset     : int a! a!
-  tget     : int option[a]
   size     : int
   slice    : int int list[a]
   repeat   : int list[a]
@@ -172,21 +155,20 @@ extern list a:
   pop      : a!        # modify and shurink
 
 extern set a:
-  _     : ...[a] set[a] # constructor
-  -     : set[a] set[a]
-  |     : set[a] set[a]
-  &     : set[a] set[a]
-  ^     : set[a] set[a]
-  size  : int
-  has   : a bool
-  list  : list[a]
-  add   : a bool  # modify in-place
-  rid   : a bool  # modify in-place
+  _    : ...[a] set[a] # constructor
+  -    : set[a] set[a]
+  |    : set[a] set[a]
+  &    : set[a] set[a]
+  ^    : set[a] set[a]
+  size : int
+  has  : a bool
+  list : list[a]
+  add  : a bool  # modify in-place
+  rid  : a bool  # modify in-place
 
 extern dict k v:
   _      : ...[k v] dict[k v] # constructor
-  get    : k v!
-  tget   : k option[v]
+  get    : k option[v]
   size   : int
   has    : k bool
   keys   : list[k]
