@@ -20,6 +20,9 @@ dec while     : bool _
 dec continue  : _
 dec break     : _
 
+interface any:
+  get a.type : a a
+
 enum bool:
   true
   false
@@ -120,13 +123,12 @@ enum option a:
 
 extern tuple ...a:
   _        : ...a tuple[...a] # constructor
-  nget     : int a.nth
-  nset     : int a.nth a.nth
+  get      : int a.nth
+  set      : int a.nth a.nth
 
 extern list a:
   _        : ...[a] list[a] # constructor
   get      : int a!
-  nget     : int a!
   size     : int
   slice    : int int list[a]
   repeat   : int list[a]
@@ -152,7 +154,6 @@ extern list a:
   repeat   : int list[a]
   unique   : set[a]
   set      : int a a!  # modify in-place
-  nset     : int a! a! # modify in-place
   push     : a a       # modify and expand
   pop      : a!        # modify and shurink
 

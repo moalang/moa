@@ -42,13 +42,13 @@ object.method(...) -> __type__method(object ...)
 
 Keyword
 ```
-literal   : any true false some none
+literal   : _ any true false some none
 primitive : bool int float string fn error i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
 container : option tuple list set dict
 declare   : let var def class enum dec interface extern
 branch    : iif if else guard match
 flow      : return throw catch
-loop      : for while continue break
+loop      : for each while continue break
 global    : log assert
 ```
 
@@ -91,19 +91,26 @@ $    # undefined
 `    # undefined
 ```
 
-Loop
+IO [TBD]
 ```
-for i<n { ... }                          # for 0 to n - 1
-for n>i { ... }                          # for n - 1 to 0
-for i=1<n { ... }                        # for 1 to n - 1
-for n>i=1 { ... }                        # for n - 1 to 1
-for acc=0 i<n { ... }                    # for returns value
-for x:xs { ... }                         # for each
-for i<x:xs { ... }                       # for each with index
-while l<r { ... }                        # while
-while acc=0 l<r { ... }                  # while returns value
-for i<n j<m { break i }                  # nested break with label
-while acc x { while y { continue acc } } # nested continue with label
+sh('ls -alF')                 # string or exception
+sh('ls' dir)                  # string or exception
+sh.py('1').int                # int or exception
+sh.py('[1]').list[int]        # list[int] or exception
+sh.js('location.href').string # string or exception
+```
+
+Loop [TBD]
+```
+for i 3: ...                       # 0 1 2
+for i = 1 < 3: ...                 # 1 2   # TBD
+for i = 2 >= 0: ...                # 2 1 0 # TBD
+for i = 1 <= 5 +=2: ...            # 1 3 5 # TBD
+each x xs: ...                     # each item
+each i x xs: ...                   # each item with index
+while l < r: ...                   # while
+for i n: for j m: break.i          # nested break with index
+while.z l < r: while m: continue.z # nested continue with label # TBD
 ```
 
 Pattern match
