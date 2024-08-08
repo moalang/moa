@@ -3,20 +3,23 @@
 top: line+
 line: exp+ (":" block)? comment? "\n"
 block: ("\n  " line)+ | line
-exp: op1? atom (op2 exp)?
+exp:
+| op1? atom (op2 exp)?
+| id ("," id+ )* "=>" block               # a,b => c        -> fn(a b c)
 atom:
 | "(" exp ")"
-| bottom (prop | call | copy)*
-prop: "." (id | [0-9]+)       # property access
-call: "(" exp* ")"            # call function
-index: "[" exp+ "]"           # index access or generic
+| bottom (prop | call)*
+prop: "." (id | [0-9]+)                   # property access
+call: "(" exp* ")"                        # call function
+index: "[" exp+ "]"                       # index access or generic
 bottom:
-| "(" exp ")"                 # 1 * (2 + 3)
-| "[" exp* "]"                # [1 2 3] -> list(1 2 3)
-| "-"? [0-9]+ ("." [0-9]+)?   # -1.2
-| "-"? "0x" [0-9a-fA-F_]+     # 0xff -> 255
-| '"' [^"]* '"'               # "string"
-| '"""' [^"]* '"""'           # """a="b"""" -> "a=\"b\""
+| "(" exp ")"                             # 1 * (2 + 3)
+| "[" exp? ":" exp? "]"                   # [:3] -> [0 1 2]
+| "[" exp* "]"                            # [1 2 3] -> list(1 2 3)
+| "-"? [0-9]+ ("." [0-9]+)? ("e" [0-9]+)? # -1.2
+| "-"? "0x" [0-9a-fA-F_]+                 # 0xff -> 255
+| '"' [^"]* '"'                           # "string"
+| '"""' [^"]* '"""'                       # """a="b"""" -> "a=\"b\""
 | id [?]?
 op1: [!-~] | "..."
 op2: [+-*/%<>|&^=!]+
@@ -24,51 +27,27 @@ id: [A-Za-z_][A-Za-z0-9_]*
 comment: "//" [^\n]*
 ```
 
-Keyword
-```
-literal   : _ any true false some none
-primitive : bool int float string fn error i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
-container : option tuple list set dict
-declare   : let var def class enum dec interface extern
-branch    : iif if else guard match
-flow      : return throw catch
-loop      : for each while continue break
-global    : log assert
-```
-
-Syntax sugar [TBD]
-```
-x.0       -> x.get(0)
-x.0 = a   -> x.set(0 a)
-x[a]      -> x.get(a)
-x[a] = b  -> x.set(a b)
-x[:]      -> x{}
-x[1:]     -> x.slice(1 x.size())
-x[:1]     -> x.slice(0 1)
-x[1:2]    -> x.slice(1 2)
-[0:3]     -> [1 2]
-[4:-1:-2] -> [4 2 0]
-x ++ y    -> x.concat(y)
-x ** y    -> x.repeat(y)
-0xff      -> 255
-1e3       -> 1000
-```
-
-Reserved word
-```
-_
-bytes regexp time duration stream num decimal array
-use module
-```
-
-Operators
+Operator
 ```
 ! - ~           # Unray
 || &&           # Boolean
 + - * ** / %    # Arithmetic
 & | ^ << >>     # Bit
 == != < <= > >= # Compare
-=               # Update
+=               # Override
+```
+
+Keyword
+```
+literal   : _ true false some none
+primitive : _ bool int float string fn error i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
+container : option tuple list set dict
+declare   : let var def class enum dec interface extern
+branch    : iif if else guard match
+flow      : return throw catch
+loop      : for each while continue break
+global    : log assert
+reserved  : _ bytes regexp time duration stream num decimal array use module
 ```
 
 Symbols
@@ -81,10 +60,9 @@ _    # part of id
 "    # string
 #    # comment
 :    # block
-->   # matcher
+=>   # lambda
+,    # argument separator of lambda
 { }  # reserved for class
-=>   # reserved for lambda
-,    # reserved for argument separator of lambda
 ;    # undefined
 ?    # undefined
 \    # undefined
@@ -117,10 +95,6 @@ dec g a.num: ...a int
 def g ...ns: n.fold(+)
 dec h: ... _
 def h ...o: log ...o
-def show2:
-  0      => "zero"
-  .float => "float"
-  x      => x
 class v2:
   x int
   y int
@@ -137,75 +111,41 @@ iif:
 if cond1: log 1
 else if cond2: log 2
 else: log 3
-match b(7):
-  .a  => "a"
-  v.b => "b {}".format(v)
-  v.c => "c {}".format(v)
-catch throw(3):
-  _.abc => log "enum abc"
-  e.int => log e.data
-  e     => log e
+if:
+  cond1: log 1
+  cond2: log 2
+  _    : log 3
+catch throw(3) e => log e.message e.stack
+catch throw(b(1)) e => match e.data:
+  a: "a"
+  b v: "b {}".format(v)
+  c v: "c {}".format(v)
 
-guard n < 0     # return 0
+guard n < 0     # return returned_type()
 guard n == 1: 1 # return 1
 if n < 0: return 0
 
 for i 3: continue
 while true: break
+each i x [5::-2]: log i x # 0 4 1 2 2 0 # TBD
 ```
 
 IO [TBD]
 ```
-sh('ls -alF')                 # string or exception
-sh('ls' dir)                  # string or exception
-sh.py('1').int                # int or exception
-sh.py('[1]').list[int]        # list[int] or exception
-sh.js('location.href').string # string or exception
+sh('ls' '-alF') # string or exception
 ```
 
 Loop [TBD]
 ```
 for i 3: ...                       # 0 1 2
-for i = 1 < 3: ...                 # 1 2   # TBD
-for i = 2 >= 0: ...                # 2 1 0 # TBD
-for i = 1 <= 5 +=2: ...            # 1 3 5 # TBD
+for i = 1 < 3: ...                 # 1 2
+for i = 2 >= 0: ...                # 2 1 0
+for i = 1 <= 5 +=2: ...            # 1 3 5
 each x xs: ...                     # each item
 each i x xs: ...                   # each item with index
 while l < r: ...                   # while
 for i n: for j m: break.i          # nested break with index
 while.z l < r: while m: continue.z # nested continue with label # TBD
-```
-
-Lambda [TBD]
-```
-lambda: arg ("," arg)* "=>" block
-arg: id ("." type)? ("=" exp)?
-type: id ("." id)* ("[" type+ "]")? ("(" case ")")?
-```
-
-Pattern match
-```
-match: "match" exp ":" ("\n  " type id? ":" block)+
-type: id ("." id)* ("[" type+ "]")? ("(" case ")")?
-
-enum ab t:
-  a
-  b int
-
-def show t:
-  match t:
-    a: "a"
-    b n: b.string
-
-def f g:
-  catch(g() fn(e: match(e.detail
-    int n: "error code {}".format(n)
-    _: "some error")))
-
-def f g:
-  catch g():
-    int e: "error code {}".format(e.info)
-    _: "some error"
 ```
 
 
@@ -220,12 +160,10 @@ def string.slice
 | count.int                   : ...
 | start.int count.int         : ...
 | start.int count.int step.int: ...
-def f ?a: a         # f() returns option[_], f(1) returns option[int]
-def f a=1: a        # f() is f(1)
-def f ...a: a       # f(), f(1) or f(1 2)
-def f ...a,: a      # f(), f(1 "a"), f(1 "a" 2 "b")
-def f ...a,,: a     # f(), f(1 "a" true), f(1 "a" true 2 "b" false)
-def f ...a: g(...a) # f(1 2) will call g(1 2)
+def f a?: a    # f() returns option[_], f(1) returns option[int]
+def f a=1: a   # f() is f(1)
+
+a,b=1 => a + b
 ```
 
 idea: Named argument
@@ -328,15 +266,11 @@ exp:
 atom:
 | "(" exp ")"
 | bottom (prop | call | index | copy | key)*
-copy: "{" id* (id "=" atom)* "}"   # copy with updates
+copy: "{" id* (id "=" atom)* "}"   # copy with new values
 key: "." (id | [0-9]+) [!?] type?  # a.b!            -> a.at("b"), a.b? -> a.get("b")
 bottom:
 | "[" ":" | (atom ":" atom)+ "]"   # ["x":1 ("y"):2] -> dict("x" 1 "y" 2)
 | "{" id* (id "=" atom)* "}"  # {x y=1}
-| "-"? [0-9]+ "e" [0-9]+           # 1e3             -> 100
-| "-"? "0o" [0-7_]+                # 0o11            -> 9
-| "-"? "0b" [0-1_]+                # 0b11            -> 3
-| "-"? [0-9][0-9_]+ ("." [0-9_]+)? # 10_000.1_002    -> 10000.1002
 ```
 
 idea: Pattern matching
@@ -364,16 +298,4 @@ def validate t:
     node {value left.node right.leaf}: left.value <= value && validate(left)
     node {value left.leaf right.node}: value <= right.value && validate(right)
     node {value left.node right.node}: left.value <= value <= right.value && validate(left) && validate(right)
-```
-
-idea: Error handling
-```
-catch: "catch" exp id? ":" ("\n  " type id? ("if" exp) ":" block)+
-type: id ("." id)* ("[" type+ "]")? ("(" case ")")?
-
-def calc f:
-  catch f():
-    int n if n == 0: "zero"
-    int n: n.string()
-    _: ""
 ```
