@@ -14,30 +14,14 @@ bottom:
 | "(" exp ")"                 # 1 * (2 + 3)
 | "[" exp* "]"                # [1 2 3] -> list(1 2 3)
 | "-"? [0-9]+ ("." [0-9]+)?   # -1.2
-| "-"? "0x" [0-9a-fA-F_]+     # 0xff    -> 255
+| "-"? "0x" [0-9a-fA-F_]+     # 0xff -> 255
 | '"' [^"]* '"'               # "string"
-| '"""' [^"]* '"""'           # """a="b""""     -> "a=\"b\""
+| '"""' [^"]* '"""'           # """a="b"""" -> "a=\"b\""
 | id [?]?
 op1: [!-~] | "..."
 op2: [+-*/%<>|&^=!]+
 id: [A-Za-z_][A-Za-z0-9_]*
 comment: "//" [^\n]*
-```
-
-Syntax sugar [TBD]
-```
-x.0      -> x.nget(0)
-x.0 = a  -> x.nset(0 a)
-x[a]     -> x.get(a)
-x[a] = b -> x.set(a b)
-x[:]     -> x{}
-x[1:]    -> x.slice(1 x.size())
-x[:1]    -> x.slice(0 1)
-x[1:2]   -> x.slice(1 2)
-x ++ y   -> x.concat(y)
-x ** y   -> x.repeat(y)
-
-object.method(...) -> __type__method(object ...)
 ```
 
 Keyword
@@ -52,11 +36,29 @@ loop      : for each while continue break
 global    : log assert
 ```
 
+Syntax sugar [TBD]
+```
+x.0       -> x.get(0)
+x.0 = a   -> x.set(0 a)
+x[a]      -> x.get(a)
+x[a] = b  -> x.set(a b)
+x[:]      -> x{}
+x[1:]     -> x.slice(1 x.size())
+x[:1]     -> x.slice(0 1)
+x[1:2]    -> x.slice(1 2)
+[0:3]     -> [1 2]
+[4:-1:-2] -> [4 2 0]
+x ++ y    -> x.concat(y)
+x ** y    -> x.repeat(y)
+0xff      -> 255
+1e3       -> 1000
+```
+
 Reserved word
 ```
+_
 bytes regexp time duration stream num decimal array
 use module
-_ __[.*]
 ```
 
 Operators
@@ -79,6 +81,7 @@ _    # part of id
 "    # string
 #    # comment
 :    # block
+->   # matcher
 { }  # reserved for class
 =>   # reserved for lambda
 ,    # reserved for argument separator of lambda
@@ -89,6 +92,66 @@ _    # part of id
 $    # undefined
 @    # undefined
 `    # undefined
+```
+
+Example
+```
+true
+1
+1.1
+"a"
+"""a"""
+fn(1)()
+fn(a a)(1)
+fn(a b: a + b)(1 2)
+tuple(1 "a").0
+[1 2]
+set(1 2)
+dict("a" 1 "b" 2)
+
+var a 1: a += 1
+let a 1: a += 1
+dec f a: a a bool
+def f x y: x == y
+dec g a.num: ...a int
+def g ...ns: n.fold(+)
+dec h: ... _
+def h ...o: log ...o
+def show2:
+  0      => "zero"
+  .float => "float"
+  x      => x
+class v2:
+  x int
+  y int
+enum abc:
+  a
+  b int
+  c: d bool
+
+iif false 1 true 2 3
+iif:
+  a > b: c
+  d    : e
+  : f
+if cond1: log 1
+else if cond2: log 2
+else: log 3
+match b(7):
+  .a  => "a"
+  v.b => "b {}".format(v)
+  v.c => "c {}".format(v)
+catch throw(3):
+  _.abc => log "enum abc"
+  e.int => log e.data
+  e     => log e
+
+guard n < 0     # return 0
+guard n == 1: 1 # return 1
+if n < 0: return 0
+
+for i 3: continue
+while true: break
 ```
 
 IO [TBD]
@@ -111,6 +174,13 @@ each i x xs: ...                   # each item with index
 while l < r: ...                   # while
 for i n: for j m: break.i          # nested break with index
 while.z l < r: while m: continue.z # nested continue with label # TBD
+```
+
+Lambda [TBD]
+```
+lambda: arg ("," arg)* "=>" block
+arg: id ("." type)? ("=" exp)?
+type: id ("." id)* ("[" type+ "]")? ("(" case ")")?
 ```
 
 Pattern match

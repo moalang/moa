@@ -14,7 +14,7 @@ dec else a    : a _
 dec throw a b : a b
 dec catch a b : a fn[error[b] a] a
 dec return a  : a a
-dec match a b : a ...[bool b] b
+dec match a b : a ...fn[a option[b]] b
 dec for       : _
 dec while     : bool _
 dec continue  : _
