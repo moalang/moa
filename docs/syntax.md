@@ -62,6 +62,7 @@ _    # part of id
 :    # block
 =>   # lambda
 ,    # argument separator of lambda
+::   # reserved for `where` of Haskell
 { }  # reserved for class
 ;    # undefined
 ?    # undefined
@@ -127,7 +128,21 @@ if n < 0: return 0
 
 for i 3: continue
 while true: break
-each i x [5::-2]: log i x # 0 4 1 2 2 0 # TBD
+```
+
+Foreign function interface [TBD]
+```
+ffi ymd:
+  y int
+  m int
+  d int
+
+ffi.js date:
+  _     : date     : js new Date()
+  year  : int      : js getFullYear()
+  month : int      : js getMonth() + 1
+  day   : int      : js getDate()
+  to    : int date : js (self, n) => { const d = new Date(self.getTime()); d.setDate(d.getDate() + n); return d }
 ```
 
 IO [TBD]
@@ -229,7 +244,7 @@ class vector1.num:
 
 idea: Duration
 ```
-"-"? ([0-9]+ ("d" | "h" | "m" | "s" | "ms" | "us" | "ns"))+ # 1h2m3s -> duration(hour=1 minute=30 second=3)
+"-"? ([0-9]+ ("w" | "d" | "h" | "m" | "s" | "ms" | "us" | "ns"))+ # 1h2m3s -> duration(hour=1 minute=30 second=3)
 ```
 
 idea: Regexp
@@ -243,6 +258,15 @@ atom: bottom (... | copy | key)*
 copy: "{" id* (id "=" atom)* "}"   # copy with new values
 key: "." (id | [0-9]+) [!?] type?  # a.b! -> a.at("b"), a.b? -> a.get("b")
 bottom: "{" id* (id "=" atom)* "}" # {x y=1}
+```
+
+idea: Where
+```
+def fib n:
+  a.map(f):: # fib(5) -> [1 3 6 10 16]
+    var sum 1
+    let a [:n]
+    def f x: sum += x
 ```
 
 idea: Pattern matching
