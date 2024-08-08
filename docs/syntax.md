@@ -152,29 +152,30 @@ while.z l < r: while m: continue.z # nested continue with label # TBD
 
 # Ideas
 
-idea: Variadic argument
+idea: Optional argument
 ```
-dec string.slice: string int int?     int?     string
-dec string.slice: string int int=none int=none string
+dec string.slice: string int int? int? string
 def string.slice
-| count.int                   : ...
-| start.int count.int         : ...
-| start.int count.int step.int: ...
-def f a?: a    # f() returns option[_], f(1) returns option[int]
-def f a=1: a   # f() is f(1)
+| count           : ...
+| start count     : ...
+| start count step: ...
+def f a?: a    # f() -> _, f(1) -> int, a is option[T] in the function
+def f a=1: a   # f() -> f(1)
 
-a,b=1 => a + b
+(a,b=1 => a + b)(1) # 2
 ```
 
 idea: Named argument
 ```
-def f a{}    : a  # f(a=1 b=2) returns list[tuple[string int]]
-def f {a}    : a  # f(a=1)
-def f {a?}   : a  # f() or f(a=1)
-def f {a=0}  : a  # f() or f(a=1)
-def f {a b}  : a  # f(a=1 b=2) or f(b=2 a=1)
-def f {a b=0}: a  # f(a=1), f(a=1 b=2) or f(b=2 a=1)
-def f {a b}? : a  # f() or f(a=1 b=2)
+def f a{}    : a     # f(a=1 b=2) -> list[tuple[string int]]
+def f a{}    : g a   # f(a=1) -> g(a=1) 
+def f {a}    : a     # f(a=1) -> 1
+def f {a?}   : a     # f() or f(a=1)
+def f {a=0}  : a     # f() or f(a=1)
+def f {a b}  : a     # f(a=1 b=2) or f(b=2 a=1)
+def f {a b=0}: a     # f(a=1), f(a=1 b=2) or f(b=2 a=1)
+def f {a}?   : a     # f() -> option[_], f(a=1) -> 1
+def f a {b}  : a + b # f(1 b=2) -> 3
 ```
 
 idea: Typed argument
@@ -183,24 +184,16 @@ dec flatten a                 : list[list[a]] list[a]
 def flatten[t] a.list[list[t]]: a.map(x => x)
 def flatten a: a.map(x => x)
 
-dec sum t{.zero[t] +[t t t]}   : list[t] t
-def sum[t{.zero[t] +[t t t]}] a.list[t]:
-    let n t.zero: each m a: n += m
-def sum[t] a[list[t]]:
+dec sum t{+[t t t]}   : list[t] t
+def sum[t{+[t t t]}] a.list[t]:
+    let n t: each m a: n += m
+def sum[t] a.list[t]:
     let n t.zero: each m a: n += m
 def sum a:
-    let n typeof(a).0.zero: each m a: += m
-
-dec product t{.one[t] *[t t t]}: list[t] t
-def product[t{.one[t] *[t t t]}] a[list[t]]:
-    let n t.one: each m a: n *= m
-def product[t] a[list[t]]:
-    let n t.one: each m a: n *= m
-def product a:
-    let n typeof(a).0.one: each m a: n *= m
+    let n: each m a: n += m
 
 dec nth t: dict[int t] int t!
-def nth[t] d[dict[int t]] n[int]:
+def nth[t] d.dict[int t] n.int:
     d[n]
 def nth d n:
     d[n]
@@ -211,41 +204,27 @@ idea: Method
 class vector2:
   x int
   y iny
+  show1 v: "({}, {})".format v.x v.y
 
-def vector2.show v:
+def vector2.show2 v:
   "({}, {})".format v.x v.y
 
 def f:
-  vector2(1 2).show # (1, 2)
-```
-
-idea: Type alias
-```
-class seconds = int
-
-def seconds.milliseconds n:
-  n * 1000
-
-def f:
-  seconds(3).milliseconds # 3000
+  vector2(1 2).show1 # (1, 2)
+  vector2(1 2).show2 # (1, 2)
 ```
 
 idea: Interface
 ```
 interface num t:
-  (+ - * / % **) t t t
+  (+ -) t t t
 
-class vector2:
+class vector1:
   x int
-  y int
 
-class vector2.num:
-   + l r: vector2 (l.x  + r.x) (l.y  + r.y)
-   - l r: vector2 (l.x  - r.x) (l.y  - r.y)
-   * l r: vector2 (l.x  * r.x) (l.y  * r.y)
-   / l r: vector2 (l.x  / r.x) (l.y  % r.y)
-   % l r: vector2 (l.x  / r.x) (l.y  % r.y)
-  ** l r: vector2 (l.x ** r.x) (l.y ** r.y)
+class vector1.num:
+  + l r: vector1 (l.x + r.x)
+  - l r: vector1 (l.x - r.x)
 ```
 
 idea: Duration
@@ -260,17 +239,10 @@ re"[0-9]+"
 
 idea: Sugar
 ```
-exp:
-| id ("," id+ )* "=>" exp | block  # a,b => c        -> fn(a b c)
-| op1? atom (op2 exp)?
-atom:
-| "(" exp ")"
-| bottom (prop | call | index | copy | key)*
+atom: bottom (... | copy | key)*
 copy: "{" id* (id "=" atom)* "}"   # copy with new values
-key: "." (id | [0-9]+) [!?] type?  # a.b!            -> a.at("b"), a.b? -> a.get("b")
-bottom:
-| "[" ":" | (atom ":" atom)+ "]"   # ["x":1 ("y"):2] -> dict("x" 1 "y" 2)
-| "{" id* (id "=" atom)* "}"  # {x y=1}
+key: "." (id | [0-9]+) [!?] type?  # a.b! -> a.at("b"), a.b? -> a.get("b")
+bottom: "{" id* (id "=" atom)* "}" # {x y=1}
 ```
 
 idea: Pattern matching
