@@ -39,7 +39,7 @@ Operator
 
 Keyword
 ```
-literal   : _ true false some none
+literal   : _ ... true false some none
 primitive : _ bool int float string fn error i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
 container : option tuple list set dict
 declare   : let var def class enum dec interface extern
@@ -47,7 +47,7 @@ branch    : iif if else guard match
 flow      : return throw catch
 loop      : for each while continue break
 global    : log assert
-reserved  : _ bytes regexp time duration stream num decimal array import export
+reserved  : __.* bytes regexp time duration stream num decimal array import export
 ```
 
 Symbols
@@ -133,23 +133,23 @@ while true: break
 Foreign function interface [TBD]
 ```
 def log n:
-  __native__.log(n) + __c__.log(n) + __go__.log(n) + __js__.log(n)
+  __native.log(n) + __c.log(n) + __go.log(n) + __js.log(n)
 
 def ps:
-  __shell__("ps").split("\n")
+  __sh("ps").split("\n")
 
-__native__
+__native
 log float float
 
-__c__
+__c
 #include <math.h>
 double moa_log(double n) { return log(n); }
 
-__go__
+__go
 import "math"
 func Moa_log(n float64) float64 { return math.Log(n) }
 
-__js__
+__js
 export const moa_log = n => Math.log(n)
 ```
 
