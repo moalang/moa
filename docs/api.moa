@@ -51,15 +51,15 @@ interface _int a:
   int      : int
   float    : float
   char     : string
-extern i8 : _int
-extern i16: _int
-extern i32: _int
-extern i64: _int
-extern u8 : _int
-extern u16: _int
-extern u32: _int
-extern u64: _int
-extern int: _int
+class i8 : _int
+class i16: _int
+class i32: _int
+class i64: _int
+class u8 : _int
+class u16: _int
+class u32: _int
+class u64: _int
+class int: _int
 
 interface _float a:
   _num
@@ -68,11 +68,11 @@ interface _float a:
   round : int
   isinf : bool
   isnan : bool
-extern f32: _float
-extern f64: _float
-extern float: _float
+class f32: _float
+class f64: _float
+class float: _float
 
-extern string:
+class string:
   _       : _ string # constructor
   size    : int
   concat  : string string
@@ -92,7 +92,7 @@ extern string:
   int     : option[int]
   float   : option[float]
 
-extern fn ...
+class fn ...
 
 class error a:
   message string
@@ -109,12 +109,12 @@ enum option a:
   or     : a a
   alt    : a
 
-extern tuple ...a:
+class tuple ...a:
   _        : ...a tuple[...a] # constructor
   []       : int a.nth
   []=      : int a.nth a.nth
 
-extern list a:
+class list a:
   _        : ...[a] list[a] # constructor
   []       : int a!
   size     : int
@@ -144,7 +144,7 @@ extern list a:
   push     : a a       # modify and expand
   pop      : a!        # modify and shurink
 
-extern set a:
+class set a:
   _    : ...[a] set[a] # constructor
   -    : set[a] set[a]
   |    : set[a] set[a]
@@ -156,7 +156,7 @@ extern set a:
   add  : a bool  # modify in-place
   rid  : a bool  # modify in-place
 
-extern dict k v:
+class dict k v:
   _      : ...[k v] dict[k v] # constructor
   []     : k option[v]
   size   : int

@@ -47,7 +47,7 @@ branch    : iif if else guard match
 flow      : return throw catch
 loop      : for each while continue break
 global    : log assert
-reserved  : _ bytes regexp time duration stream num decimal array use module
+reserved  : _ bytes regexp time duration stream num decimal array import export
 ```
 
 Symbols
@@ -132,22 +132,25 @@ while true: break
 
 Foreign function interface [TBD]
 ```
-ffi ymd:
-  y int
-  m int
-  d int
+def log n:
+  __native__.log(n) + __c__.log(n) + __go__.log(n) + __js__.log(n)
 
-ffi.js date:
-  _     : date     : js new Date()
-  year  : int      : js getFullYear()
-  month : int      : js getMonth() + 1
-  day   : int      : js getDate()
-  to    : int date : js (self, n) => { const d = new Date(self.getTime()); d.setDate(d.getDate() + n); return d }
-```
+def ps:
+  __shell__("ps").split("\n")
 
-IO [TBD]
-```
-sh('ls' '-alF') # string or exception
+__native__
+log float float
+
+__c__
+#include <math.h>
+double moa_log(double n) { return log(n); }
+
+__go__
+import "math"
+func Moa_log(n float64) float64 { return math.Log(n) }
+
+__js__
+export const moa_log = n => Math.log(n)
 ```
 
 Loop [TBD]
