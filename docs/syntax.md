@@ -133,13 +133,13 @@ while true: break
 Foreign function interface [TBD]
 ```
 def log n:
-  __native.log(n) + __c.log(n) + __go.log(n) + __js.log(n)
+  __c.log(n) + __go.log(n) + __js.log(n)
 
 def ps:
   __sh("ps").split("\n")
 
-__native
-log float float
+__moa
+def log n: n ** n # fallback if the target language has no implementation
 
 __c
 #include <math.h>
