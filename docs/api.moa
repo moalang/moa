@@ -30,15 +30,15 @@ enum bool:
   ||| a : option[a] option[a]
 
 interface _num a:
-  _ b._num: b a
-  +       : a a
-  -       : a a
-  *       : a a
-  /       : a a
-  %       : a a
-  **      : a a
-  abs     : a
-  neg     : a
+ ()_ b._num: b a
+  +        : a a
+  -        : a a
+  *        : a a
+  /        : a a
+  %        : a a
+  **       : a a
+  abs      : a
+  neg      : a
 
 interface _int a:
   _num
@@ -73,7 +73,7 @@ class f64: _float
 class float: _float
 
 class string:
-  _       : _ string # constructor
+  ()      : _ string
   size    : int
   concat  : string string
   slice   : int int string
@@ -110,12 +110,12 @@ enum option a:
   alt    : a
 
 class tuple ...a:
-  _        : ...a tuple[...a] # constructor
+  ()       : ...a tuple[...a]
   []       : int a.nth
   []=      : int a.nth a.nth
 
 class list a:
-  _        : ...[a] list[a] # constructor
+  ()       : ...[a] list[a]
   []       : int a!
   size     : int
   slice    : int int list[a]
@@ -145,7 +145,7 @@ class list a:
   pop      : a!        # modify and shurink
 
 class set a:
-  _    : ...[a] set[a] # constructor
+  ()   : ...[a] set[a]
   -    : set[a] set[a]
   |    : set[a] set[a]
   &    : set[a] set[a]
@@ -157,7 +157,7 @@ class set a:
   rid  : a bool  # modify in-place
 
 class dict k v:
-  _      : ...[k v] dict[k v] # constructor
+  ()     : ...[k v] dict[k v]
   []     : k option[v]
   size   : int
   has    : k bool
