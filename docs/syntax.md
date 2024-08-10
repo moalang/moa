@@ -294,7 +294,15 @@ enum tree t:
 def validate t:
   match t:
     leaf: true
-    node {value left.node right.leaf}: left.value <= value && validate(left)
-    node {value left.leaf right.node}: value <= right.value && validate(right)
-    node {value left.node right.node}: left.value <= value <= right.value && validate(left) && validate(right)
+    node{value=0}                   : false
+    node{value} if value.isnan()    : false
+    node{left=leaf right=leaf}      : true
+    node{value left=node right=leaf}: left.value <= value && validate(left)
+    node{value left=leaf right=node}: value <= right.value && validate(right)
+    node{value left=node right=node}: left.value <= value <= right.value && validate(left) && validate(right)
+
+match a:
+  []: "empty"
+  [n n _ _ _]: "pair"
+  [n n m m m]: "fullhouse"
 ```
