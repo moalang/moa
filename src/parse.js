@@ -8,9 +8,6 @@ const string = o =>
 const log = o => { console.dir(o, {depth: null}); return o }
 const fail = (m, ...a) => { throw new Error(m + ': ' + a.map(string).join(' ')) }
 const parse = source => {
-  if (source.trim().length === 0) {
-    return []
-  }
   // operator | symbols | string | number | id | white spaces
   const regexp = /(\.\.\.[A-Za-z_]*|[!~+\-*/%<>:!=^|&]+|[()\[\]{}]|""".*?"""|"[^]*?(?<!\\)"|-?[0-9]+[0-9_]*(?:\.[0-9_]+)|[0-9A-Za-z_]+|(?:#[^\n]*|[ \n])+)/
   let offset = 0
