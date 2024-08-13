@@ -23,6 +23,7 @@ syn keyword Conditional iif if else guard match
 syn keyword Repeat      for while
 syn keyword keyword     continue break return throw catch assert log
 syn keyword Keyword     use module math array nume decimal i8 i16 i32 i64 u8 u16 u32 u64 f32 f64
+syn keyword Define      where sub
 syn match Operator /[-+%<>!&|^*=]=\?/
 syn match Operator "||"
 syn match Operator "&&"
