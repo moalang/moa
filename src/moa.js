@@ -1,6 +1,30 @@
 #!node
 'use strict'
 
+/*
+top: exp+ ([\n;] exp+)*
+exp:
+| op1? atom (op2 exp)?
+| id ("," id+ )* "=>" exp
+atom: bottom (prop | call | copy | slice)*
+prop: "." (id | [0-9]+)                   # property access
+call: "(" exp* ")"                        # call function
+index: "[" exp* "]"                       # index access or generic
+copy: "{" top "}"                         # copy with new value
+slice: "[" exp? ":" exp? "]"              # slice
+bottom:
+| call | index | copy | slice
+| "-"? [0-9]+ ("." [0-9]+)? ("e" [0-9]+)? # -1.2
+| "-"? "0x" [0-9a-fA-F_]+                 # 0xff -> 255
+| '"' [^"]* '"'                           # "string"
+| '"""' [^"]* '"""'                       # """a="b"""" -> "a=\"b\""
+| id
+op1: [!-~] | "..."
+op2: [+-/*%<>|&^=!]+
+id: [A-Za-z_][A-Za-z0-9_]*
+comment: "//" [^\n]*
+*/
+
 class TypeError extends Error {}
 const log = o => { console.dir(o, {depth: null}); return o }
 const str = o => JSON.stringify(o, null, '  ')

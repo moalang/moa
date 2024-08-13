@@ -2,7 +2,6 @@
 const assert = require('node:assert/strict')
 const test = require('node:test').test
 const vm = require('node:vm')
-require('child_process').exec
 
 const { main, toJs, runtimeJs } = require('./moa.js')
 
