@@ -9,7 +9,7 @@ line:
 exp:
 | op1? atom (op2 exp)?
 | id ("," id+ )* "=>" exp
-atom: bottom (prop | call | copy)* type?
+atom: bottom (prop | call | copy)*
 prop: "." (id | [0-9]+)                   # property access
 call: "(" exp* ")"                        # call function
 index: "[" exp* "]"                       # index access or generic
@@ -24,8 +24,6 @@ bottom:
 op1: [!-~] | "..."
 op2: [+-/*%<>|&^=!]+
 id: [A-Za-z_][A-Za-z0-9_]*
-type: ":" atom
-comment: "//" [^\n]*
 */
 
 /* API
