@@ -219,6 +219,7 @@ function tokenize(source) {
 function parse(tokens) {
   let pos = 0
   const br = /[;\n]/
+  const space = /[ \t\n]/
   function parseTop() {
     return loop(() => true, parseLine)
   }
@@ -227,11 +228,11 @@ function parse(tokens) {
   }
   function parseExp(token) {
     // TODO: a,b => c
-    let lhs = op1.includes(token.code) ? [token, parseAtom(tokens[pos++])] : parseAtom(token)
-    let lp = Math.inf
+    let lhs = op1.includes(token.code) ? [token, parseAtom(consume())] : parseAtom(token)
+    let lp = 255
     til(({code}) => op2.includes(code), token => {
       const rp = op2.findIndex(op => op === token.code)
-      lhs = lp < rp ? [token, lhs, parseAtom(tokens[pos++])] : [lhs[0], lhs[1], [token, lhs[2], parseAtom(tokens[pos++])]]
+      lhs = lp > rp ? [token, lhs, parseAtom(consume())] : [lhs[0], lhs[1], [token, lhs[2], parseAtom(consume())]]
       lp = rp
     })
     return lhs
@@ -249,8 +250,15 @@ function parse(tokens) {
     }
     return token.code.startsWith('"""') ? {...token, code: JSON.stringify(token.code.slice(3, -3))} : token
   }
+  function consume() {
+    look()
+    return tokens[pos++]
+  }
+  function look() {
+    return space.test(tokens[pos].code) ? tokens[++pos] : tokens[pos]
+  }
   function til(f, g, h) {
-    return loop(() => f(tokens[pos]), () => g(tokens[pos++]), () => h(tokens[pos]))
+    return loop(() => f(look()), () => g(consume()), () => h && h(look()))
   }
   function loop(f, g, h) {
     const a = []
@@ -273,12 +281,13 @@ function compileToJs(root) {
       const [head, ...tail] = node.map(toJs)
       return tail.length === 1 && op1.includes(head) ? `(${head}${tail[0]})` :
         tail.length === 2 && op2.includes(head) ? `(${tail[0]} ${head} ${tail[1]})` :
+        head === 'var' ? 'let ' + tail[0].slice(1, -1) :
         head + '(' + tail.join(', ') + ')'
     } else {
       return node.code
     }
   }
-  return root.map(x => x.length === 1 ? toJs(x[0]) : toJs(x)).join('\n')
+  return root.map(x => x.length === 1 ? toJs(x[0]) : toJs(x)).join(';\n')
 }
 
 function toJs(source) {
