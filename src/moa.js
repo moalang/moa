@@ -275,10 +275,10 @@ function infer(root) {
   return root
 }
 
-function compileToJs(root) {
-  function toJs(node) {
+function toJs(source) {
+  function toCode(node) {
     if (Array.isArray(node)) {
-      const [head, ...tail] = node.map(toJs)
+      const [head, ...tail] = node.map(toCode)
       return tail.length === 1 && op1.includes(head) ? `(${head}${tail[0]})` :
         tail.length === 2 && op2.includes(head) ? `(${tail[0]} ${head} ${tail[1]})` :
         head === 'var' ? 'let ' + tail[0].slice(1, -1) :
@@ -287,11 +287,8 @@ function compileToJs(root) {
       return node.code
     }
   }
-  return root.map(x => x.length === 1 ? toJs(x[0]) : toJs(x)).join(';\n')
-}
-
-function toJs(source) {
-  return compileToJs(infer(parse(tokenize(source))))
+  const root = infer(parse(tokenize(source)))
+  return root.map(x => x.length === 1 ? toCode(x[0]) : toCode(x)).join(';\n')
 }
 
 module.exports = { main, runtimeJs, toJs, TypeError }
