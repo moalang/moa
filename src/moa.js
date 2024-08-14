@@ -179,6 +179,8 @@ const log = o => { console.dir(o, {depth: null}); return o }
 const str = o => JSON.stringify(o, null, '  ')
 const fail = (m, ...a) => { const e = new Error(m); a && (e.detail = a); throw e }
 const failUnify = (m, ...a) => { const e = new TypeError(m); a && (e.detail = a); throw e }
+const op1 = '- ^ ~'.split(' ')
+const op2 = '* ** / % + - << >> & ^ | == != < <= > >= && || = += -= *= /= %= &= |= ^= <<= >>='.split(' ')
 const runtimeJs = (function() {'use strict'
 const ___string = o => typeof o === 'string' ? o :
   o instanceof Array ? `(list ${o.map(___string).join(' ')})` :
@@ -186,12 +188,12 @@ const ___string = o => typeof o === 'string' ? o :
   o instanceof Set ? `(dict ${[...o].map(___string).join(' ')})` :
   o.toString()
 const ___throw = (m, d) => { const e = new Error(m); e.detail = d; throw e }
-const ___dict_set = (m, k, v) => (m.set(k, v), v)
+const ___dict_set = (m, k, v) => { m.set(k, v); return v }
 const ___assert = (a, b) => ___string(a) === ___string(b) || ___throw(`Assert failure: \`${___string(a)}\` is not \`${___string(b)}\``, a, b)
 const ___tuple = (...a) => a
 const ___list = (...a) => a
 const ___dict = (...a) => new Map([...Array(a.length/2)].map((_,i) => [a[i*2], a[i*2+1]]))
-const ___log = (...a) => (console.log(...a.map(___string)), a.at(-1))
+const ___log = (...a) => { console.log(...a.map(___string)); return a.at(-1)}
 }).toString().slice(12, -1) + '\n'
 
 function main(command, args) {
@@ -208,14 +210,57 @@ function main(command, args) {
 }
 
 function tokenize(source) {
-  const regexp = /([!~+\-*/%<>:!=^|&]+|[()\[\]{}]|""".*?"""|"[^]*?(?<!\\)"|-?[0-9]+[0-9_]*(?:\.[0-9_]+)|[0-9A-Za-z_]+|(?:#[^\n]*|[ \n])+)/
+  const regexp = /(-?[0-9]+[0-9_]*(?:\.[0-9_]+)(?:e[0-9]+)?|[0-9A-Za-z_]+|[!~+\-*/%<>:!=^|&]+|[()\[\]{}]|""".*?"""|"[^]*?(?<!\\)"|(?:#[^\n]*|[ \n])+)/
   let offset = 0
-  const tokens = source.trim().split(regexp).flatMap(code => code.length ? [{code, offset: offset+=code.length}] : [])
+  const tokens = source.trim().split(regexp).flatMap(code => code.length ? [{code, offset: offset += code.length}] : [])
   return tokens
 }
 
 function parse(tokens) {
-  return tokens[0]
+  let pos = 0
+  const br = /[;\n]/
+  function parseTop() {
+    return loop(() => true, parseLine)
+  }
+  function parseLine() {
+    return til(({code}) => !br.test(code), parseExp, ({code}) => { br.test(code); pos++ })
+  }
+  function parseExp(token) {
+    // TODO: a,b => c
+    let lhs = op1.includes(token.code) ? [token, parseAtom(tokens[pos++])] : parseAtom(token)
+    let lp = Math.inf
+    til(({code}) => op2.includes(code), token => {
+      const rp = op2.findIndex(op => op === token.code)
+      lhs = lp < rp ? [token, lhs, parseAtom(tokens[pos++])] : [lhs[0], lhs[1], [token, lhs[2], parseAtom(tokens[pos++])]]
+      lp = rp
+    })
+    return lhs
+  }
+  function parseAtom(token) {
+    // TODO: atom: bottom (prop | call | copy)*
+    let bottom = parseBottom(token)
+    return bottom
+  }
+  function parseBottom(token) {
+    for (const [l, r] of [['(', ')'], ['[', ']'], ['{', '}']]) {
+      if (token.code === l) {
+        return [token].concat(til(({code}) => code !== r, parseTop, ({code}) => code === r && pos++))
+      }
+    }
+    return token.code.startsWith('"""') ? {...token, code: JSON.stringify(token.code.slice(3, -3))} : token
+  }
+  function til(f, g, h) {
+    return loop(() => f(tokens[pos]), () => g(tokens[pos++]), () => h(tokens[pos]))
+  }
+  function loop(f, g, h) {
+    const a = []
+    while (pos < tokens.length && f()) {
+      a.push(g())
+    }
+    pos < tokens.length && h && h()
+    return a
+  }
+  return parseTop()
 }
 
 function infer(root) {
@@ -223,7 +268,17 @@ function infer(root) {
 }
 
 function compileToJs(root) {
-  return root.code
+  function toJs(node) {
+    if (Array.isArray(node)) {
+      const [head, ...tail] = node.map(toJs)
+      return tail.length === 1 && op1.includes(head) ? `(${head}${tail[0]})` :
+        tail.length === 2 && op2.includes(head) ? `(${tail[0]} ${head} ${tail[1]})` :
+        head + '(' + tail.join(', ') + ')'
+    } else {
+      return node.code
+    }
+  }
+  return root.map(x => x.length === 1 ? toJs(x[0]) : toJs(x)).join('\n')
 }
 
 function toJs(source) {

@@ -29,12 +29,11 @@ comment: "//" [^\n]*
 
 Operator
 ```
-! - ~           # Unray
-|| &&           # Boolean
-+ - * ** / %    # Arithmetic
-& | ^ << >>     # Bit
-== != < <= > >= # Compare
-=               # Override
+! - ~                             # Unray
+* ** / % + - << >> & ^ |          # number
+== != < <= > >=                   # Compare
+&& ||                             # Boolean
+= += -= *= /= %= &= |= ^= <<= >>= # Override
 ```
 
 Keyword
