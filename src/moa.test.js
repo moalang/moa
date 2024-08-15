@@ -89,6 +89,10 @@ test('enum', () => {
   run(2, 'enum t:\n  a:\n    b int\n    c int\nmatch a(1 2):\n  a d: d.c')
 })
 
+test('dec', () => {
+  run(1, 'dec f: int\n1')
+})
+
 // The following are helper functions
 
 function run(expect, src) {

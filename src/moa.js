@@ -329,6 +329,7 @@ function toJs(root) {
         head === 'var'   ? toBind('let', node[1], node[2]) :
         head === 'let'   ? toBind('let', node[1], node[2]) :
         head === 'def'   ? `function ${node[1].code}(${node.slice(2, -1).map(toArg).join(', ')}) {\n${toReturn(node.at(-1))}\n}` :
+        head === 'dec'   ? '' :
         head === 'class' ? toClass(node[1], node.slice(2, -1), node.at(-1)) :
         head === 'enum'  ? toEnum(node[1], node.slice(2, -1), node.at(-1)) :
         head === 'match' ? toMatch(node[1], node[2][1]) :
