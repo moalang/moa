@@ -176,6 +176,7 @@ class dict k v:
 */
 
 class TypeError extends Error {}
+const log = (...a) => { console.log(...a); return a[0] }
 const fail = (m, ...a) => { const e = new Error(m); a && (e.detail = JSON.stringify(a)); throw e }
 const failUnify = (m, ...a) => { const e = new TypeError(m); a && (e.detail = JSON.stringify(a)); throw e }
 const op1 = '- ^ ~'.split(' ')
@@ -212,7 +213,7 @@ function main(command, args) {
 function tokenize(source) {
   const regexp = /(-?[0-9]+[0-9_]*(?:\.[0-9_]+)(?:e[0-9]+)?|[0-9A-Za-z_]+|[!~+\-*/%<>:!=^|&]+|[()\[\]{}]|""".*?"""|"[^]*?(?<!\\)"|(?:#[^\n]*|[ \n])+)/
   let offset = 0
-  const tokens = source.trim().split(regexp).flatMap(code => code.length ? [{code, offset: offset += code.length}] : [])
+  const tokens = source.trim().split(regexp).map(code => ({code, offset: offset += code.length})).filter(t => !/^[ \t]*$/.test(t.code))
   return tokens
 }
 
@@ -221,21 +222,19 @@ function parse(tokens) {
   let indent = 0
   const br = /[;\n]/
   const stmt = {code: '__stmt', pos: 0}
+  const stopReg = /[\n;\])}]/
   function parseTop() {
-    return [stmt, loop(
-      t => t.code === ';' ? ++pos : true,
-      parseLine,
-      t => { br.test(t.code) && pos++ })]
+    return [stmt, sepby(parseLine, t => /[;\n]/.test(t.code))]
   }
-  function parseLine() {
+  function parseLine(_) {
+    pos && pos-- // push back consumed token
     const blockable = ': = =>'.split(' ')
-    return until(t => !br.test(t.code),
-      t => blockable.includes(t.code) ? parseBlock(t) : parseExp(t))
+    return many(t => blockable.includes(t.code) ? parseBlock(t) : parseExp(t))
   }
   function parseExp(token) {
     // TODO: a,b => c
     let lhs = op1.includes(token.code) ? [token, parseAtom(consume())] : parseAtom(token)
-    let lp = 255
+    let lp = Infinity
     until(({code}) => op2.includes(code), token => {
       const rp = op2.findIndex(op => op === token.code)
       lhs = lp > rp ? [token, lhs, parseAtom(consume())] : [lhs[0], lhs[1], [token, lhs[2], parseAtom(consume())]]
@@ -244,23 +243,19 @@ function parse(tokens) {
     return lhs
   }
   function parseBlock(token) {
+    consume() // drop token because parseLine() will push back the token
     if (indent > 0 && prev().code.includes('\n')) {
       const startIndent = indent
       return [token, until(_ => indent === startIndent, parseLine)]
     } else {
-      //const a = loop(
-      //  t => { const p = prev(); p.code === ';' && ++pos; return p.code !== '\n' },
-      //  parseLine)
-      const a = parseLine()
-      console.dir(a, {depth: null})
-      return [token, a]
+      return [token, sepby(parseLine, t => t.code === ';')]
     }
   }
   function parseAtom(token) {
-    // TODO: atom: bottom (prop | call | copy)*
     function parseSuffix(x) {
       const t = look()
-      const isClose = t && !/[ \t\n]/.test(tokens[pos-1].code)
+      const p = prev()
+      const isClose = t && t.offset === p.offset + p.code.length
       return t && t.code === '.'       ? parseSuffix([consume(), token, consume()]) :
         t && t.code === '(' && isClose ? parseSuffix([consume(), x].concat(until(t => t.code === ')' ? (++pos, false) : true, parseExp))) :
         t && t.code === '{' && isClose ? parseSuffix([consume(), x].concat(until(t => t.code === '}' ? (++pos, false) : true, parseExp))) :
@@ -271,28 +266,30 @@ function parse(tokens) {
   function parseBottom(token) {
     for (const [l, r] of [['(', ')'], ['[', ']'], ['{', '}']]) {
       if (token.code === l) {
-        return [token].concat(until(({code}) => code !== r, parseTop, ({code}) => code === r && pos++))
+        return [token].concat(until(({code}) => code !== r, parseExp, ({code}) => code === r && pos++))
       }
     }
     return token.code.startsWith('"""') ? {...token, code: JSON.stringify(token.code.slice(3, -3))} : token
   }
   function consume() {
-    look()
     return tokens[pos++]
   }
   function prev() {
     return pos > 0 ? tokens[pos-1] : {code: '', offset: 0}
   }
   function look() {
-    return pos < tokens.length && /[ \t\n]/.test(tokens[pos].code) ? tokens[++pos] : tokens[pos]
+    return tokens[pos]
+  }
+  function many(f) {
+    return until(t => !stopReg.test(t.code), f)
+  }
+  function sepby(f, g) {
+    return [f()].concat(until(t => g(t) && ++pos, f))
   }
   function until(f, g, h) {
-    return loop(f, () => g(consume()), h)
-  }
-  function loop(f, g, h) {
     const a = []
     while (pos < tokens.length && f(look())) {
-      a.push(g())
+      a.push(g(consume()))
     }
     pos < tokens.length && h && h(look())
     return a
@@ -313,7 +310,7 @@ function toJs(root) {
   }
   function toReturn(node) {
     const codes = toCode(node).split(';\n')
-    return codes.slice(0, -1).join(';\n') + '\nreturn ' + codes.at(-1)
+    return codes.slice(0, -1).map(code => code + ';\n') + 'return ' + codes.at(-1)
   }
   function toCode(node) {
     if (Array.isArray(node)) {
@@ -324,6 +321,7 @@ function toJs(root) {
         head === 'var' ? 'let ' + toCode(node.slice(1)).slice(1, -1) :
         head === 'let' ? 'const ' + toCode(node.slice(1)).slice(1, -1) :
         head === ':'   ? toCode(node[1]) :
+        head === '('   ? toCode(node[1]) + '(' + node.slice(2).map(toCode).join(', ') + ')' :
         head === '__stmt' ? node[1].map(toCode).join(';\n') :
         node.length === 1 ? toCode(node[0]) :
         toCode(node[0]) + '(' + node.slice(1).map(toCode).join(', ') + ')'

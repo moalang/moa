@@ -83,5 +83,7 @@ test('let', () => {
 })
 
 test('def', () => {
-  run(1, 'def f n: n\nf(1)')
+  run(1, 'def f: 1\nf()')
+  run(1, 'def f a: a\nf(1)')
+  run(3, 'def f a b: a + b\nf(1 2)')
 })
