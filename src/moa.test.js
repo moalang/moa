@@ -10,10 +10,10 @@ function run(expect, src) {
   const js = moa.toJs()
   try {
     const actual = vm.runInNewContext(moa.runtimeJs + js)
-    assert.deepEqual(actual, expect, `${src} -> ${js} -> ${actual}`)
+    assert.deepEqual(actual, expect, `${ src } -> ${ js } -> ${ JSON.stringify(actual) } != ${ JSON.stringify(expect) }`)
   } catch (e) {
+    console.error(e)
     console.dir({src, js, nodes: moa.nodes}, {depth: null})
-    console.log(e.message)
     process.exit(1)
   }
 }
@@ -87,4 +87,10 @@ test('def', () => {
   run(1, 'def f: 1\nf()')
   run(1, 'def f a: a\nf(1)')
   run(3, 'def f a b: a + b\nf(1 2)')
+})
+
+test('class', () => {
+  run(1, 'class t: a int\nt(1).a')
+  run(1, 'class t:\n  a int\nt(1).a')
+  run(2, 'class t: a int; b int\nt(1 2).b')
 })

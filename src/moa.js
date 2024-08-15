@@ -180,7 +180,7 @@ const log = (...a) => { console.log(...a); return a[0] }
 const fail = (m, ...a) => { const e = new Error(m); a && (e.detail = JSON.stringify(a)); throw e }
 const failUnify = (m, ...a) => { const e = new TypeError(m); a && (e.detail = JSON.stringify(a)); throw e }
 const op1 = '- ^ ~'.split(' ')
-const op2 = '* ** / % + - << >> & ^ | == != < <= > >= && || = += -= *= /= %= &= |= ^= <<= >>='.split(' ')
+const op2 = '. * ** / % + - << >> & ^ | == != < <= > >= && || = += -= *= /= %= &= |= ^= <<= >>='.split(' ')
 const runtimeJs = (function() {'use strict'
 const ___string = o => typeof o === 'string' ? o :
   o instanceof Array ? `(list ${o.map(___string).join(' ')})` :
@@ -213,13 +213,11 @@ function main(command, args) {
 function tokenize(source) {
   const regexp = /(-?[0-9]+[0-9_]*(?:\.[0-9_]+)(?:e[0-9]+)?|[0-9A-Za-z_]+|[!~+\-*/%<>:!=^|&]+|[()\[\]{}]|""".*?"""|"[^]*?(?<!\\)"|(?:#[^\n]*|[ \n])+)/
   let offset = 0
-  const tokens = source.trim().split(regexp).map(code => ({code, offset: offset += code.length})).filter(t => !/^[ \t]*$/.test(t.code))
-  return tokens
+  return source.trim().split(regexp).map(code => ({code, offset: offset += code.length})).filter(t => !/^[ \t]*$/.test(t.code))
 }
 
 function parse(tokens) {
   let pos = 0
-  let indent = 0
   const br = /[;\n]/
   const stmt = {code: '__stmt', pos: 0}
   const stopReg = /[\n;\])}]/
@@ -244,9 +242,10 @@ function parse(tokens) {
   }
   function parseBlock(token) {
     consume() // drop token because parseLine() will push back the token
-    if (indent > 0 && prev().code.includes('\n')) {
-      const startIndent = indent
-      return [token, until(_ => indent === startIndent, parseLine)]
+    const p = prev()
+    if (p.code.includes('\n')) {
+      const indent = p.code.split('\n').at(-1).length
+      return [token, until(_ => prev().code.includes('\n') && prev().code.split('\n').at(-1).length === indent, parseLine)]
     } else {
       return [token, sepby(parseLine, t => t.code === ';')]
     }
@@ -256,7 +255,7 @@ function parse(tokens) {
       const t = look()
       const p = prev()
       const isClose = t && t.offset === p.offset + p.code.length
-      return t && t.code === '.'       ? parseSuffix([consume(), token, consume()]) :
+      return t && t.code === '.'       ? parseSuffix([consume(), x, consume()]) :
         t && t.code === '(' && isClose ? parseSuffix([consume(), x].concat(until(t => t.code === ')' ? (++pos, false) : true, parseExp))) :
         t && t.code === '{' && isClose ? parseSuffix([consume(), x].concat(until(t => t.code === '}' ? (++pos, false) : true, parseExp))) :
         x
@@ -316,16 +315,22 @@ function toJs(root) {
     const bind = `${kind} ${id.code} ${op.code} ${toCode(body)}`
     return init ? bind + `\n;{{${toCode(init)}}};\n${id.code}` : bind
   }
+  function toClass(name, args, body) {
+    const fields = body[1].map(x => x[0].code)
+    return body[0].code === '=' ? `function ${name.code}(...a) { return ${ body[1][0].code }(...a) }` :
+      `function ${ name.code }(${ fields }) { return { ${ fields } } }`
+  }
   function toCode(node) {
     if (Array.isArray(node)) {
       const head = node[0].code
       return node.length === 2 && op1.includes(head) ? `(${head}${toCode(node[1])})` :
         node.length === 3 && op2.includes(head) ? `(${toCode(node[1])} ${head} ${toCode(node[2])})` :
-        head === 'def' ? `function ${node[1].code}(${node.slice(2, -1).map(toArg).join(', ')}) {\n${toReturn(node.at(-1))}\n}` :
-        head === 'var' ? toBind('let', node[1], node[2]) :
-        head === 'let' ? toBind('let', node[1], node[2]) :
-        head === ':'   ? node[1].map(toCode).join(';\n') :
-        head === '('   ? toCode(node[1]) + '(' + node.slice(2).map(toCode).join(', ') + ')' :
+        head === 'var'   ? toBind('let', node[1], node[2]) :
+        head === 'let'   ? toBind('let', node[1], node[2]) :
+        head === 'def'   ? `function ${node[1].code}(${node.slice(2, -1).map(toArg).join(', ')}) {\n${toReturn(node.at(-1))}\n}` :
+        head === 'class' ? toClass(node[1], node.slice(2, -1), node.at(-1)) :
+        head === ':'     ? node[1].map(toCode).join(';\n') :
+        head === '('     ? toCode(node[1]) + '(' + node.slice(2).map(toCode).join(', ') + ')' :
         head === '__stmt' ? node[1].map(toCode).join(';\n') :
         node.length === 1 ? toCode(node[0]) :
         toCode(node[0]) + '(' + node.slice(1).map(toCode).join(', ') + ')'
