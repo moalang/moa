@@ -312,15 +312,19 @@ function toJs(root) {
     const codes = toCode(node).split(';\n')
     return codes.slice(0, -1).map(code => code + ';\n') + 'return ' + codes.at(-1)
   }
+  function toBind(kind, [op, id, body], init) {
+    const bind = `${kind} ${id.code} ${op.code} ${toCode(body)}`
+    return init ? bind + `\n;{{${toCode(init)}}};\n${id.code}` : bind
+  }
   function toCode(node) {
     if (Array.isArray(node)) {
       const head = node[0].code
       return node.length === 2 && op1.includes(head) ? `(${head}${toCode(node[1])})` :
         node.length === 3 && op2.includes(head) ? `(${toCode(node[1])} ${head} ${toCode(node[2])})` :
         head === 'def' ? `function ${node[1].code}(${node.slice(2, -1).map(toArg).join(', ')}) {\n${toReturn(node.at(-1))}\n}` :
-        head === 'var' ? 'let ' + toCode(node.slice(1)).slice(1, -1) :
-        head === 'let' ? 'const ' + toCode(node.slice(1)).slice(1, -1) :
-        head === ':'   ? toCode(node[1]) :
+        head === 'var' ? toBind('let', node[1], node[2]) :
+        head === 'let' ? toBind('let', node[1], node[2]) :
+        head === ':'   ? node[1].map(toCode).join(';\n') :
         head === '('   ? toCode(node[1]) + '(' + node.slice(2).map(toCode).join(', ') + ')' :
         head === '__stmt' ? node[1].map(toCode).join(';\n') :
         node.length === 1 ? toCode(node[0]) :

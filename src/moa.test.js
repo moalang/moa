@@ -64,7 +64,7 @@ test('op2', () => {
   run(true, 'false || true')
 })
 
-test('variable with op2', () => {
+test('var with op2', () => {
   run(1, 'var a = 6; a = 1')
   run(7, 'var a = 6; a += 1')
   run(5, 'var a = 6; a -= 1')
@@ -78,8 +78,9 @@ test('variable with op2', () => {
   run(2, 'var a = 4; a >>= 1')
 })
 
-test('let', () => {
-  run(1, 'let a = 1; a')
+test('var and let with block', () => {
+  run(2, 'var a = 1 : a += 1; a')
+  run(2, 'let a = 1 : a += 1; a')
 })
 
 test('def', () => {
