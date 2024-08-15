@@ -203,13 +203,13 @@ function tokenize(source) {
   return source.trim().split(regexp).map(code => ({code, offset: offset += code.length})).filter(t => !/^[ \t]*$/.test(t.code))
 }
 
-function parse(tokens) {
-  let pos = 0
+function parse(originalTokens) {
+  const tokens = [{code: '', pos: 0}].concat(originalTokens) // set sentinel to look up previous token
+  let pos = 1
   function parseTop() {
     return [{code: ':', pos: 0}, sepby(parseLine, t => /[;\n]/.test(t.code))]
   }
-  function parseLine(_) {
-    pos && pos-- // push back consumed token
+  function parseLine(t) {
     const blockable = ': = =>'.split(' ')
     return until(t => !/[\n;\])}]/.test(t.code), t => blockable.includes(t.code) ? parseBlock(t) : parseExp(t))
   }
@@ -217,18 +217,17 @@ function parse(tokens) {
     // TODO: a,b => c
     let lhs = op1.includes(token.code) ? [token, parseAtom(consume())] : parseAtom(token)
     let lp = Infinity
-    until(({code}) => op2.includes(code), token => {
-      const rp = op2.findIndex(op => op === token.code)
-      lhs = lp > rp ? [token, lhs, parseAtom(consume())] : [lhs[0], lhs[1], [token, lhs[2], parseAtom(consume())]]
+    until(({code}) => op2.includes(code), t => {
+      const rp = op2.findIndex(op => op === t.code)
+      lhs = lp > rp ? [t, lhs, parseAtom(consume())] : [lhs[0], lhs[1], [t, lhs[2], parseAtom(consume())]]
       lp = rp
     })
     return lhs
   }
   function parseBlock(token) {
-    consume() // drop token because parseLine() will push back the token
-    const indent = prev().code.match(/ *$/)[0].length
+    const indent = tokens[pos].code.match(/ *$/)[0].length
     if (indent) {
-      consume() // drop again
+      consume() // drop breaking line
       return [token, sepby(parseLine, t => indent === t.code.match(/ *$/)[0].length)]
     } else {
       return [token, sepby(parseLine, t => t.code === ';')]
@@ -236,8 +235,8 @@ function parse(tokens) {
   }
   function parseAtom(token) {
     function parseSuffix(x) {
-      const t = look()
-      const p = prev()
+      const t = tokens[pos]
+      const p = tokens[pos - 1]
       const isClose = t && t.offset === p.offset + p.code.length
       return t && t.code === '.'       ? parseSuffix([consume(), x, consume()]) :
         t && t.code === '(' && isClose ? parseSuffix([consume(), x].concat(until(t => t.code === ')' ? (++pos, false) : true, parseExp))) :
@@ -249,7 +248,7 @@ function parse(tokens) {
   function parseBottom(token) {
     for (const [l, r] of [['(', ')'], ['[', ']'], ['{', '}']]) {
       if (token.code === l) {
-        return [token].concat(until(({code}) => code !== r, parseExp, ({code}) => code === r && pos++))
+        return [token].concat(until(({code}) => code !== r, parseExp, chomp=true))
       }
     }
     return token.code.startsWith('"""') ? {...token, code: JSON.stringify(token.code.slice(3, -3))} : token
@@ -257,21 +256,18 @@ function parse(tokens) {
   function consume() {
     return tokens[pos++]
   }
-  function prev() {
-    return pos > 0 ? tokens[pos-1] : {code: '', offset: 0}
-  }
-  function look() {
-    return tokens[pos]
-  }
   function sepby(f, g) {
-    return [f()].concat(until(t => g(t) && ++pos, f))
+    return [f()].concat(loop(t => g(t) && ++pos, f))
   }
-  function until(f, g, h) {
+  function until(f, g, chomp=false) {
+    return loop(f, t => g(consume()), chomp=chomp)
+  }
+  function loop(f, g, chomp=false) {
     const a = []
-    while (pos < tokens.length && f(look())) {
-      a.push(g(consume()))
+    while (pos < tokens.length && f(tokens[pos])) {
+      a.push(g(tokens[pos]))
     }
-    pos < tokens.length && h && h(look())
+    chomp && pos++
     return a
   }
   return parseTop()
