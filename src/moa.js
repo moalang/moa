@@ -229,10 +229,10 @@ function parse(tokens) {
   }
   function parseBlock(token) {
     consume() // drop token because parseLine() will push back the token
-    const p = prev()
-    if (p.code.includes('\n')) {
-      const indent = p.code.split('\n').at(-1).length
-      return [token, until(_ => prev().code.includes('\n') && prev().code.split('\n').at(-1).length === indent, parseLine)]
+    const indent = prev().code.match(/ *$/)[0].length
+    if (indent) {
+      consume() // drop again
+      return [token, sepby(parseLine, t => indent === t.code.match(/ *$/)[0].length)]
     } else {
       return [token, sepby(parseLine, t => t.code === ';')]
     }
@@ -288,9 +288,6 @@ function infer(root) {
 }
 
 function toJs(root) {
-  function blockCode(node) {
-    return node.map(toCode).join('\n')
-  }
   function toArg(node) {
     return node.code
   }
@@ -299,13 +296,30 @@ function toJs(root) {
     return codes.slice(0, -1).map(code => code + ';\n') + 'return ' + codes.at(-1)
   }
   function toBind(kind, [op, id, body], init) {
-    const bind = `${kind} ${id.code} ${op.code} ${toCode(body)}`
-    return init ? bind + `\n;{{${toCode(init)}}};\n${id.code}` : bind
+    const bind = `${ kind } ${ id.code } ${ op.code } ${ toCode(body) }`
+    return init ? bind + `\n;{{${ toCode(init) }}};\n${ id.code }` : bind
   }
-  function toClass(name, args, body) {
+  function toClass(name, _args, body) {
     const fields = body[1].map(x => x[0].code)
-    return body[0].code === '=' ? `function ${name.code}(...a) { return ${ body[1][0].code }(...a) }` :
+    return body[0].code === '=' ? `function ${ name.code }(...a) { return ${ body[1][0].code }(...a) }` :
       `function ${ name.code }(${ fields }) { return { ${ fields } } }`
+  }
+  function toEnum(name, _args, body) {
+    function tagFunction(tag, args) {
+      return `function ${ tag }(${ args }) { return { __tag: '${ tag }', __value: { ${ args } } } }`
+    }
+    return body[1].map(x =>
+      x.length === 1 ? `const ${ x[0].code } = { __tag: '${ x[0].code }' }` :
+      Array.isArray(x[1]) ? tagFunction(x[0].code, x[1][1].map(x => x[0].code)) :
+      `function ${ x[0].code }(__value) { return { __tag: '${ x[0].code }', __value } }`).join(';\n')
+  }
+  function toMatch(target, conds) {
+    function gen(conds) {
+      const cond = conds[0]
+      return conds.length === 0 ? '(() => { throw new Error(`miss match tag=${ __enum.__tag }`) })()' :
+        `__enum.__tag === '${ cond[0].code }' ? ${ cond.length === 2 ? toCode(cond[1]) : '(' + cond[1].code + ' => { ' + toReturn(cond[2]) + '})(__enum.__value)' } : ` + gen(conds.slice(1))
+    }
+    return `(__enum => ${ gen(conds) })(${toCode(target)})`
   }
   function toCode(node) {
     if (Array.isArray(node)) {
@@ -316,6 +330,8 @@ function toJs(root) {
         head === 'let'   ? toBind('let', node[1], node[2]) :
         head === 'def'   ? `function ${node[1].code}(${node.slice(2, -1).map(toArg).join(', ')}) {\n${toReturn(node.at(-1))}\n}` :
         head === 'class' ? toClass(node[1], node.slice(2, -1), node.at(-1)) :
+        head === 'enum'  ? toEnum(node[1], node.slice(2, -1), node.at(-1)) :
+        head === 'match' ? toMatch(node[1], node[2][1]) :
         head === ':'     ? node[1].map(toCode).join(';\n') :
         head === '('     ? toCode(node[1]) + '(' + node.slice(2).map(toCode).join(', ') + ')' :
         head === '__stmt' ? node[1].map(toCode).join(';\n') :
@@ -328,9 +344,11 @@ function toJs(root) {
   return toCode(root)
 }
 function analyze(source) {
-  const root = infer(parse(tokenize(source)))
+  const tokens = tokenize(source)
+  const root = infer(parse(tokens))
   return {
     runtimeJs,
+    tokens,
     nodes: root[1],
     toJs: () => toJs(root)
   }

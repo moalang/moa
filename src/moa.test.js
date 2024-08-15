@@ -82,6 +82,13 @@ test('class', () => {
   run(2, 'class t: a int; b int\nt(1 2).b')
 })
 
+test('enum', () => {
+  run(1, 'enum t: a\nmatch a:\n  a: 1')
+  run(1, 'enum t: a b\nmatch a(1):\n  a c: c')
+  run(1, 'enum t:\n  a:\n    b int\nmatch a(1):\n  a c: c.b')
+  run(2, 'enum t:\n  a:\n    b int\n    c int\nmatch a(1 2):\n  a d: d.c')
+})
+
 // The following are helper functions
 
 function run(expect, src) {
@@ -92,7 +99,7 @@ function run(expect, src) {
     assert.deepEqual(actual, expect, `${ src } -> ${ js } -> ${ JSON.stringify(actual) } != ${ JSON.stringify(expect) }`)
   } catch (e) {
     console.error(e)
-    console.dir({src, js, nodes: moa.nodes}, {depth: null})
+    console.dir({src, js, nodes: moa.nodes, tokens: moa.tokens}, {depth: null})
     process.exit(1)
   }
 }
