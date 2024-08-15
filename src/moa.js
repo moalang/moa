@@ -181,20 +181,7 @@ const fail = (m, ...a) => { const e = new Error(m); a && (e.detail = JSON.string
 const failUnify = (m, ...a) => { const e = new TypeError(m); a && (e.detail = JSON.stringify(a)); throw e }
 const op1 = '- ^ ~'.split(' ')
 const op2 = '. * ** / % + - << >> & ^ | == != < <= > >= && || = += -= *= /= %= &= |= ^= <<= >>='.split(' ')
-const runtimeJs = (function() {'use strict'
-const ___string = o => typeof o === 'string' ? o :
-  o instanceof Array ? `(list ${o.map(___string).join(' ')})` :
-  o instanceof Map ? `(dict ${[...o].map(___string).join(' ')})` :
-  o instanceof Set ? `(dict ${[...o].map(___string).join(' ')})` :
-  o.toString()
-const ___throw = (m, d) => { const e = new Error(m); e.detail = d; throw e }
-const ___dict_set = (m, k, v) => { m.set(k, v); return v }
-const ___assert = (a, b) => ___string(a) === ___string(b) || ___throw(`Assert failure: \`${___string(a)}\` is not \`${___string(b)}\``, a, b)
-const ___tuple = (...a) => a
-const ___list = (...a) => a
-const ___dict = (...a) => new Map([...Array(a.length/2)].map((_,i) => [a[i*2], a[i*2+1]]))
-const ___log = (...a) => { console.log(...a.map(___string)); return a.at(-1)}
-}).toString().slice(12, -1) + '\n'
+const runtimeJs = ''
 
 function main(command, args) {
   const { readFileSync } = require('fs')

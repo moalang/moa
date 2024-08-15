@@ -5,19 +5,6 @@ const vm = require('node:vm')
 
 const { main, analyze } = require('./moa.js')
 
-function run(expect, src) {
-  const moa = analyze(src)
-  const js = moa.toJs()
-  try {
-    const actual = vm.runInNewContext(moa.runtimeJs + js)
-    assert.deepEqual(actual, expect, `${ src } -> ${ js } -> ${ JSON.stringify(actual) } != ${ JSON.stringify(expect) }`)
-  } catch (e) {
-    console.error(e)
-    console.dir({src, js, nodes: moa.nodes}, {depth: null})
-    process.exit(1)
-  }
-}
-
 test('command line', () => {
   assert.match(main().out, /Usage:/)
   assert.deepEqual(true, vm.runInNewContext(main('to', ['js', 'true']).out))
@@ -94,3 +81,19 @@ test('class', () => {
   run(1, 'class t:\n  a int\nt(1).a')
   run(2, 'class t: a int; b int\nt(1 2).b')
 })
+
+// The following are helper functions
+
+function run(expect, src) {
+  const moa = analyze(src)
+  const js = moa.toJs()
+  try {
+    const actual = vm.runInNewContext(moa.runtimeJs + js)
+    assert.deepEqual(actual, expect, `${ src } -> ${ js } -> ${ JSON.stringify(actual) } != ${ JSON.stringify(expect) }`)
+  } catch (e) {
+    console.error(e)
+    console.dir({src, js, nodes: moa.nodes}, {depth: null})
+    process.exit(1)
+  }
+}
+
