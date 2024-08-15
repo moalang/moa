@@ -214,7 +214,7 @@ function parse(tokens) {
   function parseLine(_) {
     pos && pos-- // push back consumed token
     const blockable = ': = =>'.split(' ')
-    return many(t => blockable.includes(t.code) ? parseBlock(t) : parseExp(t))
+    return until(t => !stopReg.test(t.code), t => blockable.includes(t.code) ? parseBlock(t) : parseExp(t))
   }
   function parseExp(token) {
     // TODO: a,b => c
@@ -265,9 +265,6 @@ function parse(tokens) {
   }
   function look() {
     return tokens[pos]
-  }
-  function many(f) {
-    return until(t => !stopReg.test(t.code), f)
   }
   function sepby(f, g) {
     return [f()].concat(until(t => g(t) && ++pos, f))
