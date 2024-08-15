@@ -3,12 +3,19 @@ const assert = require('node:assert/strict')
 const test = require('node:test').test
 const vm = require('node:vm')
 
-const { main, toJs, runtimeJs } = require('./moa.js')
+const { main, analyze } = require('./moa.js')
 
 function run(expect, src) {
-  const js = toJs(src)
-  const actual = vm.runInNewContext(runtimeJs + js)
-  assert.deepEqual(actual, expect, `${src} -> ${js} -> ${actual}`)
+  const moa = analyze(src)
+  const js = moa.toJs()
+  try {
+    const actual = vm.runInNewContext(moa.runtimeJs + js)
+    assert.deepEqual(actual, expect, `${src} -> ${js} -> ${actual}`)
+  } catch (e) {
+    console.dir({src, js, nodes: moa.nodes}, {depth: null})
+    console.log(e.message)
+    process.exit(1)
+  }
 }
 
 test('command line', () => {
@@ -69,4 +76,12 @@ test('variable with op2', () => {
   run(4, 'var a = 7; a ^= 3')
   run(8, 'var a = 4; a <<= 1')
   run(2, 'var a = 4; a >>= 1')
+})
+
+test('let', () => {
+  run(1, 'let a = 1; a')
+})
+
+test('def', () => {
+  run(1, 'def f n: n\nf(1)')
 })

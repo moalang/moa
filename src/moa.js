@@ -2,11 +2,12 @@
 'use strict'
 
 /* Syntax
-top: line ([\n;] line)*
-line: exp+
+top: line ([;\n] line)*
+line: exp+ (":" block)?
 exp:
 | op1? atom (op2 exp)?
 | id ("," id+ )* "=>" exp
+block: ("\n  " line)+ | line (";" line)*
 atom: bottom (prop | call | copy)*
 prop: "." (id | [0-9]+)                   # property access
 call: "(" exp* ")"                        # call function
@@ -175,10 +176,8 @@ class dict k v:
 */
 
 class TypeError extends Error {}
-const log = o => { console.dir(o, {depth: null}); return o }
-const str = o => JSON.stringify(o, null, '  ')
-const fail = (m, ...a) => { const e = new Error(m); a && (e.detail = a); throw e }
-const failUnify = (m, ...a) => { const e = new TypeError(m); a && (e.detail = a); throw e }
+const fail = (m, ...a) => { const e = new Error(m); a && (e.detail = JSON.stringify(a)); throw e }
+const failUnify = (m, ...a) => { const e = new TypeError(m); a && (e.detail = JSON.stringify(a)); throw e }
 const op1 = '- ^ ~'.split(' ')
 const op2 = '* ** / % + - << >> & ^ | == != < <= > >= && || = += -= *= /= %= &= |= ^= <<= >>='.split(' ')
 const runtimeJs = (function() {'use strict'
@@ -199,7 +198,8 @@ const ___log = (...a) => { console.log(...a.map(___string)); return a.at(-1)}
 function main(command, args) {
   const { readFileSync } = require('fs')
   if (command === 'to' && args[0] === 'js') {
-    return { out: runtimeJs + toJs(args.slice(1).join(' ') || readFileSync('/dev/stdin', 'utf-8')) }
+    const source = args.slice(1).join(' ') || readFileSync('/dev/stdin', 'utf-8')
+    return { out: runtimeJs + analyze(source).toJs() }
   } else {
     return { out: `Usage:
       moa                       # launch interactive shell
@@ -218,34 +218,60 @@ function tokenize(source) {
 
 function parse(tokens) {
   let pos = 0
+  let indent = 0
   const br = /[;\n]/
-  const space = /[ \t\n]/
+  const stmt = {code: '__stmt', pos: 0}
   function parseTop() {
-    return loop(() => true, parseLine)
+    return [stmt, loop(
+      t => t.code === ';' ? ++pos : true,
+      parseLine,
+      t => { br.test(t.code) && pos++ })]
   }
   function parseLine() {
-    return til(({code}) => !br.test(code), parseExp, ({code}) => { br.test(code); pos++ })
+    const blockable = ': = =>'.split(' ')
+    return until(t => !br.test(t.code),
+      t => blockable.includes(t.code) ? parseBlock(t) : parseExp(t))
   }
   function parseExp(token) {
     // TODO: a,b => c
     let lhs = op1.includes(token.code) ? [token, parseAtom(consume())] : parseAtom(token)
     let lp = 255
-    til(({code}) => op2.includes(code), token => {
+    until(({code}) => op2.includes(code), token => {
       const rp = op2.findIndex(op => op === token.code)
       lhs = lp > rp ? [token, lhs, parseAtom(consume())] : [lhs[0], lhs[1], [token, lhs[2], parseAtom(consume())]]
       lp = rp
     })
     return lhs
   }
+  function parseBlock(token) {
+    if (indent > 0 && prev().code.includes('\n')) {
+      const startIndent = indent
+      return [token, until(_ => indent === startIndent, parseLine)]
+    } else {
+      //const a = loop(
+      //  t => { const p = prev(); p.code === ';' && ++pos; return p.code !== '\n' },
+      //  parseLine)
+      const a = parseLine()
+      console.dir(a, {depth: null})
+      return [token, a]
+    }
+  }
   function parseAtom(token) {
     // TODO: atom: bottom (prop | call | copy)*
-    let bottom = parseBottom(token)
-    return bottom
+    function parseSuffix(x) {
+      const t = look()
+      const isClose = t && !/[ \t\n]/.test(tokens[pos-1].code)
+      return t && t.code === '.'       ? parseSuffix([consume(), token, consume()]) :
+        t && t.code === '(' && isClose ? parseSuffix([consume(), x].concat(until(t => t.code === ')' ? (++pos, false) : true, parseExp))) :
+        t && t.code === '{' && isClose ? parseSuffix([consume(), x].concat(until(t => t.code === '}' ? (++pos, false) : true, parseExp))) :
+        x
+    }
+    return parseSuffix(parseBottom(token))
   }
   function parseBottom(token) {
     for (const [l, r] of [['(', ')'], ['[', ']'], ['{', '}']]) {
       if (token.code === l) {
-        return [token].concat(til(({code}) => code !== r, parseTop, ({code}) => code === r && pos++))
+        return [token].concat(until(({code}) => code !== r, parseTop, ({code}) => code === r && pos++))
       }
     }
     return token.code.startsWith('"""') ? {...token, code: JSON.stringify(token.code.slice(3, -3))} : token
@@ -254,18 +280,21 @@ function parse(tokens) {
     look()
     return tokens[pos++]
   }
-  function look() {
-    return space.test(tokens[pos].code) ? tokens[++pos] : tokens[pos]
+  function prev() {
+    return pos > 0 ? tokens[pos-1] : {code: '', offset: 0}
   }
-  function til(f, g, h) {
-    return loop(() => f(look()), () => g(consume()), () => h && h(look()))
+  function look() {
+    return pos < tokens.length && /[ \t\n]/.test(tokens[pos].code) ? tokens[++pos] : tokens[pos]
+  }
+  function until(f, g, h) {
+    return loop(f, () => g(consume()), h)
   }
   function loop(f, g, h) {
     const a = []
-    while (pos < tokens.length && f()) {
+    while (pos < tokens.length && f(look())) {
       a.push(g())
     }
-    pos < tokens.length && h && h()
+    pos < tokens.length && h && h(look())
     return a
   }
   return parseTop()
@@ -275,23 +304,45 @@ function infer(root) {
   return root
 }
 
-function toJs(source) {
+function toJs(root) {
+  function blockCode(node) {
+    return node.map(toCode).join('\n')
+  }
+  function toArg(node) {
+    return node.code
+  }
+  function toReturn(node) {
+    const codes = toCode(node).split(';\n')
+    return codes.slice(0, -1).join(';\n') + '\nreturn ' + codes.at(-1)
+  }
   function toCode(node) {
     if (Array.isArray(node)) {
-      const [head, ...tail] = node.map(toCode)
-      return tail.length === 1 && op1.includes(head) ? `(${head}${tail[0]})` :
-        tail.length === 2 && op2.includes(head) ? `(${tail[0]} ${head} ${tail[1]})` :
-        head === 'var' ? 'let ' + tail[0].slice(1, -1) :
-        head + '(' + tail.join(', ') + ')'
+      const head = node[0].code
+      return node.length === 2 && op1.includes(head) ? `(${head}${toCode(node[1])})` :
+        node.length === 3 && op2.includes(head) ? `(${toCode(node[1])} ${head} ${toCode(node[2])})` :
+        head === 'def' ? `function ${node[1].code}(${node.slice(2, -1).map(toArg).join(', ')}) {\n${toReturn(node.at(-1))}\n}` :
+        head === 'var' ? 'let ' + toCode(node.slice(1)).slice(1, -1) :
+        head === 'let' ? 'const ' + toCode(node.slice(1)).slice(1, -1) :
+        head === ':'   ? toCode(node[1]) :
+        head === '__stmt' ? node[1].map(toCode).join(';\n') :
+        node.length === 1 ? toCode(node[0]) :
+        toCode(node[0]) + '(' + node.slice(1).map(toCode).join(', ') + ')'
     } else {
       return node.code
     }
   }
+  return toCode(root)
+}
+function analyze(source) {
   const root = infer(parse(tokenize(source)))
-  return root.map(x => x.length === 1 ? toCode(x[0]) : toCode(x)).join(';\n')
+  return {
+    runtimeJs,
+    nodes: root[1],
+    toJs: () => toJs(root)
+  }
 }
 
-module.exports = { main, runtimeJs, toJs, TypeError }
+module.exports = { main, analyze, TypeError }
 
 if (require.main === module) {
   console.log(main(process.argv[2], process.argv.slice(3)).out || '')
