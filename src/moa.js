@@ -205,16 +205,13 @@ function tokenize(source) {
 
 function parse(tokens) {
   let pos = 0
-  const br = /[;\n]/
-  const stmt = {code: '__stmt', pos: 0}
-  const stopReg = /[\n;\])}]/
   function parseTop() {
-    return [stmt, sepby(parseLine, t => /[;\n]/.test(t.code))]
+    return [{code: ':', pos: 0}, sepby(parseLine, t => /[;\n]/.test(t.code))]
   }
   function parseLine(_) {
     pos && pos-- // push back consumed token
     const blockable = ': = =>'.split(' ')
-    return until(t => !stopReg.test(t.code), t => blockable.includes(t.code) ? parseBlock(t) : parseExp(t))
+    return until(t => !/[\n;\])}]/.test(t.code), t => blockable.includes(t.code) ? parseBlock(t) : parseExp(t))
   }
   function parseExp(token) {
     // TODO: a,b => c
@@ -332,7 +329,6 @@ function toJs(root) {
         head === 'match' ? toMatch(node[1], node[2][1]) :
         head === ':'     ? node[1].map(toCode).join(';\n') :
         head === '('     ? toCode(node[1]) + '(' + node.slice(2).map(toCode).join(', ') + ')' :
-        head === '__stmt' ? node[1].map(toCode).join(';\n') :
         node.length === 1 ? toCode(node[0]) :
         toCode(node[0]) + '(' + node.slice(1).map(toCode).join(', ') + ')'
     } else {
