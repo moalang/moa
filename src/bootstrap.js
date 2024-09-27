@@ -33,6 +33,9 @@ function evaluate(root, env) {
   function ge(a, b) {
     return le(b, a)
   }
+  const embedded = {
+    list: (...a) => a.slice(0, -1) // drop caller at the last
+  }
   const props = {
     object: o => o,
     string: s => ({
@@ -77,7 +80,7 @@ function evaluate(root, env) {
       case 'def': return env[tail[0].text] = (...args) => recWith(tail.at(-1), args, tail.slice(1, -1))
       case 'test': return recWith(tail.at(-1), [tester], tail.slice(0, -1))
       default:
-        const f = Array.isArray(head) ? rec(head) : head.text in env ? env[head.text] : fail(`no id '${head.text}'`, head)
+        const f = rec(head)
         return f(...tail.map(rec), head)
     }
   } else {
@@ -88,6 +91,7 @@ function evaluate(root, env) {
       t === 'true' ? true :
       t === 'false' ? false :
       t in env ? env[t] :
+      t in embedded ? embedded[t] :
       fail(`no id '${t}'`, root)
   }
 }
@@ -143,11 +147,11 @@ function parse(tokens) {
   function until(start, mark) {
     const a = []
     while (index < len) {
-      const token = exp()
-      if (token.text === mark) {
+      if (tokens[index].text === mark) {
+        index++
         return a
       } else {
-        a.push(token)
+        a.push(exp())
       }
     }
     fail(`no close '${start.text}'`, start)
@@ -243,7 +247,7 @@ function tokenize(source) {
         tokens.push({text: c, pos: i, line, indent});
         break
       default:
-        if (c === '.' && /[a-zA-Z_]/.test(source[i+1])) {
+        if (c === '.' && !/[0-9]/.test(source[i-1])) {
           flush()
           tokens.push({text: c, pos: i, line, indent});
           break

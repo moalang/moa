@@ -1,5 +1,14 @@
 def run source:
-  source.float
+  eval(parse(tokenize(source)))
+
+def eval node:
+  node.float
+
+def parse tokens:
+  tokens.0
+
+def tokenize source:
+  list(source)
 
 test t:
   def eq expectation source:
