@@ -1,8 +1,8 @@
-def run source:
+def compileToJs source:
   eval(parse(tokenize(source)))
 
 def eval node:
-  node.float
+  node
 
 def parse tokens:
   tokens.0
@@ -12,6 +12,7 @@ def tokenize source:
 
 test t:
   def eq expectation source:
-    t.eq(run(source) expectation)
-  eq(1 "1")
-  eq(1.2 "1.2")
+    t.eq(compileToJs(source) expectation)
+  eq("1" "1")
+  eq("1.2" "1.2")
+  eq("\"a\"" "\"a\"")

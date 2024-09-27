@@ -34,7 +34,8 @@ function evaluate(root, env) {
     return le(b, a)
   }
   const embedded = {
-    list: (...a) => a.slice(0, -1) // drop caller at the last
+    list: (...a) => a.slice(0, -1), // drop caller at the last
+    dict: (...a) => new Map([...new Array((a.length - 1) / 2)].map((_, i) => [a[i*2], a[i*2+1]]))
   }
   const props = {
     object: o => o,
@@ -45,9 +46,10 @@ function evaluate(root, env) {
       float: parseFloat(s),
     })
   }
-  function prop(o, name) {
-    const table = props[typeof o](o)
-    return name.text in table ? table[name.text] : fail(`no field '${name.text}' of '${typeof o}'`, name)
+  function prop(obj, name) {
+    const table = props[typeof obj](obj)
+    const x = name.text in table ? table[name.text] : fail(`no field '${name.text}' of '${typeof obj}'`, name)
+    return typeof x === 'function' ? x.bind(obj) : x
   }
   function line(caller) {
     return Array.isArray(caller) ? line(caller[0]) : caller.line
@@ -217,6 +219,13 @@ function tokenize(source) {
   for (let i=0; i<len; ++i) {
     const c = source[i]
     switch (c) {
+      case '\\':
+        const cc = source[++i]
+        switch (cc) {
+          case 'n': token.text += '\n'; continue
+          case 't': token.text += '\t'; continue
+          default: token.text += cc; continue
+        }
       case '\n':
         line += 1
         indent = source.slice(i+1).match(/ */)[0].length

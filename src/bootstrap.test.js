@@ -5,6 +5,9 @@ tester((eq, only) => {
   eq(1, '1')
   eq(1.2, '1.2')
   eq('a', '"a"')
+  eq('"a"', '\\"a"\\')
+  eq('"\n"', '"\\n"')
+  eq('"\t"', '"\\t"')
   eq(true, 'true')
   eq(false, 'false')
   eq(1, 'a', {a: 1})
@@ -64,6 +67,13 @@ tester((eq, only) => {
   eq([], 'list()')
   eq([1], 'list(1)')
   eq(1, 'list(1).0')
+
+  // Dictionary
+  eq(new Map(), 'dict()')
+  eq(new Map([['a', 1]]), 'dict("a" 1)')
+  eq(1, 'dict("a" 1).get("a")')
+  eq(true, 'dict("a" 1).has("a")')
+  eq(false, 'dict("a" 1).has("b")')
 
   // Test
   eq(true, 'test t: t.eq(1 1)')
