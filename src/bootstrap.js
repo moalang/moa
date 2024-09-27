@@ -57,7 +57,6 @@ function evaluate(root, env) {
   if (Array.isArray(root)) {
     const head = root[0]
     const tail = root.slice(1)
-    if (head.text==="test") log(root)
     switch (head.text) {
       case '!': return !rec(tail[0])
       case '.': return prop(rec(tail[0]), tail[1])
