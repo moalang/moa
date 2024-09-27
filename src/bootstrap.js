@@ -2,7 +2,7 @@
 
 const STMT = '__statement'
 const STMT_TOKEN = {text: STMT, pos: 0, line: 0}
-const BLOCKS = new Set('def'.split(' '))
+const BLOCKS = new Set('def test'.split(' '))
 
 function run(source, env) {
   return evaluate(parse(tokenize(source)), env || {})
@@ -45,11 +45,17 @@ function evaluate(node, env) {
     object: o => o,
     string: s => ({
       size: s.length,
+      has(ss) { return s.includes(ss) },
     })
   }
   function prop(o, name) {
     const table = props[typeof o](o)
-    return name.text in table ? table[name.text] : fail(`no field '${name.text}'`, name)
+    return name.text in table ? table[name.text] : fail(`no field '${name.text}' of '${typeof o}'`, name)
+  }
+  const tester = {
+    eq(a, b) {
+      return eq(a, b) || fail(`'${a}' != '${b}'`)
+    }
   }
   if (Array.isArray(node)) {
     const head = node[0]
@@ -72,8 +78,9 @@ function evaluate(node, env) {
       case '%': return rec(tail[0]) % rec(tail[1])
       case STMT: return tail.map(rec).at(-1)
       case 'def': env[tail[0].text] = (...args) => recWith(tail.at(-1), args, tail.slice(1, -1)); break
+      case 'test': return recWith(tail.at(-1), [tester], tail.slice(0, -1))
       default:
-        const f = head.text in env ? env[head.text] : fail(`no id '${head.text}'`, head)
+        const f = Array.isArray(head) ? rec(head) : head.text in env ? env[head.text] : fail(`no id '${head.text}'`, head)
         return f(...tail.map(rec))
     }
   } else {
@@ -91,6 +98,64 @@ function evaluate(node, env) {
 function parse(tokens) {
   const len = tokens.length
   let index = 0
+  function consumeBottom() {
+    const node = consume()
+    switch (node.text) {
+      case '!':
+        return [node, consumeUnit()]
+      case '(':
+        const ret = consumeUnit()
+        consume().text !== ')' && fail('( is not close', node)
+        return ret
+      default:
+        if (BLOCKS.has(node.text)) {
+          const a = [node].concat(consumeLine(node.line, t => t.text === ':'))
+          if (tokens[index].line === node.line) {
+            return a.concat([consumeUnit()])
+          } else {
+            return a.concat([consumeBlock(tokens[index].indent)])
+          }
+        } else {
+          return node
+        }
+    }
+  }
+  function consumeUnit() {
+    return consumeWith(consumeBottom())
+  }
+  function consumeWith(node) {
+    if (index < len) {
+      switch (tokens[index].text) {
+        case '&&':
+        case '||':
+        case '==':
+        case '!=':
+        case '>':
+        case '<':
+        case '>=':
+        case '<=':
+        case '+':
+        case '-':
+        case '*':
+        case '/':
+        case '%':
+          const op2 = consume()
+          return [op2, node, consumeUnit()]
+        case '.':
+          const dot = consume()
+          const ref = [dot, node, consume()]
+          return consumeWith(ref)
+        case '(':
+          if (index > 0 && tokens[index-1].pos + tokens[index-1].text.length === tokens[index].pos) {
+            return consumeWith([node].concat(until(consume(), ')')))
+          }
+        default:
+          return node
+      }
+    } else {
+      return node
+    }
+  }
   function consume() {
     return tokens[index++] || fail('EOT', tokens.at(-1))
   }
@@ -125,62 +190,9 @@ function parse(tokens) {
     }
     fail(`no close '${start.text}'`, start)
   }
-  function unit() {
-    const node = bottom()
-    if (index < len) {
-      switch (tokens[index].text) {
-        case '&&':
-        case '||':
-        case '==':
-        case '!=':
-        case '>':
-        case '<':
-        case '>=':
-        case '<=':
-        case '+':
-        case '-':
-        case '*':
-        case '/':
-        case '%':
-        case '.':
-          const op2 = consume()
-          return [op2, node, unit()]
-        case '(':
-          if (node.pos + node.text.length === tokens[index].pos) {
-            return [node].concat(until(consume(), ')'))
-          }
-        default:
-          return node
-      }
-    } else {
-      return node
-    }
-  }
-  function bottom() {
-    const node = consume()
-    switch (node.text) {
-      case '!':
-        return [node, unit()]
-      case '(':
-        const ret = unit()
-        consume().text !== ')' && fail('( is not close', node)
-        return ret
-      default:
-        if (BLOCKS.has(node.text)) {
-          const a = [node].concat(consumeLine(node.line, t => t.text === ':'))
-          if (tokens[index].line === node.line) {
-            return a.concat([bottom()])
-          } else {
-            return a.concat([consumeBlock(tokens[index].indent)])
-          }
-        } else {
-          return node
-        }
-    }
-  }
   const nodes = []
   while (index < len) {
-    nodes.push(unit())
+    nodes.push(consumeUnit())
   }
   if (index < tokens.length) {
     fail('failed to parse', `${ index } < ${ tokens.length }`)

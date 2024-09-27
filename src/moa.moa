@@ -1,0 +1,4 @@
+test t:
+  def eq source expectation:
+    t.eq(run(source) expectation)
+  eq(1 "1")
