@@ -1,5 +1,2 @@
-t:
-	cd src && node --test --watch --experimental-test-coverage
-
-wc:
-	wc -l src/*.js
+test:
+	(cd src && node --test --watch --experimental-test-coverage)

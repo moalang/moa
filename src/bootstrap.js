@@ -1,0 +1,263 @@
+'use strict'
+
+const STMT = '__statement'
+const STMT_TOKEN = {text: STMT, pos: 0, line: 0}
+const BLOCKS = new Set('def'.split(' '))
+
+function run(source, env) {
+  return evaluate(parse(tokenize(source)), env || {})
+}
+
+function evaluate(node, env) {
+  function rec(node) {
+    return evaluate(node, env)
+  }
+  function recWith(node, args, types) {
+    const params = types.map((t, i) => [t.text, args[i]])
+    return evaluate(node, {...env, ...Object.fromEntries(params)})
+  }
+  function eq(a, b) {
+    const ta = typeof a
+    const tb = typeof b
+    const aa = Array.isArray(a)
+    const ab = Array.isArray(b)
+    return typeof a === typeof b && Array.isArray(a) && Array.isArray(b) &&
+      Array.isArray(a) ? a.length === b.length && a.every((x, i) => eq(x, b[i])) :
+      typeof a === 'object' ? eq(Object.keys(a).sort(), Object.keys(b).sort()) && Object.keys(a).every(k => eq(a[k], b[k])) :
+      a === b
+  }
+  function lt(a, b) {
+    return typeof a === typeof b && Array.isArray(a) && Array.isArray(b) &&
+      Array.isArray(a) ? a.every((x, i) => lt(x, b[i])) :
+      typeof a === 'object' ? Object.keys(a).every(k => lt(a[k], b[k])) :
+      a < b
+  }
+  function le(a, b) {
+    return eq(a, b) || lt(a, b)
+  }
+  function gt(a, b) {
+    return lt(b, a)
+  }
+  function ge(a, b) {
+    return le(b, a)
+  }
+  const props = {
+    object: o => o,
+    string: s => ({
+      size: s.length,
+    })
+  }
+  function prop(o, name) {
+    const table = props[typeof o](o)
+    return name.text in table ? table[name.text] : fail(`no field '${name.text}'`, name)
+  }
+  if (Array.isArray(node)) {
+    const head = node[0]
+    const tail = node.slice(1)
+    switch (head.text) {
+      case '!': return !rec(tail[0])
+      case '.': return prop(rec(tail[0]), tail[1])
+      case '&&': return rec(tail[0]) && rec(tail[1])
+      case '||': return rec(tail[0]) || rec(tail[1])
+      case '==': return eq(rec(tail[0]), rec(tail[1]))
+      case '!=': return !eq(rec(tail[0]), rec(tail[1]))
+      case '<': return lt(rec(tail[0]), rec(tail[1]))
+      case '<=': return le(rec(tail[0]), rec(tail[1]))
+      case '>': return gt(rec(tail[0]), rec(tail[1]))
+      case '>=': return ge(rec(tail[0]), rec(tail[1]))
+      case '+': return rec(tail[0]) + rec(tail[1])
+      case '-': return rec(tail[0]) - rec(tail[1])
+      case '*': return rec(tail[0]) * rec(tail[1])
+      case '/': return rec(tail[0]) / rec(tail[1])
+      case '%': return rec(tail[0]) % rec(tail[1])
+      case STMT: return tail.map(rec).at(-1)
+      case 'def': env[tail[0].text] = (...args) => recWith(tail.at(-1), args, tail.slice(1, -1)); break
+      default:
+        const f = head.text in env ? env[head.text] : fail(`no id '${head.text}'`, head)
+        return f(...tail.map(rec))
+    }
+  } else {
+    const t = node.text
+    return /^[0-9]+\./.test(t) ? parseFloat(t) :
+      /^[0-9]/.test(t) ? parseInt(t) :
+      t[0] === '"' ? t.slice(1, -1) :
+      t === 'true' ? true :
+      t === 'false' ? false :
+      t in env ? env[t] :
+      fail(`no id '${t}'`, node)
+  }
+}
+
+function parse(tokens) {
+  const len = tokens.length
+  let index = 0
+  function consume() {
+    return tokens[index++] || fail('EOT', tokens.at(-1))
+  }
+  function consumeLine(line, f) {
+    const a = []
+    while (index < len && tokens[index].line === line) {
+      const t = consume()
+      if (f(t)) {
+        break
+      } else {
+        a.push(t)
+      }
+    }
+    return a
+  }
+  function consumeBlock(indent) {
+    const a = []
+    while (index < len && tokens[index].indent === indent) {
+      a.push(unit())
+    }
+    return a
+  }
+  function until(start, mark) {
+    const a = []
+    while (index < len) {
+      const token = consume()
+      if (token.text === mark) {
+        return a
+      } else {
+        a.push(token)
+      }
+    }
+    fail(`no close '${start.text}'`, start)
+  }
+  function unit() {
+    const node = bottom()
+    if (index < len) {
+      switch (tokens[index].text) {
+        case '&&':
+        case '||':
+        case '==':
+        case '!=':
+        case '>':
+        case '<':
+        case '>=':
+        case '<=':
+        case '+':
+        case '-':
+        case '*':
+        case '/':
+        case '%':
+        case '.':
+          const op2 = consume()
+          return [op2, node, unit()]
+        case '(':
+          if (node.pos + node.text.length === tokens[index].pos) {
+            return [node].concat(until(consume(), ')'))
+          }
+        default:
+          return node
+      }
+    } else {
+      return node
+    }
+  }
+  function bottom() {
+    const node = consume()
+    switch (node.text) {
+      case '!':
+        return [node, unit()]
+      case '(':
+        const ret = unit()
+        consume().text !== ')' && fail('( is not close', node)
+        return ret
+      default:
+        if (BLOCKS.has(node.text)) {
+          const a = [node].concat(consumeLine(node.line, t => t.text === ':'))
+          if (tokens[index].line === node.line) {
+            return a.concat([bottom()])
+          } else {
+            return a.concat([consumeBlock(tokens[index].indent)])
+          }
+        } else {
+          return node
+        }
+    }
+  }
+  const nodes = []
+  while (index < len) {
+    nodes.push(unit())
+  }
+  if (index < tokens.length) {
+    fail('failed to parse', `${ index } < ${ tokens.length }`)
+  }
+  return nodes.length === 1 ? nodes[0] : [STMT_TOKEN].concat(nodes)
+}
+
+function tokenize(source) {
+  const len = source.length
+  const tokens = []
+  let line = 1
+  let indent = 0
+  let token = null
+  function flush() {
+    if (token) {
+      tokens.push(token)
+      token = null
+    }
+  }
+  for (let i=0; i<len; ++i) {
+    const c = source[i]
+    switch (c) {
+      case '\n':
+        line += 1
+        indent = source.slice(i+1).match(/ */)[0].length
+        flush()
+        break
+      case ' ':
+        flush()
+        break
+      case '&':
+        flush()
+        if (source[i+1] === '&') {
+          tokens.push({text: '&&', pos: i, line, indent})
+          i += 1
+        }
+        break
+      case '<':
+      case '>':
+      case '!':
+        if (source[i+1] === '=') {
+          tokens.push({text: c + '=', pos: i, line, indent})
+          i += 1
+          break
+        }
+      case ':':
+      case '(':
+      case ')':
+        flush()
+        tokens.push({text: c, pos: i, line, indent});
+        break
+      default:
+        if (c === '.' && /[a-zA-Z_]/.test(source[i+1])) {
+          flush()
+          tokens.push({text: c, pos: i, line, indent});
+          break
+        }
+        if (!token) {
+          token = {text: c, pos: i, line, indent}
+        } else {
+          token.text += c
+        }
+    }
+  }
+  token && tokens.push(token)
+  return tokens
+}
+
+function fail(message, info) {
+  const e = new Error(message)
+  e.info = info
+  throw e
+}
+
+function log(...a) {
+  console.log(...a)
+  return a[0]
+}
+
+module.exports = { run }
