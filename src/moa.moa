@@ -1,4 +1,8 @@
+def run source:
+  source.float
+
 test t:
-  def eq source expectation:
+  def eq expectation source:
     t.eq(run(source) expectation)
   eq(1 "1")
+  eq(1.2 "1.2")
