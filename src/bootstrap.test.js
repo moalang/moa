@@ -5,9 +5,9 @@ tester((eq, only) => {
   eq(1, '1')
   eq(1.2, '1.2')
   eq('a', '"a"')
-  eq('"a"', '\\"a"\\')
-  eq('"\n"', '"\\n"')
-  eq('"\t"', '"\\t"')
+  eq('"a"', '"\\"a"\\"')
+  eq('\n', '"\\n"')
+  eq('\t', '"\\t"')
   eq(true, 'true')
   eq(false, 'false')
   eq(1, 'a', {a: 1})
@@ -47,6 +47,14 @@ tester((eq, only) => {
   eq(2, '4 / 2')
   eq(1, '4 % 3')
 
+  // Variable
+  eq(1, 'var a 1')
+  eq(4, 'var a 2\na += 2\na')
+  eq(0, 'var a 2\na -= 2\na')
+  eq(4, 'var a 2\na *= 2\na')
+  eq(1, 'var a 2\na /= 2\na')
+  eq(0, 'var a 2\na %= 2\na')
+
   // Parenthesis
   eq(9, '(1 + 2) * 3')
   eq(1, '((1))')
@@ -74,6 +82,9 @@ tester((eq, only) => {
   eq(1, 'dict("a" 1).get("a")')
   eq(true, 'dict("a" 1).has("a")')
   eq(false, 'dict("a" 1).has("b")')
+
+  // Comment
+  //eq(1, '1 // comment')
 
   // Test
   eq(true, 'test t: t.eq(1 1)')

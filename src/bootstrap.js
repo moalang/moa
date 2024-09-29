@@ -78,7 +78,14 @@ function evaluate(root, env) {
       case '*': return rec(tail[0]) * rec(tail[1])
       case '/': return rec(tail[0]) / rec(tail[1])
       case '%': return rec(tail[0]) % rec(tail[1])
+      case '+=': return env[tail[0].text] = rec(tail[0]) + rec(tail[1])
+      case '-=': return env[tail[0].text] = rec(tail[0]) - rec(tail[1])
+      case '*=': return env[tail[0].text] = rec(tail[0]) * rec(tail[1])
+      case '/=': return env[tail[0].text] = rec(tail[0]) / rec(tail[1])
+      case '%=': return env[tail[0].text] = rec(tail[0]) % rec(tail[1])
       case '__stmt': return tail.map(rec).at(-1)
+      case 'let':
+      case 'var': return env[tail[0].text] = rec(tail[1])
       case 'def': return env[tail[0].text] = (...args) => recWith(tail.at(-1), args, tail.slice(1, -1))
       case 'test': return recWith(tail.at(-1), [tester], tail.slice(0, -1))
       default:
@@ -110,6 +117,9 @@ function parse(tokens) {
         const ret = exp()
         consume().text !== ')' && fail('( is not close', node)
         return ret
+      case 'let':
+      case 'var':
+        return [node].concat(line(node.line, t => t.text === ':'))
       case 'def':
       case 'test':
         const a = [node].concat(line(node.line, t => t.text === ':'))
@@ -174,6 +184,11 @@ function parse(tokens) {
         case '*':
         case '/':
         case '%':
+        case '+=':
+        case '-=':
+        case '*=':
+        case '/=':
+        case '%=':
           const op2 = consume()
           return [op2, node, exp()]
         case '.':
