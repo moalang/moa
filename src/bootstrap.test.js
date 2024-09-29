@@ -84,7 +84,8 @@ tester((eq, only) => {
   eq(false, 'dict("a" 1).has("b")')
 
   // Comment
-  //eq(1, '1 // comment')
+  eq(1, '1 //a')
+  eq(3, '1 /*a\nb\nc*/ + 2')
 
   // Test
   eq(true, 'test t: t.eq(1 1)')

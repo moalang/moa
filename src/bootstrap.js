@@ -256,6 +256,21 @@ function tokenize(source) {
           i += 1
         }
         break
+      case '/':
+        if (source[i+1] == '/') {
+          while (i < len && source[i] != '\n') {
+            i++
+          }
+          i++
+          break
+        } else if (source[i+1] == '*') {
+          i++
+          while (i < len && source.slice(i, i+2) != '*/') {
+            i++
+          }
+          i+=2
+          break
+        }
       case '<':
       case '>':
       case '!':
