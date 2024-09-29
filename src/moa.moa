@@ -1,7 +1,7 @@
-def compileToJs source:
-  eval(parse(tokenize(source)))
+def compileToC source:
+  buildC(parse(tokenize(source)))
 
-def eval node:
+def buildC node:
   node
 
 def parse tokens:
@@ -12,7 +12,7 @@ def tokenize source:
 
 test t:
   def eq expectation source:
-    t.eq(expectation compileToJs(source))
+    t.eq(expectation compileToC(source))
 
   // Value
   eq("1" "1")
