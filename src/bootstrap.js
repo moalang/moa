@@ -4,6 +4,8 @@ function run(source, env) {
   return evaluate(parse(tokenize(source)), env || {})
 }
 
+class Return { constructor(x) { this.value = x } }
+
 function evaluate(root, env) {
   function rec(node) {
     return evaluate(node, env)
@@ -83,14 +85,26 @@ function evaluate(root, env) {
       case '*=': return env[tail[0].text] = rec(tail[0]) * rec(tail[1])
       case '/=': return env[tail[0].text] = rec(tail[0]) / rec(tail[1])
       case '%=': return env[tail[0].text] = rec(tail[0]) % rec(tail[1])
-      case '__stmt': return tail.map(rec).at(-1)
+      case 'return': return new Return(rec(tail[0]))
+      case 'iif': return rec(tail[0]) ? rec(tail[1]) : rec(tail[2])
+      case 'if': return rec(tail[0]) && rec(tail[1])
       case 'let':
       case 'var': return env[tail[0].text] = rec(tail[1])
       case 'def': return env[tail[0].text] = (...args) => recWith(tail.at(-1), args, tail.slice(1, -1))
       case 'test': return recWith(tail.at(-1), [tester], tail.slice(0, -1))
+      case '__stmt':
+        let value
+        for (const item of tail) {
+          value = rec(item)
+          if (value instanceof Return) {
+            return value
+          }
+        }
+        return value
       default:
         const f = rec(head)
-        return f(...tail.map(rec), head)
+        const ret = f(...tail.map(rec), head)
+        return ret instanceof Return ? ret.value : ret
     }
   } else {
     const t = root.text
@@ -117,9 +131,12 @@ function parse(tokens) {
         const ret = exp()
         consume().text !== ')' && fail('( is not close', node)
         return ret
+      case 'return':
+        return [node].concat(line(node.line, _ => false))
       case 'let':
       case 'var':
         return [node].concat(line(node.line, t => t.text === ':'))
+      case 'if':
       case 'def':
       case 'test':
         const a = [node].concat(line(node.line, t => t.text === ':'))

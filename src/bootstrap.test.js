@@ -83,6 +83,12 @@ tester((eq, only) => {
   eq(true, 'dict("a" 1).has("a")')
   eq(false, 'dict("a" 1).has("b")')
 
+  // Branch
+  eq(1, 'iif(true 1 2)')
+  eq(2, 'iif(false 1 2)')
+  eq(1, 'def f:\n  if true: return 1\n  2\nf()')
+  eq(2, 'def f:\n  if false: return 1\n  2\nf()')
+
   // Comment
   eq(1, '1 //a')
   eq(3, '1 /*a\nb\nc*/ + 2')
@@ -130,3 +136,5 @@ function tester(f) {
     f(eq, noop)
   }
 }
+
+try { require('./moa.moa') } catch (_) {} // Add target moa.moa to "node --watch" command

@@ -13,6 +13,14 @@ def tokenize source:
 test t:
   def eq expectation source:
     t.eq(expectation compileToJs(source))
+
+  // Value
   eq("1" "1")
   eq("1.2" "1.2")
   eq("\"a\"" "\"a\"")
+  //eq('"a"' '"\\"a"\\"')
+  //eq('\n' '"\\n"')
+  //eq('\t' '"\\t"')
+  //eq(true 'true')
+  //eq(false 'false')
+  //eq(1, 'a' {a: 1})
