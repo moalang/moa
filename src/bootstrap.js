@@ -5,6 +5,8 @@ function run(source, env) {
 }
 
 class Return { constructor(x) { this.value = x } }
+class Break { }
+class Continue { }
 
 function evaluate(root, env) {
   function rec(node) {
@@ -88,6 +90,20 @@ function evaluate(root, env) {
       case 'return': return new Return(rec(tail[0]))
       case 'iif': return rec(tail[0]) ? rec(tail[1]) : rec(tail[2])
       case 'if': return rec(tail[0]) && rec(tail[1])
+      case 'while':
+        while (rec(tail[0])) {
+          const value = rec(tail[1])
+          if (value instanceof Return) {
+            return value
+          }
+          if (value instanceof Continue) {
+            continue
+          }
+          if (value instanceof Break) {
+            break
+          }
+        }
+        return
       case 'let':
       case 'var': return env[tail[0].text] = rec(tail[1])
       case 'def': return env[tail[0].text] = (...args) => recWith(tail.at(-1), args, tail.slice(1, -1))
@@ -113,6 +129,8 @@ function evaluate(root, env) {
       t[0] === '"' ? t.slice(1, -1) :
       t === 'true' ? true :
       t === 'false' ? false :
+      t === 'break'? new Break() :
+      t === 'continue'? new Continue() :
       t in env ? env[t] :
       t in embedded ? embedded[t] :
       fail(`no id '${t}'`, root)
@@ -144,6 +162,14 @@ function parse(tokens) {
           return a.concat([exp()])
         } else {
           return a.concat([block(tokens[index])])
+        }
+      case 'while':
+        const cond = exp()
+        tokens[index].text === ':' ? index++ : fail(`no ':' but '${tokens[index].text}'`, tokens[index])
+        if (tokens[index].line === node.line) {
+          return [node, cond].concat([exp()])
+        } else {
+          return [node, cond].concat([block(tokens[index])])
         }
       default:
         return node
@@ -326,7 +352,7 @@ function fail(message, info) {
 }
 
 function log(...a) {
-  console.dir(a, {depth: null})
+  console.dir(a.length === 1 ? a[0] : a, {depth: null})
   return a[0]
 }
 

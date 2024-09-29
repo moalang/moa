@@ -89,6 +89,11 @@ tester((eq, only) => {
   eq(1, 'def f:\n  if true: return 1\n  2\nf()')
   eq(2, 'def f:\n  if false: return 1\n  2\nf()')
 
+  // While loop
+  eq(3, 'var a 1\nwhile a < 3:\n  a += 1\na')
+  eq(2, 'var a 1\nwhile a < 3:\n  a += 1\n  break\na')
+  eq(3, 'var a 1\nwhile a < 3:\n  a += 1\n  continue\n  a += 1\na')
+
   // Comment
   eq(1, '1 //a')
   eq(3, '1 /*a\nb\nc*/ + 2')
