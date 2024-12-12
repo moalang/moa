@@ -27,9 +27,9 @@ http.moa
 ```
 use http
 
-main = http.serve "localhost:8000" req => (type:"text/plain" body:"hello")
+main: http.serve "localhost:8000" req => (type:"text/plain" body:"hello")
 
-test = assert.equal "hello" main.get("/").body
+test {eq}: eq "hello" main.get("/").body
 ```
 
 ```
@@ -54,38 +54,6 @@ hello
 
 
 
-## Example: Static site generator
-```
-use fs
-
-main = fs.files "/**/*.md" file => fs.write path html {
-  path = file.path.replace ".md" ".html"
-  html = util.md_to_html file.string
-}
-
-package util
-
-md_to_html md = "html"
-```
-
-
-
-## Example: fibonatch
-```
-fib n =
-  a = 0
-  b = 1
-  while a < n {
-    yield a
-    a, b = b, a + b
-  }
-
-main =
-  puts fib(1000)
-```
-
-
-
 ## Moa command usage
 ```
 Usage:
@@ -101,4 +69,62 @@ Usage:
 ```
 :          -- repeat last command
 :q         -- quit the shell
+```
+
+
+
+## Primitive
+- bool
+- int
+- float
+- string
+- function
+- tuple
+- struct
+
+## Standard library
+- optional
+- list
+- map
+- set
+- time
+- random
+- stream
+- error
+
+
+
+## Syntax
+```
+top: (line | block | exp)*
+line: <continue break return import export package var let> exp* "\n"
+block: <def struct if else match for while test> unit* "{" exp* "}"
+exp: unit (op2 exp)?
+unit: atom no-space suffix*
+suffix:
+| "." id
+| "(" exp* ")"
+| "[" exp* "]"
+atom:
+| "(" exp ")"
+| [0-9]+ ("." [0-9]+)?
+| '"' .* '"'
+| id
+op2: [+-*/%<>|&^=!]+
+id: [A-Za-z_][A-Za-z0-9_]*
+```
+
+## Example: fibonatch
+```
+def fib n {
+  var a 0 b 1
+  while a < n {
+    yield a
+    a, b = b, a + b
+  }
+}
+
+def main {
+  puts(fib(1000))
+}
 ```
