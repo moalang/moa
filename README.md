@@ -96,9 +96,8 @@ Usage:
 
 ## Syntax
 ```
-top: (line | block | exp)*
-line: <continue break return import export package var let> exp* "\n"
-block: <def struct if else match for while test> unit* "{" exp* "}"
+top: (line (br line)*)?
+line: (reserved exp*) | exp
 exp: unit (op2 exp)?
 unit: atom no-space suffix*
 suffix:
@@ -107,24 +106,36 @@ suffix:
 | "[" exp* "]"
 atom:
 | "(" exp ")"
+| "{" top "}"
 | [0-9]+ ("." [0-9]+)?
 | '"' .* '"'
 | id
 op2: [+-*/%<>|&^=!]+
 id: [A-Za-z_][A-Za-z0-9_]*
+br: "\n" | ";"
+reserved: def struct enum var let if else match for while test continue break return package import export
 ```
 
-## Example: fibonatch
+## Examples
 ```
-def fib n {
+def fib n:
   var a 0 b 1
+  while a < n:
+    yield a
+    a, b = b, a + b
+
+def fib n var(a 0 b 1
   while a < n {
     yield a
     a, b = b, a + b
-  }
-}
+  })
 
-def main {
-  puts(fib(1000))
-}
+def gcd x y with(
+  gcd_ a 0 a
+  gcd_ a b gcd_(b a.rem(b))
+  gcd_(x.abs b.abs))
+
+gcd x y =  gcd' (abs x) (abs y)
+           where gcd' a 0  =  a
+                 gcd' a b  =  gcd' b (a `rem` b)
 ```
