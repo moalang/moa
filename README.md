@@ -27,9 +27,11 @@ http.moa
 ```
 use http
 
-main: http.serve "localhost:8000" req => (type:"text/plain" body:"hello")
+main:
+  http.serve "localhost:8000" req => (type:"text/plain" body:"hello")
 
-test {eq}: eq "hello" main.get("/").body
+test eq:
+  eq "hello" main.get("/").body
 ```
 
 ```
@@ -58,9 +60,10 @@ hello
 ```
 Usage:
     moa                   # launch interactive shell
-    moa run  [--watch]    # run the program
-    moa test [--watch]    # test the program
+    moa run               # run the program
+    moa test              # test the program
     moa build [os] [arch] # compile to executable file
+    moa watch [...]       # Run command and again when a file is changed
 ```
 
 
@@ -73,31 +76,9 @@ Usage:
 
 
 
-## Primitive
-- bool
-- int
-- float
-- string
-- function
-- tuple
-- struct
-
-## Standard library
-- optional
-- list
-- map
-- set
-- time
-- random
-- stream
-- error
-
-
-
 ## Syntax
 ```
-top: (line (br line)*)?
-line: (reserved exp*) | exp
+top: (exp+ ("\n" exp+)*)?
 exp: unit (op2 exp)?
 unit: atom no-space suffix*
 suffix:
@@ -106,36 +87,79 @@ suffix:
 | "[" exp* "]"
 atom:
 | "(" exp ")"
+| "[" exp* "]"
 | "{" top "}"
 | [0-9]+ ("." [0-9]+)?
 | '"' .* '"'
 | id
 op2: [+-*/%<>|&^=!]+
 id: [A-Za-z_][A-Za-z0-9_]*
-br: "\n" | ";"
-reserved: def struct enum var let if else match for while test continue break return package import export
+reserved: def struct enum var let test if else when iif switch match for while continue break return yield package import export
 ```
 
-## Examples
+## Reserved words
+Primitive
+- any
+- bool, true, false
+- int
+- float
+- string
+- function
+- tuple
+- struct
+- i8, i16, i32, i64, u8, u16, u32, u64, f8, f16, f32, f64
+
+Container
+- opt, some, none
+- list
+- map
+- set
+- time
+- async
+- stream, reader, writer
+
+IO
+- now
+- random
+- tcp
+- fs
+
+Declaration
+- def
+- struct
+- enum
+- var
+- let
+- test
+
+Branch
+- if
+- else
+- when
+- iif
+- switch
+- match
+
+Control flow
+- for
+- while
+- continue
+- break
+- yield
+- return
+- throw, catch
+
+Namespcae
+- packgage
+- import
+- export
+
+Binary operators
 ```
-def fib n:
-  var a 0 b 1
-  while a < n:
-    yield a
-    a, b = b, a + b
-
-def fib n var(a 0 b 1
-  while a < n {
-    yield a
-    a, b = b, a + b
-  })
-
-def gcd x y with(
-  gcd_ a 0 a
-  gcd_ a b gcd_(b a.rem(b))
-  gcd_(x.abs b.abs))
-
-gcd x y =  gcd' (abs x) (abs y)
-           where gcd' a 0  =  a
-                 gcd' a b  =  gcd' b (a `rem` b)
+* // / %          # number (high)
++ -               # number (low)
+| & ^ << >>       # binary operator
+|| &&             # comparision (low)
+> >= < <=  == !=  # comparision (high)
+= += -= ...       # update
 ```

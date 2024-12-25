@@ -1,0 +1,94 @@
+#!/usr/bin/env python3
+import sys
+from collections import defaultdict
+
+class Result:
+    def __init__(self, path, ec):
+        self.path = path
+        self.ec = ec
+        self.count = sum(ec.values())
+
+def countElements(s):
+    brs    = '\r\n'
+    spaces = ' \r\n\t'
+    escapedSpaces = '\\r \\n \\t'.split(' ')
+    chars3 = '=== !== ...'.split(' ')
+    chars2 = '== != <= >= << >> || && ..'.split(' ')
+    chars1 = '+-*/%|&=!()[]{}<>^~,:;.?'
+    charsnum = '0123456789'
+    charsid = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_'
+    i = 0
+    ln = len(s)
+    ec = defaultdict(int)
+    while i < ln:
+        # TODO: support regular expression
+        if s[i] == '"':
+            i += 1
+            while i < ln and s[i] != '"' and s[i-1] != '\\':
+                i += 1
+            i += 1
+            ec['Double quote string'] += 1
+        elif s[i] == "'":
+            i += 1
+            while i < ln and s[i] != "'" and s[i-1] != '\\':
+                i += 1
+            i += 1
+            ec['Single quote string'] += 1
+        elif s[i] == '`':
+            i += 1
+            while i < ln and s[i] != '`' and s[i-1] != '\\':
+                i += 1
+            i += 1
+            ec['Back quote string'] += 1
+        elif s[i] in spaces:
+            while i < ln and s[i] in spaces:
+                i += 1
+        elif s[i:i+2] in escapedSpaces:
+            i += 2
+        elif s[i] == '#' or s[i:i+2] == '//':
+            while i < ln and s[i] not in brs:
+                i += 1
+            ec['Comment'] += 1
+        elif s[i:i+3] in chars2:
+            ec[s[i:i+3]] += 1
+            i += 3
+        elif s[i:i+2] in chars2:
+            ec[s[i:i+2]] += 1
+            i += 2
+        elif s[i] in chars1:
+            ec[s[i]] += 1
+            i += 1
+        elif s[i] in charsnum:
+            while i < ln and s[i] in charsnum or s[i] in 'e.':
+                i += 1
+            #ec['__' + s[j:i]] += 1
+            ec['Number'] += 1
+        elif s[i] in charsid:
+            j = i
+            i += 1
+            while i < ln and s[i] in charsid:
+                i += 1
+            #ec['__' + s[j:i]] += 1
+            ec['ID'] += 1
+        else:
+            ec['__UNKNOWN__ ' + s[i:i+20]] += 1
+            i += 1
+    return ec
+
+results = []
+verbose = False
+for path in sys.argv[1:]:
+    if path == '-v':
+        verbose = True
+    else:
+        with open(path) as fh:
+            results.append(Result(path, countElements(fh.read())))
+
+total = 0
+for result in results:
+    total += result.count
+    print(result.count, '\t', result.path)
+    if verbose:
+        for element, count in sorted(result.ec.items(), key=lambda x: x[1], reverse=True):
+            print('\t', count, element)
+print(total, '\t', 'total')

@@ -1,0 +1,2 @@
+count:
+	./ec -v examples/*
