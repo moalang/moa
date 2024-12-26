@@ -4,8 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"runtime"
-	"slices"
+	"path/filepath"
 	"strings"
 )
 
@@ -21,9 +20,9 @@ func main() {
 	case "test":
 		commandTest()
 	case "version":
-		fmt.Println("moa v0.0.1 " + runtime.GOOS + "/" + runtime.GOARCH)
+		fmt.Println("moa v0.0.1 " + getPlatform())
 	case "go-version":
-		fmt.Print(runGoCommand("version"), " ")
+		fmt.Println(strings.Trim(runGoCommand("version"), " "))
 	default:
 		fmt.Println(`Moa is a programming language
 
@@ -39,7 +38,7 @@ Commands:
 }
 
 func commandBuild() {
-	compile(generate(), "build", "-ldflags=-s -w", "-trimpath", "-o", "a.out")
+	println("build not implemented yet")
 }
 
 func commandREPL(args []string) {
@@ -52,41 +51,26 @@ func commandREPL(args []string) {
 }
 
 func commandRun() {
-	fmt.Print(compile(generate(), "run"))
+	fmt.Println("hello")
 }
 
 func commandTest() {
-	fmt.Print(compile(generate("test"), "run"))
-}
-
-func generate(options ...string) string {
-	if slices.Contains(options, "test") {
-		return `package main
-import "fmt"
-func main() { fmt.Println("...............................ok") }`
-	} else {
-		return `package main
-import "fmt"
-func main() { fmt.Println("hello") }`
-	}
-}
-
-func compile(gocode string, args ...string) string {
-	f, err := os.CreateTemp("", "main*.go")
-	if err != nil {
-		panic(err)
-	}
-	defer os.Remove(f.Name())
-	_, err = f.Write([]byte(gocode))
-	if err != nil {
-		panic(err)
-	}
-	args = append(args, f.Name())
-	return runGoCommand(args...)
+	println("test not implemented yet")
 }
 
 func runGoCommand(args ...string) string {
-	cmd := exec.Command("go", args...)
+	tempDir, err := os.MkdirTemp("", "moa-go-binary")
+	if err != nil {
+		panic(err.Error())
+	}
+	defer os.RemoveAll(tempDir)
+	os.Setenv("GOROOT", tempDir)
+	binaryPath := filepath.Join(tempDir, "go")
+	err = os.WriteFile(binaryPath, getGoBinary(), 0755)
+	if err != nil {
+		panic(err.Error())
+	}
+	cmd := exec.Command(binaryPath, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		fmt.Println(string(output))
