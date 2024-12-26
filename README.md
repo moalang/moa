@@ -12,7 +12,7 @@ bash -c "$(curl -fsS https://raw.githubusercontent.com/moalang/moa/main/bin/inst
 
 Hello world
 ```
-echo 'main: puts "Hello world"' | moa
+echo 'def main puts("Hello world")' | moa
 ```
 
 ```
@@ -27,11 +27,13 @@ http.moa
 ```
 use http
 
-main:
+def main {
   http.serve "localhost:8000" req => (type:"text/plain" body:"hello")
+}
 
-test eq:
-  eq "hello" main.get("/").body
+def test t {
+  t.eq "hello" main.get("/").body
+}
 ```
 
 ```
@@ -78,13 +80,15 @@ Usage:
 
 ## Syntax
 ```
-top: (exp+ ("\n" exp+)*)?
+top: line ("\n" line)*
+line: exp+ comment?
 exp: unit (op2 exp)?
 unit: atom no-space suffix*
 suffix:
 | "." id
 | "(" exp* ")"
 | "[" exp* "]"
+| "{" exp* "}"
 atom:
 | "(" exp ")"
 | "[" exp* "]"
@@ -94,23 +98,24 @@ atom:
 | id
 op2: [+-*/%<>|&^=!]+
 id: [A-Za-z_][A-Za-z0-9_]*
-reserved: def struct enum var let test if else when iif switch match for while continue break return yield package import export
+comment: "//" .*
+reserved: def class trait enum var let test if else when iif switch match for while continue break return yield package import export
 ```
 
-## Reserved words
+## Keyword
 Primitive
-- any
 - bool, true, false
 - int
 - float
 - string
-- function
-- tuple
-- struct
+- fn
 - i8, i16, i32, i64, u8, u16, u32, u64, f8, f16, f32, f64
 
 Container
 - opt, some, none
+- ref, wref
+- tuple
+- struct
 - list
 - map
 - set
@@ -126,7 +131,8 @@ IO
 
 Declaration
 - def
-- struct
+- class
+- trait
 - enum
 - var
 - let
@@ -156,10 +162,11 @@ Namespcae
 
 Binary operators
 ```
-* // / %          # number (high)
+??                # opt
+* / %             # number (high)
 + -               # number (low)
-| & ^ << >>       # binary operator
-|| &&             # comparision (low)
-> >= < <=  == !=  # comparision (high)
-= += -= ...       # update
+| & ^ << >>       # integer
+|| &&             # boolean
+> >= < <=  == !=  # comparision
+= += -= ...       # updation
 ```
