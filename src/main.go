@@ -100,13 +100,45 @@ func parseMoaCodes(args []string) []AST {
 		if err != nil {
 			panic(err)
 		}
-		asts = append(asts, parse(tokenize(string(buf), file))...)
+		asts = append(asts, parseMoaCode(tokenize(string(buf), file))...)
 	}
 	return asts
 }
 
-func parse(tokens []Token) []AST {
-	return []AST{makeAST("def", makeAST("main"), makeAST("puts", makeAST("\"hello\"")))}
+func parseMoaCode(tokens []Token) []AST {
+	makeAST := func(token Token, args ...AST) AST {
+		return AST{Token: token, Args: args, Type: Type{TypeName: ""}}
+	}
+	pos := 0
+	asts := []AST{}
+	var parse func() AST
+	parse = func() AST {
+		ast := makeAST(tokens[pos])
+		pos++
+		if ast.Token.Code == "def" {
+			for pos < len(tokens) && tokens[pos].Lineno == ast.Token.Lineno {
+				ast.Args = append(ast.Args, parse())
+			}
+			return ast
+		} else if ast.Token.Kind == KID {
+			if pos < len(tokens) && tokens[pos].Code == "(" {
+				pos++ // drop "("
+				for pos < len(tokens) && tokens[pos].Code != ")" {
+					ast.Args = append(ast.Args, parse())
+				}
+				pos++ // drop ")"
+			}
+			return ast
+		} else if ast.Token.Kind == KINT || ast.Token.Kind == KFLOAT || ast.Token.Kind == KSTR {
+			return ast
+		} else {
+			panic(fmt.Sprintf("Unknown %v", tokens[pos]))
+		}
+	}
+	for pos < len(tokens) {
+		asts = append(asts, parse())
+	}
+	return asts
 }
 
 func tokenize(code string, file string) []Token {
@@ -114,14 +146,19 @@ func tokenize(code string, file string) []Token {
 	i := 0
 	lineno := 1
 	br := 0
-	units := strings.Split("! ~ * / % + - | & ^ > < = ( ) [ ] { } .", " ")
-	op2s := strings.Split("?? << >> || && >= == != <= += -= *= /= %= |= &= ^=", " ")
-	push := func(code string) {
+	uop1s := strings.Split("! ~", " ")
+	bop1s := strings.Split("* / % + - | & ^ < > =", " ")
+	bop2s := strings.Split("?? << >> || && == != <= >=", " ")
+	bop2as := strings.Split("+= -= *= /= %= |= &= ^=", " ")
+	bop3as := strings.Split("<<= >>= ||= &&=", " ")
+	symbols := strings.Split("( ) [ ] { } . =", " ")
+	push := func(code string, kind int) {
 		tokens = append(tokens, Token{
 			File:   file,
 			Code:   code,
 			Lineno: lineno,
 			Column: i - br + 1,
+			Kind:   kind,
 		})
 	}
 	for i = 0; i < len(code); i++ {
@@ -130,23 +167,38 @@ func tokenize(code string, file string) []Token {
 			br = i
 		} else if code[i] == ' ' {
 			// ignore space
-		} else if slices.Contains(op2s, code[i:i+2]) {
-			push(code[i : i+2])
+		} else if slices.Contains(symbols, code[i:i+1]) {
+			push(code[i:i+1], KSYM)
+		} else if slices.Contains(uop1s, code[i:i+1]) {
+			push(code[i:i+1], KOP1)
+		} else if slices.Contains(bop1s, code[i:i+1]) {
+			push(code[i:i+1], KOP2)
+		} else if slices.Contains(bop2s, code[i:i+2]) {
+			push(code[i:i+2], KOP2)
 			i++
-		} else if slices.Contains(units, code[i:i+1]) {
-			push(code[i : i+1])
+		} else if slices.Contains(bop2as, code[i:i+2]) {
+			push(code[i:i+2], KOP2A)
+			i++
+		} else if slices.Contains(bop3as, code[i:i+3]) {
+			push(code[i:i+3], KOP2A)
+			i += 2
 		} else if '0' <= code[i] && code[i] <= '9' {
 			left := i
 			for i < len(code) && (('0' <= code[i+1] && code[i+1] <= '9') || code[i+1] == '.') {
 				i++
 			}
-			push(code[left : i+1])
+			s := code[left : i+1]
+			if strings.Contains(s, ".") {
+				push(s, KFLOAT)
+			} else {
+				push(s, KINT)
+			}
 		} else if ('A' <= code[i] && code[i] <= 'Z') || ('a' <= code[i] && code[i] <= 'z') || code[i] == '_' {
 			left := i
 			for i < len(code) && (('A' <= code[i+1] && code[i+1] <= 'Z') || ('a' <= code[i+1] && code[i+1] <= 'z') || code[i+1] == '_') {
 				i += 1
 			}
-			push(code[left : i+1])
+			push(code[left:i+1], KID)
 		} else if code[i] == '"' {
 			left := i
 			i++
@@ -156,7 +208,7 @@ func tokenize(code string, file string) []Token {
 			s := code[left : i+1]
 			s = strings.Replace(s, "\\n", "\n", -1)
 			s = strings.Replace(s, "\\t", "\t", -1)
-			push(s)
+			push(s, KSTR)
 		} else {
 			panic("Unknown character `" + code[i:i+1] + "`")
 		}
@@ -164,10 +216,6 @@ func tokenize(code string, file string) []Token {
 
 	//fmt.Println(tokens)
 	return tokens
-}
-
-func makeAST(code string, args ...AST) AST {
-	return AST{Token: Token{Code: code}, Args: args, Type: Type{TypeName: "any"}}
 }
 
 func generateGoCode(asts []AST, isTest bool) string {
@@ -189,6 +237,7 @@ func moa_puts(a ...any) {
 
 type Type struct {
 	TypeName string
+	Resolved bool
 	Instance *Type
 }
 
@@ -197,7 +246,19 @@ type Token struct {
 	Code   string
 	Lineno int
 	Column int
+	Kind   int
 }
+
+const (
+	KOP1 = iota
+	KOP2
+	KOP2A
+	KSYM
+	KINT
+	KFLOAT
+	KID
+	KSTR
+)
 
 type AST struct {
 	Token Token
