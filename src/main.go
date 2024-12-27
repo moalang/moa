@@ -1,25 +1,33 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
 	"runtime"
 	"slices"
-	"strings"
 )
 
 func main() {
 	args := append(os.Args[1:], []string{""}...)
 	switch args[0] {
 	case "build":
-		commandBuild()
+		compile(generate(), "build", "-ldflags=-s -w", "-trimpath", "-o", "a.out")
 	case "repl":
-		commandREPL(args[1:])
+		reader := bufio.NewReader(os.Stdin)
+		for {
+			fmt.Print("> ")
+			text, err := reader.ReadString('\n')
+			if err != nil {
+				panic(err)
+			}
+			fmt.Print(text)
+		}
 	case "run":
-		commandRun()
+		fmt.Print(compile(generate(), "run"))
 	case "test":
-		commandTest()
+		fmt.Print(compile(generate("test"), "run"))
 	case "version":
 		fmt.Println("moa v0.0.1 " + runtime.GOOS + "/" + runtime.GOARCH)
 	case "go-version":
@@ -36,27 +44,6 @@ Commands:
   moa test                 run tests
   moa version              display Moa version`)
 	}
-}
-
-func commandBuild() {
-	compile(generate(), "build", "-ldflags=-s -w", "-trimpath", "-o", "a.out")
-}
-
-func commandREPL(args []string) {
-	if len(args) > 0 {
-		code := strings.Join(args, " ")
-		println("repl not implemented yet : " + code)
-	} else {
-		println("repl not implemented yet")
-	}
-}
-
-func commandRun() {
-	fmt.Print(compile(generate(), "run"))
-}
-
-func commandTest() {
-	fmt.Print(compile(generate("test"), "run"))
 }
 
 func generate(options ...string) string {
