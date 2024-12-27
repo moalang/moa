@@ -12,7 +12,8 @@ bash -c "$(curl -fsS https://raw.githubusercontent.com/moalang/moa/main/bin/inst
 
 Hello world
 ```
-echo 'def main io.puts("Hello world")' | moa
+echo 'def main io.puts("Hello world")' > hello.moa
+moa run hello.moa
 ```
 
 ```
@@ -25,10 +26,8 @@ Hello world
 
 http.moa
 ```
-use http
-
 def main {
-  http.serve "localhost:8000" req => (type:"text/plain" body:"hello")
+  io.http.serve "localhost:8000" req => (type:"text/plain" body:"hello")
 }
 
 def test t {
@@ -155,10 +154,14 @@ Namespcae
 - export
 
 IO
+- io.put
+- io.puts
+- io.log
 - io.now
 - io.rand
 - io.fs
 - io.http
+- io.db
 
 Binary operators
 ```
