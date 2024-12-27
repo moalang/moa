@@ -30,9 +30,9 @@ func main() {
 			fmt.Print(text)
 		}
 	case "run":
-		fmt.Print(runGoCommand(compileToGoCode(args), "run"))
+		runGoCommand(compileToGoCode(args), "run")
 	case "test":
-		fmt.Print(runGoCommand(compileToGoCode(args), "run"))
+		runGoCommand(compileToGoCode(args), "run")
 	case "version":
 		fmt.Println("moa v0.0.1 " + runtime.GOOS + "/" + runtime.GOARCH)
 	default:
@@ -49,7 +49,7 @@ Commands:
 	}
 }
 
-func runGoCommand(gocode string, args ...string) string {
+func runGoCommand(gocode string, args ...string) {
 	f, err := os.CreateTemp("", "main*.go")
 	if err != nil {
 		panic(err)
@@ -63,10 +63,9 @@ func runGoCommand(gocode string, args ...string) string {
 	cmd := exec.Command("go", args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		fmt.Println(string(output))
 		panic(err.Error())
 	}
-	return string(output)
+	fmt.Print(string(output))
 }
 
 func compileToGoCode(args []string) string {
@@ -108,7 +107,8 @@ func readMoaCodes(args []string) []string {
 }
 
 type Type struct {
-	GoType string
+	TypeName string
+	Instance *Type
 }
 
 type AST struct {
@@ -133,30 +133,33 @@ func (a AST) Gen() string {
 		name := a.Args[0]
 		args := []string{}
 		for _, arg := range a.Args[0].Args {
-			args = append(args, arg.Code+" "+arg.Type.GoType)
+			args = append(args, arg.Code+" "+arg.GoType())
 		}
 		body := []string{}
 		for _, arg := range a.Args[1:] {
 			body = append(body, arg.Gen())
 		}
-		return fmt.Sprintf(`func %s(%s) { %s }`, name, strings.Join(args, ", "), strings.Join(body, "\n"))
+		return fmt.Sprintf(`func moa_%s(%s) { %s }`, name, strings.Join(args, ", "), strings.Join(body, "\n"))
 	} else if len(a.Args) == 0 {
 		return a.Code
 	} else {
-		s := a.Code
-		if s == "puts" {
-			s = "fmt.Println"
-		}
-		s += "("
+		s := "moa_" + a.Code + "("
 		for i, arg := range a.Args {
 			if i > 0 {
 				s += ","
 			}
 			s += arg.Gen()
 		}
-		s += ")"
-		return s
+		return s + ")"
 	}
+}
+
+func (a AST) GoType() string {
+	t := &a.Type
+	for t != nil && t.Instance != nil {
+		t = t.Instance
+	}
+	return t.TypeName
 }
 
 func parseMoaCode(code string) AST {
@@ -164,17 +167,18 @@ func parseMoaCode(code string) AST {
 }
 
 func makeAST(code string, args ...AST) AST {
-	return AST{Code: code, Args: args, Type: Type{GoType: "int"}}
+	return AST{Code: code, Args: args, Type: Type{TypeName: "any"}}
 }
 
 func generateGoCode(ast AST, isTest bool) string {
+	prefix := `package main
+import "fmt"
+func moa_puts(a ...any) {
+  fmt.Println(a...)
+}`
 	if isTest {
-		return `package main
-import "fmt"
-func main() { fmt.Println("...............................ok") }`
+		return prefix + "\nfunc main() { fmt.Println(\"...............................ok\") }"
 	} else {
-		return `package main
-import "fmt"
-` + ast.Gen()
+		return prefix + "\nfunc main() { moa_main() }\n" + ast.Gen()
 	}
 }
