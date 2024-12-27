@@ -5,15 +5,20 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
-	"slices"
+	"strings"
 )
 
 func main() {
-	args := append(os.Args[1:], []string{""}...)
-	switch args[0] {
+	args := os.Args[1:]
+	command := ""
+	if len(args) >= 1 {
+		command = args[0]
+	}
+	switch command {
 	case "build":
-		compile(generate(), "build", "-ldflags=-s -w", "-trimpath", "-o", "a.out")
+		runGoCommand(compileToGoCode(args), "build", "-ldflags=-s -w", "-trimpath", "-o", "a.out")
 	case "repl":
 		reader := bufio.NewReader(os.Stdin)
 		for {
@@ -25,13 +30,11 @@ func main() {
 			fmt.Print(text)
 		}
 	case "run":
-		fmt.Print(compile(generate(), "run"))
+		fmt.Print(runGoCommand(compileToGoCode(args), "run"))
 	case "test":
-		fmt.Print(compile(generate("test"), "run"))
+		fmt.Print(runGoCommand(compileToGoCode(args), "run"))
 	case "version":
 		fmt.Println("moa v0.0.1 " + runtime.GOOS + "/" + runtime.GOARCH)
-	case "go-version":
-		fmt.Print(runGoCommand("version"), " ")
 	default:
 		fmt.Println(`Moa is a programming language
 
@@ -46,19 +49,7 @@ Commands:
 	}
 }
 
-func generate(options ...string) string {
-	if slices.Contains(options, "test") {
-		return `package main
-import "fmt"
-func main() { fmt.Println("...............................ok") }`
-	} else {
-		return `package main
-import "fmt"
-func main() { fmt.Println("hello") }`
-	}
-}
-
-func compile(gocode string, args ...string) string {
+func runGoCommand(gocode string, args ...string) string {
 	f, err := os.CreateTemp("", "main*.go")
 	if err != nil {
 		panic(err)
@@ -69,10 +60,6 @@ func compile(gocode string, args ...string) string {
 		panic(err)
 	}
 	args = append(args, f.Name())
-	return runGoCommand(args...)
-}
-
-func runGoCommand(args ...string) string {
 	cmd := exec.Command("go", args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -80,4 +67,114 @@ func runGoCommand(args ...string) string {
 		panic(err.Error())
 	}
 	return string(output)
+}
+
+func compileToGoCode(args []string) string {
+	codes := readMoaCodes(args[1:])
+	ast := parseMoaCode(strings.Join(codes, "\n"))
+	return generateGoCode(ast, args[0] == "test")
+}
+
+func readMoaCodes(args []string) []string {
+	if len(args) == 0 {
+		args = append(args, ".")
+	}
+	targetFiles := []string{}
+	for _, arg := range args {
+		info, err := os.Stat(arg)
+		if err != nil {
+			println(arg)
+			panic(err)
+		}
+		if info.IsDir() {
+			files, err := filepath.Glob(filepath.Join(arg, "**/*.moa"))
+			if err != nil {
+				panic(err)
+			}
+			targetFiles = append(targetFiles, files...)
+		} else {
+			targetFiles = append(targetFiles, arg)
+		}
+	}
+	codes := []string{}
+	for _, file := range targetFiles {
+		buf, err := os.ReadFile(file)
+		if err != nil {
+			panic(err)
+		}
+		codes = append(codes, string(buf))
+	}
+	return codes
+}
+
+type Type struct {
+	GoType string
+}
+
+type AST struct {
+	Code   string
+	Args   []AST
+	Type   Type
+	File   string
+	Line   int
+	Column int
+}
+
+func (a AST) String() string {
+	if len(a.Args) == 0 {
+		return a.Code
+	} else {
+		return fmt.Sprintf("%s%v", a.Code, a.Args)
+	}
+}
+
+func (a AST) Gen() string {
+	if a.Code == "def" {
+		name := a.Args[0]
+		args := []string{}
+		for _, arg := range a.Args[0].Args {
+			args = append(args, arg.Code+" "+arg.Type.GoType)
+		}
+		body := []string{}
+		for _, arg := range a.Args[1:] {
+			body = append(body, arg.Gen())
+		}
+		return fmt.Sprintf(`func %s(%s) { %s }`, name, strings.Join(args, ", "), strings.Join(body, "\n"))
+	} else if len(a.Args) == 0 {
+		return a.Code
+	} else {
+		s := a.Code
+		if s == "puts" {
+			s = "fmt.Println"
+		}
+		s += "("
+		for i, arg := range a.Args {
+			if i > 0 {
+				s += ","
+			}
+			s += arg.Gen()
+		}
+		s += ")"
+		return s
+	}
+}
+
+func parseMoaCode(code string) AST {
+	return makeAST("def", makeAST("main"), makeAST("puts", makeAST("\"hello\"")))
+}
+
+func makeAST(code string, args ...AST) AST {
+	return AST{Code: code, Args: args, Type: Type{GoType: "int"}}
+}
+
+func generateGoCode(ast AST, isTest bool) string {
+	if isTest {
+		return `package main
+import "fmt"
+func main() { fmt.Println("...............................ok") }`
+	} else {
+		return `package main
+import "fmt"
+` + ast.Gen()
+	}
 }
