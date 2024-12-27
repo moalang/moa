@@ -1,12 +1,11 @@
 package main
 
 import (
-	"log"
 	"os"
 	"testing"
 )
 
-func TestStub(t *testing.T) {
+func TestIO(t *testing.T) {
 	eq := func(expect, code string) {
 		if run("def main io.puts("+code+")") != expect+"\n" {
 			t.Errorf("failed")
@@ -25,11 +24,10 @@ func run(moa string) string {
 	}
 	defer os.Remove(f.Name())
 	if _, err := f.Write([]byte(moa)); err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 	if err := f.Close(); err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
-	args := []string{"run", f.Name()}
-	return runGoCommand(compileToGoCode(args), "run")
+	return runGoCommand(compileToGoCode([]string{"run", f.Name()}), "run")
 }
