@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -19,7 +20,7 @@ func main() {
 	}
 	switch command {
 	case "build":
-		runGoCommand(compileToGoCode(args), "build", "-ldflags=-s -w", "-trimpath", "-o", "a.out")
+		fmt.Print(runGoCommand(compileToGoCode(args), "build", "-ldflags=-s -w", "-trimpath", "-o", "a.out"))
 	case "repl":
 		reader := bufio.NewReader(os.Stdin)
 		for {
@@ -31,9 +32,11 @@ func main() {
 			fmt.Print(text)
 		}
 	case "run":
-		runGoCommand(compileToGoCode(args), "run")
+		fmt.Print(runGoCommand(compileToGoCode(args), "run"))
 	case "test":
-		runGoCommand(compileToGoCode(args), "run")
+		fmt.Print(runGoCommand(compileToGoCode(args), "run"))
+	case "go":
+		fmt.Println(compileToGoCode(args))
 	case "version":
 		fmt.Println("moa v0.0.1 " + runtime.GOOS + "/" + runtime.GOARCH)
 	default:
@@ -50,7 +53,7 @@ Commands:
 	}
 }
 
-func runGoCommand(gocode string, args ...string) {
+func runGoCommand(gocode string, args ...string) string {
 	f, err := os.CreateTemp("", "main*.go")
 	if err != nil {
 		panic(err)
@@ -64,9 +67,12 @@ func runGoCommand(gocode string, args ...string) {
 	cmd := exec.Command("go", args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		fmt.Println(gocode)
+		fmt.Println("--")
+		fmt.Println(string(output))
 		panic(err.Error())
 	}
-	fmt.Print(string(output))
+	return string(output)
 }
 
 func compileToGoCode(args []string) string {
@@ -111,7 +117,18 @@ func parseMoaCode(tokens []Token) []AST {
 	}
 	pos := 0
 	asts := []AST{}
+	var suffix func(AST) AST
 	var parse func() AST
+	suffix = func(a AST) AST {
+		if pos < len(tokens) {
+			t := tokens[pos]
+			if t.IsPrefixNotation() {
+				pos++
+				return makeAST(t, a, parse())
+			}
+		}
+		return a
+	}
 	parse = func() AST {
 		ast := makeAST(tokens[pos])
 		pos++
@@ -119,8 +136,7 @@ func parseMoaCode(tokens []Token) []AST {
 			for pos < len(tokens) && tokens[pos].Lineno == ast.Token.Lineno {
 				ast.Args = append(ast.Args, parse())
 			}
-			return ast
-		} else if ast.Token.Kind == KID {
+		} else if ast.Token.IsId() {
 			if pos < len(tokens) && tokens[pos].Code == "(" {
 				pos++ // drop "("
 				for pos < len(tokens) && tokens[pos].Code != ")" {
@@ -128,12 +144,14 @@ func parseMoaCode(tokens []Token) []AST {
 				}
 				pos++ // drop ")"
 			}
-			return ast
-		} else if ast.Token.Kind == KINT || ast.Token.Kind == KFLOAT || ast.Token.Kind == KSTR {
-			return ast
+		} else if ast.Token.IsLiteral() {
+			// do nothing
 		} else {
+			fmt.Println(tokens)
+			fmt.Println(asts)
 			panic(fmt.Sprintf("Unknown %v", tokens[pos]))
 		}
+		return suffix(ast)
 	}
 	for pos < len(tokens) {
 		asts = append(asts, parse())
@@ -142,23 +160,22 @@ func parseMoaCode(tokens []Token) []AST {
 }
 
 func tokenize(code string, file string) []Token {
-	tokens := []Token{}
+	tokens := []Token{Token{}}
 	i := 0
 	lineno := 1
 	br := 0
-	uop1s := strings.Split("! ~", " ")
-	bop1s := strings.Split("* / % + - | & ^ < > =", " ")
-	bop2s := strings.Split("?? << >> || && == != <= >=", " ")
-	bop2as := strings.Split("+= -= *= /= %= |= &= ^=", " ")
-	bop3as := strings.Split("<<= >>= ||= &&=", " ")
-	symbols := strings.Split("( ) [ ] { } . =", " ")
-	push := func(code string, kind int) {
+	s1s := strings.Split("! ~ * / % + - | & ^ < > = ( ) [ ] { } .", " ")
+	s2s := strings.Split("?? << >> || && == != <= >= += -= *= /= %= |= &= ^=", " ")
+	s3s := strings.Split("<<= >>= ||= &&=", " ")
+	push := func(code string) {
 		tokens = append(tokens, Token{
-			File:   file,
-			Code:   code,
-			Lineno: lineno,
-			Column: i - br + 1,
-			Kind:   kind,
+			File:     file,
+			Code:     code,
+			Pos:      i,
+			Lineno:   lineno,
+			Column:   i - br + 1,
+			PrevCode: tokens[len(tokens)-1].Code,
+			PrevPos:  tokens[len(tokens)-1].Pos,
 		})
 	}
 	for i = 0; i < len(code); i++ {
@@ -167,21 +184,14 @@ func tokenize(code string, file string) []Token {
 			br = i
 		} else if code[i] == ' ' {
 			// ignore space
-		} else if slices.Contains(symbols, code[i:i+1]) {
-			push(code[i:i+1], KSYM)
-		} else if slices.Contains(uop1s, code[i:i+1]) {
-			push(code[i:i+1], KOP1)
-		} else if slices.Contains(bop1s, code[i:i+1]) {
-			push(code[i:i+1], KOP2)
-		} else if slices.Contains(bop2s, code[i:i+2]) {
-			push(code[i:i+2], KOP2)
-			i++
-		} else if slices.Contains(bop2as, code[i:i+2]) {
-			push(code[i:i+2], KOP2A)
-			i++
-		} else if slices.Contains(bop3as, code[i:i+3]) {
-			push(code[i:i+3], KOP2A)
+		} else if i+2 < len(code) && slices.Contains(s3s, code[i:i+3]) {
+			push(code[i : i+3])
 			i += 2
+		} else if i+1 < len(code) && slices.Contains(s2s, code[i:i+2]) {
+			push(code[i : i+2])
+			i++
+		} else if slices.Contains(s1s, code[i:i+1]) {
+			push(code[i : i+1])
 		} else if '0' <= code[i] && code[i] <= '9' {
 			left := i
 			for i < len(code) && (('0' <= code[i+1] && code[i+1] <= '9') || code[i+1] == '.') {
@@ -189,16 +199,16 @@ func tokenize(code string, file string) []Token {
 			}
 			s := code[left : i+1]
 			if strings.Contains(s, ".") {
-				push(s, KFLOAT)
+				push(s)
 			} else {
-				push(s, KINT)
+				push(s)
 			}
 		} else if ('A' <= code[i] && code[i] <= 'Z') || ('a' <= code[i] && code[i] <= 'z') || code[i] == '_' {
 			left := i
 			for i < len(code) && (('A' <= code[i+1] && code[i+1] <= 'Z') || ('a' <= code[i+1] && code[i+1] <= 'z') || code[i+1] == '_') {
 				i += 1
 			}
-			push(code[left:i+1], KID)
+			push(code[left : i+1])
 		} else if code[i] == '"' {
 			left := i
 			i++
@@ -208,21 +218,24 @@ func tokenize(code string, file string) []Token {
 			s := code[left : i+1]
 			s = strings.Replace(s, "\\n", "\n", -1)
 			s = strings.Replace(s, "\\t", "\t", -1)
-			push(s, KSTR)
+			push(s)
 		} else {
 			panic("Unknown character `" + code[i:i+1] + "`")
 		}
 	}
-
-	//fmt.Println(tokens)
-	return tokens
+	return tokens[1:]
 }
 
 func generateGoCode(asts []AST, isTest bool) string {
 	codes := []string{`package main
 import "fmt"
-func moa_puts(a ...any) {
-  fmt.Println(a...)
+type IO struct {
+  puts func(...any)
+}
+var io = IO {
+  puts: func(a ...any) {
+    fmt.Println(a...)
+  },
 }`}
 	if isTest {
 		codes = append(codes, "\nfunc main() { fmt.Println(\"...............................ok\") }")
@@ -242,23 +255,14 @@ type Type struct {
 }
 
 type Token struct {
-	File   string
-	Code   string
-	Lineno int
-	Column int
-	Kind   int
+	File     string
+	Code     string
+	Pos      int
+	Lineno   int
+	Column   int
+	PrevCode string
+	PrevPos  int
 }
-
-const (
-	KOP1 = iota
-	KOP2
-	KOP2A
-	KSYM
-	KINT
-	KFLOAT
-	KID
-	KSTR
-)
 
 type AST struct {
 	Token Token
@@ -278,6 +282,18 @@ func (t Token) String() string {
 	return t.Code
 }
 
+func (t Token) IsPrefixNotation() bool {
+	return bytes.IndexByte([]byte("!~*/%+-|&^<>=.?"), t.Code[0]) >= 0
+}
+
+func (t Token) IsId() bool {
+	return ('A' <= t.Code[0] && t.Code[0] <= 'Z') || ('a' <= t.Code[0] && t.Code[0] <= 'z') || t.Code[0] == '_'
+}
+
+func (t Token) IsLiteral() bool {
+	return t.Code[0] == '"' || ('0' <= t.Code[0] && t.Code[0] <= '9')
+}
+
 func (a AST) Gen() string {
 	if a.Token.Code == "def" {
 		name := a.Args[0]
@@ -290,17 +306,33 @@ func (a AST) Gen() string {
 			body = append(body, arg.Gen())
 		}
 		return fmt.Sprintf(`func moa_%s(%s) { %s }`, name, strings.Join(args, ", "), strings.Join(body, "\n"))
+	} else if a.Token.Code == "." {
+		return a.Args[0].Gen() + "." + a.Args[1].Gen()
 	} else if len(a.Args) == 0 {
 		return a.Token.Code
 	} else {
-		s := "moa_" + a.Token.Code + "("
-		for i, arg := range a.Args {
-			if i > 0 {
-				s += ","
+		if a.Token.IsPrefixNotation() {
+			if len(a.Args) == 2 {
+				return a.Args[0].Gen() + a.Token.Code + a.Args[1].Gen()
+			} else if len(a.Args) == 1 {
+				return a.Token.Code + a.Args[0].Gen()
+			} else {
+				panic("Unexpected length of operator")
 			}
-			s += arg.Gen()
+		} else {
+			s := ""
+			if a.Token.PrevCode != "." {
+				s += "moa_"
+			}
+			s += a.Token.Code + "("
+			for i, arg := range a.Args {
+				if i > 0 {
+					s += ","
+				}
+				s += arg.Gen()
+			}
+			return s + ")"
 		}
-		return s + ")"
 	}
 }
 

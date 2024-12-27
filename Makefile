@@ -7,5 +7,5 @@ moa:
 .PHONY: test
 test: $(TEST_SCRIPTS)
 	mkdir -p /tmp/moa_test
-	(cd src && go test -v main_test.go && go build -o /tmp/moa_test/moa main.go)
+	(cd src && go test -v main.go main_test.go && go build -o /tmp/moa_test/moa main.go)
 	@for script in $^; do bash $$script || exit 1; done

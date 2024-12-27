@@ -12,7 +12,7 @@ bash -c "$(curl -fsS https://raw.githubusercontent.com/moalang/moa/main/bin/inst
 
 Hello world
 ```
-echo 'def main puts("Hello world")' | moa
+echo 'def main io.puts("Hello world")' | moa
 ```
 
 ```
@@ -123,12 +123,6 @@ Container
 - async
 - stream, reader, writer
 
-IO
-- now
-- random
-- tcp
-- fs
-
 Declaration
 - def
 - class
@@ -159,6 +153,12 @@ Namespcae
 - packgage
 - import
 - export
+
+IO
+- io.now
+- io.rand
+- io.fs
+- io.http
 
 Binary operators
 ```
