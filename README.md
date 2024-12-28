@@ -7,19 +7,29 @@ Moa is an open source programming language that enhances your development experi
 
 Install
 ```
-bash -c "$(curl -fsS https://raw.githubusercontent.com/moalang/moa/main/bin/install.sh)" && exec $SHELL
+bash -c "$(curl -fsS https://raw.githubusercontent.com/moalang/moa/main/misc/install.sh)" && exec $SHELL
 ```
 
 Hello world
 ```
 echo 'def main io.puts("Hello world")' > hello.moa
-moa run hello.moa
+moa dev hello.moa
 ```
 
 ```
 Hello world
 ```
 
+
+## REPL
+```
+moa repl
+```
+
+```
+> 1 + 2
+3
+```
 
 
 ## Example: HTTP server
@@ -27,7 +37,7 @@ Hello world
 http.moa
 ```
 def main {
-  io.http.serve "localhost:8000" req => (type:"text/plain" body:"hello")
+  io.http.serve ":8000" req => (type:"text/plain" body:"hello")
 }
 
 def test t {
@@ -36,7 +46,7 @@ def test t {
 ```
 
 ```
-moa test
+moa test http.moa
 ```
 
 ```
@@ -44,7 +54,7 @@ moa test
 ```
 
 ```
-moa run
+moa dev http.moa
 ```
 
 ```
@@ -57,22 +67,52 @@ hello
 
 
 
-## Moa command usage
+## Example: ToDo application
+
+http.moa
 ```
-Usage:
-    moa                   # launch interactive shell
-    moa run               # run the program
-    moa test              # test the program
-    moa build [os] [arch] # compile to executable file
-    moa watch [...]       # Run command and again when a file is changed
+struct DB {
+  todos list[Todo]
+}
+
+struct Todo {
+  id         i64
+  title      string
+  done       bool
+  created_at time
+}
+
+def main {
+  io.http.serve ":8000" req => io.db[DB] "db.jsonl" db => match {
+    (path:"/")                    io.fs("index.html")
+    (path:"/todos" method:"get")  (json:db)
+    (path:"/todos" method:"post") {
+      db.todos.push title:req.post("title")
+      (status:204)
+    }
+  }
+}
 ```
 
-
-
-## Interactive shell commands 
 ```
-:          -- repeat last command
-:q         -- quit the shell
+moa dev http.moa
+```
+
+```
+curl -d "title=walking" http://localhost:8000/todos
+curl http://localhost:8000/todos
+```
+
+```
+{"todos": [{"title":"walking","created_at":"2000-01-02T03:04:05Z"}]}
+```
+
+```
+cat db.jsonl
+```
+
+```
+{"todos": [{"title":"walking","created_at":"2000-01-02T03:04:05Z"}]}
 ```
 
 
@@ -98,7 +138,7 @@ atom:
 op2: [+-*/%<>|&^=!]+
 id: [A-Za-z_][A-Za-z0-9_]*
 comment: "//" .*
-reserved: def class trait enum var let test if else when iif switch match for while continue break return yield package import export
+reserved: def class trait enum var let test if else iif switch match for while continue break return yield package import export
 ```
 
 ## Keyword
@@ -134,7 +174,6 @@ Declaration
 Branch
 - if
 - else
-- when
 - iif
 - switch
 - match
@@ -165,7 +204,7 @@ IO
 
 Binary operators
 ```
-??                # opt
+?? ?.             # optional
 * / %             # number (high)
 + -               # number (low)
 | & ^ << >>       # integer

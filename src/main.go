@@ -31,7 +31,7 @@ func main() {
 			}
 			fmt.Print(text)
 		}
-	case "run":
+	case "dev":
 		fmt.Print(runGoCommand(compileToGoCode(args), "run"))
 	case "test":
 		fmt.Print(runGoCommand(compileToGoCode(args), "run"))
@@ -47,8 +47,8 @@ Usage: moa <command> [...arguments]
 Commands:
   moa build [os] [arch]    compile to an executable file
   moa repl                 start a REPL session
-  moa run                  execute the program
-  moa test                 run tests
+  moa dev [...files]       execute as development mode
+  moa test [...files]      run tests
   moa version              display Moa version`)
 	}
 }

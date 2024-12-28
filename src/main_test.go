@@ -29,5 +29,5 @@ func run(moa string) string {
 	if err := f.Close(); err != nil {
 		panic(err)
 	}
-	return runGoCommand(compileToGoCode([]string{"run", f.Name()}), "run")
+	return runGoCommand(compileToGoCode([]string{"dev", f.Name()}), "run")
 }
