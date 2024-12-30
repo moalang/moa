@@ -1,0 +1,52 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+)
+
+type moaIO struct {
+	moa_put  func(...any)
+	moa_puts func(...any)
+	moa_http moaHttp
+}
+type moaHttp struct {
+	moa_serve func(string, func(moaHttpRequest) moaHttpResponse)
+}
+type moaHttpRequest struct {
+	r *http.Request
+}
+type moaHttpResponse struct {
+	moa_status *int
+	moa_text   *string
+	moa_json   *any
+}
+
+var moa_io = moaIO{
+	moa_put: func(a ...any) {
+		fmt.Print(a...)
+	},
+	moa_puts: func(a ...any) {
+		fmt.Println(a...)
+	},
+	moa_http: moaHttp{
+		moa_serve: func(address string, handler func(moaHttpRequest) moaHttpResponse) {
+			http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+				response := handler(moaHttpRequest{r})
+				if response.moa_status != nil {
+					w.WriteHeader(*response.moa_status)
+				}
+				if response.moa_text != nil {
+					w.Write([]byte(*response.moa_text))
+					w.Header().Set("content-type", "text/plain; charset=UTF-8")
+				}
+				if response.moa_json != nil {
+					json.NewEncoder(w).Encode(response.moa_json)
+					w.Header().Set("content-type", "application/json")
+				}
+			})
+			http.ListenAndServe(address, nil)
+		},
+	},
+}

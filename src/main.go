@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	_ "embed"
 	"fmt"
 	"os"
 	"os/exec"
@@ -79,7 +80,7 @@ func compileToGoCode(args []string) string {
 	return generateGoCode(parseMoaCodes(args[1:]), args[0] == "test")
 }
 
-func parseMoaCodes(args []string) []AST {
+func parseMoaCodes(args []string) []*AST {
 	if len(args) == 0 {
 		args = append(args, ".")
 	}
@@ -100,7 +101,7 @@ func parseMoaCodes(args []string) []AST {
 			targetFiles = append(targetFiles, arg)
 		}
 	}
-	asts := []AST{}
+	asts := []*AST{}
 	for _, file := range targetFiles {
 		buf, err := os.ReadFile(file)
 		if err != nil {
@@ -111,30 +112,53 @@ func parseMoaCodes(args []string) []AST {
 	return asts
 }
 
-func parseMoaCode(tokens []Token) []AST {
-	makeAST := func(token Token, args ...AST) AST {
-		return AST{Token: token, Args: args, Type: Type{TypeName: ""}}
+func parseMoaCode(tokens []Token) []*AST {
+	makeAST := func(token Token, args ...*AST) *AST {
+		return &AST{Token: token, Args: args, Type: Type{TypeName: ""}}
 	}
 	pos := 0
-	asts := []AST{}
-	var suffix func(AST) AST
-	var parse func() AST
-	suffix = func(a AST) AST {
+	asts := []*AST{}
+	var suffix func(*AST) *AST
+	var parse func() *AST
+	suffix = func(a *AST) *AST {
 		if pos < len(tokens) {
 			t := tokens[pos]
 			if t.IsPrefixNotation() {
 				pos++
-				return makeAST(t, a, parse())
+				return suffix(makeAST(t, a, parse()))
 			}
 		}
 		return a
 	}
-	parse = func() AST {
+	parse = func() *AST {
 		ast := makeAST(tokens[pos])
 		pos++
 		if ast.Token.Code == "def" {
 			for pos < len(tokens) && tokens[pos].Lineno == ast.Token.Lineno {
 				ast.Args = append(ast.Args, parse())
+			}
+		} else if ast.Token.Code == "{" {
+			for pos < len(tokens) && tokens[pos].Code != "}" {
+				next := parse()
+				if len(ast.Args) == 0 || ast.Args[len(ast.Args)-1].Token.Lineno != next.Token.Lineno {
+					ast.Args = append(ast.Args, makeAST("", next))
+				} else {
+					ast.Args[len(ast.Args)-1].Args = append(ast.Args[len(ast.Args)-1].Args, next)
+				}
+			}
+			if pos < len(tokens) && tokens[pos].Code == "}" {
+				pos++
+			} else {
+				panic("'{' is not closed")
+			}
+		} else if ast.Token.Code == "(" {
+			for pos < len(tokens) && tokens[pos].Code != ")" {
+				ast.Args = append(ast.Args, parse())
+			}
+			if pos < len(tokens) && tokens[pos].Code == ")" {
+				pos++
+			} else {
+				panic("'{' is not closed")
 			}
 		} else if ast.Token.IsId() {
 			if pos < len(tokens) && tokens[pos].Code == "(" {
@@ -149,7 +173,7 @@ func parseMoaCode(tokens []Token) []AST {
 		} else {
 			fmt.Println(tokens)
 			fmt.Println(asts)
-			panic(fmt.Sprintf("Unknown %v", tokens[pos]))
+			panic(fmt.Sprintf("Failed to parse to '%v'", ast))
 		}
 		return suffix(ast)
 	}
@@ -164,8 +188,8 @@ func tokenize(code string, file string) []Token {
 	i := 0
 	lineno := 1
 	br := 0
-	s1s := strings.Split("! ~ * / % + - | & ^ < > = ( ) [ ] { } .", " ")
-	s2s := strings.Split("?? << >> || && == != <= >= += -= *= /= %= |= &= ^=", " ")
+	s1s := strings.Split("! ~ * / % + - | & ^ < > = ( ) [ ] { } : .", " ")
+	s2s := strings.Split("?? << >> || && == != <= >= += -= *= /= %= |= &= ^= =>", " ")
 	s3s := strings.Split("<<= >>= ||= &&=", " ")
 	push := func(code string) {
 		tokens = append(tokens, Token{
@@ -226,17 +250,11 @@ func tokenize(code string, file string) []Token {
 	return tokens[1:]
 }
 
-func generateGoCode(asts []AST, isTest bool) string {
-	codes := []string{`package main
-import "fmt"
-type IO struct {
-  puts func(...any)
-}
-var io = IO {
-  puts: func(a ...any) {
-    fmt.Println(a...)
-  },
-}`}
+//go:embed std.go.txt
+var stdGo string
+
+func generateGoCode(asts []*AST, isTest bool) string {
+	codes := []string{stdGo}
 	if isTest {
 		codes = append(codes, "\nfunc main() { fmt.Println(\"...............................ok\") }")
 	} else {
@@ -266,7 +284,7 @@ type Token struct {
 
 type AST struct {
 	Token Token
-	Args  []AST
+	Args  []*AST
 	Type  Type
 }
 
@@ -283,7 +301,7 @@ func (t Token) String() string {
 }
 
 func (t Token) IsPrefixNotation() bool {
-	return bytes.IndexByte([]byte("!~*/%+-|&^<>=.?"), t.Code[0]) >= 0
+	return bytes.IndexByte([]byte("!~*/%+-|&^<>=:.?"), t.Code[0]) >= 0
 }
 
 func (t Token) IsId() bool {
@@ -294,49 +312,71 @@ func (t Token) IsLiteral() bool {
 	return t.Code[0] == '"' || ('0' <= t.Code[0] && t.Code[0] <= '9')
 }
 
-func (a AST) Gen() string {
+func (a *AST) Gen() string {
 	if a.Token.Code == "def" {
 		name := a.Args[0]
 		args := []string{}
-		for _, arg := range a.Args[0].Args {
-			args = append(args, arg.Token.Code+" "+arg.GoType())
-		}
-		body := []string{}
-		for _, arg := range a.Args[1:] {
-			body = append(body, arg.Gen())
-		}
-		return fmt.Sprintf(`func moa_%s(%s) { %s }`, name, strings.Join(args, ", "), strings.Join(body, "\n"))
-	} else if a.Token.Code == "." {
-		return a.Args[0].Gen() + "." + a.Args[1].Gen()
-	} else if len(a.Args) == 0 {
-		return a.Token.Code
-	} else {
-		if a.Token.IsPrefixNotation() {
-			if len(a.Args) == 2 {
-				return a.Args[0].Gen() + a.Token.Code + a.Args[1].Gen()
-			} else if len(a.Args) == 1 {
-				return a.Token.Code + a.Args[0].Gen()
-			} else {
-				panic("Unexpected length of operator")
+		if len(a.Args) >= 3 {
+			for _, arg := range a.Args[1 : len(a.Args)-1] {
+				args = append(args, arg.Token.Code+" "+arg.GoType())
 			}
+		}
+		body := a.Args[len(a.Args)-1].Gen()
+		return fmt.Sprintf(`func moa_%s(%s) { %s }`, name, strings.Join(args, ", "), body)
+	} else if a.Token.Code == "{" {
+		s := ""
+		for _, node := range a.Args {
+			s += node.Gen() + "\n"
+		}
+		return s
+	} else if a.Token.Code == "(" {
+		if a.Args[0].Token.Code == ":" {
+			s := a.Args[0].GoType() + "("
+			for i, arg := range a.Args[0].Args {
+				if i >= 1 {
+					s += ","
+				}
+				s += arg.Gen()
+			}
+			return s + ")"
 		} else {
-			s := ""
-			if a.Token.PrevCode != "." {
-				s += "moa_"
+			return "(" + a.Args[0].Gen() + ")"
+		}
+	} else if a.Token.IsPrefixNotation() {
+		if len(a.Args) == 2 {
+			if a.Token.Code == "=>" {
+				return "func(" + a.Args[0].Gen() + " " + a.Args[0].GoType() + ") {" + a.Args[1].Gen() + "}"
+			} else {
+				return a.Args[0].Gen() + a.Token.Code + a.Args[1].Gen()
 			}
-			s += a.Token.Code + "("
+		} else if len(a.Args) == 1 {
+			return a.Token.Code + a.Args[0].Gen()
+		} else {
+			panic("Unexpected length of operator")
+		}
+	} else {
+		s := ""
+		if a.Token.IsId() {
+			s += "moa_" + a.Token.Code
+		} else {
+			s += a.Token.Code
+		}
+		if len(a.Args) >= 1 {
+			s += "("
 			for i, arg := range a.Args {
 				if i > 0 {
 					s += ","
 				}
 				s += arg.Gen()
 			}
-			return s + ")"
+			s += ")"
 		}
+		return s
 	}
 }
 
 func (a AST) GoType() string {
+	return "any" // TODO
 	t := &a.Type
 	for t != nil && t.Instance != nil {
 		t = t.Instance

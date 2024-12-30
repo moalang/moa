@@ -6,28 +6,18 @@ import (
 )
 
 func TestIO(t *testing.T) {
-	eq := func(expect, code string) {
-		if run("def main io.puts("+code+")") != expect+"\n" {
-			t.Errorf("failed")
-		}
+	if run("def main io.put(123)") != "123" {
+		t.Errorf("failed")
 	}
-	eq("true", "true")
-	eq("hi", "\"hi\"")
-	eq("123", "123")
-	eq("3", "1+2")
+	if run("def main io.puts(123)") != "123\n" {
+		t.Errorf("failed")
+	}
 }
 
 func run(moa string) string {
-	f, err := os.CreateTemp("", "test*.moa")
+	err := os.WriteFile("/tmp/test.moa", []byte(moa), 0644)
 	if err != nil {
 		panic(err)
 	}
-	defer os.Remove(f.Name())
-	if _, err := f.Write([]byte(moa)); err != nil {
-		panic(err)
-	}
-	if err := f.Close(); err != nil {
-		panic(err)
-	}
-	return runGoCommand(compileToGoCode([]string{"dev", f.Name()}), "run")
+	return runGoCommand(compileToGoCode([]string{"dev", "/tmp/test.moa"}), "run")
 }

@@ -37,7 +37,7 @@ moa repl
 http.moa
 ```
 def main {
-  io.http.serve ":8000" req => (type:"text/plain" body:"hello")
+  io.http.serve ":8000" req => (text:"hello")
 }
 
 def test t {
@@ -87,7 +87,7 @@ def main {
     (path:"/")                    io.fs("index.html")
     (path:"/todos" method:"get")  (json:db)
     (path:"/todos" method:"post") {
-      db.todos.push title:req.post("title")
+      db.todos.push title:req.post("title") created_at:io.now
       (status:204)
     }
   }
@@ -138,7 +138,7 @@ atom:
 op2: [+-*/%<>|&^=!]+
 id: [A-Za-z_][A-Za-z0-9_]*
 comment: "//" .*
-reserved: def class trait enum var let test if else iif switch match for while continue break return yield package import export
+reserved: def class enum var let test if else iif switch match for while continue break return yield package import export
 ```
 
 ## Keyword
@@ -162,10 +162,17 @@ Container
 - async
 - stream, reader, writer
 
+Modifier
+- eq
+- ord
+- hash
+- show
+- num
+- enum
+
 Declaration
 - def
 - class
-- trait
 - enum
 - var
 - let
@@ -204,6 +211,7 @@ IO
 
 Binary operators
 ```
+:                 # tag
 ?? ?.             # optional
 * / %             # number (high)
 + -               # number (low)
