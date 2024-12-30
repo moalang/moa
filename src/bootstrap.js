@@ -28,8 +28,13 @@ function compile(source) {
       } else if (isInfix(tokens[pos].code)) {
         return suffix([tokens[pos++], token, consume()])
       } else if (token.code === '(') {
-        return suffix(until(')'))
+        const a = until(')')
+        if (a.length !== 1) {
+          throw new Error(`Unsupported '${JSON.stringify(a)}' around ${JSON.stringify(token)}`)
+        }
+        return suffix(a[0])
       } else if (tokens[pos-1].pos + tokens[pos-1].code.length === tokens[pos].pos && tokens[pos].code === '(') {
+        pos++
         return suffix([token, ...until(')')])
       } else {
         return token
@@ -66,7 +71,25 @@ function compile(source) {
   }
   return parse(tokenize()).map(gen).join('\n\n')
 }
+function run(source) {
+  const std = require('fs').readFileSync(__dirname + '/std.go', 'utf-8')
+  const user = compile(source)
+  require('fs').writeFileSync('/tmp/a.go', std + '\n' + user)
+  return require('child_process').execSync('go run /tmp/a.go', {encoding: 'utf-8'})
+}
 
-const std = require('fs').readFileSync(__dirname + '/std.go', 'utf-8')
-const user = compile(require('fs').readFileSync(0, 'utf-8'))
-console.log(std + user)
+if (process.argv[2] === 'test') {
+  function eq(expect, source) {
+    const actual = run(source)
+    if (expect == run(source)) {
+      process.stdout.write('.')
+    } else {
+      throw new Error(`${expect} != ${actual}\n${source}`)
+    }
+  }
+  eq('1', 'def main io.put(1)')
+  eq('1\n', 'def main io.puts(1)')
+  console.log('ok')
+} else {
+  console.log(run(require('fs').readFileSync(0, 'utf-8')))
+}
