@@ -17,7 +17,8 @@ function compile(source) {
     let pos = 0
     function line() {
       const lineno = tokens[pos].lineno
-      return loop(t => t.lineno === lineno, consume)
+      const a = loop(t => t.lineno === lineno && !(')]}'.includes(t.code)), consume)
+      return a.length === 1 ? a[0] : a
     }
     function consume() {
       return suffix(tokens[pos++])
@@ -33,6 +34,9 @@ function compile(source) {
           throw new Error(`Unsupported '${JSON.stringify(a)}' around ${JSON.stringify(token)}`)
         }
         return suffix(a[0])
+      } else if (token.code === '{') {
+        token.lines = loop(t => t.code !== '}' || pos++ === null, line)
+        return token
       } else if (tokens[pos-1].pos + tokens[pos-1].code.length === tokens[pos].pos && tokens[pos].code === '(') {
         pos++
         return suffix([token, ...until(')')])
@@ -52,44 +56,43 @@ function compile(source) {
     }
     return loop(_ => true, line)
   }
+  const reserved = 'return continue break'.split(' ')
   function gen(node) {
     if (Array.isArray(node)) {
       if (node[0].code === 'def') {
-        return `func _${node[1].code}(${node.slice(2, -1).map(arg => arg.code + ' ' + gotype(arg)).join(', ')}) { ${ gen(node.at(-1)) } }`
+        return `const ${gen(node[1])} = (${node.slice(2, -1).map(gen).join(', ')}) => ${ gen(node.at(-1)) }`
+      } else if (node[0].code === 'var') {
+        return `let ${gen(node[1])} = ${node.length === 3 ? gen(node[2]) : gen(node.slice(2))}`
       } else if (isInfix(node[0].code)) {
         return gen(node[1]) + node[0].code + gen(node[2])
-      } else if (node.length === 1) {
-        return gen(node[0])
       } else {
         return `${gen(node[0])}(${node.slice(1).map(gen).join(', ')})`
       }
-    } else if (/^[A-Za-z_]/.test(node.code[0])) {
+    } else if (/^[A-Za-z_]/.test(node.code) && !reserved.includes(node.code)) {
       return '_' + node.code
+    } else if (node.code[0] == '{') {
+      return '{' + node.lines.map(gen).join(';\n') + '}'
     } else {
       return node.code
     }
   }
   return parse(tokenize()).map(gen).join('\n\n')
 }
-function run(source) {
-  const std = require('fs').readFileSync(__dirname + '/std.go', 'utf-8')
-  const user = compile(source)
-  require('fs').writeFileSync('/tmp/a.go', std + '\n' + user)
-  return require('child_process').execSync('go run /tmp/a.go', {encoding: 'utf-8'})
-}
 
 if (process.argv[2] === 'test') {
   function eq(expect, source) {
-    const actual = run(source)
-    if (expect == run(source)) {
+    const js = compile(source)
+    const actual = eval(compile(source))
+    if (expect == actual) {
       process.stdout.write('.')
     } else {
-      throw new Error(`${expect} != ${actual}\n${source}`)
+      throw new Error(`${expect} != ${actual}\n${source}\n${js}`)
     }
   }
-  eq('1', 'def main io.put(1)')
-  eq('1\n', 'def main io.puts(1)')
+  eq(1, '1')
+  eq(2, 'def inc n n + 1\ninc(1)')
+  eq(1, 'def calc { var n 0\n n += 1\n return n }\ncalc()')
   console.log('ok')
 } else {
-  console.log(run(require('fs').readFileSync(0, 'utf-8')))
+  console.log(eval(compile(require('fs').readFileSync(0, 'utf-8'))))
 }
