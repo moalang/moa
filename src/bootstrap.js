@@ -6,7 +6,7 @@ function compile(source) {
   function tokenize() {
     let pos = 0
     let lineno = 1
-    return source.split(/([(){}\[\].]|[\r\n\t ]+)/g).map(code => {
+    return source.split(/(".*?"|[(){}\[\].]|[\r\n\t ]+)/g).map(code => {
       const o = {code, pos, lineno}
       pos += code.length
       lineno += code.split('\n').length - 1
