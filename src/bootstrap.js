@@ -23,6 +23,23 @@ const std = (function() {
     }
     f({_eq})
   }
+  function prop(o, name) {
+    if (typeof o === 'string') {
+      switch (name) {
+        case '_size': return o.length
+      }
+    } else if (Array.isArray(o)) {
+      switch (name) {
+        case '_size': return o.length
+        case '_at': return n => o.at(n)
+      }
+    }
+    if (name in o) {
+      return o[name]
+    } else {
+      throw new Error(`No '${name}' of '${typeof o}'`)
+    }
+  }
 }).toString().slice(14, -2) + '\n\n\n'
 
 function compile(source) {
@@ -120,6 +137,8 @@ function compile(source) {
       } else if (node[0].code === 'while') {
         const cond = node.length === 3 ? gen(node[1]) : gen(node.slice(1, -1))
         return `while (${cond}) ${gen(node.at(-1))}`
+      } else if (node[0].code === '.' && /^[A-Za-z_]/.test(node[2].code)) {
+        return `prop(${gen(node[1])}, '${gen(node[2])}')`
       } else if (isInfix(node[0].code)) {
         return `(${gen(node[1])}${node[0].code}${gen(node[2])})`
       } else {
@@ -172,6 +191,10 @@ if (process.argv[2] === 'test') {
   // container
   eq([1,2], 'list 1 2')
   eq(new Map([[1, true]]), 'map 1 true')
+
+  // property
+  eq(2, '"hi".size')
+  eq(2, 'list(1 2).at 1')
 
   // declaration
   eq(1, 'let a 1\na')
