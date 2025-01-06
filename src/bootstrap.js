@@ -117,6 +117,9 @@ function compile(source) {
         const item = node.length >= 4 ? gen(node[2]) : '_'
         const ijk = node.length >= 5 ? gen(node[3]) : 'i'
         return `const __a = ${gen(node[1])}; for (let ${ijk}=0; ${ijk}<__a.length; ${ijk}++) { let ${item} = __a[${ijk}]; ${gen(node.at(-1))} }`
+      } else if (node[0].code === 'while') {
+        const cond = node.length === 3 ? gen(node[1]) : gen(node.slice(1, -1))
+        return `while (${cond}) ${gen(node.at(-1))}`
       } else if (isInfix(node[0].code)) {
         return `(${gen(node[1])}${node[0].code}${gen(node[2])})`
       } else {
@@ -194,9 +197,9 @@ if (process.argv[2] === 'test') {
   eq(2, 'var n 0\n each list(2 3) { n += 1 }\n n')
   eq(5, 'var n 0\n each list(2 3) m { n += m }\n n')
   eq(3, 'var n 0\n each list(2 3) m i { n += i * m }\n n')
-  //- [ ] Enable while
-  //- [ ] Enable continue
-  //- [ ] Enable break
+  eq(3, 'var n 0\n while n < 3 { n += 1 }\n n')
+  eq(1, 'var n 0\n while n < 3 { n += 1\n if n == 1 break }\n n')
+  eq(4, 'var n 0\n each list(1 2 3) m { if m == 2 continue \n n += m }\n n')
 
   // error
   err(1, 'throw 1')
