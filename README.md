@@ -71,10 +71,9 @@ hello
 
 http.moa
 ```
-struct DB {
+struct Schema {
   todos list[Todo]
 }
-
 struct Todo {
   id         i64
   title      string
@@ -83,7 +82,7 @@ struct Todo {
 }
 
 def main {
-  io.http.serve ":8000" req => io.db[DB] "db.jsonl" db => match {
+  io.http.serve ":8000" req => io.db[Schema] "db.jsonl" db => match req {
     (path:"/")                    io.fs("index.html")
     (path:"/todos" method:"get")  (json:db)
     (path:"/todos" method:"post") {
