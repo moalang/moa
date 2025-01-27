@@ -103,6 +103,9 @@ function infer(nodes) {
   const tv1 = newVar()
   const tint = newType("int")
   const tstring = newType("string")
+  const tarray = t => newType("array", [t], {
+    at: [tint, t]
+  })
   function prune(t) {
     return t.instance ? (t.instance = prune(t.instance)) : t
   }
@@ -150,7 +153,7 @@ function infer(nodes) {
           return tenv[tail[0].code] = inf(tail[1])
         } else if (head.code === ".") {
           const prop = inf(tail[0]).props[tail[1].code]
-          assert(prop, node)
+          assert(prop, "No field", showNode(tail[0]), tail[1].code)
           return prop
         } else {
           const id = head.code
@@ -174,6 +177,7 @@ function infer(nodes) {
   const troot = {
     io: newType("io", [], {
       puts: [toVariadic(tany), tvoid],
+      args: tarray(tstring),
     }),
     "+": [tv1, tv1, tv1],
   }
@@ -189,7 +193,7 @@ function showType(o) {
 }
 
 function showNode(o) {
-  return (Array.isArray(o) ? `(${o.map(showNode).join(" ")})` : o.code || JSON.stringify(o)) + (o.type ? "@" + showType(o.type) : "")
+  return (Array.isArray(o) ? `(${o.map(showNode).join(" ")})` : o.code || JSON.stringify(o)) // + (o.type ? "@" + showType(o.type) : "")
 }
 
 function compile(moa) {
@@ -205,6 +209,8 @@ function compile(moa) {
         return `func ${tail[0].code}(${args}) {${body}}`
       } else if (head.code === "let" || head.code === "var") {
         return `${tail[0].code} := ${gen(tail[1])}`
+      } else if (head.code === "." && tail[0].type.name === "io") {
+        return "io_" + tail[1].code
       } else if ("+-*/%!=^|&?<>.".includes(head.code[0])) {
         return gen(tail[0]) + head.code + gen(tail[1])
       } else {
@@ -218,16 +224,31 @@ function compile(moa) {
   infer(nodes)
   const go = nodes.map(gen).join("\n") + "\n"
   return `package main
-import "fmt"
+import (
+  "fmt"
+  "os"
+)
 
-type MoaIO struct {
-  puts func(...any)
+type MoaArray[T any] struct {
+  _me []T
 }
 
-var io = MoaIO{
-  puts: func(a ...any) {
-    fmt.Println(a...)
-  },
+func newArray[T any](a []T) MoaArray[T] {
+  return MoaArray[T]{a}
+}
+
+func (a MoaArray[T]) at(n int) T {
+  return a._me[n]
+}
+
+var io_args = MoaArray[string]{}
+
+func io_puts(a ...any) {
+  fmt.Println(a...)
+}
+
+func init() {
+  io_args = newArray(os.Args)
 }
 
 ${go}`
