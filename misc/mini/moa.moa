@@ -1,0 +1,3 @@
+# moa run io.puts "hello"
+def main:
+  io.puts 3

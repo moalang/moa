@@ -4,8 +4,7 @@ if exists("b:current_syntax")
 endif
 
 " Comments
-syn match  Comment /\/\/.*/
-syn region Comment start="/\*" end="\*/"
+syn match  Comment /#.*/
 
 " Constant
 syn region String start=+\z(["']\)+  skip=+\\\%(\z1\|$\)+  end=+\z1+ end=+$+

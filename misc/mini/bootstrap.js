@@ -1,4 +1,5 @@
 "use strict"
+// echo 'def main: io.puts "hello"' | node bootstrap.js | grep hello
 const fs = require("node:fs")
 const child_process = require("node:child_process")
 
@@ -9,7 +10,7 @@ function assert(cond, ...a) {
 }
 
 function isOp2(s) {
-  return ".+-*/%<>!=^|&".includes(s[0])
+  return "+-*/%<>!=^|&".includes(s[0])
 }
 
 function tokenize(moa) {
@@ -36,10 +37,17 @@ function parse(moa) {
   function bottom() {
     const token = tokens[pos++]
     function suffix(node) {
-      const token = tokens[pos]
-      if (token && isOp2(token.code)) {
-        pos++
-        return suffix([token, node, bottom()])
+      const next = tokens[pos]
+      const prev = tokens[pos-1]
+      if (next && isOp2(next.code)) {
+        pos++ // consume binary operator
+        return suffix([next, node, bottom()])
+      } else if (next && next.code === ".") {
+        pos++ // consume dot
+        return suffix([next, node, tokens[pos++]])
+      } else if (prev && next && prev.offset + prev.code.length === next.offset && next.code === "(") {
+        pos++ // consume closed open parenthesis
+        return suffix([node].concat(many(t => t.code === ")" ? (pos++, null) : bottom())))
       } else {
         return node
       }
@@ -49,10 +57,7 @@ function parse(moa) {
       return suffix(many(t => t.code === closes[index] ? (pos++, null) : bottom()))
     } else if (token.code === ":") {
       const indent = tokens[pos].indent
-      const nodes = []
-      while (pos < tokens.length && tokens[pos].indent === indent) {
-        nodes.push(line())
-      }
+      const nodes = many(t => tokens[pos].indent === indent && line())
       assert(nodes.length > 0, "Empty indent", pos, tokens.length)
       return nodes
     } else {
@@ -62,23 +67,26 @@ function parse(moa) {
   function many(f) {
     const nodes = []
     while (pos < tokens.length) {
-      const node = f(tokens[pos])
-      if (!node) {
-        break
+      if (tokens[pos].code === "#") {
+        const line = tokens[pos].line
+        while (pos < tokens.length && tokens[pos].line === line) {
+          pos++
+        }
+      } else {
+        const node = f(tokens[pos])
+        if (!node) {
+          break
+        }
+        nodes.push(node)
       }
-      nodes.push(node)
     }
     return nodes
   }
   function line() {
     const line = tokens[pos].line
-    const isOpen = tokens[pos].code === "("
-    const nodes = []
-    while (pos < tokens.length && tokens[pos].line === line && !closes.includes(tokens[pos].code)) {
-      nodes.push(bottom())
-    }
+    const nodes = many(t => t.line === line && !closes.includes(tokens[pos].code) && bottom())
     assert(nodes.length > 0, "Empty line", pos, tokens.length, tokens.slice(pos))
-    return isOpen && nodes.length === 1 ? nodes[0] : nodes
+    return nodes.length === 1 && Array.isArray(nodes[0]) ? nodes[0] : nodes
   }
   const top = many(line)
   assert(pos >= tokens.length, "No reach end of token", pos, tokens.length)
@@ -225,6 +233,6 @@ var io = MoaIO{
 ${go}`
 }
 
-const go = compile(fs.readFileSync(process.argv[2] || "/dev/stdin", "utf-8"))
+const go = compile(fs.readFileSync("/dev/stdin", "utf-8"))
 fs.writeFileSync("/tmp/moa.go", go)
-console.log(child_process.execSync("go run /tmp/moa.go", {encoding: "utf-8"}))
+console.log(child_process.execSync(`go run /tmp/moa.go ${process.argv.slice(2).join(" ")}`, {encoding: "utf-8"}))
