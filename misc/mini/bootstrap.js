@@ -2,29 +2,87 @@
 const fs = require("node:fs")
 const child_process = require("node:child_process")
 
-function assert(cond, v) {
+function assert(cond, ...a) {
   if (!cond) {
-    throw new Error(JSON.stringify(v))
+    throw new Error(a.map(x => JSON.stringify(x)).join(" "))
   }
 }
 
+function isOp2(s) {
+  return ".+-*/%<>!=^|&".includes(s[0])
+}
+
+function tokenize(moa) {
+  let line = 1
+  let offset = 0
+  let indent = 0
+  const tokens = []
+  for (const code of moa.split(/([ \n]+|[()\[\]{}]|[:.+\-*/%!=^|&?]+|"[^"]*"|[ \n]+)/)) {
+    if (code.trim()) {
+      tokens.push({code, line, offset, indent})
+    }
+    offset += code.length
+    line += code.split("\n").length - 1
+    indent = code.includes("\n") ? code.split("\n").at(-1).length : indent
+  }
+  return tokens
+}
+
 function parse(moa) {
-  const tokens = moa.split(/([ \n]+|[()\[\]{}]|[+\-*/%!=^|&?]+|"[^"]*"|[ \n]+)/).filter(s => s.trim().length).map(code => ({code}))
+  const tokens = tokenize(moa)
+  const opens = "{([".split("")
+  const closes = "])}".split("")
   let pos = 0
-  function until(code) {
-    const a = []
-    while (pos < tokens.length && tokens[pos].code !== code) {
-      a.push(parseUnit(tokens[pos++]))
+  function bottom() {
+    const token = tokens[pos++]
+    function suffix(node) {
+      const token = tokens[pos]
+      if (token && isOp2(token.code)) {
+        pos++
+        return suffix([token, node, bottom()])
+      } else {
+        return node
+      }
     }
-    if (pos < tokens.length && tokens[pos].code === code) {
-      pos++
+    const index = opens.findIndex(code => code === token.code)
+    if (index >= 0) {
+      return suffix(many(t => t.code === closes[index] ? (pos++, null) : bottom()))
+    } else if (token.code === ":") {
+      const indent = tokens[pos].indent
+      const nodes = []
+      while (pos < tokens.length && tokens[pos].indent === indent) {
+        nodes.push(line())
+      }
+      assert(nodes.length > 0, "Empty indent", pos, tokens.length)
+      return nodes
+    } else {
+      return suffix(token)
     }
-    return a
   }
-  function parseUnit(token) {
-    return token.code === "(" ? until(")") : token
+  function many(f) {
+    const nodes = []
+    while (pos < tokens.length) {
+      const node = f(tokens[pos])
+      if (!node) {
+        break
+      }
+      nodes.push(node)
+    }
+    return nodes
   }
-  return until()
+  function line() {
+    const line = tokens[pos].line
+    const isOpen = tokens[pos].code === "("
+    const nodes = []
+    while (pos < tokens.length && tokens[pos].line === line && !closes.includes(tokens[pos].code)) {
+      nodes.push(bottom())
+    }
+    assert(nodes.length > 0, "Empty line", pos, tokens.length, tokens.slice(pos))
+    return isOpen && nodes.length === 1 ? nodes[0] : nodes
+  }
+  const top = many(line)
+  assert(pos >= tokens.length, "No reach end of token", pos, tokens.length)
+  return top
 }
 
 function infer(nodes) {
@@ -34,6 +92,7 @@ function infer(nodes) {
   const toVariadic = t => ({...t, variadic: true})
   const tvoid = newType("tvoid")
   const tany = ({name: "any", isvar: true})
+  const tv1 = newVar()
   const tint = newType("int")
   const tstring = newType("string")
   function prune(t) {
@@ -47,20 +106,20 @@ function infer(nodes) {
     } else if (b.isvar) {
       unify(b, a)
     } else {
-      assert(a.name === b.name, {a, b})
+      assert(a.name === b.name, "No unify", showType(a), showType(b))
       assert(a.generics.length === b.generics.length, {a, b})
       a.generics.map((ag, i) => unify(ag, b.generics[i]))
     }
   }
   function call(f, args) {
     assert(Array.isArray(f), f)
-    assert((f.length >= 1 && f.at(-2).variadic) || f.length === args.length - 1, f)
+    assert((f.length >= 1 && f.at(-2).variadic) || f.length === args.length + 1, "Not callable", f.map(showType), args.map(showType))
     args.map((a, i) => unify(f[i], a))
     return f.at(-1)
   }
   function inferWith(node, tenv) {
     function lookup(node) {
-      assert(node.code in tenv, node)
+      assert(node.code in tenv, node.code, Object.keys(tenv))
       return tenv[node.code]
     }
     function inf(node) {
@@ -79,12 +138,20 @@ function infer(nodes) {
           const tinner = {...tenv, ...Object.fromEntries(args.map((a,i) => [a[i].code, vargs[i]]))}
           const body = tail.at(-1).map(node => inferWith(node, tinner)).at(-1)
           return vars.concat([body])
+        } else if (head.code === "let" || head.code === "var") {
+          return tenv[tail[0].code] = inf(tail[1])
         } else if (head.code === ".") {
           const prop = inf(tail[0]).props[tail[1].code]
           assert(prop, node)
           return prop
         } else {
-          assert(node)
+          const id = head.code
+          assert(id in tenv, "No id", id, Object.keys(tenv))
+          if (tail.length === 0) {
+            return tenv[id]
+          } else {
+            return call(tenv[id], tail.map(inf))
+          }
         }
       } else if(node.code.startsWith('"')) {
         return tstring
@@ -98,8 +165,9 @@ function infer(nodes) {
   }
   const troot = {
     io: newType("io", [], {
-      puts: [toVariadic(tany), tvoid]
-    })
+      puts: [toVariadic(tany), tvoid],
+    }),
+    "+": [tv1, tv1, tv1],
   }
   nodes.map(node => inferWith(node, troot))
 }
@@ -125,8 +193,10 @@ function compile(moa) {
         return `${gen(head)}(${tail.map(gen)})`
       } else if (head.code === "def") {
         const args = tail.slice(1, -1)
-        const body = tail.at(-1).map(gen)
+        const body = tail.at(-1).map(gen).join("\n")
         return `func ${tail[0].code}(${args}) {${body}}`
+      } else if (head.code === "let" || head.code === "var") {
+        return `${tail[0].code} := ${gen(tail[1])}`
       } else if ("+-*/%!=^|&?<>.".includes(head.code[0])) {
         return gen(tail[0]) + head.code + gen(tail[1])
       } else {
@@ -138,7 +208,7 @@ function compile(moa) {
   }
   const nodes = parse(moa)
   infer(nodes)
-  const go = nodes.map(gen).join("\n\n")
+  const go = nodes.map(gen).join("\n") + "\n"
   return `package main
 import "fmt"
 
@@ -155,10 +225,6 @@ var io = MoaIO{
 ${go}`
 }
 
-function main() {
-  const go = compile(fs.readFileSync(process.argv[2] || "/dev/stdin", "utf-8"))
-  fs.writeFileSync("/tmp/moa.go", go)
-  console.log(child_process.execSync("go run /tmp/moa.go", {encoding: "utf-8"}))
-}
-
-main()
+const go = compile(fs.readFileSync(process.argv[2] || "/dev/stdin", "utf-8"))
+fs.writeFileSync("/tmp/moa.go", go)
+console.log(child_process.execSync("go run /tmp/moa.go", {encoding: "utf-8"}))
