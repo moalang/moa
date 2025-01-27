@@ -99,12 +99,13 @@ function parse(moa) {
 
 function infer(nodes) {
   let typeVariableSequence = 0
-  const newType = (name,generics=[]) => ({name,generics})
+  const newType = (name,generics) => generics ? ({name,generics}) : ({name})
   const newVar = () => ({name: (typeVariableSequence++).toString(), isvar: true})
   const toVariadic = t => ({...t, variadic: true})
   const tvoid = newType("void")
   const tany = ({name: "any", isvar: true})
   const tv1 = newVar()
+  const tbool = newType("bool")
   const tint = newType("int")
   const tstring = newType("string", [])
   const tarray = t => newType("array", [t])
@@ -122,7 +123,7 @@ function infer(nodes) {
       join: [tstring, tstring],
       push: [t.generics[0], t],
       at: [tint, t],
-    })
+    }),
   }
   function prune(t) {
     return t.instance ? (t.instance = prune(t.instance)) : t
@@ -136,8 +137,10 @@ function infer(nodes) {
       unify(b, a)
     } else {
       assert(a.name === b.name, "No unify", showType(a), showType(b))
-      assert(a.generics.length === b.generics.length, {a, b})
-      a.generics.map((ag, i) => unify(ag, b.generics[i]))
+      const ag = a.generics || []
+      const bg = b.generics || []
+      assert(ag.length === bg.length, {a, b})
+      ag.map((_, i) => unify(ag[i], bg[i]))
     }
   }
   function call(f, args) {
@@ -169,13 +172,19 @@ function infer(nodes) {
         if (Array.isArray(head)) {
           return call(inf(head), tail.map(inf))
         } else if (head.code === "return") {
-          return inf(tail[0])
+          return tail.length === 0 ? tvoid : inf(tail[0])
         } else if (head.code === "def") {
           const args = tail.slice(1, -1)
           const vars = args.map(newVar)
-          const tinner = {...tenv, ...Object.fromEntries(args.map((arg,i) => [arg.code, vars[i]]))}
-          const body = tail.at(-1).map(node => inferWith(node, tinner)).at(-1)
+          const tenv2 = {...tenv, ...Object.fromEntries(args.map((arg,i) => [arg.code, vars[i]]))}
+          const body = tail.at(-1).map(node => inferWith(node, tenv2)).at(-1)
           return tenv[tail[0].code] = vars.concat([body])
+        } else if (head.code === "struct") {
+          const id = tail[0].code
+          const fields = tail.at(-1).map(line => line[0].code)
+          const types = tail.at(-1).map(line => inf(line[1]))
+          props[id] = Object.fromEntries(fields.map((_, i) => [fields[i], types[i]]))
+          return tenv[id] = [...types, newType(id)]
         } else if (head.code === "let" || head.code === "var") {
           return tenv[tail[0].code] = inf(tail[1])
         } else if (head.code === ".") {
@@ -208,6 +217,9 @@ function infer(nodes) {
     "io": newType("io"),
     "array": [toVariadic(tv1), tarray(tv1)],
     "+": [tv1, tv1, tv1],
+    "int": tint,
+    "string": tstring,
+    "bool": tbool,
   }
   nodes.map(node => inferWith(node, troot))
 }
@@ -229,6 +241,9 @@ function showFull(o) {
 }
 
 function compile(moa) {
+  const nodes = parse(moa)
+  infer(nodes)
+  const userTypes = nodes.filter(node => node[0].code === "struct").map(node => node[1].code)
   const embededTypes = "bool int float string array dict".split(" ")
   function goType(type) {
     const s = showType(type)
@@ -253,12 +268,17 @@ function compile(moa) {
           return `${gen(head)}(${tail.map(gen)})`
         }
       } else if (head.code === "return") {
-        return `return ${gen(tail[0])}`
+        return tail.length === 0 ? "return" : `return ${gen(tail[0])}`
       } else if (head.code === "def") {
         const types = node.type.map(goType)
         const args = tail.slice(1, -1).map((node, i) => node.code + " " + types[i])
         const body = tail.at(-1).map(gen).join("\n")
         return `func ${tail[0].code}(${args}) ${types.at(-1)} {${body}}`
+      } else if (head.code === "struct") {
+        const id = tail[0].code
+        const fields = tail.at(-1)
+        const body = fields.map(([field, type]) => field.code + " " + goType(type.type) ).join(";")
+        return `type ${id} struct { ${body} }`
       } else if (head.code === "let" || head.code === "var") {
         return `${tail[0].code} := ${gen(tail[1])}`
       } else if (head.code === ".") {
@@ -272,14 +292,16 @@ function compile(moa) {
         return gen(tail[0]) + head.code + gen(tail[1])
       } else {
         const generics = tail.length === 0 && node.type.generics && node.type.generics.length ? "[" + node.type.generics.map(goType) + "]" : ""
-        return `${gen(head)}${generics}(${tail.map(gen)})`
+        if (userTypes.includes(gen(head))) {
+          return `${gen(head)}${generics}{${tail.map(gen)}}`
+        } else {
+          return `${gen(head)}${generics}(${tail.map(gen)})`
+        }
       }
     } else {
       return node.code
     }
   }
-  const nodes = parse(moa)
-  infer(nodes)
   return nodes.map(gen).join("\n") + "\n"
 }
 

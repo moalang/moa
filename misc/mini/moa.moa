@@ -1,10 +1,24 @@
 # moa run io.puts 3
+struct token:
+  code string
+  offset int
+  lineno int
+  indent int
+
+def tokenize moa:
+  return [""]
+
 def parse moa:
+  let tokens tokenize(moa)
+  let nodes []
   return []
+
 def infer nodes:
-  return 1
+  return
+
 def gen nodes:
   return "io.puts(1)"
+
 def main:
   let code io.args().slice(2).join(" ")
   let nodes parse(code)

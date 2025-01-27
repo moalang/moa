@@ -17,5 +17,6 @@ b: # test bootstrap
 	echo 'def main: io.puts "hi!".size()'        | node bootstrap.js | grep 3 # string method
 	echo 'def main: io.puts array(1 2 3).size()' | node bootstrap.js | grep 3 # array method
 	echo 'def main: io.puts [1 2 3].size()'      | node bootstrap.js | grep 3 # syntax sugar: [a b] -> (array a b)
+	echo 'struct v1: x int\ndef main: io.puts v1(3).x'            | node bootstrap.js | grep 3 # struct
 	echo 'def add a b: return a + b\ndef main: io.puts add(1 2)'  | node bootstrap.js | grep 3 # type inference: function
-	echo 'def main:\n let a []\n a.push(1)\n io.puts(a.size())'    | node bootstrap.js | grep 1 # type inference
+	echo 'def main:\n let a []\n a.push(1)\n io.puts(a.size())'   | node bootstrap.js | grep 1 # type inference
