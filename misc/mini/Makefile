@@ -14,3 +14,4 @@ b: # test for bootstrap
 	echo 'def main: io.puts "hi!".size()'        | node bootstrap.js | grep 3 # string method
 	echo 'def main: io.puts array(1 2 3).size()' | node bootstrap.js | grep 3 # array method
 	echo 'def main: io.puts [1 2 3].size()'      | node bootstrap.js | grep 3 # syntax sugar: [a b] -> (array a b)
+	echo 'def add a b: return a + b\ndef main: io.puts add(1 2)'  | node bootstrap.js | grep 3 # function

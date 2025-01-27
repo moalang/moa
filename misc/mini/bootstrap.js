@@ -14,16 +14,16 @@ function isOp2(s) {
 }
 
 function tokenize(moa) {
-  let line = 1
+  let lineno = 1
   let offset = 0
   let indent = 0
   const tokens = []
   for (const code of moa.split(/([ \n]+|[()\[\]{}]|[:.+\-*/%!=^|&?]+|"[^"]*"|[ \n]+)/)) {
     if (code.trim()) {
-      tokens.push({code, line, offset, indent})
+      tokens.push({code, lineno, offset, indent})
     }
     offset += code.length
-    line += code.split("\n").length - 1
+    lineno += code.split("\n").length - 1
     indent = code.includes("\n") ? code.split("\n").at(-1).length : indent
   }
   return tokens
@@ -56,10 +56,14 @@ function parse(moa) {
     } else if (token.code === "[") {
       return suffix([{code: "array"}].concat(many(t => t.code === "]" ? (pos++, null) : bottom())))
     } else if (token.code === ":") {
-      const indent = tokens[pos].indent
-      const nodes = many(t => tokens[pos].indent === indent && line())
-      assert(nodes.length > 0, "Empty indent", pos, tokens.length)
-      return nodes
+      if (token.lineno === tokens[pos].lineno) {
+        return [statement()]
+      } else {
+        const indent = tokens[pos].indent
+        const nodes = many(t => tokens[pos].indent === indent && statement())
+        assert(nodes.length > 0, "Empty indent", pos, tokens.length)
+        return nodes
+      }
     } else {
       return suffix(token)
     }
@@ -68,8 +72,8 @@ function parse(moa) {
     const nodes = []
     while (pos < tokens.length) {
       if (tokens[pos].code === "#") {
-        const line = tokens[pos].line
-        while (pos < tokens.length && tokens[pos].line === line) {
+        const lineno = tokens[pos].lineno
+        while (pos < tokens.length && tokens[pos].lineno === lineno) {
           pos++
         }
       } else {
@@ -82,13 +86,13 @@ function parse(moa) {
     }
     return nodes
   }
-  function line() {
-    const line = tokens[pos].line
-    const nodes = many(t => t.line === line && !closes.includes(tokens[pos].code) && bottom())
+  function statement() {
+    const lineno = tokens[pos].lineno
+    const nodes = many(t => t.lineno === lineno && !closes.includes(tokens[pos].code) && bottom())
     assert(nodes.length > 0, "Empty line", pos, tokens.length, tokens.slice(pos))
     return nodes.length === 1 && Array.isArray(nodes[0]) ? nodes[0] : nodes
   }
-  const top = many(line)
+  const top = many(statement)
   assert(pos >= tokens.length, "No reach end of token", pos, tokens.length)
   return top
 }
@@ -98,7 +102,7 @@ function infer(nodes) {
   const newType = (name,generics=[],props={}) => ({name,generics,props})
   const newVar = () => ({name: (typeVariableSequence++).toString(), isvar: true})
   const toVariadic = t => ({...t, variadic: true})
-  const tvoid = newType("tvoid")
+  const tvoid = newType("void")
   const tany = ({name: "any", isvar: true})
   const tv1 = newVar()
   const tint = newType("int")
@@ -153,13 +157,14 @@ function infer(nodes) {
         const tail = node.slice(1)
         if (Array.isArray(head)) {
           return call(inf(head), tail.map(inf))
+        } else if (head.code === "return") {
+          return inf(tail[0])
         } else if (head.code === "def") {
-          const name = tail[0]
           const args = tail.slice(1, -1)
           const vars = args.map(newVar)
-          const tinner = {...tenv, ...Object.fromEntries(args.map((a,i) => [a[i].code, vargs[i]]))}
+          const tinner = {...tenv, ...Object.fromEntries(args.map((arg,i) => [arg.code, vars[i]]))}
           const body = tail.at(-1).map(node => inferWith(node, tinner)).at(-1)
-          return vars.concat([body])
+          return tenv[tail[0].code] = vars.concat([body])
         } else if (head.code === "let" || head.code === "var") {
           return tenv[tail[0].code] = inf(tail[1])
         } else if (head.code === ".") {
@@ -172,7 +177,10 @@ function infer(nodes) {
           if (tail.length === 0) {
             return tenv[id]
           } else {
-            return call(tenv[id], tail.map(inf))
+            const args = tail.map(inf)
+            const ret = call(tenv[id], args)
+            tenv[id].type = args.concat(ret)
+            return ret
           }
         }
       } else if(node.code.startsWith('"')) {
@@ -198,18 +206,26 @@ function infer(nodes) {
 
 function showType(o) {
   function show(o) {
-    return Array.isArray(o) ? `${o.map(show).join(":")}` : `${o.variadic ? "..." : ""}${o.name}`
+    return Array.isArray(o) ? `${o.map(show).join(":")}` : o.instance ? showType(o.instance) : `${o.variadic ? "..." : ""}${o.name}`
   }
   const m = new Map()
   return show(o).replace(/[0-9]+/g, n => m.get(n) || m.set(n, m.size+1).get(n))
 }
 
 function showNode(o) {
-  return (Array.isArray(o) ? `(${o.map(showNode).join(" ")})` : o.code || JSON.stringify(o)) // + (o.type ? "@" + showType(o.type) : "")
+  return (Array.isArray(o) ? `(${o.map(showNode).join(" ")})` : o.code || JSON.stringify(o))
+}
+
+function showFull(o) {
+  return (Array.isArray(o) ? `(${o.map(showFull).join(" ")})` : o.code || JSON.stringify(o)) + (o.type ? "@" + showType(o.type) : "")
 }
 
 function compile(moa) {
   const embededTypes = "bool int float string array dict".split(" ")
+  function goType(type) {
+    const s = showType(type)
+    return s === "void" ? "" : s
+  }
   function gen(node) {
     if (Array.isArray(node)) {
       const head = node[0]
@@ -224,10 +240,13 @@ function compile(moa) {
         } else {
           return `${gen(head)}(${tail.map(gen)})`
         }
+      } else if (head.code === "return") {
+        return `return ${gen(tail[0])}`
       } else if (head.code === "def") {
-        const args = tail.slice(1, -1)
+        const types = node.type.map(goType)
+        const args = tail.slice(1, -1).map((node, i) => node.code + " " + types[i])
         const body = tail.at(-1).map(gen).join("\n")
-        return `func ${tail[0].code}(${args}) {${body}}`
+        return `func ${tail[0].code}(${args}) ${types.at(-1)} {${body}}`
       } else if (head.code === "let" || head.code === "var") {
         return `${tail[0].code} := ${gen(tail[1])}`
       } else if ("+-*/%!=^|&?<>.".includes(head.code[0])) {
@@ -241,6 +260,7 @@ function compile(moa) {
   }
   const nodes = parse(moa)
   infer(nodes)
+  console.warn(showFull(nodes))
   return nodes.map(gen).join("\n") + "\n"
 }
 
