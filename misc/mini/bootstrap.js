@@ -103,7 +103,7 @@ function infer(nodes) {
   const newVar = () => ({name: (typeVariableSequence++).toString(), isvar: true})
   const toVariadic = t => ({...t, variadic: true})
   const tvoid = newType("void")
-  const tany = ({name: "any", isvar: true})
+  const tany = ({name: "any"})
   const tv1 = newVar()
   const tbool = newType("bool")
   const tint = newType("int")
@@ -131,36 +131,50 @@ function infer(nodes) {
   function unify(a, b) {
     a = prune(a)
     b = prune(b)
-    if (a.isvar) {
+    if (a === b || a.name == "any" || b.name == "any") {
+      // do nothing
+    } else if (a.isvar) {
       a.instance = b
     } else if (b.isvar) {
       unify(b, a)
     } else {
-      assert(a.name === b.name, "No unify", showType(a), showType(b))
-      const ag = a.generics || []
-      const bg = b.generics || []
-      assert(ag.length === bg.length, {a, b})
-      ag.map((_, i) => unify(ag[i], bg[i]))
-    }
-  }
-  function call(f, args) {
-    assert(Array.isArray(f), f)
-    assert((f.length >= 2 && f.at(-2).variadic) || f.length === args.length + 1, "Not callable", f.map(showType), args.map(showType))
-    for (let i=0; i<args.length; i++) {
-      unify(f[i], args[i])
-      if (f[i].variadic) {
-        for (let j=i; j<args.length; j++) {
-          unify(f[i], args[j])
-        }
-        break
+      assert(Array.isArray(a) === Array.isArray(b), "Not function", a, b)
+      if (Array.isArray(a)) {
+        assert(a.length === b.length, "No match length of arguments", a, b)
+        a.map((_, i) => unify(a[i], b[i]))
+      } else {
+        assert(a.name === b.name, "No unify", showType(a), showType(b))
+        const ag = a.generics || []
+        const bg = b.generics || []
+        assert(ag.length === bg.length, {a, b})
+        ag.map((_, i) => unify(ag[i], bg[i]))
       }
     }
-    return f.at(-1)
+    return a
+  }
+  function call(f, args) {
+    f = prune(f)
+    if (f.isvar) {
+      return (f.instance = args.concat(newVar())).at(-1)
+    } else {
+      assert(Array.isArray(f), f)
+      assert((f.length >= 2 && f.at(-2).variadic) || f.length === args.length + 1, "Not callable", f.map(showType), args.map(showType))
+      for (let i=0; i<args.length; i++) {
+        unify(f[i], args[i])
+        if (f[i].variadic) {
+          for (let j=i+1; j<args.length; j++) {
+            unify(f[i], args[j])
+          }
+          break
+        }
+      }
+      return f.at(-1)
+    }
   }
   function inferWith(node, tenv) {
     function lookup(node) {
       assert(node.code in tenv, node.code, Object.keys(tenv))
-      return tenv[node.code]
+      return prune(tenv[node.code])
     }
     function inf(node) {
       return node.type = infImpl(node)
@@ -177,14 +191,15 @@ function infer(nodes) {
           const args = tail.slice(1, -1)
           const vars = args.map(newVar)
           const tenv2 = {...tenv, ...Object.fromEntries(args.map((arg,i) => [arg.code, vars[i]]))}
-          const body = tail.at(-1).map(node => inferWith(node, tenv2)).at(-1)
-          return tenv[tail[0].code] = vars.concat([body])
+          //const body = tail.at(-1).map(node => inferWith(node, tenv2)).at(-1)
+          const body = inferTop(tail.at(-1), tenv2).at(-1)
+          return unify(lookup(tail[0]), vars.concat([body]))
         } else if (head.code === "struct") {
           const id = tail[0].code
           const fields = tail.at(-1).map(line => line[0].code)
           const types = tail.at(-1).map(line => inf(line[1]))
           props[id] = Object.fromEntries(fields.map((_, i) => [fields[i], types[i]]))
-          return tenv[id] = [...types, newType(id)]
+          return unify(tenv[id], [...types, newType(id)])
         } else if (head.code === "let" || head.code === "var") {
           return tenv[tail[0].code] = inf(tail[1])
         } else if (head.code === ".") {
@@ -197,7 +212,7 @@ function infer(nodes) {
           return field
         } else {
           const target = lookup(head)
-          assert(Array.isArray(target), "No function", target)
+          assert(Array.isArray(target) || target.isvar, "No function", target)
           const args = tail.map(inf)
           const ret = call(target, args)
           tenv[head.code].type = args.concat(ret)
@@ -213,6 +228,22 @@ function infer(nodes) {
     }
     return inf(node)
   }
+  function inferTop(nodes, tenv) {
+    assert(Array.isArray(nodes), "No arary", typeof nodes)
+    const definitions = "def struct let var".split(" ")
+    for (const node of nodes.filter(node => definitions.includes(node[0].code))) {
+      tenv[node[1].code] = newVar()
+    }
+    return nodes.map(node => inferWith(node, tenv))
+  }
+  function recPrune(node) {
+    if (node.type) {
+      node.type = prune(node.type)
+    }
+    if (Array.isArray(node)) {
+      node.map(recPrune)
+    }
+  }
   const troot = {
     "io": newType("io"),
     "array": [toVariadic(tv1), tarray(tv1)],
@@ -221,7 +252,9 @@ function infer(nodes) {
     "string": tstring,
     "bool": tbool,
   }
-  nodes.map(node => inferWith(node, troot))
+  inferTop(nodes, troot)
+  recPrune(nodes)
+  //nodes.map(node => inferWith(node, troot))
 }
 
 function showType(o) {
@@ -254,7 +287,7 @@ function compile(moa) {
       const head = node[0]
       const tail = node.slice(1)
       if (Array.isArray(head)) {
-        const baseType = (head[1].type.instance || head[1].type).name
+        const baseType = head[1].type.name
         if (head[0].code === "." && baseType === "io") {
           return `${baseType}_${head[2].code}(${tail.map(gen)})`
         } else if (head[0].code === "." && baseType === "array" && head[2].code === "push") {
@@ -282,7 +315,7 @@ function compile(moa) {
       } else if (head.code === "let" || head.code === "var") {
         return `${tail[0].code} := ${gen(tail[1])}`
       } else if (head.code === ".") {
-        const baseType = (tail[0].type.instance || tail[0].type).name
+        const baseType = tail[0].type.name
         if (baseType === "io") {
           return `io_${tail[1].code}`
         } else {
