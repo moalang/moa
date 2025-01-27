@@ -52,6 +52,7 @@ const std = (function() {
       case 'array_map': return f => o.map(f)
       case 'array_push': return x => o.push(x)
       case 'array_join': return s => o.map(x => x.toString()).join(s)
+      case 'array_slice': return (...a) => o.slice(...a)
       case 'array_has': return s => o.includes(s)
       default:
         if (typeof o === 'object' && field in o) {
@@ -142,7 +143,7 @@ function compile(source) {
       } else if (node[0].code === 'def') {
         return `const ${gen(node[1])} = (${node.slice(2, -1).map(gen).join(', ')}) => ${ gen(node.at(-1)) }`
       } if (node[0].code === 'class') {
-        const fields = node.at(-1).lines.map(a => a[0].code).join(', ')
+        const fields = node.at(-1).lines.map(a => '_' + a[0].code).join(', ')
         return `function ${gen(node[1])}(${fields}) { return {${fields}}}`
       } if (node[0].code === 'if') {
         return `if (${gen(node[1])}) ${gen(node[2])}`
@@ -278,7 +279,5 @@ if (process.argv[2] === 'test') {
 
   console.log('ok')
 } else if (process.argv[2] === 'js') {
-  console.log(std + compile(require('fs').readFileSync(0, 'utf-8')) + '\n_main()')
-} else {
-  console.log(eval(std + compile(require('fs').readFileSync(0, 'utf-8')) + '\n_main()'))
+  console.log(std + compile(require('fs').readFileSync(process.argv[3], 'utf-8')) + '\n_main()')
 }

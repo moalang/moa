@@ -9,3 +9,4 @@ boot:
 
 test:
 	(cd src && node bootstrap.js test)
+	(cd src && echo 'def main io.puts("boot")' | node /tmp/a.js > /tmp/a.go && go run /tmp/a.go | grep boot)
