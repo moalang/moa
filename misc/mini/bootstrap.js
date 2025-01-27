@@ -99,20 +99,31 @@ function parse(moa) {
 
 function infer(nodes) {
   let typeVariableSequence = 0
-  const newType = (name,generics=[],props={}) => ({name,generics,props})
+  const newType = (name,generics=[]) => ({name,generics})
   const newVar = () => ({name: (typeVariableSequence++).toString(), isvar: true})
   const toVariadic = t => ({...t, variadic: true})
   const tvoid = newType("void")
   const tany = ({name: "any", isvar: true})
   const tv1 = newVar()
   const tint = newType("int")
-  const tstring = newType("string", [], {
-    size: [tint],
-  })
-  const tarray = t => newType("array", [t], {
-    size: [tint],
-    at: [tint, t],
-  })
+  const tstring = newType("string", [])
+  const tarray = t => newType("array", [t])
+  const props = {
+    io: {
+      puts: [toVariadic(tany), tvoid],
+      args: [tarray(tstring)],
+    },
+    string: {
+      size: [tint],
+    },
+    array: (t) => ({
+      size: [tint],
+      slice: [tint, toVariadic(tint), t],
+      join: [tstring, tstring],
+      push: [t.generics[0], t],
+      at: [tint, t],
+    })
+  }
   function prune(t) {
     return t.instance ? (t.instance = prune(t.instance)) : t
   }
@@ -132,7 +143,7 @@ function infer(nodes) {
   function call(f, args) {
     assert(Array.isArray(f), f)
     assert((f.length >= 2 && f.at(-2).variadic) || f.length === args.length + 1, "Not callable", f.map(showType), args.map(showType))
-    for (let i=0; i<f.length-1; i++) {
+    for (let i=0; i<args.length; i++) {
       unify(f[i], args[i])
       if (f[i].variadic) {
         for (let j=i; j<args.length; j++) {
@@ -168,20 +179,20 @@ function infer(nodes) {
         } else if (head.code === "let" || head.code === "var") {
           return tenv[tail[0].code] = inf(tail[1])
         } else if (head.code === ".") {
-          const prop = inf(tail[0]).props[tail[1].code]
-          assert(prop, "No field", showNode(tail[0]), tail[1].code)
-          return prop
+          const type = inf(tail[0])
+          const id = tail[1].code
+          const prop = props[type.name]
+          assert(prop, "No type", type, id)
+          const field = typeof prop === "function" ? prop(type)[id] : prop[id]
+          assert(field, "No field", typeof prop, type, id)
+          return field
         } else {
-          const id = head.code
-          assert(id in tenv, "No id", id, Object.keys(tenv))
-          if (tail.length === 0) {
-            return tenv[id]
-          } else {
-            const args = tail.map(inf)
-            const ret = call(tenv[id], args)
-            tenv[id].type = args.concat(ret)
-            return ret
-          }
+          const target = lookup(head)
+          assert(Array.isArray(target), "No function", target)
+          const args = tail.map(inf)
+          const ret = call(target, args)
+          tenv[head.code].type = args.concat(ret)
+          return ret
         }
       } else if(node.code.startsWith('"')) {
         return tstring
@@ -194,10 +205,7 @@ function infer(nodes) {
     return inf(node)
   }
   const troot = {
-    io: newType("io", [], {
-      puts: [toVariadic(tany), tvoid],
-      args: tarray(tstring),
-    }),
+    "io": newType("io"),
     "array": [toVariadic(tv1), tarray(tv1)],
     "+": [tv1, tv1, tv1],
   }
@@ -206,7 +214,7 @@ function infer(nodes) {
 
 function showType(o) {
   function show(o) {
-    return Array.isArray(o) ? `${o.map(show).join(":")}` : o.instance ? showType(o.instance) : `${o.variadic ? "..." : ""}${o.name}`
+    return Array.isArray(o) ? `${o.map(show).join(":")}` : o.instance ? showType(o.instance) : `${o.variadic ? "..." : ""}${o.name}${o.generics && o.generics.length ? "[" + o.generics.map(showType).join(" ") + "]" : ""}`
   }
   const m = new Map()
   return show(o).replace(/[0-9]+/g, n => m.get(n) || m.set(n, m.size+1).get(n))
@@ -234,6 +242,10 @@ function compile(moa) {
         const baseType = (head[1].type.instance || head[1].type).name
         if (head[0].code === "." && baseType === "io") {
           return `${baseType}_${head[2].code}(${tail.map(gen)})`
+        } else if (head[0].code === "." && baseType === "array" && head[2].code === "push") {
+          assert(head[1].code, "array_push violation")
+          const id = head[1].code
+          return `${id} = append(${id}, ${gen(tail[0])})`
         } else if (head[0].code === "." && embededTypes.includes(baseType)) {
           const args = [head[1]].concat(tail)
           return `${baseType}_${head[2].code}(${args.map(gen)})`
@@ -249,10 +261,18 @@ function compile(moa) {
         return `func ${tail[0].code}(${args}) ${types.at(-1)} {${body}}`
       } else if (head.code === "let" || head.code === "var") {
         return `${tail[0].code} := ${gen(tail[1])}`
+      } else if (head.code === ".") {
+        const baseType = (tail[0].type.instance || tail[0].type).name
+        if (baseType === "io") {
+          return `io_${tail[1].code}`
+        } else {
+          return gen(tail[0]) + head.code + gen(tail[1])
+        }
       } else if ("+-*/%!=^|&?<>.".includes(head.code[0])) {
         return gen(tail[0]) + head.code + gen(tail[1])
       } else {
-        return `${gen(head)}(${tail.map(gen)})`
+        const generics = tail.length === 0 && node.type.generics && node.type.generics.length ? "[" + node.type.generics.map(goType) + "]" : ""
+        return `${gen(head)}${generics}(${tail.map(gen)})`
       }
     } else {
       return node.code
@@ -260,7 +280,6 @@ function compile(moa) {
   }
   const nodes = parse(moa)
   infer(nodes)
-  console.warn(showFull(nodes))
   return nodes.map(gen).join("\n") + "\n"
 }
 
