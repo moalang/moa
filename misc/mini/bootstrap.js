@@ -31,7 +31,6 @@ function tokenize(moa) {
 
 function parse(moa) {
   const tokens = tokenize(moa)
-  const opens = "{([".split("")
   const closes = "])}".split("")
   let pos = 0
   function bottom() {
@@ -52,9 +51,10 @@ function parse(moa) {
         return node
       }
     }
-    const index = opens.findIndex(code => code === token.code)
-    if (index >= 0) {
-      return suffix(many(t => t.code === closes[index] ? (pos++, null) : bottom()))
+    if (token.code === "(") {
+      return suffix(many(t => t.code === ")" ? (pos++, null) : bottom()))
+    } else if (token.code === "[") {
+      return suffix([{code: "array"}].concat(many(t => t.code === "]" ? (pos++, null) : bottom())))
     } else if (token.code === ":") {
       const indent = tokens[pos].indent
       const nodes = many(t => tokens[pos].indent === indent && line())
@@ -102,9 +102,12 @@ function infer(nodes) {
   const tany = ({name: "any", isvar: true})
   const tv1 = newVar()
   const tint = newType("int")
-  const tstring = newType("string")
+  const tstring = newType("string", [], {
+    size: [tint],
+  })
   const tarray = t => newType("array", [t], {
-    at: [tint, t]
+    size: [tint],
+    at: [tint, t],
   })
   function prune(t) {
     return t.instance ? (t.instance = prune(t.instance)) : t
@@ -124,8 +127,16 @@ function infer(nodes) {
   }
   function call(f, args) {
     assert(Array.isArray(f), f)
-    assert((f.length >= 1 && f.at(-2).variadic) || f.length === args.length + 1, "Not callable", f.map(showType), args.map(showType))
-    args.map((a, i) => unify(f[i], a))
+    assert((f.length >= 2 && f.at(-2).variadic) || f.length === args.length + 1, "Not callable", f.map(showType), args.map(showType))
+    for (let i=0; i<f.length-1; i++) {
+      unify(f[i], args[i])
+      if (f[i].variadic) {
+        for (let j=i; j<args.length; j++) {
+          unify(f[i], args[j])
+        }
+        break
+      }
+    }
     return f.at(-1)
   }
   function inferWith(node, tenv) {
@@ -179,6 +190,7 @@ function infer(nodes) {
       puts: [toVariadic(tany), tvoid],
       args: tarray(tstring),
     }),
+    "array": [toVariadic(tv1), tarray(tv1)],
     "+": [tv1, tv1, tv1],
   }
   nodes.map(node => inferWith(node, troot))
@@ -197,24 +209,31 @@ function showNode(o) {
 }
 
 function compile(moa) {
+  const embededTypes = "bool int float string array dict".split(" ")
   function gen(node) {
     if (Array.isArray(node)) {
       const head = node[0]
       const tail = node.slice(1)
       if (Array.isArray(head)) {
-        return `${gen(head)}(${tail.map(gen)})`
+        const baseType = (head[1].type.instance || head[1].type).name
+        if (head[0].code === "." && baseType === "io") {
+          return `${baseType}_${head[2].code}(${tail.map(gen)})`
+        } else if (head[0].code === "." && embededTypes.includes(baseType)) {
+          const args = [head[1]].concat(tail)
+          return `${baseType}_${head[2].code}(${args.map(gen)})`
+        } else {
+          return `${gen(head)}(${tail.map(gen)})`
+        }
       } else if (head.code === "def") {
         const args = tail.slice(1, -1)
         const body = tail.at(-1).map(gen).join("\n")
         return `func ${tail[0].code}(${args}) {${body}}`
       } else if (head.code === "let" || head.code === "var") {
         return `${tail[0].code} := ${gen(tail[1])}`
-      } else if (head.code === "." && tail[0].type.name === "io") {
-        return "io_" + tail[1].code
       } else if ("+-*/%!=^|&?<>.".includes(head.code[0])) {
         return gen(tail[0]) + head.code + gen(tail[1])
       } else {
-        assert(node)
+        return `${gen(head)}(${tail.map(gen)})`
       }
     } else {
       return node.code
@@ -222,38 +241,10 @@ function compile(moa) {
   }
   const nodes = parse(moa)
   infer(nodes)
-  const go = nodes.map(gen).join("\n") + "\n"
-  return `package main
-import (
-  "fmt"
-  "os"
-)
-
-type MoaArray[T any] struct {
-  _me []T
+  return nodes.map(gen).join("\n") + "\n"
 }
 
-func newArray[T any](a []T) MoaArray[T] {
-  return MoaArray[T]{a}
-}
-
-func (a MoaArray[T]) at(n int) T {
-  return a._me[n]
-}
-
-var io_args = MoaArray[string]{}
-
-func io_puts(a ...any) {
-  fmt.Println(a...)
-}
-
-func init() {
-  io_args = newArray(os.Args)
-}
-
-${go}`
-}
-
-const go = compile(fs.readFileSync("/dev/stdin", "utf-8"))
+const runtime = fs.readFileSync(__dirname + "/runtime.go", "utf-8")
+const go = runtime + compile(fs.readFileSync("/dev/stdin", "utf-8"))
 fs.writeFileSync("/tmp/moa.go", go)
 console.log(child_process.execSync(`go run /tmp/moa.go ${process.argv.slice(2).join(" ")}`, {encoding: "utf-8"}))
