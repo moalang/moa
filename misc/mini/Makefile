@@ -1,10 +1,7 @@
-r: # test runtime
+all:
+	# test runtime
 	go test -v runtime.go runtime_test.go
-
-m: # test moa.moa with bootstrap
-	cat moa.moa | node bootstrap.js run io.puts 3
-
-b: # test bootstrap
+	# test bootstrap
 	echo '(def main (((. io puts) (+ 1 2))))'    | node bootstrap.js | grep 3 # lisp style
 	echo 'def main (((. io puts) (+ 1 2)))'      | node bootstrap.js | grep 3 # syntax sugar: (a b) -> a b
 	echo 'def main ((io.puts (+ 1 2)))'          | node bootstrap.js | grep 3 # syntax sugar: (. a b) -> a.b
@@ -21,3 +18,5 @@ b: # test bootstrap
 	echo 'def add a b: return a + b\ndef main: io.puts add(1 2)'  | node bootstrap.js | grep 3 # type inference: function
 	echo 'def main: io.puts add(1 2)\ndef add a b: return a + b'  | node bootstrap.js | grep 3 # type inference: function
 	echo 'def main:\n let a []\n a.push(1)\n io.puts(a.size())'   | node bootstrap.js | grep 1 # type inference
+	# test moa.moa with bootstrap
+	cat moa.moa | node bootstrap.js run io.puts 3

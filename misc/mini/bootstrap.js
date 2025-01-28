@@ -191,9 +191,8 @@ function infer(nodes) {
           const args = tail.slice(1, -1)
           const vars = args.map(newVar)
           const tenv2 = {...tenv, ...Object.fromEntries(args.map((arg,i) => [arg.code, vars[i]]))}
-          //const body = tail.at(-1).map(node => inferWith(node, tenv2)).at(-1)
-          const body = inferTop(tail.at(-1), tenv2).at(-1)
-          return unify(lookup(tail[0]), vars.concat([body]))
+          const ret = inferTop(tail.at(-1), tenv2).at(-1)
+          return unify(lookup(tail[0]), vars.concat([ret]))
         } else if (head.code === "struct") {
           const id = tail[0].code
           const fields = tail.at(-1).map(line => line[0].code)
@@ -246,7 +245,7 @@ function infer(nodes) {
   }
   const troot = {
     "io": newType("io"),
-    "array": [toVariadic(tv1), tarray(tv1)],
+    "array": (t => [t, tarray(t)])(toVariadic(tv1)),
     "+": [tv1, tv1, tv1],
     "int": tint,
     "string": tstring,
@@ -277,10 +276,20 @@ function compile(moa) {
   const nodes = parse(moa)
   infer(nodes)
   const userTypes = nodes.filter(node => node[0].code === "struct").map(node => node[1].code)
-  const embededTypes = "bool int float string array dict".split(" ")
+  const embededTypes = "void bool int float string array dict".split(" ")
   function goType(type) {
-    const s = showType(type)
-    return s === "void" ? "" : s
+    const t = type.name
+    return type.instance ? goType(type.instance) :
+      Array.isArray(type) ? (a => `func(${a.slice(0, -1)}) ${a.at(-1)}`)(type.map(goType)) :
+      t === "void" ? "" :
+      t === "float" ? "float64" :
+      t === "array" ? `[]${goType(type.generics[0])}` :
+      t === "dict" ? `dict[${goType(type.generics[0])}]${goType(type.generics[1])}` :
+      [
+        type.variadic ? "..." : "",
+        type.name,
+        type.generics && type.generics.length ? `[${type.generics.map(goType)}]` : ""
+      ].join("")
   }
   function gen(node) {
     if (Array.isArray(node)) {
