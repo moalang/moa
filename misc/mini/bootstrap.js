@@ -281,10 +281,11 @@ function compile(moa) {
     const t = type.name
     return type.instance ? goType(type.instance) :
       Array.isArray(type) ? (a => `func(${a.slice(0, -1)}) ${a.at(-1)}`)(type.map(goType)) :
-      t === "void" ? "" :
+      t === "void"  ? "" :
+      t === "int"   ? "int64" :
       t === "float" ? "float64" :
       t === "array" ? `[]${goType(type.generics[0])}` :
-      t === "dict" ? `dict[${goType(type.generics[0])}]${goType(type.generics[1])}` :
+      t === "dict"  ? `dict[${goType(type.generics[0])}]${goType(type.generics[1])}` :
       [
         type.variadic ? "..." : "",
         type.name,

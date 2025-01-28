@@ -7,33 +7,40 @@ import (
 	"strings"
 )
 
-func string_size(s string) int {
-	return len(s)
+func string_size(s string) int64 {
+	return int64(len(s))
 }
 
 func array[T any](a ...T) []T {
 	return a
 }
 
-func array_size[T any](a []T) int {
-	return len(a)
+func array_size[T any](a []T) int64 {
+	return int64(len(a))
 }
 
-func array_at[T any](a []T, n int) T {
+func array_at[T any](a []T, n int64) T {
 	return a[n]
 }
 
-func array_slice[T any](a []T, n int, m ...int) []T {
-	s := n
-	e := len(a)
+func array_slice[T any](a []T, n int64, m ...int64) []T {
+	ln := len(a)
+	s := int(n)
+	e := ln
 	if len(m) == 1 {
-		e = m[0]
+		e = int(m[0])
 	}
 	if s < 0 {
-		s = len(a) - s - 1
+		s = ln - s - 1
 	}
 	if e < 0 {
-		e = len(a) + e
+		e = ln + e
+	}
+	if s > ln {
+		s = ln - 1
+	}
+	if e > ln {
+		e = ln - 1
 	}
 	return a[s:e]
 }
@@ -67,6 +74,10 @@ func to_string[T any](x T) string {
 		return strconv.FormatBool(v)
 	case int:
 		return strconv.Itoa(v)
+	case int32:
+		return strconv.FormatInt(int64(v), 10)
+	case int64:
+		return strconv.FormatInt(v, 10)
 	case float32:
 		return strconv.FormatFloat(float64(v), 'f', -1, 32)
 	case float64:
