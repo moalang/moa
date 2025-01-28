@@ -1,283 +1,354 @@
-'use strict'
-const std = (function() {
-  let ___test_ok = 0
-  let ___test_failed = 0
-  const _io = {
-    _in: {
-      get _string() {
-        return require('fs').readFileSync(0, 'utf-8')
+"use strict"
+// echo 'def main: io.puts "hello"' | node bootstrap.js | grep hello
+const fs = require("node:fs")
+const child_process = require("node:child_process")
+
+function assert(cond, ...a) {
+  if (!cond) {
+    throw new Error(a.map(x => JSON.stringify(x)).join(" "))
+  }
+}
+
+function isOp2(s) {
+  return "+-*/%<>!=^|&".includes(s[0])
+}
+
+function tokenize(moa) {
+  let lineno = 1
+  let offset = 0
+  let indent = 0
+  const tokens = []
+  for (const code of moa.split(/([ \n]+|[()\[\]{}]|[:.+\-*/%!=^|&?]+|"[^"]*"|[ \n]+)/)) {
+    if (code.trim()) {
+      tokens.push({code, lineno, offset, indent})
+    }
+    offset += code.length
+    lineno += code.split("\n").length - 1
+    indent = code.includes("\n") ? code.split("\n").at(-1).length : indent
+  }
+  return tokens
+}
+
+function parse(moa) {
+  const tokens = tokenize(moa)
+  const closes = "])}".split("")
+  let pos = 0
+  function bottom() {
+    const token = tokens[pos++]
+    function suffix(node) {
+      const next = tokens[pos]
+      const prev = tokens[pos-1]
+      if (next && isOp2(next.code)) {
+        pos++ // consume binary operator
+        return suffix([next, node, bottom()])
+      } else if (next && next.code === ".") {
+        pos++ // consume dot
+        return suffix([next, node, tokens[pos++]])
+      } else if (prev && next && prev.offset + prev.code.length === next.offset && next.code === "(") {
+        pos++ // consume closed open parenthesis
+        return suffix([node].concat(many(t => t.code === ")" ? (pos++, null) : bottom())))
+      } else {
+        return node
       }
-    },
-    _puts(...a) {
-      console.log(...a)
-    },
-    _warn(...a) {
-      console.warn(...a)
-    },
-    _argv: process.argv.slice(2)
+    }
+    if (token.code === "(") {
+      return suffix(many(t => t.code === ")" ? (pos++, null) : bottom()))
+    } else if (token.code === "[") {
+      return suffix([{code: "array"}].concat(many(t => t.code === "]" ? (pos++, null) : bottom())))
+    } else if (token.code === ":") {
+      if (token.lineno === tokens[pos].lineno) {
+        return [statement()]
+      } else {
+        const indent = tokens[pos].indent
+        const nodes = many(t => tokens[pos].indent === indent && statement())
+        assert(nodes.length > 0, "Empty indent", pos, tokens.length)
+        return nodes
+      }
+    } else {
+      return suffix(token)
+    }
   }
-  function _throw(obj) {
-    const e = new Error(obj)
-    e._data = obj
-    throw e
+  function many(f) {
+    const nodes = []
+    while (pos < tokens.length) {
+      if (tokens[pos].code === "#") {
+        const lineno = tokens[pos].lineno
+        while (pos < tokens.length && tokens[pos].lineno === lineno) {
+          pos++
+        }
+      } else {
+        const node = f(tokens[pos])
+        if (!node) {
+          break
+        }
+        nodes.push(node)
+      }
+    }
+    return nodes
   }
-  function _list(...a) {
+  function statement() {
+    const lineno = tokens[pos].lineno
+    const nodes = many(t => t.lineno === lineno && !closes.includes(tokens[pos].code) && bottom())
+    assert(nodes.length > 0, "Empty line", pos, tokens.length, tokens.slice(pos))
+    return nodes.length === 1 && Array.isArray(nodes[0]) ? nodes[0] : nodes
+  }
+  const top = many(statement)
+  assert(pos >= tokens.length, "No reach end of token", pos, tokens.length)
+  return top
+}
+
+function infer(nodes) {
+  let typeVariableSequence = 0
+  const newType = (name,generics) => generics ? ({name,generics}) : ({name})
+  const newVar = () => ({name: (typeVariableSequence++).toString(), isvar: true})
+  const toVariadic = t => ({...t, variadic: true})
+  const tvoid = newType("void")
+  const tany = ({name: "any"})
+  const tv1 = newVar()
+  const tbool = newType("bool")
+  const tint = newType("int")
+  const tstring = newType("string", [])
+  const tarray = t => newType("array", [t])
+  const props = {
+    io: {
+      puts: [toVariadic(tany), tvoid],
+      args: [tarray(tstring)],
+    },
+    string: {
+      size: [tint],
+    },
+    array: (t) => ({
+      size: [tint],
+      slice: [tint, toVariadic(tint), t],
+      join: [tstring, tstring],
+      push: [t.generics[0], t],
+      at: [tint, t],
+    }),
+  }
+  function prune(t) {
+    return t.instance ? (t.instance = prune(t.instance)) : t
+  }
+  function unify(a, b) {
+    a = prune(a)
+    b = prune(b)
+    if (a === b || a.name == "any" || b.name == "any") {
+      // do nothing
+    } else if (a.isvar) {
+      a.instance = b
+    } else if (b.isvar) {
+      unify(b, a)
+    } else {
+      assert(Array.isArray(a) === Array.isArray(b), "Not function", a, b)
+      if (Array.isArray(a)) {
+        assert(a.length === b.length, "No match length of arguments", a, b)
+        a.map((_, i) => unify(a[i], b[i]))
+      } else {
+        assert(a.name === b.name, "No unify", showType(a), showType(b))
+        const ag = a.generics || []
+        const bg = b.generics || []
+        assert(ag.length === bg.length, {a, b})
+        ag.map((_, i) => unify(ag[i], bg[i]))
+      }
+    }
     return a
   }
-  function _map(...a) {
-    return new Map([... new Array(a.length / 2)].map((_,i) => [a[i*2], a[i*2+1]]))
-  }
-  function _test(f) {
-    function _eq(a, b) {
-      if (JSON.stringify(a) === JSON.stringify(b)) {
-        ___test_ok++
-      } else {
-        ___test_failed++
+  function call(f, args) {
+    f = prune(f)
+    if (f.isvar) {
+      return (f.instance = args.concat(newVar())).at(-1)
+    } else {
+      assert(Array.isArray(f), f)
+      assert((f.length >= 2 && f.at(-2).variadic) || f.length === args.length + 1, "Not callable", f.map(showType), args.map(showType))
+      for (let i=0; i<args.length; i++) {
+        unify(f[i], args[i])
+        if (f[i].variadic) {
+          for (let j=i+1; j<args.length; j++) {
+            unify(f[i], args[j])
+          }
+          break
+        }
       }
+      return f.at(-1)
     }
-    f({_eq})
   }
-  function prop(o, field) {
-    const type = Array.isArray(o) ? 'array' : typeof o
-    switch (type + field) {
-      case 'string_size': return o.length
-      case 'string_int': return parseInt(o)
-      case 'string_at': return i => o[i]
-      case 'string_has': return s => o.includes(s)
-      case 'string_slice': return (...a) => o.slice(...a)
-      case 'string_split': return s => o.split(s)
-      case 'number_string': return o.toString()
-      case 'array_size': return o.length
-      case 'array_at': return n => o.at(n)
-      case 'array_map': return f => o.map(f)
-      case 'array_push': return x => o.push(x)
-      case 'array_join': return s => o.map(x => x.toString()).join(s)
-      case 'array_slice': return (...a) => o.slice(...a)
-      case 'array_has': return s => o.includes(s)
-      default:
-        if (typeof o === 'object' && field in o) {
-          return o[field]
+  function inferWith(node, tenv) {
+    function lookup(node) {
+      assert(node.code in tenv, node.code, Object.keys(tenv))
+      return prune(tenv[node.code])
+    }
+    function inf(node) {
+      return node.type = infImpl(node)
+    }
+    function infImpl(node) {
+      if (Array.isArray(node)) {
+        const head = node[0]
+        const tail = node.slice(1)
+        if (Array.isArray(head)) {
+          return call(inf(head), tail.map(inf))
+        } else if (head.code === "return") {
+          return tail.length === 0 ? tvoid : inf(tail[0])
+        } else if (head.code === "def") {
+          const args = tail.slice(1, -1)
+          const vars = args.map(newVar)
+          const tenv2 = {...tenv, ...Object.fromEntries(args.map((arg,i) => [arg.code, vars[i]]))}
+          const ret = inferTop(tail.at(-1), tenv2).at(-1)
+          return unify(lookup(tail[0]), vars.concat([ret]))
+        } else if (head.code === "struct") {
+          const id = tail[0].code
+          const fields = tail.at(-1).map(line => line[0].code)
+          const types = tail.at(-1).map(line => inf(line[1]))
+          props[id] = Object.fromEntries(fields.map((_, i) => [fields[i], types[i]]))
+          return unify(tenv[id], [...types, newType(id)])
+        } else if (head.code === "let" || head.code === "var") {
+          return tenv[tail[0].code] = inf(tail[1])
+        } else if (head.code === ".") {
+          const type = inf(tail[0])
+          const id = tail[1].code
+          const prop = props[type.name]
+          assert(prop, "No type", type, id)
+          const field = typeof prop === "function" ? prop(type)[id] : prop[id]
+          assert(field, "No field", typeof prop, type, id)
+          return field
         } else {
-          throw new Error(`No '${field}' of '${type}'`)
+          const target = lookup(head)
+          assert(Array.isArray(target) || target.isvar, "No function", target)
+          const args = tail.map(inf)
+          const ret = call(target, args)
+          tenv[head.code].type = args.concat(ret)
+          return ret
         }
-    }
-  }
-}).toString().slice(14, -2) + '\n\n\n'
-
-function compile(source) {
-  function isInfixLeft(s) {
-    return '.'.includes(s[0])
-  }
-  function isInfixRight(s) {
-    return '+-*/%<>!=|&^?'.includes(s[0])
-  }
-  function tokenize() {
-    let pos = 0
-    let lineno = 1
-    return source.split(/("(?:[^"\\]|\\.)*?"|[(){}\[\].]|[\r\n\t ]+)/g).map(code => {
-      const o = {code, pos, lineno}
-      pos += code.length
-      lineno += code.split('\n').length - 1
-      return o
-    }).filter(x => x.code.trim().length)
-  }
-  function parse(tokens) {
-    let pos = 0
-    function line() {
-      const lineno = tokens[pos].lineno
-      const a = loop(t => t.lineno === lineno && !(')]}'.includes(t.code)), consume)
-      return a.length === 1 ? a[0] : a
-    }
-    function consume() {
-      return suffix(tokens[pos++])
-    }
-    function suffix(token) {
-      if (pos >= tokens.length) {
-        return token
-      } else if (isInfixLeft(tokens[pos].code)) {
-        const op2 = tokens[pos++]
-        return suffix([op2, token, tokens[pos++]])
-      } else if (isInfixRight(tokens[pos].code)) {
-        return suffix([tokens[pos++], token, consume()])
-      } else if (token.code === '(') {
-        const a = until(')')
-        if (a.length !== 1) {
-          throw new Error(`Unsupported '${JSON.stringify(a)}' around ${JSON.stringify(token)}`)
-        }
-        token.body = a[0]
-        return suffix(token)
-      } else if (token.code === '[') {
-        return suffix([{code: 'list', pos: token.pos}, ...until(']')])
-      } else if (token.code === '{') {
-        token.lines = loop(t => t.code !== '}' || pos++ === null, line)
-        return token
-      } else if (tokens[pos-1].pos + tokens[pos-1].code.length === tokens[pos].pos && tokens[pos].code === '(') {
-        pos++
-        return suffix([token, ...until(')')])
-      } else if (tokens[pos-1].pos + tokens[pos-1].code.length === tokens[pos].pos && tokens[pos].code === '[') {
-        pos++
-        const index = consume()
-        pos++
-        return suffix([[{code: '.'}, token, {code: 'at'}], index])
+      } else if(node.code.startsWith('"')) {
+        return tstring
+      } else if("0123456789".includes(node.code[0])) {
+        return tint
       } else {
-        return token
+        return lookup(node)
       }
     }
-    function until(c) {
-      return loop(t => t.code !== c || ++pos === null, consume)
-    }
-    function loop(f, g) {
-      const a = []
-      while (pos < tokens.length && f(tokens[pos])) {
-        a.push(g())
-      }
-      return a
-    }
-    return loop(_ => true, line)
+    return inf(node)
   }
-  const reserved = 'return continue break'.split(' ')
+  function inferTop(nodes, tenv) {
+    assert(Array.isArray(nodes), "No arary", typeof nodes)
+    const definitions = "def struct let var".split(" ")
+    for (const node of nodes.filter(node => definitions.includes(node[0].code))) {
+      tenv[node[1].code] = newVar()
+    }
+    return nodes.map(node => inferWith(node, tenv))
+  }
+  function recPrune(node) {
+    if (node.type) {
+      node.type = prune(node.type)
+    }
+    if (Array.isArray(node)) {
+      node.map(recPrune)
+    }
+  }
+  const troot = {
+    "io": newType("io"),
+    "array": (t => [t, tarray(t)])(toVariadic(tv1)),
+    "+": [tv1, tv1, tv1],
+    "int": tint,
+    "string": tstring,
+    "bool": tbool,
+  }
+  inferTop(nodes, troot)
+  recPrune(nodes)
+  //nodes.map(node => inferWith(node, troot))
+}
+
+function showType(o) {
+  function show(o) {
+    return Array.isArray(o) ? `${o.map(show).join(":")}` : o.instance ? showType(o.instance) : `${o.variadic ? "..." : ""}${o.name}${o.generics && o.generics.length ? "[" + o.generics.map(showType).join(" ") + "]" : ""}`
+  }
+  const m = new Map()
+  return show(o).replace(/[0-9]+/g, n => m.get(n) || m.set(n, m.size+1).get(n))
+}
+
+function showNode(o) {
+  return (Array.isArray(o) ? `(${o.map(showNode).join(" ")})` : o.code || JSON.stringify(o))
+}
+
+function showFull(o) {
+  return (Array.isArray(o) ? `(${o.map(showFull).join(" ")})` : o.code || JSON.stringify(o)) + (o.type ? "@" + showType(o.type) : "")
+}
+
+function compile(moa) {
+  const nodes = parse(moa)
+  infer(nodes)
+  const userTypes = nodes.filter(node => node[0].code === "struct").map(node => node[1].code)
+  const embededTypes = "void bool int float string array dict".split(" ")
+  function goType(type) {
+    const t = type.name
+    return type.instance ? goType(type.instance) :
+      Array.isArray(type) ? (a => `func(${a.slice(0, -1)}) ${a.at(-1)}`)(type.map(goType)) :
+      t === "void"  ? "" :
+      t === "int"   ? "int64" :
+      t === "float" ? "float64" :
+      t === "array" ? `[]${goType(type.generics[0])}` :
+      t === "dict"  ? `dict[${goType(type.generics[0])}]${goType(type.generics[1])}` :
+      [
+        type.variadic ? "..." : "",
+        type.name,
+        type.generics && type.generics.length ? `[${type.generics.map(goType)}]` : ""
+      ].join("")
+  }
   function gen(node) {
     if (Array.isArray(node)) {
-      if (Array.isArray(node[0])) {
-        return node.length === 1 ? gen(node[0]) : `${gen(node[0])}(${node.slice(1).map(gen).join(', ')})`
-      } else if (node[0].code === 'def') {
-        return `const ${gen(node[1])} = (${node.slice(2, -1).map(gen).join(', ')}) => ${ gen(node.at(-1)) }`
-      } if (node[0].code === 'class') {
-        const fields = node.at(-1).lines.map(a => '_' + a[0].code).join(', ')
-        return `function ${gen(node[1])}(${fields}) { return {${fields}}}`
-      } if (node[0].code === 'if') {
-        return `if (${gen(node[1])}) ${gen(node[2])}`
-      } if (node[0].code === 'else') {
-        return node.length === 2 ? `else ${gen(node[1])}` : `else ${gen(node.slice(1))}`
-      } if (node[0].code === 'catch') {
-        return `(() => {try { return ${gen(node[1])} } catch (__e) { return (${gen(node[2])})(__e) }})()`
-      } else if (['var', 'let'].includes(node[0].code)) {
-        return `let ${gen(node[1])} = ${node.length === 3 ? gen(node[2]) : gen(node.slice(2))}`
-      } else if (node[0].code === 'iif') {
-        function iif(a) {
-          return a.length === 1 ? gen(a[0]) : gen(a[0]) + '?' + gen(a[1]) + ':' + iif(a.slice(2))
+      const head = node[0]
+      const tail = node.slice(1)
+      if (Array.isArray(head)) {
+        const baseType = head[1].type.name
+        if (head[0].code === "." && baseType === "io") {
+          return `${baseType}_${head[2].code}(${tail.map(gen)})`
+        } else if (head[0].code === "." && baseType === "array" && head[2].code === "push") {
+          assert(head[1].code, "array_push violation")
+          const id = head[1].code
+          return `${id} = append(${id}, ${gen(tail[0])})`
+        } else if (head[0].code === "." && embededTypes.includes(baseType)) {
+          const args = [head[1]].concat(tail)
+          return `${baseType}_${head[2].code}(${args.map(gen)})`
+        } else {
+          return `${gen(head)}(${tail.map(gen)})`
         }
-        return iif(node.slice(1))
-      } else if (node[0].code === 'for') {
-        const ijk = node.length >= 4 ? gen(node[2]) : '_'
-        const step = node.length >= 5 ? gen(node[3]) : 1
-        return `for (let ${ijk}=0; ${ijk}<${gen(node[1])}; ${ijk}+=${step}) { ${gen(node.at(-1))} }`
-      } else if (node[0].code === 'each') {
-        const item = node.length >= 4 ? gen(node[2]) : '_'
-        const ijk = node.length >= 5 ? gen(node[3]) : 'i'
-        return `const __a = ${gen(node[1])}; for (let ${ijk}=0; ${ijk}<__a.length; ${ijk}++) { let ${item} = __a[${ijk}]; ${gen(node.at(-1))} }`
-      } else if (node[0].code === 'while') {
-        const cond = node.length === 3 ? gen(node[1]) : gen(node.slice(1, -1))
-        return `while (${cond}) ${gen(node.at(-1))}`
-      } else if (node[0].code === '.' && /^[A-Za-z_]/.test(node[2].code)) {
-        return `prop(${gen(node[1])}, '${gen(node[2])}')`
-      } else if (isInfixLeft(node[0].code) || isInfixRight(node[0].code) ) {
-        return `${gen(node[1])}${node[0].code}${gen(node[2])}`
+      } else if (head.code === "return") {
+        return tail.length === 0 ? "return" : `return ${gen(tail[0])}`
+      } else if (head.code === "def") {
+        const types = node.type.map(goType)
+        const args = tail.slice(1, -1).map((node, i) => node.code + " " + types[i])
+        const body = tail.at(-1).map(gen).join("\n")
+        return `func ${tail[0].code}(${args}) ${types.at(-1)} {${body}}`
+      } else if (head.code === "struct") {
+        const id = tail[0].code
+        const fields = tail.at(-1)
+        const body = fields.map(([field, type]) => field.code + " " + goType(type.type) ).join(";")
+        return `type ${id} struct { ${body} }`
+      } else if (head.code === "let" || head.code === "var") {
+        return `${tail[0].code} := ${gen(tail[1])}`
+      } else if (head.code === ".") {
+        const baseType = tail[0].type.name
+        if (baseType === "io") {
+          return `io_${tail[1].code}`
+        } else {
+          return gen(tail[0]) + head.code + gen(tail[1])
+        }
+      } else if ("+-*/%!=^|&?<>.".includes(head.code[0])) {
+        return gen(tail[0]) + head.code + gen(tail[1])
       } else {
-        return `${gen(node[0])}(${node.slice(1).map(gen).join(', ')})`
+        const generics = tail.length === 0 && node.type.generics && node.type.generics.length ? "[" + node.type.generics.map(goType) + "]" : ""
+        if (userTypes.includes(gen(head))) {
+          return `${gen(head)}${generics}{${tail.map(gen)}}`
+        } else {
+          return `${gen(head)}${generics}(${tail.map(gen)})`
+        }
       }
-    } else if (['true', 'false', 'else'].includes(node.code)) {
-      return node.code
-    } else if (/^[A-Za-z_]/.test(node.code) && !reserved.includes(node.code)) {
-      return '_' + node.code
-    } else if (node.code[0] === '(') {
-      return '(' + gen(node.body) + ')'
-    } else if (node.code[0] === '{') {
-      return '{' + node.lines.map(gen).join('\n') + '}'
     } else {
       return node.code
     }
   }
-  return parse(tokenize()).map(gen).join('\n')
+  return nodes.map(gen).join("\n") + "\n"
 }
 
-if (process.argv[2] === 'test') {
-  function tryEval(s) {
-    try {
-      return eval(s)
-    } catch (e) {
-      return e
-    }
-  }
-  function eq(expect, source, f=tryEval) {
-    const js = compile(source)
-    const actual = f(std + js)
-    if (JSON.stringify(expect) === JSON.stringify(actual)) {
-      process.stdout.write('.')
-    } else {
-      throw new Error(`${expect} != ${actual}\n--\n${source}\n--\n${js}`)
-    }
-  }
-  function err(expect, source) {
-    eq(expect, source, s => tryEval(s)._data)
-  }
-  eq(2, 'def f { if false {\n return 1\n } else if true {\n return 2 \n} }\nf()')
-
-  // primitive
-  eq(true, 'true')
-  eq('hi', '"hi"')
-  eq('h"i', '"h\\"i"')
-  eq('\\', '"\\\\"')
-  eq('package main\nimport "fmt"\nfunc main() {\n  fmt.Println("Hello World")\n}', '"package main\\nimport \\"fmt\\"\\nfunc main() {\\n  fmt.Println(\\"Hello World\\")\\n}"')
-  eq(1, '1')
-  eq(1.2, '1.2')
-  eq(1, '(x => x)(1)')
-
-  // container
-  eq([1, 2], 'list 1 2')
-  eq([2, 3], 'list(1 2).map x => x + 1')
-  eq('1 2', 'list(1 2).join " "')
-  eq(new Map([[1, true]]), 'map 1 true')
-
-  // property
-  eq(2, '"hi".size')
-  eq(['a', 'b'], '"a b".split " "')
-  eq(1, '"1".int.string.int')
-  eq(2, 'list(1 2).at 1')
-  eq(true, 'list(1).has 1')
-
-  // declaration
-  eq(1, 'let a 1\na')
-  eq(3, 'var a 1\na += 2\na')
-  eq(2, 'def inc n n + 1\ninc(1)')
-  eq(1, 'def calc { var n 0\n n += 1\n return n }\ncalc()')
-  eq(1, 'test t => { t.eq 1 1 }\n__test_ok')
-  eq(1, 'test t => { t.eq 1 2 }\n__test_failed')
-  eq({x:1, y:2}, 'class v2 { x int\n y int}\nv2(1 2)')
-
-  // control flow
-  eq(1, 'def f { if true { return 1 }\n return 2 }\nf()')
-  eq(2, 'def f { if false { return 1 }\n return 2 }\nf()')
-  eq(2, 'def f { if false { return 1 }\n return 2 }\nf()')
-  eq(1, 'def f { if true { return 1 }\n else { return 2 } }\nf()')
-  eq(2, 'def f { if false { return 1 }\n else { return 2 } }\nf()')
-  eq(2, 'def f { if false { return 1 }\n else if true { return 2 } }\nf()')
-  eq(2, 'def f { if false {\n return 1 \n}\n else if true {\n return 2 \n} }\nf()')
-  eq(1, 'iif true 1 2')
-  eq(2, 'iif false 1 2')
-  eq(3, 'iif false 1 false 2 3')
-  eq(3, 'var n 0\n for 3 { n += 1 }\n n')
-  eq(3, 'var n 0\n for 3 i { n += i }\n n')
-  eq(6, 'var n 0\n for 5 i 2 { n += i }\n n')
-  eq(2, 'var n 0\n each list(2 3) { n += 1 }\n n')
-  eq(5, 'var n 0\n each list(2 3) m { n += m }\n n')
-  eq(3, 'var n 0\n each list(2 3) m i { n += i * m }\n n')
-  eq(3, 'var n 0\n while n < 3 { n += 1 }\n n')
-  eq(1, 'var n 0\n while n < 3 { n += 1\n if n == 1 break }\n n')
-  eq(4, 'var n 0\n each list(1 2 3) m { if m == 2 continue \n n += m }\n n')
-
-  // variable
-  eq([1], 'var a list()\n a.push(1)\n a')
-
-  // syntax sugar
-  eq([1], '[1]')
-  eq(2, '[1 2 3][1]')
-
-  // error
-  err(1, 'throw 1')
-  eq(1, 'catch throw(1) e => e.data')
-
-  console.log('ok')
-} else if (process.argv[2] === 'js') {
-  console.log(std + compile(require('fs').readFileSync(process.argv[3], 'utf-8')) + '\n_main()')
-}
+const runtime = fs.readFileSync(__dirname + "/runtime.go", "utf-8")
+const go = runtime + compile(fs.readFileSync("/dev/stdin", "utf-8"))
+fs.writeFileSync("/tmp/moa.go", go)
+console.log(child_process.execSync(`go run /tmp/moa.go ${process.argv.slice(2).join(" ")}`, {encoding: "utf-8"}))
