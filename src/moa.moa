@@ -23,3 +23,10 @@ def main:
   let nodes parse(code)
   infer nodes
   io.puts gen(nodes)
+  io.puts "Moa is a modern programming language, many-core optimized, type-safe with optional typing, dev tools, and a test runner.
+
+Usage:
+  moa                                Launch interactive shell
+  moa dev [<path>]                   Execute files as dev mode
+  moa build [-o output] [<path>]     Compile files
+  moa test [<path>]                  Run tests"

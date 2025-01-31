@@ -342,13 +342,15 @@ function compile(moa) {
         }
       }
     } else {
-      return node.code
+      const s = node.code
+      return s.startsWith('"') ? JSON.stringify(s.slice(1, -1)) : s
     }
   }
   return nodes.map(gen).join("\n") + "\n"
 }
 
 const runtime = fs.readFileSync(__dirname + "/runtime.go", "utf-8")
-const go = runtime + compile(fs.readFileSync("/dev/stdin", "utf-8"))
+const moa = fs.readFileSync("/dev/stdin", "utf-8")
+const go = runtime + compile(moa)
 fs.writeFileSync("/tmp/moa.go", go)
 console.log(child_process.execSync(`go run /tmp/moa.go ${process.argv.slice(2).join(" ")}`, {encoding: "utf-8"}))
