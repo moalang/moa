@@ -1,0 +1,188 @@
+extern option a:
+  and[b] option[a] (a b) option[b]
+  or     option[a] a a
+  bool   bool
+dec some a: option[a]
+dec none  : option[a]
+
+extern num a:
+  (+ - * ** / % | & ^) a a a
+  (abs neg) a
+
+extern int.num:
+  char string
+
+extern float.num:
+  floor  int
+  ceil   int
+  round  int
+
+extern string:
+  ++      string string string
+  size    int
+  reverse string
+  slice   int int? string
+  split   string int? list[string]
+  index   string option[int]
+  replace string string string
+  trim    string
+  starts  string bool
+  ends    string bool
+  has     string bool
+  encode  string string? bytes @error
+
+extern regexp:
+  match   string bool
+  capture string list[string]
+  split   string list[string]
+  replace string (list[string] string) string
+
+extern list a:
+  call    ...[a] list[a]
+  ++      list[a] list[a]
+  size    int
+  at      int a @error
+  tie     int a a @error
+  push    a a
+  map[b]  (a int? b) list[b]
+  fmap[b] (a int? list[b]) list[b]
+  keep    (a bool) list[a]
+  all     (a bool) bool
+  any     (a bool) bool
+  slice   int int? list[a]
+  sort    (a a bool)? list[a]
+  reverse list[a]
+  zip[b]  list[b] list[tuple[a b]]
+  fold[b] b (a b b) b
+  find    (a bool) option[a]
+  index   (a bool) option[int]
+  join    string string
+  has     a bool
+  min     a
+  max     a
+
+extern dict k v:
+  call    ...[k v] dict[k v]
+  size   int
+  at     k v @error
+  set    k v bool
+  has    k bool
+  keys   list[k]
+  values list[v]
+  list   list[tuple[k v]]
+
+extern set a:
+  size   int
+  -      set[a] set[a]
+  |      set[a] set[a]
+  &      set[a] set[a]
+  ^      set[a] set[a]
+  has    a bool
+  add    a bool
+  rid    a bool
+  list   list[a]
+
+extern tuple ...a[any]:
+  ...a.map(x,i => tuple(i h))
+
+extern struct ...[id type]:
+  ...a.map((id type) => tuple(id type))
+
+extern time:
+  (year month day hour min sec wday yday offset) int
+  format string string
+  utc    time
+  string string
+  tick   int time
+
+extern io:
+  env      string string
+  now      time
+  in       stream
+  out      stream
+  err      stream
+  argv     list[string]
+  exec     string ...[string] bytes @error
+  log[t]   t ... t
+  db[t u]  (t u) u
+  rand:
+    int   int? int? int
+    float float? float? float
+    bytes int? bytes
+  fs:
+    open[t]    string string? (stream t) a @error
+    read       string bytes @error
+    reads      string string @error
+    write      string ...any int @error
+    rm         string bool @error
+    append     string ...any int @error
+  http:
+    call   request response
+    listen (request response)
+    request:
+      version  string
+      method   string
+      path     string
+      headers  list[tuple[string string]]
+      body     stream
+      header   string string
+      get      string string
+      gets     list[tuple[string string]]
+      post     string string
+      posts    list[tuple[string string]]
+    response:
+      version  string
+      status   int
+      headers  list[tuple[string string]]
+      body     stream
+      header   string string
+
+extern stream:
+  write       ...any int @error
+  flush       ...any int @error
+  read        int? bytes @error
+  reads       string @error
+  decode[t]   t @error
+  i8          int @error
+  i16         int @error
+  i32         int @error
+  i64         int @error
+  u8          int @error
+  u16         int @error
+  u32         int @error
+  u64         int @error
+  f32         float @error
+  f64         float @error
+  le          stream
+  be          stream
+  offset      int
+  peek        bytes
+  seek        int int @error
+  close       bool @error
+  closed      bool
+
+extern bytes:
+  size    int
+  slice   int int? bytes
+  tr      string string
+  string  string
+  stream  stream
+
+extern bcrypt:
+  encrypt string
+  eq      string string bool
+
+extern math:
+  (acos acosh asin asinh atan atan2 atanh cbrt cos cosh erf erfc exp gamma log log10 log2 sin sinh sqrt tan tanh) float float
+  (e pi inf nan)  float
+  (hypot logn)    float float float
+  (lgamma frexp)  float tuple(float int)
+  ldexp           float int float
+
+dec true     : bool
+dec false    : bool
+dec throw a b: a b
+dec catch a  : (error a) a
+dec if a     : ...[bool a] a
+dec case a b : a ...[a b] b
+dec default a: a
