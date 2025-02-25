@@ -18,8 +18,6 @@ all:
 	echo 'def add a b: return a + b\ndef main: io.puts add(1 2)'  | node bootstrap.js | grep 3 # type inference: function
 	echo 'def main: io.puts add(1 2)\ndef add a b: return a + b'  | node bootstrap.js | grep 3 # type inference: function
 	echo 'def main:\n let a []\n a.push(1)\n io.puts(a.size())'   | node bootstrap.js | grep 1 # type inference
-	# test io
-	echo 'def main:\n io.write("/dev/stdout", io.read("runtime.go").at(0))' | node bootstrap.js | grep p
 	# test moa.moa with bootstrap
-	node bootstrap.js < moa.moa help | grep "Moa"
-	node bootstrap.js < moa.moa build moa.moa && ./a help | grep "Moa"
+	node bootstrap.js selfboot
+	/tmp/moa help | grep "Moa"

@@ -5,7 +5,7 @@ const child_process = require("node:child_process")
 
 function assert(cond, ...a) {
   if (!cond) {
-    throw new Error(a.map(x => JSON.stringify(x)).join(" "))
+    throw new Error(a.map(x => JSON.stringify(x, null, 2)).join(" "))
   }
 }
 
@@ -173,7 +173,7 @@ function infer(nodes) {
   }
   function inferWith(node, tenv) {
     function lookup(node) {
-      assert(node.code in tenv, node.code, Object.keys(tenv))
+      assert(node.code in tenv, `No '${node.code}'`, node, Object.keys(tenv))
       return prune(tenv[node.code])
     }
     function inf(node) {
@@ -193,6 +193,11 @@ function infer(nodes) {
           const tenv2 = {...tenv, ...Object.fromEntries(args.map((arg,i) => [arg.code, vars[i]]))}
           const ret = inferTop(tail.at(-1), tenv2).at(-1)
           return unify(lookup(tail[0]), vars.concat([ret]))
+        } else if (head.code === "dec") {
+          const args = tail.slice(1, -1)
+          const vars = args.map(newVar)
+          const tenv2 = {...tenv, ...Object.fromEntries(args.map((arg,i) => [arg.code, vars[i]]))}
+          return tenv[tail[0].code] = tail.at(-1).map(node => inferWith(node, tenv2))
         } else if (head.code === "struct") {
           const id = tail[0].code
           const fields = tail.at(-1).map(line => line[0].code)
@@ -211,7 +216,7 @@ function infer(nodes) {
           return field
         } else {
           const target = lookup(head)
-          assert(Array.isArray(target) || target.isvar, "No function", target)
+          assert(Array.isArray(target) || target.isvar, "No function", head, target)
           const args = tail.map(inf)
           const ret = call(target, args)
           tenv[head.code].type = args.concat(ret)
@@ -238,6 +243,7 @@ function infer(nodes) {
   function recPrune(node) {
     if (node.type) {
       node.type = prune(node.type)
+      assert(!node.type.isvar, "A type is not inferred", node)
     }
     if (Array.isArray(node)) {
       node.map(recPrune)
@@ -350,7 +356,18 @@ function compile(moa) {
 }
 
 const runtime = fs.readFileSync(__dirname + "/runtime.go", "utf-8")
-const moa = fs.readFileSync("/dev/stdin", "utf-8")
-const go = runtime + compile(moa)
-fs.writeFileSync("/tmp/moa.go", go)
-console.log(child_process.execSync(`go run /tmp/moa.go ${process.argv.slice(2).join(" ")}`, {encoding: "utf-8"}))
+if (process.argv[2] === "selfboot") {
+  const moa = fs.readFileSync(__dirname + "/moa.moa", "utf-8")
+  const prefix = `package main
+import ("fmt")`
+  fs.writeFileSync(`${__dirname}/moa.go`, prefix + "\n" + compile(moa))
+  console.log(child_process.execSync(`go build -o /tmp/moa moa.go runtime.go main.go`, {
+    cwd: __dirname,
+    encoding: "utf-8"
+  }))
+} else {
+  const moa = fs.readFileSync("/dev/stdin", "utf-8")
+  const go = runtime + compile(moa)
+  fs.writeFileSync("/tmp/moa.go", go)
+  console.log(child_process.execSync(`go run /tmp/moa.go ${process.argv.slice(2).join(" ")}`, {encoding: "utf-8"}))
+}

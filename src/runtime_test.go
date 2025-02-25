@@ -5,9 +5,6 @@ import (
 )
 
 func TestRuntime(t *testing.T) {
-	if len(io_args()) != 4 {
-		t.Fatal("io_args")
-	}
 	if string_size("hi") != 2 {
 		t.Fatal("string_size")
 	}

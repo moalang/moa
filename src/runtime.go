@@ -1,9 +1,7 @@
 package main
 
 import (
-	"encoding/binary"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 )
@@ -63,34 +61,6 @@ func io_puts(a ...any) {
 	if _, err := fmt.Println(a...); err != nil {
 		panic(err)
 	}
-}
-
-func io_args() []string {
-	return os.Args
-}
-
-func io_read(name string) []byte {
-	b, err := os.ReadFile(name)
-	if err != nil {
-		panic(err)
-	}
-	return b
-}
-
-func io_write(name string, items ...any) {
-	fh, err := os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
-	if err != nil {
-		panic(err)
-	}
-	for _, item := range items {
-		if err = binary.Write(fh, binary.LittleEndian, item); err != nil {
-			break
-		}
-	}
-	if err1 := fh.Close(); err1 != nil && err == nil {
-		err = err1
-	}
-	panic(err)
 }
 
 func to_string[T any](x T) string {

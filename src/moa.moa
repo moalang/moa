@@ -1,9 +1,15 @@
-# moa run io.puts 3
 struct Node:
   code string
   offset int
   lineno int
   indent int
+
+dec compile a: string string
+
+def compile moa:
+  let nodes parse(moa)
+  infer nodes
+  gen nodes
 
 def tokenize moa:
   return [Node("" 0 0 0)]
@@ -16,17 +22,4 @@ def infer nodes:
   return
 
 def gen nodes:
-  return "io.puts(1)"
-
-def main:
-  let code io.args().slice(2).join(" ")
-  let nodes parse(code)
-  infer nodes
-  io.puts gen(nodes)
-  io.puts "Moa is a modern programming language, many-core optimized, type-safe with optional typing, dev tools, and a test runner.
-
-Usage:
-  moa                                Launch interactive shell
-  moa dev [<path>]                   Execute files as dev mode
-  moa build [-o output] [<path>]     Compile files
-  moa test [<path>]                  Run tests"
+  return "fmt.Println(1)"
