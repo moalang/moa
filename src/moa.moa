@@ -4,6 +4,11 @@ struct Node:
   lineno int
   indent int
 
+struct Type:
+  name     string
+  args     array[Type]
+  instance ref[Type]
+
 dec compile a: string string
 
 def compile moa:

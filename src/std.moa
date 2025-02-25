@@ -1,3 +1,6 @@
+extern any
+extern nil
+extern ref a
 extern option a:
   and[b] option[a] (a b) option[b]
   or     option[a] a a
@@ -95,6 +98,61 @@ extern time:
   string string
   tick   int time
 
+extern bytes:
+  size    int
+  slice   int int? bytes
+  tr      string string
+  string  string
+
+extern math:
+  (acos acosh asin asinh atan atan2 atanh cbrt cos cosh erf erfc exp gamma log log10 log2 sin sinh sqrt tan tanh) float float
+  (e pi inf nan)  float
+  (hypot logn)    float float float
+  (lgamma frexp)  float tuple(float int)
+  ldexp           float int float
+
+dec true     : bool
+dec false    : bool
+dec throw a b: a b
+dec catch a  : (error a) a
+dec if a     : ...[bool a] a
+dec case a b : a ...[a b] b
+dec default a: a
+
+extern io:
+  env      string string
+  now      time
+  log[t]   t ... t
+  db[t u]  (t u) u
+  rand:
+    int   int? int? int
+    float float? float? float
+    bytes int? bytes
+  http:
+    fetch  request response
+    listen (request response)
+    request:
+      version  string
+      method   string
+      host     string
+      path     string
+      headers  list[tuple[string string]]
+      body     stream
+      header   string string
+      get      string string
+      gets     list[tuple[string string]]
+      post     string string
+      posts    list[tuple[string string]]
+    response:
+      version  string
+      status   int
+      headers  list[tuple[string string]]
+      body     stream
+      header   string string
+
+
+# TBD
+
 extern io:
   env      string string
   now      time
@@ -161,28 +219,6 @@ extern stream:
   close       bool @error
   closed      bool
 
-extern bytes:
-  size    int
-  slice   int int? bytes
-  tr      string string
-  string  string
-  stream  stream
-
 extern bcrypt:
   encrypt string
   eq      string string bool
-
-extern math:
-  (acos acosh asin asinh atan atan2 atanh cbrt cos cosh erf erfc exp gamma log log10 log2 sin sinh sqrt tan tanh) float float
-  (e pi inf nan)  float
-  (hypot logn)    float float float
-  (lgamma frexp)  float tuple(float int)
-  ldexp           float int float
-
-dec true     : bool
-dec false    : bool
-dec throw a b: a b
-dec catch a  : (error a) a
-dec if a     : ...[bool a] a
-dec case a b : a ...[a b] b
-dec default a: a

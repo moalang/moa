@@ -109,6 +109,7 @@ function infer(nodes) {
   const tint = newType("int")
   const tstring = newType("string", [])
   const tarray = t => newType("array", [t])
+  const tref = t => newType("ref", [t])
   const props = {
     io: {
       puts: [toVariadic(tany), tvoid],
@@ -117,7 +118,7 @@ function infer(nodes) {
     string: {
       size: [tint],
     },
-    array: (t) => ({
+    array: t => ({
       size: [tint],
       slice: [tint, toVariadic(tint), t],
       join: [tstring, tstring],
@@ -256,10 +257,10 @@ function infer(nodes) {
     "int": tint,
     "string": tstring,
     "bool": tbool,
+    "ref": tref,
   }
   inferTop(nodes, troot)
   recPrune(nodes)
-  //nodes.map(node => inferWith(node, troot))
 }
 
 function showType(o) {
@@ -290,6 +291,7 @@ function compile(moa) {
       t === "void"  ? "" :
       t === "int"   ? "int64" :
       t === "float" ? "float64" :
+      t === "ref"   ? `*${goType(type.generics[0])}` :
       t === "array" ? `[]${goType(type.generics[0])}` :
       t === "dict"  ? `dict[${goType(type.generics[0])}]${goType(type.generics[1])}` :
       [
@@ -324,10 +326,11 @@ function compile(moa) {
         const body = tail.at(-1).map(gen).join("\n")
         return `func ${tail[0].code}(${args}) ${types.at(-1)} {${body}}`
       } else if (head.code === "dec") {
-        return `// ${node}`
+        return `// ${node.slice(0, -1).map(x => x.code).concat(":", ...node.at(-1).flatMap(x => x.flatMap(x => x.code))).join(" ")}`
       } else if (head.code === "struct") {
         const id = tail[0].code
         const fields = tail.at(-1)
+        console.dir({id, fields}, {depth:null})
         const body = fields.map(([field, type]) => field.code + " " + goType(type.type) ).join(";")
         return `type ${id} struct { ${body} }`
       } else if (head.code === "let" || head.code === "var") {
