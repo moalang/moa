@@ -197,7 +197,7 @@ function infer(nodes) {
           const args = tail.slice(1, -1)
           const vars = args.map(newVar)
           const tenv2 = {...tenv, ...Object.fromEntries(args.map((arg,i) => [arg.code, vars[i]]))}
-          return tenv[tail[0].code] = tail.at(-1).map(node => inferWith(node, tenv2))
+          return tenv[tail[0].code] = tail.at(-1).flatMap(x => x).map(x => inferWith(x, tenv2))
         } else if (head.code === "struct") {
           const id = tail[0].code
           const fields = tail.at(-1).map(line => line[0].code)
@@ -216,7 +216,7 @@ function infer(nodes) {
           return field
         } else {
           const target = lookup(head)
-          assert(Array.isArray(target) || target.isvar, "No function", head, target)
+          assert(tail.length === 0 || (Array.isArray(target) || target.isvar), "Not a function", target)
           const args = tail.map(inf)
           const ret = call(target, args)
           tenv[head.code].type = args.concat(ret)
@@ -323,6 +323,8 @@ function compile(moa) {
         const args = tail.slice(1, -1).map((node, i) => node.code + " " + types[i])
         const body = tail.at(-1).map(gen).join("\n")
         return `func ${tail[0].code}(${args}) ${types.at(-1)} {${body}}`
+      } else if (head.code === "dec") {
+        return `// ${node}`
       } else if (head.code === "struct") {
         const id = tail[0].code
         const fields = tail.at(-1)
@@ -359,7 +361,9 @@ const runtime = fs.readFileSync(__dirname + "/runtime.go", "utf-8")
 if (process.argv[2] === "selfboot") {
   const moa = fs.readFileSync(__dirname + "/moa.moa", "utf-8")
   const prefix = `package main
-import ("fmt")`
+import (
+  _ "fmt"
+)`
   fs.writeFileSync(`${__dirname}/moa.go`, prefix + "\n" + compile(moa))
   console.log(child_process.execSync(`go build -o /tmp/moa moa.go runtime.go main.go`, {
     cwd: __dirname,

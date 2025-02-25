@@ -9,7 +9,7 @@ dec compile a: string string
 def compile moa:
   let nodes parse(moa)
   infer nodes
-  gen nodes
+  return gen(nodes)
 
 def tokenize moa:
   return [Node("" 0 0 0)]
