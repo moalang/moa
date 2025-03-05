@@ -1,26 +1,45 @@
-extern any
-extern nil
-extern ref a
-extern option a:
-  and[b] option[a] (a b) option[b]
-  or     option[a] a a
-  bool   bool
-dec some a: option[a]
-dec none  : option[a]
+interface any a:
+  (== !=) a bool
+  (> >= < <=) a bool
 
-extern num a:
+extern ref a:
+  __new   a
+  *a
+  (<-)    a a # assign
+
+enum bool:
+  true
+  false
+
+dec throw a b: a any
+dec catch a  : a (error a) a
+dec if a     : ...[bool a] a
+
+enum option a:
+  some a
+  none
+
+extern option a:
+  and[b] (a b) option[b]
+  or     a a
+  bool   bool
+
+interface num a:
   (+ - * ** / % | & ^) a a a
   (abs neg) a
 
-extern int.num:
+extern (int i8 i16 i32 i64 u8 u16 u32 u64):
+  .num
   char string
 
-extern float.num:
+extern (float f32 f64):
+  .num
   floor  int
   ceil   int
   round  int
 
 extern string:
+  __new   any
   ++      string string string
   size    int
   reverse string
@@ -32,16 +51,11 @@ extern string:
   starts  string bool
   ends    string bool
   has     string bool
-  encode  string string? bytes @error
-
-extern regexp:
-  match   string bool
-  capture string list[string]
-  split   string list[string]
-  replace string (list[string] string) string
+  bytes   bytes
+  encode  string bytes @error
 
 extern list a:
-  call    ...[a] list[a]
+  __new   ...[a]
   ++      list[a] list[a]
   size    int
   at      int a @error
@@ -65,7 +79,7 @@ extern list a:
   max     a
 
 extern dict k v:
-  call    ...[k v] dict[k v]
+  __new  ...[k v]
   size   int
   at     k v @error
   set    k v bool
@@ -75,6 +89,7 @@ extern dict k v:
   list   list[tuple[k v]]
 
 extern set a:
+  __new  ...a
   size   int
   -      set[a] set[a]
   |      set[a] set[a]
@@ -86,139 +101,83 @@ extern set a:
   list   list[a]
 
 extern tuple ...a[any]:
+  __new ...a
   ...a.map(x,i => tuple(i h))
 
-extern struct ...[id type]:
+extern struct ...a[id type]:
+  __new ...[a.map((id type) => type)]
   ...a.map((id type) => tuple(id type))
 
-extern time:
+struct time:
   (year month day hour min sec wday yday offset) int
+
+extern time:
   format string string
   utc    time
   string string
   tick   int time
 
 extern bytes:
+  __new ...u8
   size    int
   slice   int int? bytes
   tr      string string
   string  string
+  stream  stream
 
-extern math:
+extern stream:
+  endian   string # LE or BE
+  le       stream
+  be       stream
+  read[t]  t @error
+  peek     bytes
+  write    ...any int @error
+  flush    int @error
+  close    bool @error
+  closed   bool
+
+package regexp:
+  __new string
+  match   string bool
+  capture string list[string]
+  split   string list[string]
+  replace string (list[string] string) string
+
+package math:
   (acos acosh asin asinh atan atan2 atanh cbrt cos cosh erf erfc exp gamma log log10 log2 sin sinh sqrt tan tanh) float float
   (e pi inf nan)  float
   (hypot logn)    float float float
   (lgamma frexp)  float tuple(float int)
   ldexp           float int float
 
-dec true     : bool
-dec false    : bool
-dec throw a b: a b
-dec catch a  : (error a) a
-dec if a     : ...[bool a] a
-dec case a b : a ...[a b] b
-dec default a: a
+struct bcrypt:
+  __new   string
+  eq      string bool
 
-extern io:
+package io:
   env      string string
   now      time
   log[t]   t ... t
   db[t u]  (t u) u
-  rand:
-    int   int? int? int
-    float float? float? float
-    bytes int? bytes
-  http:
-    fetch  request response
-    listen (request response)
-    request:
-      version  string
-      method   string
+  rand     float
+  fetch    string req res::
+    req:
+      method  string
+      headers list[tuple[string string]]
+      body    stream
+    res:
+      status  int
+      headers list[tuple[string string]]
+      body    stream
+  serve    string req res::
+    req:
       host     string
-      path     string
-      headers  list[tuple[string string]]
-      body     stream
-      header   string string
-      get      string string
-      gets     list[tuple[string string]]
-      post     string string
-      posts    list[tuple[string string]]
-    response:
-      version  string
-      status   int
-      headers  list[tuple[string string]]
-      body     stream
-      header   string string
-
-
-# TBD
-
-extern io:
-  env      string string
-  now      time
-  in       stream
-  out      stream
-  err      stream
-  argv     list[string]
-  exec     string ...[string] bytes @error
-  log[t]   t ... t
-  db[t u]  (t u) u
-  rand:
-    int   int? int? int
-    float float? float? float
-    bytes int? bytes
-  fs:
-    open[t]    string string? (stream t) a @error
-    read       string bytes @error
-    reads      string string @error
-    write      string ...any int @error
-    rm         string bool @error
-    append     string ...any int @error
-  http:
-    call   request response
-    listen (request response)
-    request:
       version  string
       method   string
       path     string
       headers  list[tuple[string string]]
       body     stream
-      header   string string
-      get      string string
-      gets     list[tuple[string string]]
-      post     string string
-      posts    list[tuple[string string]]
-    response:
-      version  string
-      status   int
-      headers  list[tuple[string string]]
-      body     stream
-      header   string string
-
-extern stream:
-  write       ...any int @error
-  flush       ...any int @error
-  read        int? bytes @error
-  reads       string @error
-  decode[t]   t @error
-  i8          int @error
-  i16         int @error
-  i32         int @error
-  i64         int @error
-  u8          int @error
-  u16         int @error
-  u32         int @error
-  u64         int @error
-  f32         float @error
-  f64         float @error
-  le          stream
-  be          stream
-  offset      int
-  peek        bytes
-  seek        int int @error
-  close       bool @error
-  closed      bool
-
-extern bcrypt:
-  encrypt string
-  eq      string string bool
+    res:
+      status  int
+      headers list[tuple[string string]]
+      body    stream
