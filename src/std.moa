@@ -1,11 +1,13 @@
+extern void
+
 interface any a:
   (== !=) a bool
   (> >= < <=) a bool
+  __hash int
 
 extern ref a:
   __new   a
-  *a
-  (<-)    a a # assign
+  value   a
 
 enum bool:
   true
@@ -101,43 +103,42 @@ extern set a:
   list   list[a]
 
 extern tuple ...a[any]:
-  __new ...a
+  __new  ...a
   ...a.map(x,i => tuple(i h))
 
 extern struct ...a[id type]:
-  __new ...[a.map((id type) => type)]
+  __new  ...[a.map((id type) => type)]
   ...a.map((id type) => tuple(id type))
 
 struct time:
   (year month day hour min sec wday yday offset) int
 
 extern time:
-  format string string
-  utc    time
-  string string
-  tick   int time
+  string string? string
+  zone   string
+  offset int
+  lcoal  string time
 
 extern bytes:
-  __new ...u8
+  __new   ...u8
   size    int
   slice   int int? bytes
   tr      string string
-  string  string
   stream  stream
 
 extern stream:
-  endian   string # LE or BE
-  le       stream
-  be       stream
   read[t]  t @error
   peek     bytes
   write    ...any int @error
   flush    int @error
   close    bool @error
   closed   bool
+  endian   string # LE or BE
+  le       stream
+  be       stream
 
 package regexp:
-  __new string
+  __new   string
   match   string bool
   capture string list[string]
   split   string list[string]
@@ -151,15 +152,15 @@ package math:
   ldexp           float int float
 
 struct bcrypt:
-  __new   string
-  eq      string bool
+  __new    string
+  compare  string bool
 
 package io:
-  env      string string
+  env      dict[string string]
   now      time
   log[t]   t ... t
   db[t u]  (t u) u
-  rand     float
+  rand     int int? int
   fetch    string req res::
     req:
       method  string
