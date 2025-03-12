@@ -1,161 +1,21 @@
-extern void
+extern std:
+  regexp:
+    __new   string
+    match   string bool
+    capture string list[string]
+    split   string list[string]
+    replace string (list[string] string) string
+  match:
+    (acos acosh asin asinh atan atan2 atanh cbrt cos cosh erf erfc exp gamma log log10 log2 sin sinh sqrt tan tanh) float float
+    (e pi inf nan)  float
+    (hypot logn)    float float float
+    (lgamma frexp)  float tuple(float int)
+    ldexp           float int float
+  bcrypt:
+    __new    string
+    compare  string bool
 
-interface any a:
-  (== !=) a bool
-  (> >= < <=) a bool
-  __hash int
-
-extern ref a:
-  __new   a
-  value   a
-
-enum bool:
-  true
-  false
-
-dec throw a b: a any
-dec catch a  : a (error a) a
-dec if a     : ...[bool a] a
-
-enum option a:
-  some a
-  none
-
-extern option a:
-  and[b] (a b) option[b]
-  or     a a
-  bool   bool
-
-interface num a:
-  (+ - * ** / % | & ^) a a a
-  (abs neg) a
-
-extern (int i8 i16 i32 i64 u8 u16 u32 u64):
-  .num
-  char string
-
-extern (float f32 f64):
-  .num
-  floor  int
-  ceil   int
-  round  int
-
-extern string:
-  __new   any
-  ++      string string string
-  size    int
-  reverse string
-  slice   int int? string
-  split   string int? list[string]
-  index   string option[int]
-  replace string string string
-  trim    string
-  starts  string bool
-  ends    string bool
-  has     string bool
-  bytes   bytes
-  encode  string bytes @error
-
-extern list a:
-  __new   ...[a]
-  ++      list[a] list[a]
-  size    int
-  at      int a @error
-  tie     int a a @error
-  push    a a
-  map[b]  (a int? b) list[b]
-  fmap[b] (a int? list[b]) list[b]
-  keep    (a bool) list[a]
-  all     (a bool) bool
-  any     (a bool) bool
-  slice   int int? list[a]
-  sort    (a a bool)? list[a]
-  reverse list[a]
-  zip[b]  list[b] list[tuple[a b]]
-  fold[b] b (a b b) b
-  find    (a bool) option[a]
-  index   (a bool) option[int]
-  join    string string
-  has     a bool
-  min     a
-  max     a
-
-extern dict k v:
-  __new  ...[k v]
-  size   int
-  at     k v @error
-  set    k v bool
-  has    k bool
-  keys   list[k]
-  values list[v]
-  list   list[tuple[k v]]
-
-extern set a:
-  __new  ...a
-  size   int
-  -      set[a] set[a]
-  |      set[a] set[a]
-  &      set[a] set[a]
-  ^      set[a] set[a]
-  has    a bool
-  add    a bool
-  rid    a bool
-  list   list[a]
-
-extern tuple ...a[any]:
-  __new  ...a
-  ...a.map(x,i => tuple(i h))
-
-extern struct ...a[id type]:
-  __new  ...[a.map((id type) => type)]
-  ...a.map((id type) => tuple(id type))
-
-struct time:
-  (year month day hour min sec wday yday offset) int
-
-extern time:
-  string string? string
-  zone   string
-  offset int
-  lcoal  string time
-
-extern bytes:
-  __new   ...u8
-  size    int
-  slice   int int? bytes
-  tr      string string
-  stream  stream
-
-extern stream:
-  read[t]  t @error
-  peek     bytes
-  write    ...any int @error
-  flush    int @error
-  close    bool @error
-  closed   bool
-  endian   string # LE or BE
-  le       stream
-  be       stream
-
-package regexp:
-  __new   string
-  match   string bool
-  capture string list[string]
-  split   string list[string]
-  replace string (list[string] string) string
-
-package math:
-  (acos acosh asin asinh atan atan2 atanh cbrt cos cosh erf erfc exp gamma log log10 log2 sin sinh sqrt tan tanh) float float
-  (e pi inf nan)  float
-  (hypot logn)    float float float
-  (lgamma frexp)  float tuple(float int)
-  ldexp           float int float
-
-struct bcrypt:
-  __new    string
-  compare  string bool
-
-package io:
+extern io:
   env      dict[string string]
   now      time
   log[t]   t ... t

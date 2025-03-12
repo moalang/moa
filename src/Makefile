@@ -1,4 +1,4 @@
-all:
+test:
 	node bootstrap.js test
 	# test bootstrap
 	#echo '(def main (((. io puts) (+ 1 2))))'                     | node bootstrap.js
@@ -21,3 +21,6 @@ all:
 	### test moa.moa with bootstrap
 	##node bootstrap.js selfboot
 	##/tmp/moa help | grep "Moa"
+watch:
+	make test
+	@-fswatch -0 -l 0.1 -o . | xargs -I {} -0 make test
