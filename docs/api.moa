@@ -54,9 +54,8 @@ class str:
   __get   : int a @error
   size    : int
   concat  : str str
-  slice   : int int str
-  split   : str vec[str]
-  splitn  : str int vec[str]
+  slice   : int int? str
+  split   : str int? vec[str]
   index   : str opt[int]
   rindex  : str opt[int]
   replace : str str str
@@ -100,18 +99,17 @@ class vec a:
   slice    : int int vec[a]
   repeat   : int vec[a]
   concat   : vec[a] vec[a]
-  map b    : fn[a b] vec[b]
-  fmap b   : fn[a vec[b]] vec[b]
-  keep     : fn[a bool] vec[a]
-  all      : fn[a bool] bool
-  any      : fn[a bool] bool
+  map b    : fn[a int? b] vec[b]
+  fmap b   : fn[a int? vec[b]] vec[b]
+  keep     : fn[a int? bool] vec[a]
+  all      : fn[a int? bool] bool
+  any      : fn[a int? bool] bool
   fold b   : fn[b a b] b b
-  scan b   : fn[b a b] b vec[b]
   find     : fn[a bool] opt[a]
   index    : fn[a bool] opt[int]
   rindex   : fn[a bool] opt[int]
   zip b    : vec[b] vec[tuple[a b]]
-  sort     : fn[a a bool] vec[a]
+  sort     : fn[a a bool]? vec[a]
   reverse  : vec[a]
   join     : str str
   has      : a bool
