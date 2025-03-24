@@ -16,13 +16,13 @@ syn keyword Boolean true false
 " Statement
 syn keyword Define      def dec let var struct class enum interface extern
 syn keyword Boolean     true false
-syn keyword Type        _ bool int float string bytes stream fn time duration
-syn keyword Type        tuple struct set list dict error
+syn keyword Type        void bool int i8 i16 i32 i64 u8 u16 u32 u64 float f16 f32 f64 string fn
+syn keyword Type        tuple struct set array map option any
+syn keyword Type        bytes stream time
 syn keyword Conditional iif if else guard match
 syn keyword Repeat      for while
-syn keyword keyword     continue break return throw catch assert log
-syn keyword Keyword     use module math array nume decimal i8 i16 i32 i64 u8 u16 u32 u64 f32 f64
-syn keyword Define      where sub
+syn keyword keyword     continue break return throw catch
+syn keyword Keyword     use module std log math num decimal
 syn match Operator /[-+%<>!&|^*=]=\?/
 syn match Operator "||"
 syn match Operator "&&"

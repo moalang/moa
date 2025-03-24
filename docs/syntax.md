@@ -15,12 +15,12 @@ index: "[" exp+ "]"                       # index access or generic
 bottom:
 | "(" exp ")"                             # 1 * (2 + 3)
 | "[" exp? ":" exp? "]"                   # [:3] -> [0 1 2]
-| "[" exp* "]"                            # [1 2 3] -> list(1 2 3)
+| "[" exp* "]"                            # [1 2 3] -> array(1 2 3)
 | "-"? [0-9]+ ("." [0-9]+)? ("e" [0-9]+)? # -1.2
 | "-"? "0x" [0-9a-fA-F_]+                 # 0xff -> 255
 | '"' [^"]* '"'                           # "string"
 | '"""' [^"]* '"""'                       # """a="b"""" -> "a=\"b\""
-| id [?]?
+| id "?"?
 op1: [!-~] | "..."
 op2: [+-*/%<>|&^=!]+
 id: [A-Za-z_][A-Za-z0-9_]*
@@ -38,21 +38,21 @@ Operator
 
 Keyword
 ```
-literal   : _ ... true false some none
-primitive : _ bool int float string fn error i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
-container : option ref tuple list set dict
+literal   : ... void true false some none
+primitive : void bool int float string fn i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
+container : option tuple class set array map
 declare   : let var def class enum dec interface extern
 branch    : iif if else guard match
 flow      : return throw catch
 loop      : for each while continue break
 global    : log assert
-reserved  : __.* bytes regexp time duration stream num decimal array import export
+reserved  : __.* bytes regexp time duration stream num decimal import export
 ```
 
 Symbols
 ```
 ( )  # priority
-[ ]  # list
+[ ]  # array
 .    # field access
 _    # part of id
 ...  # variadic function or there are zero or more
@@ -85,7 +85,7 @@ fn(a b: a + b)(1 2)
 tuple(1 "a").0
 [1 2]
 set(1 2)
-dict("a" 1 "b" 2)
+map("a" 1 "b" 2)
 
 var a 1: a += 1
 let a 1: a += 1
@@ -129,44 +129,6 @@ for i 3: continue
 while true: break
 ```
 
-Foreign function interface [TBD]
-```
-def log n:
-  __c.log(n) + __go.log(n) + __js.log(n)
-
-def ps:
-  __sh("ps").split("\n")
-
-__moa
-def log n: n ** n # fallback if the target language has no implementation
-
-__c
-#include <math.h>
-double moa_log(double n) { return log(n); }
-
-__go
-import "math"
-func Moa_log(n float64) float64 { return math.Log(n) }
-
-__js
-export const moa_log = n => Math.log(n)
-```
-
-Loop [TBD]
-```
-for i 3: ...                       # 0 1 2
-for i = 1 < 3: ...                 # 1 2
-for i = 2 >= 0: ...                # 2 1 0
-for i = 1 <= 5 +=2: ...            # 1 3 5
-each x xs: ...                     # each item
-each i x xs: ...                   # each item with index
-while l < r: ...                   # while
-for i n: for j m: break.i          # nested break with index
-while.z l < r: while m: continue.z # nested continue with label # TBD
-```
-
-
-
 # Ideas
 
 idea: Optional argument
@@ -184,7 +146,7 @@ def f a=1: a   # f() -> f(1)
 
 idea: Named argument
 ```
-def f a{}    : a     # f(a=1 b=2) -> list[tuple[string int]]
+def f a{}    : a     # f(a=1 b=2) -> array[tuple[string int]]
 def f a{}    : g a   # f(a=1) -> g(a=1) 
 def f {a}    : a     # f(a=1) -> 1
 def f {a?}   : a     # f() or f(a=1)
@@ -195,22 +157,35 @@ def f {a}?   : a     # f() -> option[_], f(a=1) -> 1
 def f a {b}  : a + b # f(1 b=2) -> 3
 ```
 
+idea: Loop
+```
+for i 3: ...                       # 0 1 2
+for i = 1 < 3: ...                 # 1 2
+for i = 2 >= 0: ...                # 2 1 0
+for i = 1 <= 5 +=2: ...            # 1 3 5
+each x xs: ...                     # each item
+each i x xs: ...                   # each item with index
+while l < r: ...                   # while
+for i n: for j m: break.i          # nested break with index
+while.z l < r: while m: continue.z # nested continue with label # TBD
+```
+
 idea: Typed argument
 ```
-dec flatten a                 : list[list[a]] list[a]
-def flatten[t] a.list[list[t]]: a.map(x => x)
+dec flatten a                 : array[array[a]] array[a]
+def flatten[t] a.array[array[t]]: a.map(x => x)
 def flatten a: a.map(x => x)
 
-dec sum t{+[t t t]}   : list[t] t
-def sum[t{+[t t t]}] a.list[t]:
+dec sum t{+[t t t]}   : array[t] t
+def sum[t{+[t t t]}] a.array[t]:
     let n t: each m a: n += m
-def sum[t] a.list[t]:
+def sum[t] a.array[t]:
     let n t.zero: each m a: n += m
 def sum a:
     let n: each m a: n += m
 
-dec nth t: dict[int t] int t!
-def nth[t] d.dict[int t] n.int:
+dec nth t: map[int t] int t!
+def nth[t] d.map[int t] n.int:
     d[n]
 def nth d n:
     d[n]
@@ -278,7 +253,7 @@ case: pattern ("," pattern)*
 pattern:
 | '"' [^"]* '"'                    # string
 | "-"? [0-9]+ ("." [0-9]+)?        # number
-| "[" case* ("..." id?)? case* "]" # list
+| "[" case* ("..." id?)? case* "]" # array
 | "{" ((id "=" exp) | type)+ "}"   # class
 | type
 type: id ("." id)* ("[" type+ "]")? ("(" case ")")?
@@ -304,4 +279,27 @@ match a:
   []: "empty"
   [n n _ _ _]: "pair"
   [n n m m m]: "fullhouse"
+```
+
+idea: Foreign function interface
+```
+def log n:
+  __c.log(n) + __go.log(n) + __js.log(n)
+
+def ps:
+  __sh("ps").split("\n")
+
+__moa
+def log n: n ** n # fallback if the target language has no implementation
+
+__c
+#include <math.h>
+double moa_log(double n) { return log(n); }
+
+__go
+import "math"
+func Moa_log(n float64) float64 { return math.Log(n) }
+
+__js
+export const moa_log = n => Math.log(n)
 ```
