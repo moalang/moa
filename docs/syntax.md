@@ -15,7 +15,7 @@ index: "[" exp+ "]"                       # index access or generic
 bottom:
 | "(" exp ")"                             # 1 * (2 + 3)
 | "[" exp? ":" exp? "]"                   # [:3] -> [0 1 2]
-| "[" exp* "]"                            # [1 2 3] -> array(1 2 3)
+| "[" exp* "]"                            # [1 2 3] -> vec(0 3).push(1 2 3)
 | "-"? [0-9]+ ("." [0-9]+)? ("e" [0-9]+)? # -1.2
 | "-"? "0x" [0-9a-fA-F_]+                 # 0xff -> 255
 | '"' [^"]* '"'                           # "string"
@@ -39,20 +39,21 @@ Operator
 Keyword
 ```
 literal   : ... void true false some none
-primitive : void bool int float string fn i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
-container : option tuple class set array map
-declare   : let var def class enum dec interface extern
+primitive : void bool int str fn i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
+container : opt tuple struct set vec map
+declare   : let var def class enum dec interface
 branch    : iif if else guard match
 flow      : return throw catch
 loop      : for each while continue break
 global    : log assert
-reserved  : __.* bytes regexp time duration stream num decimal import export
+std       : byte bytes regexp time duration stream decimal
+reserved  : __.* duration num decimal import export
 ```
 
 Symbols
 ```
 ( )  # priority
-[ ]  # array
+[ ]  # vec
 .    # field access
 _    # part of id
 ...  # variadic function or there are zero or more
@@ -133,12 +134,12 @@ while true: break
 
 idea: Optional argument
 ```
-dec string.slice: string int int? int? string
-def string.slice
+dec str.slice: str int int? int? str
+def str.slice
 | count           : ...
 | start count     : ...
 | start count step: ...
-def f a?: a    # f() -> _, f(1) -> int, a is option[T] in the function
+def f a?: a    # f() -> _, f(1) -> int, a is opt[T] in the function
 def f a=1: a   # f() -> f(1)
 
 (a,b=1 => a + b)(1) # 2
@@ -146,14 +147,14 @@ def f a=1: a   # f() -> f(1)
 
 idea: Named argument
 ```
-def f a{}    : a     # f(a=1 b=2) -> array[tuple[string int]]
-def f a{}    : g a   # f(a=1) -> g(a=1) 
+def f a{}    : a     # f(a=1 b=2) -> vec[tuple[str int]]
+def f a{}    : g a   # f(a=1) -> g(a=1)
 def f {a}    : a     # f(a=1) -> 1
 def f {a?}   : a     # f() or f(a=1)
 def f {a=0}  : a     # f() or f(a=1)
 def f {a b}  : a     # f(a=1 b=2) or f(b=2 a=1)
 def f {a b=0}: a     # f(a=1), f(a=1 b=2) or f(b=2 a=1)
-def f {a}?   : a     # f() -> option[_], f(a=1) -> 1
+def f {a}?   : a     # f() -> opt[_], f(a=1) -> 1
 def f a {b}  : a + b # f(1 b=2) -> 3
 ```
 
@@ -172,14 +173,14 @@ while.z l < r: while m: continue.z # nested continue with label # TBD
 
 idea: Typed argument
 ```
-dec flatten a                 : array[array[a]] array[a]
-def flatten[t] a.array[array[t]]: a.map(x => x)
+dec flatten a                 : vec[array[a]] vec[a]
+def flatten[t] a.vec[vec[t]]: a.map(x => x)
 def flatten a: a.map(x => x)
 
-dec sum t{+[t t t]}   : array[t] t
-def sum[t{+[t t t]}] a.array[t]:
+dec sum t{+[t t t]}   : vec[t] t
+def sum[t{+[t t t]}] a.vec[t]:
     let n t: each m a: n += m
-def sum[t] a.array[t]:
+def sum[t] a.vec[t]:
     let n t.zero: each m a: n += m
 def sum a:
     let n: each m a: n += m
@@ -253,7 +254,7 @@ case: pattern ("," pattern)*
 pattern:
 | '"' [^"]* '"'                    # string
 | "-"? [0-9]+ ("." [0-9]+)?        # number
-| "[" case* ("..." id?)? case* "]" # array
+| "[" case* ("..." id?)? case* "]" # vec
 | "{" ((id "=" exp) | type)+ "}"   # class
 | type
 type: id ("." id)* ("[" type+ "]")? ("(" case ")")?

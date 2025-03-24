@@ -6,8 +6,8 @@ enum bool:
   !     : bool
   ||    : bool bool
   &&    : bool bool
-  &&& a : option[a] option[a]
-  ||| a : option[a] option[a]
+  &&& a : opt[a] opt[a]
+  ||| a : opt[a] opt[a]
 
 interface _num a:
   +        : a a
@@ -29,7 +29,7 @@ interface _int a:
   >>       : a a
   int      : int
   float    : float
-  char     : string
+  char     : str
 class i8 : _int
 class i16: _int
 class i32: _int
@@ -51,26 +51,26 @@ class f32: _float
 class f64: _float
 class float: _float
 
-class string:
+class str:
   __new   : ...a[any]
   __at    : int a @error
   size    : int
-  concat  : string string
-  slice   : int int string
-  split   : string vec[string]
-  splitn  : string int array[string]
-  index   : string option[int]
-  rindex  : string option[int]
-  replace : string string string
-  starts  : string bool
-  ends    : string bool
-  has     : string bool
-  trim    : string
-  reverse : string
-  repeat  : int string
-  format  : ... string
-  int     : option[int]
-  float   : option[float]
+  concat  : str str
+  slice   : int int str
+  split   : str vec[str]
+  splitn  : str int vec[str]
+  index   : str opt[int]
+  rindex  : str opt[int]
+  replace : str str str
+  starts  : str bool
+  ends    : str bool
+  has     : str bool
+  trim    : str
+  reverse : str
+  repeat  : int str
+  format  : ... str
+  int     : opt[int]
+  float   : opt[float]
 
 class fn ...a[any] b
   __call  : ...a b
@@ -84,47 +84,48 @@ class struct ...a[id type]:
   : a.map(id,type => tuple(id type))
 
 class any:
-  as t   : option[t]
-  string : string
+  as t   : opt[t]
+  string : str
 
-enum option a:
+enum opt a:
   some a
   none
-  &&&    : option[a] option[a]
-  |||    : option[a] option[a]
+  &&&    : opt[a] opt[a]
+  |||    : opt[a] opt[a]
   bool   : bool
-  then b : (a b) option[b]
+  then b : (a b) opt[b]
   or     : a a
   alt    : a
 
-class array a:
-  __new    : ...[a] array[a]
+class vec a:
+  __new    : int? int?      # vec(8) is for length, vec(0 8) is for capacity
   __at     : int a @error
   size     : int
-  slice    : int int array[a]
-  repeat   : int array[a]
-  concat   : array[a] array[a]
-  map b    : (a b) array[b]
-  fmap b   : (a array[b]) array[b]
-  keep     : (a bool) array[a]
+  slice    : int int vec[a]
+  repeat   : int vec[a]
+  concat   : vec[a] vec[a]
+  map b    : (a b) vec[b]
+  fmap b   : (a vec[b]) vec[b]
+  keep     : (a bool) vec[a]
   all      : (a bool) bool
   any      : (a bool) bool
   fold b   : (b a b) b b
-  scan b   : (b a b) b array[b]
-  find     : (a bool) option[a]
-  index    : (a bool) option[int]
-  rindex   : (a bool) option[int]
-  zip b    : array[b] array[tuple[a b]]
-  sort     : (a a bool) array[a]
-  reverse  : array[a]
-  join     : string string
+  scan b   : (b a b) b vec[b]
+  find     : (a bool) opt[a]
+  index    : (a bool) opt[int]
+  rindex   : (a bool) opt[int]
+  zip b    : vec[b] vec[tuple[a b]]
+  sort     : (a a bool) vec[a]
+  reverse  : vec[a]
+  join     : str str
   has      : a bool
   min      : a
   max      : a
   minmax   : tuple[a a]
   unique   : set[a]
+  string   : str? str
   __set    : int a a @error  # modify in-place
-  push     : a a             # modify and expand
+  push     : ...a vec[a]     # modify and expand
   pop      : a @error        # modify and shurink
 
 class set a:
@@ -135,22 +136,22 @@ class set a:
   ^     : set[a] set[a]
   size  : int
   has   : a bool
-  array : array[a]
+  items : vec[a]
   add   : a bool  # modify in-place
   rid   : a bool  # modify in-place
 
 class map k v:
   __new  : ...[k v] map[k v]
-  __at   : k option[v]
+  __at   : k opt[v]
   size   : int
   has    : k bool
-  keys   : array[k]
-  values : array[v]
-  items  : array[tuple[k v]]
+  keys   : vec[k]
+  values : vec[v]
+  items  : vec[tuple[k v]]
   concat : map[k v] map[k v]
   __set  : k v v       # modify and expand
   gset   : k v v       # modify and expand
-  rid    : k option[v] # modify and shrink
+  rid    : k opt[v]    # modify and shrink
 
 class time:
   year   : int
@@ -162,69 +163,48 @@ class time:
   wday   : int
   yday   : int
   offset : int
-  string : string? string
-  zone   : string
+  string : str? str
+  zone   : str
   offset : int
-  lcoal  : string time
+  lcoal  : str time
 
-class bytes:
-  __new   : int? int?
-  at      : int u8 @error
-  append  : ...any bytes
-  size    : int
-  slice   : int int? bytes
-  tr      : str str
-  stream  : stream
+dec == a      : a a bool
+dec != a      : a a bool
+dec <  a      : a a bool
+dec <= a      : a a bool
+dec >  a      : a a bool
+dec >= a      : a a bool
+dec log t     : t ... t
+dec assert a  : a a void
+dec iif a     : ...[bool a] a
+dec guard     : bool void
+dec if a      : bool a void
+dec else a    : a void
+dec throw a b : a b
+dec catch a b : a (b a) a # b is union type of thrown types
+dec return a  : a a
+dec match a b : a ...(a b) b
+dec for       : void
+dec while     : bool void
+dec continue  : void
+dec break     : void
 
-interface stream a:
-  read     : int? int? bytes @error
-  reads[t] : t @error
-  peek     : bytes
-  write    : ...any int @error
-  flush    : int @error
-  offset   : int
-  seek     : int @error
-  close    : bool @error
-  closed   : bool
-  endian   : str # LE or BE
-  le       : a
-  be       : a
-
-extern std:
+module std:
   env      : map[str str]
   now      : time
-  log[t]   : t ... t
   db[t u]  : (t u) u
   rand     : int int? int
-  fetch    : string req res {
-    req:
-      method  string
-      headers vec[tuple[string string]]
-      body    stream
-    res:
-      status  int
-      headers vec[tuple[string string]]
-      body    stream
-  }
-  serve    : string req res {
-    req:
-      host     string
-      version  string
-      method   string
-      path     string
-      headers  vec[tuple[string string]]
-      body     stream
-    res:
-      status  int
-      map     vec[tuple[string string]]
-      body    stream
-  }
-  regexp:
-    __new   : string
-    match   : string bool
-    capture : string vec[string]
-    split   : string vec[string]
-    replace : string (vec[string] string) string
+  class byte = u8
+  class bytes = vec[u8]
+  class regexp:
+    __new   : str
+    match   : str bool
+    capture : str vec[str]
+    split   : str vec[str]
+    replace : str (vec[str] str) str
+  class bcrypt:
+    __new   : str
+    compare : str bool
   math:
     acos    : float float
     acosh   : float float
@@ -257,26 +237,43 @@ extern std:
     lgamma  : float tuple[float int]
     frexp   : float tuple[float int]
     ldexp   : float int float
-  bcrypt:
-    __new   : string
-    compare : string bool
-
-dec == a      : a a bool
-dec != a      : a a bool
-dec <  a      : a a bool
-dec <= a      : a a bool
-dec >  a      : a a bool
-dec >= a      : a a bool
-dec assert a  : a a void
-dec iif a     : ...[bool a] a
-dec guard     : bool void
-dec if a      : bool a void
-dec else a    : a void
-dec throw a b : a b
-dec catch a b : a (b a) a # b is union type of thrown types
-dec return a  : a a
-dec match a b : a ...(a b) b
-dec for       : void
-dec while     : bool void
-dec continue  : void
-dec break     : void
+  interface stream a:
+    read     : int? bytes @error
+    peek     : bytes
+    write    : ...any int @error
+    flush    : int @error
+    close    : bool @error
+    closed   : bool
+    endian   : str # LE or BE
+    le       : a   # return new stream with little endian
+    be       : a   # return new stream with big endian
+  class file:
+    .stream
+    offset   : int
+    seek     : int @error
+  class socket:
+    .stream
+    shutdown : bool bool void @error
+  fetch    : str req res {
+    req:
+      method  str
+      headers vec[tuple[str str]]
+      body    socket
+    res:
+      status  int
+      headers vec[tuple[str str]]
+      body    socket
+  }
+  serve    : str req res {
+    req:
+      host     str
+      version  str
+      method   str
+      path     str
+      headers  vec[tuple[str str]]
+      body     socket
+    res:
+      status  int
+      map     vec[tuple[str str]]
+      body    socket
+  }
