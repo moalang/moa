@@ -90,28 +90,28 @@ enum opt a:
   none
   &&&    : opt[a] opt[a]
   |||    : opt[a] opt[a]
-  then b : (a b) opt[b]
-  or     : (a) a
+  then b : fn[a b] opt[b]
+  or     : fn[a] a
 
 class vec a:
-  __new    : int? int?      # vec(8) is for length, vec(0 8) is for capacity
+  __new    : ...a
   __get    : int a @error
   size     : int
   slice    : int int vec[a]
   repeat   : int vec[a]
   concat   : vec[a] vec[a]
-  map b    : (a b) vec[b]
-  fmap b   : (a vec[b]) vec[b]
-  keep     : (a bool) vec[a]
-  all      : (a bool) bool
-  any      : (a bool) bool
-  fold b   : (b a b) b b
-  scan b   : (b a b) b vec[b]
-  find     : (a bool) opt[a]
-  index    : (a bool) opt[int]
-  rindex   : (a bool) opt[int]
+  map b    : fn[a b] vec[b]
+  fmap b   : fn[a vec[b]] vec[b]
+  keep     : fn[a bool] vec[a]
+  all      : fn[a bool] bool
+  any      : fn[a bool] bool
+  fold b   : fn[b a b] b b
+  scan b   : fn[b a b] b vec[b]
+  find     : fn[a bool] opt[a]
+  index    : fn[a bool] opt[int]
+  rindex   : fn[a bool] opt[int]
   zip b    : vec[b] vec[tuple[a b]]
-  sort     : (a a bool) vec[a]
+  sort     : fn[a a bool] vec[a]
   reverse  : vec[a]
   join     : str str
   has      : a bool
@@ -121,7 +121,7 @@ class vec a:
   unique   : set[a]
   string   : str? str
   __set    : int a a @error  # modify in-place
-  push     : ...a vec[a]     # modify and expand
+  push     : a a             # modify and expand
   pop      : a @error        # modify and shurink
 
 class set a:
@@ -160,19 +160,19 @@ dec iif a     : ...[bool a] a
 dec guard     : bool void
 dec if a      : bool a void
 dec else a    : a void
-dec match a b : a ...(a b) b
+dec match a b : a ...[a b] b
 dec for       : void
 dec while     : bool void
 dec continue  : void
 dec break     : void
 dec return a  : a a
 dec throw a b : a b
-dec catch a b : a (b a) a # b is union type of thrown types
+dec catch a b : a fn[b a] a # b is union type of thrown types
 
 module std:
   env      : map[str str]
   now      : time
-  db[t u]  : (t u) u
+  db[t u]  : fn[t u] u
   rand     : int int? int
   fetch    : str req res {
     req:
@@ -218,7 +218,7 @@ module std:
     match   : str bool
     capture : str vec[str]
     split   : str vec[str]
-    replace : str (vec[str] str) str
+    replace : str fn[vec[str] str] str
   class bcrypt:
     __new   : str
     compare : str bool
