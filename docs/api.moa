@@ -6,8 +6,6 @@ enum bool:
   !     : bool
   ||    : bool bool
   &&    : bool bool
-  &&& a : opt[a] opt[a]
-  ||| a : opt[a] opt[a]
 
 interface _num a:
   +        : a a
@@ -53,7 +51,7 @@ class float: _float
 
 class str:
   __new   : ...a[any]
-  __at    : int a @error
+  __get   : int a @error
   size    : int
   concat  : str str
   slice   : int int str
@@ -77,11 +75,11 @@ class fn ...a[any] b
 
 class tuple ...a[any]:
   __new   : ...a
-  : a.map(x,i => tuple(i h))
+  : a.map value,i => tuple(i value)
 
-class struct ...a[id type]:
-  __new   : ...a.map(id,type => type)
-  : a.map(id,type => tuple(id type))
+class struct ...a[sym any]:
+  __new   : ...a
+  : a
 
 class any:
   as t   : opt[t]
@@ -92,14 +90,12 @@ enum opt a:
   none
   &&&    : opt[a] opt[a]
   |||    : opt[a] opt[a]
-  bool   : bool
   then b : (a b) opt[b]
-  or     : a a
-  alt    : a
+  or     : (a) a
 
 class vec a:
   __new    : int? int?      # vec(8) is for length, vec(0 8) is for capacity
-  __at     : int a @error
+  __get    : int a @error
   size     : int
   slice    : int int vec[a]
   repeat   : int vec[a]
@@ -142,7 +138,7 @@ class set a:
 
 class map k v:
   __new  : ...[k v] map[k v]
-  __at   : k opt[v]
+  __get  : k opt[v]
   size   : int
   has    : k bool
   keys   : vec[k]
@@ -150,7 +146,6 @@ class map k v:
   items  : vec[tuple[k v]]
   concat : map[k v] map[k v]
   __set  : k v v       # modify and expand
-  gset   : k v v       # modify and expand
   rid    : k opt[v]    # modify and shrink
 
 class time:

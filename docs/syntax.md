@@ -39,7 +39,7 @@ Operator
 Keyword
 ```
 literal   : ... void true false some none
-primitive : void bool int str fn i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
+primitive : void bool int str sym fn i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
 container : opt tuple struct set vec map
 declare   : let var def class enum dec interface
 branch    : iif if else guard match
