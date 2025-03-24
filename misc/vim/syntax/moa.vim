@@ -22,7 +22,7 @@ syn keyword Type        byte bytes stream time
 syn keyword Conditional iif if else guard match
 syn keyword Repeat      for while
 syn keyword keyword     continue break return throw catch
-syn keyword Keyword     use module std log math num decimal
+syn keyword Keyword     use module std log assert math num decimal
 syn match Operator /[-+%<>!&|^*=]=\?/
 syn match Operator "||"
 syn match Operator "&&"

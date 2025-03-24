@@ -160,14 +160,14 @@ dec iif a     : ...[bool a] a
 dec guard     : bool void
 dec if a      : bool a void
 dec else a    : a void
-dec throw a b : a b
-dec catch a b : a (b a) a # b is union type of thrown types
-dec return a  : a a
 dec match a b : a ...(a b) b
 dec for       : void
 dec while     : bool void
 dec continue  : void
 dec break     : void
+dec return a  : a a
+dec throw a b : a b
+dec catch a b : a (b a) a # b is union type of thrown types
 
 module std:
   env      : map[str str]
