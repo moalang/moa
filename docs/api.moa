@@ -148,21 +148,6 @@ class map k v:
   __set  : k v v       # modify and expand
   rid    : k opt[v]    # modify and shrink
 
-class time:
-  year   : int
-  month  : int
-  day    : int
-  hour   : int
-  min    : int
-  sec    : int
-  wday   : int
-  yday   : int
-  offset : int
-  string : str? str
-  zone   : str
-  offset : int
-  lcoal  : str time
-
 dec == a      : a a bool
 dec != a      : a a bool
 dec <  a      : a a bool
@@ -189,6 +174,43 @@ module std:
   now      : time
   db[t u]  : (t u) u
   rand     : int int? int
+  fetch    : str req res {
+    req:
+      method  str
+      headers vec[tuple[str str]]
+      body    stream
+    res:
+      status  int
+      headers vec[tuple[str str]]
+      body    socket
+  }
+  serve    : str req res {
+    req:
+      host     str
+      version  str
+      method   str
+      path     str
+      headers  vec[tuple[str str]]
+      body     socket
+    res:
+      status  int
+      map     vec[tuple[str str]]
+      body    stream
+  }
+  class time:
+    year   : int
+    month  : int
+    day    : int
+    hour   : int
+    min    : int
+    sec    : int
+    wday   : int
+    yday   : int
+    offset : int
+    string : str? str
+    zone   : str
+    offset : int
+    lcoal  : str time
   class byte = u8
   class bytes = vec[u8]
   class regexp:
@@ -249,26 +271,3 @@ module std:
   class socket:
     .stream
     shutdown : bool bool void @error
-  fetch    : str req res {
-    req:
-      method  str
-      headers vec[tuple[str str]]
-      body    socket
-    res:
-      status  int
-      headers vec[tuple[str str]]
-      body    socket
-  }
-  serve    : str req res {
-    req:
-      host     str
-      version  str
-      method   str
-      path     str
-      headers  vec[tuple[str str]]
-      body     socket
-    res:
-      status  int
-      map     vec[tuple[str str]]
-      body    socket
-  }
