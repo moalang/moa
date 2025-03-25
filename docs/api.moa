@@ -50,7 +50,7 @@ class f64: _float
 class float: _float
 
 class str:
-  __new   : ...a[any]
+  __new   : ...
   __get   : int a @error
   size    : int
   concat  : str str
@@ -69,16 +69,12 @@ class str:
   int     : opt[int]
   float   : opt[float]
 
-class fn ...a[any] b
+class fn ...a b
   __call  : ...a b
 
-class tuple ...a[any]:
+class tuple ...a:
   __new   : ...a
   : a.map value,i => tuple(i value)
-
-class struct ...a[sym any]:
-  __new   : ...a
-  : a
 
 class any:
   as t   : opt[t]
@@ -87,13 +83,12 @@ class any:
 enum opt a:
   some a
   none
-  &&&    : opt[a] opt[a]
   |||    : opt[a] opt[a]
   then b : fn[a b] opt[b]
   or     : fn[a] a
 
 class vec a:
-  __new    : ...a
+  __new    : ...[a]
   __get    : int a @error
   size     : int
   slice    : int int vec[a]
@@ -155,9 +150,9 @@ dec >= a      : a a bool
 dec log t     : t ... t
 dec assert a  : a a void
 dec iif a     : ...[bool a] a
-dec guard     : bool void
 dec if a      : bool a void
 dec else a    : a void
+dec guard     : bool void
 dec match a b : a ...[a b] b
 dec for       : void
 dec while     : bool void
@@ -172,7 +167,7 @@ module std:
   now      : time
   db[t u]  : fn[t u] u
   rand     : int int? int
-  fetch    : str req res {
+  fetch    : str req res @error {
     req:
       method  str
       headers vec[tuple[str str]]
@@ -182,7 +177,7 @@ module std:
       headers vec[tuple[str str]]
       body    socket
   }
-  serve    : str req res {
+  serve    : str fn[req res] void @error {
     req:
       host     str
       version  str

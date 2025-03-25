@@ -14,10 +14,10 @@ syn match Number /\%([ \n(\[]\)\@<=[0-9]\+[xob]\?[A-Fa-f0-9_hmsun]*\(\.[A-Fa-f0-
 syn keyword Boolean true false
 
 " Statement
-syn keyword Define      def dec let var struct class enum interface extern
+syn keyword Define      def dec let var class enum interface extern
 syn keyword Boolean     true false
 syn keyword Type        void bool int i8 i16 i32 i64 u8 u16 u32 u64 float f16 f32 f64 str fn
-syn keyword Type        tuple struct set vec map opt any
+syn keyword Type        tuple set vec map opt any
 syn keyword Type        byte bytes stream time
 syn keyword Conditional iif if else guard match
 syn keyword Repeat      for while
