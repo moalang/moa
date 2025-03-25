@@ -2,12 +2,32 @@
 // echo 'def main: io.puts "hello"' | node bootstrap.js | node | grep hello
 
 const runtime = (() => {
+class MoaError extends Error {
+  constructor(data) {
+    super(data)
+    this.data = data
+  }
+}
 const some = v => v
-const none = undefined
+const none = null
 const tuple = (...a) => a
 const vec = (...a) => a
 const set = (...a) => new Set(a)
 const map = (...a) => new Map([...new Array(a.length / 2)].map((_, i) => [a[i*2], a[i*2+1]]))
+const log = (a, ...b) => { console.warn(a, ...b); return a }
+const assert = (cond, f) => cond || __throw(f())
+const __throw = s => { throw new MoaError(s) }
+const __catch = (f, g) => {
+  try {
+    return f()
+  } catch (e) {
+    if (e instanceof MoaError) {
+      return g(e.data)
+    } else {
+      throw e
+    }
+  }
+}
 const __prop = (obj, name, ...a) => {
   if (name === "then") {
     return obj === none ? none : a[0](obj)
@@ -42,16 +62,18 @@ const __str = o => Array.isArray(o) ? o.map(__str).join(" ") :
 const tokenize = moa => {
   let lineno = 1
   let offset = 0
+  let indent = 0
   const tokens = []
   for (const code of moa.split(/([ \n]+|[()\[\]{}]|[0-9+]+\.[0-9]+|[:.+\-*/%!=^|&?><]+|"[^"]*"|[ \n]+)/)) {
     if (code.trim()) {
       const op1 = code === "!"
       const op2 = "+-*/%|&<>=!".includes(code[0])
       const dot = code === "."
-      tokens.push({code, lineno, offset, ...(op1 && {op1}), ...(op2 && {op2}), ...(dot && {dot})})
+      tokens.push({code, lineno, offset, indent, ...(op1 && {op1}), ...(op2 && {op2}), ...(dot && {dot})})
     }
     offset += code.length
     lineno += code.split("\n").length - 1
+    indent = code.includes("\n") ? code.split("\n").at(-1).length : indent
   }
   return tokens
 }
@@ -72,6 +94,12 @@ const parse = tokens => {
     const t = tokens[pos++]
     if (!t) {
       throw new Error()
+    }
+    if (t.code === ":") {
+      const indent = tokens[pos].indent
+      return t.lineno === tokens[pos].lineno ?
+        [t, parseLine(tokens[pos])] :
+        [t].concat(until(tt => tt.indent === indent, parseLine))
     }
     const call = t => {
       ++pos // drop "("
@@ -98,6 +126,11 @@ const parse = tokens => {
 }
 
 const generate = nodes => {
+  const geniif = a => a.length === 1 ? a[0] : a[0] + " ? " + a[1] + " : " + geniif(a.slice(2))
+  const genif = a => `if ((${a.slice(0, -1).join(") && (")})) ${a.at(-1)}`
+  const genelse = a => "else " + (a[0].code === "if" ? genif(a.slice(1).map(gen)) : gen(a[0]))
+  const gendef = (a, body) => `const ${a[0]} = (${a.slice(1)}) => ${body}`
+  const genclass = (name, fields) => `const ${name} = (${fields}) => ({${fields}})`
   const gen = node => {
     if (Array.isArray(node)) {
       const head = node[0]
@@ -114,16 +147,29 @@ const generate = nodes => {
         return `__prop(${gen(tail[0])}, "${field}"${args.map(s => " ," + s).join("")})`
       } else if (head.op2) {
         return head.code === "=>" ? `${gen(tail[0])} => ${gen(tail[1])}` :
+          "+= -= *= /= %= **= ||= &&=".split(" ").includes(head.code) ? `${tail[0].code} = __op2("${head.code.slice(0, -1)}", ${gen(tail[0])}, () => ${gen(tail[1])})` :
           `__op2("${head.code}", ${gen(tail[0])}, () => ${gen(tail[1])})`
       } else if (head.parenthesis) {
         return "(" + gen(tail[0]) + ")"
       } else {
-        return gen(head) + "(" + tail.map(gen).join(", ") + ")"
+        return head.code === ":" ? "{" + tail.map(gen).join(";\n") + "}" :
+          head.code === "assert" ? `assert(${gen(tail[0])}, () => [${tail.slice(1).map(gen)}].join(" "))` :
+          head.code === "catch" ? `__catch(() => ${gen(tail[0])}, ${gen(tail[1])})` :
+          head.code === "iif" ? geniif(tail.map(gen)) :
+          head.code === "if" ? genif(tail.map(gen)) :
+          head.code === "else" ? genelse(tail) :
+          head.code === "def" ? gendef(tail.slice(0, -1).map(node => node.code), gen(tail.at(-1))) :
+          head.code === "class" ? genclass(tail[0].code, tail[1].slice(1).map(x => x[0].code)) :
+          head.code === "let" ? `const ${tail[0].code} = ${gen(tail[1])}` :
+          head.code === "var" ? `let ${tail[0].code} = ${gen(tail[1])}` :
+          gen(head) + "(" + tail.map(gen).join(", ") + ")"
       }
     } else if (node === undefined) {
       return ""
     } else {
-      return node.code
+      return node.code === "void" ? null :
+        node.code === "throw" ? "__throw" :
+        node.code
     }
   }
   return nodes.map(gen).join("\n")
@@ -136,16 +182,28 @@ if (process.argv[2] === "test") {
     const tokens = tokenize(moa)
     const nodes = parse(tokens)
     const js = generate(nodes)
+    const logs = []
+    const context = {
+      console: {
+        warn: (...a) => logs.push(a.join(" "))
+      }
+    }
     let actual = null
     try {
-      actual = new vm.Script(runtime + ";\n" + js).runInNewContext({console})
+      actual = new vm.Script(runtime + ";\n" + js).runInNewContext(context)
     } catch (e) {
-      actual = e.stack
+      actual = "error: " + e.message
+    }
+    if (logs.length) {
+      actual = "log: " + logs.join("\n")
     }
     assert.deepEqual(actual, expected, moa + " -> " + js + "\n" + JSON.stringify({tokens, nodes}, null, 2))
     process.stdout.write(".")
   }
+  eq({x: 1, y:2}, "class p:\n  x int\n  y int\np(1 2)")
+
   // Primitive
+  eq(undefined, "void")
   eq(1, "1")
   eq(1.1, "1.1")
   eq("hi", '"hi"')
@@ -154,7 +212,7 @@ if (process.argv[2] === "test") {
 
   // Container
   eq(1, "some(1)")
-  eq(undefined, "none")
+  eq(null, "none")
   eq("a", 'tuple(1 "a").1')
   eq([1, 2], "vec(1 2)")
   eq(new Set([1, 2]), "set(1 1 2)")
@@ -163,8 +221,8 @@ if (process.argv[2] === "test") {
   // Methods
   eq(1, "some(1) ||| none")
   eq(1, "none ||| some(1)")
-  eq(undefined, "none ||| none")
-  eq(undefined, "none.then(a => a + 1)")
+  eq(null, "none ||| none")
+  eq(null, "none.then(a => a + 1)")
   eq(2, "some(1).then(a => a + 1)")
   eq(1, "none.or(() => 1)")
   eq(2, "some(2).or(() => 1)")
@@ -179,8 +237,37 @@ if (process.argv[2] === "test") {
   eq(true, "map(1 2) == map(1 2)")
   eq(false, "map(1 2) == map(1 3)")
 
+  // Exception
+  eq("error: 1", "throw(1)")
+  eq(1, "catch(1 n => n + 1)")
+  eq(2, "catch(throw(1) n => n + 1)")
+
+  // Embedded
+  eq("log: 1 2", "log(1 2)")
+  eq("1", "assert(true)\n1")
+  eq("error: 1 2", "assert(false 1 2)\n1")
+
+  // Branch
+  eq(1, "iif(true 1 2)")
+  eq(2, "iif(false throw(1) 2)")
+  eq(3, "iif(false 1 false 2 3)")
+  eq(2, "if false: log(1)\n2")
+  eq("log: 1", "if true: log(1)\n2")
+  eq("log: 2", "if false: log(1)\nelse: log(2)")
+  eq("log: 2", "if false: log(1)\nelse if true: log(2)")
+  eq("log: 3", "if false: log(1)\nelse if false: log(2)\nelse: log(3)")
+
+  // Declare
+  eq(1, "let a 1\na")
+  eq(3, "var a 1\na += 2\na")
+  eq(1, "def f: return 1\nf()")
+  eq(1, "def f:\n  if true: return 1\n  return 2\nf()")
+  eq(2, "def f:\n  if false: return 1\n  return 2\nf()")
+  eq({x: 1, y:2}, "class p:\n  x int\n  y int\np(1 2)")
+  //eq({x: 1, y:2}, "enum ab:\n  a\n  b int\nmatch a:\n  _ a: 1\n  v b: v")
+
   // Declare   : let var def class enum dec interface extern
-  // Branch    : iif if else guard match
+  // Branch    : iif if else match
   // Flow      : return throw catch
 
   // Loop      : for each while continue break
@@ -194,18 +281,6 @@ if (process.argv[2] === "test") {
   console.log(generate(parse(tokenize(moa))))
 }
 /*
-dec log t     : t ... t
-dec assert a  : a a void
-dec iif a     : ...[bool a] a
-dec if a      : bool a void
-dec else a    : a void
-dec guard     : bool void
 dec match a b : a ...[a b] b
-dec for       : void
-dec while     : bool void
-dec continue  : void
-dec break     : void
 dec return a  : a a
-dec throw a b : a b
-dec catch a b : a fn[b a] a # b is union type of thrown types
 */

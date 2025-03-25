@@ -19,7 +19,7 @@ syn keyword Boolean     true false
 syn keyword Type        void bool int i8 i16 i32 i64 u8 u16 u32 u64 float f16 f32 f64 str fn
 syn keyword Type        tuple set vec map opt any
 syn keyword Type        byte bytes stream time
-syn keyword Conditional iif if else guard match
+syn keyword Conditional iif if else match
 syn keyword Repeat      for while
 syn keyword keyword     continue break return throw catch
 syn keyword Keyword     use module std log assert math num decimal

@@ -152,7 +152,6 @@ dec assert a  : a a void
 dec iif a     : ...[bool a] a
 dec if a      : bool a void
 dec else a    : a void
-dec guard     : bool void
 dec match a b : a ...[a b] b
 dec for       : void
 dec while     : bool void

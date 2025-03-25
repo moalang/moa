@@ -42,7 +42,7 @@ literal   : ... void true false some none
 primitive : void bool int str sym fn i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
 container : opt tuple set vec map
 declare   : let var def class enum dec interface
-branch    : iif if else guard match
+branch    : iif if else match
 flow      : return throw catch
 loop      : for each while continue break
 global    : log assert
@@ -88,13 +88,13 @@ tuple(1 "a").0
 set(1 2)
 map("a" 1 "b" 2)
 
-var a 1: a += 1
 let a 1: a += 1
+var a b c 0
 dec f a: a a bool
 def f x y: x == y
-dec g a.num: ...a int
-def g ...ns: n.fold(+)
-dec h: ... _
+dec g a.num: ...a a
+def g ...xs: xs.fold(+)
+dec h: ... void
 def h ...o: log ...o
 class v2:
   x int
@@ -116,17 +116,15 @@ if:
   cond1: log 1
   cond2: log 2
   _    : log 3
-catch throw(3) e => log e.message e.stack
+catch throw(3) fn(e => log e.message e.stack
 catch throw(b(1)) e => match e.data:
   a: "a"
   b v: "b {}".format(v)
   c v: "c {}".format(v)
 
-guard n < 0     # return returned_type()
-guard n == 1: 1 # return 1
 if n < 0: return 0
 
-for i 3: continue
+for 3: continue
 while true: break
 ```
 
@@ -161,14 +159,15 @@ def f a {b}  : a + b # f(1 b=2) -> 3
 idea: Loop
 ```
 for i 3: ...                       # 0 1 2
-for i = 1 < 3: ...                 # 1 2
-for i = 2 >= 0: ...                # 2 1 0
-for i = 1 <= 5 +=2: ...            # 1 3 5
+for i 1 < 3: ...                   # 1 2
+for i 2 >= 0: ...                  # 2 1 0
+for i 1 <= 5 +=2: ...              # 1 3 5
 each x xs: ...                     # each item
 each i x xs: ...                   # each item with index
 while l < r: ...                   # while
-for i n: for j m: break.i          # nested break with index
-while.z l < r: while m: continue.z # nested continue with label # TBD
+for i n: for j m: break.i          # nested break from for
+each xs x: each ys y: break.x      # nested break form each
+while.z l < r: while m: continue.z # nested continue with label
 ```
 
 idea: Typed argument
@@ -252,34 +251,32 @@ idea: Pattern matching
 match: "match" exp ":" ("\n  " type? case ("if" exp) ":" block)+
 case: pattern ("," pattern)*
 pattern:
-| '"' [^"]* '"'                    # string
-| "-"? [0-9]+ ("." [0-9]+)?        # number
-| "[" case* ("..." id?)? case* "]" # vec
-| "{" ((id "=" exp) | type)+ "}"   # class
-| type
+| id '"' [^"]* '"'                    # string
+| id "-"? [0-9]+ ("." [0-9]+)?        # number
+| id "[" case* ("..." id?)? case* "]" # vec
+| id "{" ((id "=" exp) | type)+ "}"   # class
+| id type
 type: id ("." id)* ("[" type+ "]")? ("(" case ")")?
 
 enum tree t:
   leaf
   node:
-    value t
     left tree t
     right tree t
+    value t
 
 def validate t:
   match t:
-    leaf: true
-    node{value=0}                   : false
-    node{value} if value.isnan()    : false
-    node{left=leaf right=leaf}      : true
-    node{value left=node right=leaf}: left.value <= value && validate(left)
-    node{value left=leaf right=node}: value <= right.value && validate(right)
-    node{value left=node right=node}: left.value <= value <= right.value && validate(left) && validate(right)
+    _ leaf: true
+    n node leaf leaf: !n.value.isnan
+    n node node node: n.left.value <= n.value <= n.right.value && validate(n.left) && validate(n.right)
+    n node node leaf: n.left.value <= n.value                  && validate(n.left)
+    n node leaf node:                 n.value <= n.right.value && validate(n.right)
 
 match a:
-  []: "empty"
-  [n n _ _ _]: "pair"
-  [n n m m m]: "fullhouse"
+  _ []: "empty"
+  _ [n n _ _ _]: "pair"
+  _ [n n m m m]: "fullhouse"
 ```
 
 idea: Foreign function interface
