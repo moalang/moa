@@ -266,13 +266,9 @@ if (process.argv[2] === "test") {
   eq({x: 1, y:2}, "class p:\n  x int\n  y int\np(1 2)")
   //eq({x: 1, y:2}, "enum ab:\n  a\n  b int\nmatch a:\n  _ a: 1\n  v b: v")
 
-  // Declare   : let var def class enum dec interface extern
-  // Branch    : iif if else match
-  // Flow      : return throw catch
-
+  // Declare   : enum dec interface
+  // Branch    : match
   // Loop      : for each while continue break
-  // Global    : log assert
-  // Reserved  : __.* bytes regexp time duration stream num decimal array import export
 
   console.log("ok")
 } else {
@@ -280,7 +276,3 @@ if (process.argv[2] === "test") {
   const moa = fs.readFileSync("/dev/stdin", "utf-8")
   console.log(generate(parse(tokenize(moa))))
 }
-/*
-dec match a b : a ...[a b] b
-dec return a  : a a
-*/

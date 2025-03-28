@@ -5,7 +5,7 @@ line: exp+ (":" block)? comment? "\n"
 block: ("\n  " line)+ | line
 exp:
 | op1? atom (op2 exp)?
-| id ("," id+ )* "=>" block               # a,b => c        -> fn(a b c)
+| id ("," id+ )* "=>" block               # a,b => c -> fn(a b c)
 atom:
 | "(" exp ")"
 | bottom (prop | call)*
@@ -34,6 +34,7 @@ Operator
 == != < <= > >=                   # Compare
 && ||                             # Boolean
 = += -= *= /= %= &= |= ^= <<= >>= # Override
+===                               # Type check
 ```
 
 Keyword
@@ -248,35 +249,29 @@ def fib n:
 
 idea: Pattern matching
 ```
-match: "match" exp ":" ("\n  " type? case ("if" exp) ":" block)+
-case: pattern ("," pattern)*
+match: "match" exp ":" ("\n  " pattern id? ("if" exp) ":" block)+
 pattern:
-| id '"' [^"]* '"'                    # string
-| id "-"? [0-9]+ ("." [0-9]+)?        # number
-| id "[" case* ("..." id?)? case* "]" # vec
-| id "{" ((id "=" exp) | type)+ "}"   # class
-| id type
-type: id ("." id)* ("[" type+ "]")? ("(" case ")")?
+| '"' [^"]* '"'                    # string
+| "-"? [0-9]+ ("." [0-9]+)?        # number
+| "[" case* ("..." id?)? case* "]" # vec
+| "{" ((id "=" exp) | type)+ "}"   # class
+| type
+type: id ("." id)* ("[" type+ "]")?
 
 enum tree t:
   leaf
   node:
+    value t
     left tree t
     right tree t
-    value t
 
 def validate t:
-  match t:
-    _ leaf: true
-    n node leaf leaf: !n.value.isnan
-    n node node node: n.left.value <= n.value <= n.right.value && validate(n.left) && validate(n.right)
-    n node node leaf: n.left.value <= n.value                  && validate(n.left)
-    n node leaf node:                 n.value <= n.right.value && validate(n.right)
-
-match a:
-  _ []: "empty"
-  _ [n n _ _ _]: "pair"
-  _ [n n m m m]: "fullhouse"
+  return match t:
+    leaf                                          -> true
+    node n if n.left === leaf && n.right === leaf -> n.value.isnan
+    node n if n.left === node && n.right === node -> n.left.value <= n.value <= n.right.valuer && validate(n.left) && validate(n.right)
+    node n if n.left === node && n.right === leaf -> n.left.value <= n.value                   && validate(n.left)
+    node n if n.left === leaf && n.right === node ->                 n.value <= n.right.value  && validate(n.right)
 ```
 
 idea: Foreign function interface
