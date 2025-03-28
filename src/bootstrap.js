@@ -131,6 +131,15 @@ const generate = nodes => {
   const genelse = a => "else " + (a[0].code === "if" ? genif(a.slice(1).map(gen)) : gen(a[0]))
   const gendef = (a, body) => `const ${a[0]} = (${a.slice(1)}) => ${body}`
   const genclass = (name, fields) => `const ${name} = (${fields}) => ({${fields}})`
+  const genenum = o => Array.isArray(o) ?
+    `const ${o[0].code} = __val => ({__tag: "${o[0].code}", __val})` :
+    `const ${o.code} = {__tag: "${o.code}"}`
+  const genmatch = a => a.length === 0 ? `__throw("No match")` :
+    a[0].length === 3 ?
+    `__tag === "${a[0][0].code}" ? (${a[0][1].code} => ${genexp(a[0][1])})(__val) : ${genmatch(a.slice(1))}` :
+    `__tag === "${a[0][0].code}" ? ${genexp(a[0][1])} : ${genmatch(a.slice(1))}`
+  const genexp = o => Array.isArray(o) && o[0].code === ":" ? genreturn(o.slice(1).map(gen)) : gen(o)
+  const genreturn = a => a.length === 1 ? a[0] : `(() => {${a.slice(0, -1).map(s => s + ";").join("")}return ${a.at(-1)}})()`
   const gen = node => {
     if (Array.isArray(node)) {
       const head = node[0]
@@ -162,6 +171,10 @@ const generate = nodes => {
           head.code === "class" ? genclass(tail[0].code, tail[1].slice(1).map(x => x[0].code)) :
           head.code === "let" ? `const ${tail[0].code} = ${gen(tail[1])}` :
           head.code === "var" ? `let ${tail[0].code} = ${gen(tail[1])}` :
+          head.code === "enum" ? tail[1].slice(1).map(genenum).join("\n") :
+          head.code === "match" ? `;(({__tag, __val}) => ${genmatch(tail[1].slice(1))})(${gen(tail[0])})` :
+          head.code === "dec" ? "" :
+          head.code === "interface" ? "" :
           gen(head) + "(" + tail.map(gen).join(", ") + ")"
       }
     } else if (node === undefined) {
@@ -197,10 +210,10 @@ if (process.argv[2] === "test") {
     if (logs.length) {
       actual = "log: " + logs.join("\n")
     }
-    assert.deepEqual(actual, expected, moa + " -> " + js + "\n" + JSON.stringify({tokens, nodes}, null, 2))
+    assert.deepEqual(actual, expected, `${actual} != ${expected}\n\n${moa}\n\n${js}`)
     process.stdout.write(".")
   }
-  eq({x: 1, y:2}, "class p:\n  x int\n  y int\np(1 2)")
+  process.stdout.write("\x1B[2J\x1B[0f") // clear console
 
   // Primitive
   eq(undefined, "void")
@@ -264,11 +277,10 @@ if (process.argv[2] === "test") {
   eq(1, "def f:\n  if true: return 1\n  return 2\nf()")
   eq(2, "def f:\n  if false: return 1\n  return 2\nf()")
   eq({x: 1, y:2}, "class p:\n  x int\n  y int\np(1 2)")
-  //eq({x: 1, y:2}, "enum ab:\n  a\n  b int\nmatch a:\n  _ a: 1\n  v b: v")
-
-  // Declare   : enum dec interface
-  // Branch    : match
-  // Loop      : for each while continue break
+  eq(1, "enum ab:\n  a\n  b int\nmatch a:\n  a: 1\n  b v: v")
+  eq(2, "enum ab:\n  a\n  b int\nmatch b(2):\n  a: 1\n  b v: v")
+  eq(undefined, "dec add: int int int")
+  eq(undefined, "interface addable a: add a a a")
 
   console.log("ok")
 } else {
