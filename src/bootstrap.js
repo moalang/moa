@@ -2,61 +2,61 @@
 // echo 'def main: io.puts "hello"' | node bootstrap.js | node | grep hello
 
 const runtime = (() => {
-class MoaError extends Error {
-  constructor(data) {
-    super(data)
-    this.data = data
-  }
-}
-const some = v => v
-const none = null
-const tuple = (...a) => a
-const vec = (...a) => a
-const set = (...a) => new Set(a)
-const map = (...a) => new Map([...new Array(a.length / 2)].map((_, i) => [a[i*2], a[i*2+1]]))
-const log = (a, ...b) => { console.warn(a, ...b); return a }
-const assert = (cond, f) => cond || __throw(f())
-const __throw = s => { throw new MoaError(s) }
-const __catch = (f, g) => {
-  try {
-    return f()
-  } catch (e) {
-    if (e instanceof MoaError) {
-      return g(e.data)
-    } else {
-      throw e
+  class MoaError extends Error {
+    constructor(data) {
+      super(data)
+      this.data = data
     }
   }
-}
-const __prop = (obj, name, ...a) => {
-  if (name === "then") {
-    return obj === none ? none : a[0](obj)
-  } else if (name === "or") {
-    return obj === none ? a[0]() : obj
-  } else if (name.match(/^[0-9]/)) {
+  const some = v => v
+  const none = null
+  const tuple = (...a) => a
+  const vec = (...a) => a
+  const set = (...a) => new Set(a)
+  const map = (...a) => new Map([...new Array(a.length / 2)].map((_, i) => [a[i*2], a[i*2+1]]))
+  const log = (a, ...b) => { console.warn(a, ...b); return a }
+  const assert = (cond, f) => cond || __throw(f())
+  const __throw = s => { throw new MoaError(s) }
+  const __catch = (f, g) => {
+    try {
+      return f()
+    } catch (e) {
+      if (e instanceof MoaError) {
+        return g(e.data)
+      } else {
+        throw e
+      }
+    }
+  }
+  const __prop = (obj, name, ...a) => {
+    if (name === "then") {
+      return obj === none ? none : a[0](obj)
+    } else if (name === "or") {
+      return obj === none ? a[0]() : obj
+    } else if (name.match(/^[0-9]/)) {
+      return obj[name]
+    }
     return obj[name]
   }
-  return obj[name]
-}
-const __op2 = (op2, lhs, f) =>
-  op2 === "|||" ? (lhs === none ? f() : lhs) :
-  op2 === "==" ? __str(lhs) == __str(f()) :
-  op2 === "!=" ? __str(lhs) != __str(f()) :
-  op2 === "< " ? lhs <  f() :
-  op2 === "<=" ? lhs <= f() :
-  op2 === "> " ? lhs >  f() :
-  op2 === ">=" ? lhs >= f() :
-  op2 === "+"  ? lhs + f() :
-  op2 === "-"  ? lhs - f() :
-  op2 === "*"  ? lhs * f() :
-  op2 === "/"  ? lhs / f() :
-  op2 === "%"  ? lhs % f() :
-  (() => { throw new Error(`Unknown operator '${op2}'`)})()
-const __str = o => Array.isArray(o) ? o.map(__str).join(" ") :
-  o instanceof Map ? [...o.keys()].sort().map(key => key + "::" + __str(o.get(key))).join(" ") :
-  o instanceof Set ? [...o].sort().join(" ") :
-  typeof o === 'object' ? Object.keys(o).sort().map(key => key + "::" + __str(o[key])).join(" ") :
-  JSON.stringify(o)
+  const __op2 = (op2, lhs, f) =>
+    op2 === "|||" ? (lhs === none ? f() : lhs) :
+    op2 === "==" ? __str(lhs) == __str(f()) :
+    op2 === "!=" ? __str(lhs) != __str(f()) :
+    op2 === "< " ? lhs <  f() :
+    op2 === "<=" ? lhs <= f() :
+    op2 === "> " ? lhs >  f() :
+    op2 === ">=" ? lhs >= f() :
+    op2 === "+"  ? lhs + f() :
+    op2 === "-"  ? lhs - f() :
+    op2 === "*"  ? lhs * f() :
+    op2 === "/"  ? lhs / f() :
+    op2 === "%"  ? lhs % f() :
+    (() => { throw new Error(`Unknown operator '${op2}'`)})()
+  const __str = o => Array.isArray(o) ? o.map(__str).join(" ") :
+    o instanceof Map ? [...o.keys()].sort().map(key => key + "::" + __str(o.get(key))).join(" ") :
+    o instanceof Set ? [...o].sort().join(" ") :
+    typeof o === 'object' ? Object.keys(o).sort().map(key => key + "::" + __str(o[key])).join(" ") :
+    JSON.stringify(o)
 }).toString().slice("() => {".length, -1).trim()
 
 const tokenize = moa => {
@@ -188,7 +188,7 @@ const generate = nodes => {
   return nodes.map(gen).join("\n")
 }
 
-if (process.argv[2] === "test") {
+const test = () => {
   const vm = require("node:vm")
   const assert = require('node:assert');
   const eq = (expected, moa) => {
@@ -283,8 +283,12 @@ if (process.argv[2] === "test") {
   eq(undefined, "interface addable a: add a a a")
 
   console.log("ok")
+}
+
+
+if (process.argv[2] === "test") {
+  test()
 } else {
-  const fs = require("node:fs")
-  const moa = fs.readFileSync("/dev/stdin", "utf-8")
+  const moa = require("node:fs").readFileSync("/dev/stdin", "utf-8")
   console.log(generate(parse(tokenize(moa))))
 }
