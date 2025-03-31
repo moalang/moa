@@ -1,30 +1,40 @@
-struct Node:
-  code string
+class type:
+  tname str
+  targs vec[type]
+
+class token:
+  code   str
   offset int
   lineno int
   indent int
 
-struct Type:
-  name     string
-  args     array[Type]
-  instance ref[Type]
+class ast:
+  head token
+  tail vec[ast]
+  type type
 
-dec compile a: string string
+let stmt = token("stmt" 0 0 0)
 
+dec compile: str str
 def compile moa:
-  let nodes parse(moa)
+  return `package main\n\nimport "fmt"\nfunc main() { fmt.Println("moa-go") }`
+  let nodes = parse(moa)
   infer nodes
   return gen(nodes)
 
+dec tokenize: str vec[token]
 def tokenize moa:
-  return [Node("" 0 0 0)]
+  return [Token("" 0 0 0)]
 
+dec parse: vec[token] ast
 def parse moa:
-  let nodes tokenize(moa)
+  let nodes = tokenize(moa)
   return nodes
 
+dec infer: ast void
 def infer nodes:
   return
 
+dec gen: ast str
 def gen nodes:
   return "fmt.Println(1)"

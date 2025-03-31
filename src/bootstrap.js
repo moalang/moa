@@ -64,12 +64,11 @@ const tokenize = moa => {
   let offset = 0
   let indent = 0
   const tokens = []
-  for (const code of moa.split(/([ \n]+|[()\[\]{}]|[0-9+]+\.[0-9]+|[:.+\-*/%!=^|&?><]+|"[^"]*"|[ \n]+)/)) {
+  for (const code of moa.split(/([ \n]+|[()\[\]{}]|[0-9+]+\.[0-9]+|[:.+\-*/%!=^|&?><]+|"[^"]*"|`[^`]*`|[ \n]+)/)) {
     if (code.trim()) {
       const op1 = code === "!"
       const op2 = "+-*/%|&<>=!".includes(code[0])
-      const dot = code === "."
-      tokens.push({code, lineno, offset, indent, ...(op1 && {op1}), ...(op2 && {op2}), ...(dot && {dot})})
+      tokens.push({code, lineno, offset, indent, ...(op1 && {op1}), ...(op2 && {op2})})
     }
     offset += code.length
     lineno += code.split("\n").length - 1
@@ -101,24 +100,27 @@ const parse = tokens => {
         [t, parseLine(tokens[pos])] :
         [t].concat(until(tt => tt.indent === indent, parseLine))
     }
-    const call = t => {
-      ++pos // drop "("
+    const bracket = (t, close) => {
+      ++pos // drop open
       const closely = tokens[pos-1].offset + tokens[pos-1].code.length === tokens[pos].offset
-      const args = untilCode(")")
+      const args = untilCode(close)
       return closely ? [t, ...args] : t
     }
     const link = t => pos >= tokens.length ? t :
+      tokens[pos].code === "." ? link([tokens[pos++], t, parseUnit()]) :
+      tokens[pos].code === "(" ? link(bracket(t, ")")) :
+      tokens[pos].code === "[" ? link(bracket(t, "]")) :
+      tokens[pos].code === "{" ? link(bracket(t, "}")) :
       tokens[pos].op1 ? link([tokens[pos++], t]) :
       tokens[pos].op2 ? link([tokens[pos++], t, parseUnit()]) :
-      tokens[pos].dot ? link([tokens[pos++], t, parseUnit()]) :
-      tokens[pos].code === "(" ? link(call(t)) :
       t
     return link(t.code === "(" ? [{parenthesis: true}, untilCode(")")[0]] : t)
   }
   const parseLine = (t) => {
     const a = until(tt => t.lineno === tt.lineno && !")]}".includes(tt.code), parseUnit)
     if (a.length === 0) {
-      throw new Error(`BUG a line has no elements ${pos} ${tokens.map(t => t.code)}`)
+      console.dir(tokens.slice(0, pos))
+      throw new Error(`BUG a line has no elements ${pos}`)
     }
     return a.length === 1 ? a[0] : a
   }
@@ -151,7 +153,7 @@ const generate = nodes => {
         return "(() => {" + a.slice(0, -1).join(";\n") + ";\n return " + a.at(-1) + "})()"
       } else if (head.op1) {
         return head.code + gen(tail[0])
-      } else if (head.dot) {
+      } else if (head.code === ".") {
         const [field, ...args] = Array.isArray(tail[1]) ? tail[1].map(gen) : [gen(tail[1])]
         return `__prop(${gen(tail[0])}, "${field}"${args.map(s => " ," + s).join("")})`
       } else if (head.op2) {
@@ -169,8 +171,8 @@ const generate = nodes => {
           head.code === "else" ? genelse(tail) :
           head.code === "def" ? gendef(tail.slice(0, -1).map(node => node.code), gen(tail.at(-1))) :
           head.code === "class" ? genclass(tail[0].code, tail[1].slice(1).map(x => x[0].code)) :
-          head.code === "let" ? `const ${tail[0].code} = ${gen(tail[1])}` :
-          head.code === "var" ? `let ${tail[0].code} = ${gen(tail[1])}` :
+          head.code === "let" ? `const ${tail[0][1].code} = ${gen(tail[0][2])}` :
+          head.code === "var" ? `let ${tail[0][1].code} = ${gen(tail[0][2])}` :
           head.code === "enum" ? tail[1].slice(1).map(genenum).join("\n") :
           head.code === "match" ? `;(({__tag, __val}) => ${genmatch(tail[1].slice(1))})(${gen(tail[0])})` :
           head.code === "dec" ? "" :
@@ -220,6 +222,8 @@ const test = () => {
   eq(1, "1")
   eq(1.1, "1.1")
   eq("hi", '"hi"')
+  eq('"hi"', '`"hi"`')
+  eq('hi\n', '"hi\\n"')
   eq(true, "true")
   eq(1, "(a => a)(1)")
 
@@ -271,8 +275,8 @@ const test = () => {
   eq("log: 3", "if false: log(1)\nelse if false: log(2)\nelse: log(3)")
 
   // Declare
-  eq(1, "let a 1\na")
-  eq(3, "var a 1\na += 2\na")
+  eq(1, "let a = 1\na")
+  eq(3, "var a = 1\na += 2\na")
   eq(1, "def f: return 1\nf()")
   eq(1, "def f:\n  if true: return 1\n  return 2\nf()")
   eq(2, "def f:\n  if false: return 1\n  return 2\nf()")
@@ -289,6 +293,12 @@ const test = () => {
 if (process.argv[2] === "test") {
   test()
 } else {
-  const moa = require("node:fs").readFileSync("/dev/stdin", "utf-8")
-  console.log(generate(parse(tokenize(moa))))
+  const fs = require("node:fs")
+  const vm = require("node:vm")
+  const child_process = require("node:child_process")
+  const moa = fs.readFileSync(__dirname + "/moa.moa", "utf-8")
+  const js = generate(parse(tokenize(moa)))
+  const go = new vm.Script(runtime + `;\n${js}\ncompile(${JSON.stringify(moa)})`).runInNewContext({console})
+  fs.writeFileSync("/tmp/moa.go", go + "\n")
+  console.log(child_process.execSync("go run /tmp/moa.go").toString())
 }

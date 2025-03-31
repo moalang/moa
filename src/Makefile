@@ -3,3 +3,6 @@ test:
 
 watch:
 	@node --watch bootstrap.js test
+
+boot:
+	@node --watch --watch-path=. bootstrap.js
