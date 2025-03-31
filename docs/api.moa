@@ -189,6 +189,33 @@ class regexp:
 
 class iter a:
   next opt[a]
+  if a == bytes:
+    i8    : i8
+    i16le : i16
+    i32le : i32
+    i64le : i64
+    i16be : i16
+    i32be : i32
+    i64be : i64
+    i16ne : i16
+    i32ne : i32
+    i64ne : i64
+    u8    : u8
+    u16le : u16
+    u32le : u32
+    u64le : u64
+    u16be : u16
+    u32be : u32
+    u64be : u64
+    u16ne : u16
+    u32ne : u32
+    u64ne : u64
+    f32le : f32
+    f64le : f64
+    f32be : f32
+    f64be : f64
+    f32ne : f32
+    f64ne : f64
 
 module io:
   args     : vec[str]
@@ -220,15 +247,13 @@ module io:
       body    iter[bytes]
   }
   interface stream a:
+    iter     : iter[bytes]
     read     : int? bytes @error
     peek     : bytes
     write    : ...any int @error
     flush    : int @error
     close    : bool @error
     closed   : bool
-    endian   : str # LE or BE
-    le       : a   # return new stream with little endian
-    be       : a   # return new stream with big endian
   class file:
     .stream
     offset   : int
