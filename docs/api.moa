@@ -67,7 +67,7 @@ class str:
   trim    : str
   reverse : str
   repeat  : int str
-  format  : ... str
+  format  : ...any str
   int     : opt[int]
   float   : opt[float]
 
@@ -79,7 +79,8 @@ class tuple ...a:
   : a.map value,i => tuple(i value)
 
 class any:
-  as t   : opt[t]
+  as t   : t opt[t]
+  is t   : t bool
   string : str
 
 enum opt a:
@@ -149,7 +150,7 @@ dec <  a      : a a bool
 dec <= a      : a a bool
 dec >  a      : a a bool
 dec >= a      : a a bool
-dec log t     : t ... t
+dec log t     : t ...any t
 dec assert a  : a a void
 dec iif a     : ...[bool a] a
 dec if a      : bool a void
@@ -187,51 +188,21 @@ class regexp:
   split   : str vec[str]
   replace : str fn[vec[str] str] str
 
-class iter a:
-  next opt[a]
-  if a == bytes:
-    i8    : i8
-    i16le : i16
-    i32le : i32
-    i64le : i64
-    i16be : i16
-    i32be : i32
-    i64be : i64
-    i16ne : i16
-    i32ne : i32
-    i64ne : i64
-    u8    : u8
-    u16le : u16
-    u32le : u32
-    u64le : u64
-    u16be : u16
-    u32be : u32
-    u64be : u64
-    u16ne : u16
-    u32ne : u32
-    u64ne : u64
-    f32le : f32
-    f64le : f64
-    f32be : f32
-    f64be : f64
-    f32ne : f32
-    f64ne : f64
-
 module io:
   args     : vec[str]
   env      : map[str str]
   now      : time
   db[t u]  : fn[t u] u
-  rand     : int int? int
+  rand     : int int
   fetch    : str req res @error {
     req:
       method  str
       headers vec[tuple[str str]]
-      body    iter[bytes]
+      body    reader
     res:
       status  int
       headers vec[tuple[str str]]
-      body    iter[bytes]
+      body    reader
   }
   serve    : str fn[req res] void @error {
     req:
@@ -240,24 +211,41 @@ module io:
       method   str
       path     str
       headers  vec[tuple[str str]]
-      body     iter[bytes]
+      body     reader
     res:
       status  int
       map     vec[tuple[str str]]
-      body    iter[bytes]
+      body    reader
   }
+  interface reader a:
+    peek    : bytes
+    read    : int? bytes @error
+    reads b : b   @error
+    i8      : i8  @error
+    i16     : i16 @error
+    i32     : i32 @error
+    i64     : i64 @error
+    u8      : u8  @error
+    u16     : u16 @error
+    u32     : u32 @error
+    u64     : u64 @error
+    f32     : f32 @error
+    f64     : f64 @error
+  interface writer a:
+    write   : ...any int @error
   interface stream a:
-    iter     : iter[bytes]
-    read     : int? bytes @error
-    peek     : bytes
-    write    : ...any int @error
-    flush    : int @error
-    close    : bool @error
-    closed   : bool
+    reader
+    writer
+    endian  : str # LE or BE
+    le      : a
+    be      : a
+    close   : bool @error
+    closed  : bool
   class file:
     .stream
-    offset   : int
-    seek     : int @error
+    fsync  : int @error
+    offset : int
+    seek   : int @error
   class socket:
     .stream
     shutdown : bool bool void @error

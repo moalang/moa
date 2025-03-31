@@ -17,14 +17,34 @@ let stmt = token("stmt" 0 0 0)
 
 dec compile: str str
 def compile moa:
-  return `package main\n\nimport "fmt"\nfunc main() { fmt.Println("moa-go") }`
   let nodes = parse(moa)
   infer nodes
   return gen(nodes)
 
 dec tokenize: str vec[token]
 def tokenize moa:
-  return [Token("" 0 0 0)]
+  var lineno = 1
+  var offset = 0
+  var indent = 0
+  var tokens = []
+  var i = 0
+  let size = moa.size
+  while i < moa.size:
+    let c = moa[i]
+    i += 1
+    log c
+#  for (const code of moa.split(/([ \n]+|[()\[\]{}]|[0-9+]+\.[0-9]+|[:.+\-*/%!=^|&?><]+|"[^"]*"|`[^`]*`|[ \n]+)/)) {
+#    if (code.trim()) {
+#      const op1 = code === "!"
+#      const op2 = "+-*/%|&<>=!".includes(code[0])
+#      tokens.push({code, lineno, offset, indent, ...(op1 && {op1}), ...(op2 && {op2})})
+#    }
+#    offset += code.length
+#    lineno += code.split("\n").length - 1
+#    indent = code.includes("\n") ? code.split("\n").at(-1).length : indent
+#  }
+#  return tokens
+  return []
 
 dec parse: vec[token] ast
 def parse moa:
@@ -37,4 +57,4 @@ def infer nodes:
 
 dec gen: ast str
 def gen nodes:
-  return "fmt.Println(1)"
+  return `package main\n\nimport "fmt"\nfunc main() { fmt.Println("moa-go") }`

@@ -33,18 +33,25 @@ const runtime = (() => {
       return obj === none ? none : a[0](obj)
     } else if (name === "or") {
       return obj === none ? a[0]() : obj
+    } else if (name === "at") {
+      return n => obj[n]
     } else if (name.match(/^[0-9]/)) {
       return obj[name]
+    } else if (typeof obj === "object" && name in obj) {
+      return obj[name]
+    } else if (typeof obj === "string" && name === "size") {
+      return obj.length
+    } else {
+      throw new Error(`No ${name} of ${typeof obj}`)
     }
-    return obj[name]
   }
   const __op2 = (op2, lhs, f) =>
     op2 === "|||" ? (lhs === none ? f() : lhs) :
     op2 === "==" ? __str(lhs) == __str(f()) :
     op2 === "!=" ? __str(lhs) != __str(f()) :
-    op2 === "< " ? lhs <  f() :
+    op2 === "<"  ? lhs <  f() :
     op2 === "<=" ? lhs <= f() :
-    op2 === "> " ? lhs >  f() :
+    op2 === ">"  ? lhs >  f() :
     op2 === ">=" ? lhs >= f() :
     op2 === "+"  ? lhs + f() :
     op2 === "-"  ? lhs - f() :
@@ -64,8 +71,8 @@ const tokenize = moa => {
   let offset = 0
   let indent = 0
   const tokens = []
-  for (const code of moa.split(/([ \n]+|[()\[\]{}]|[0-9+]+\.[0-9]+|[:.+\-*/%!=^|&?><]+|"[^"]*"|`[^`]*`|[ \n]+)/)) {
-    if (code.trim()) {
+  for (const code of moa.split(/([ \n]+|#[^\n]*|[()\[\]{}]|[0-9+]+\.[0-9]+|[:.+\-*/%!=^|&?><]+|"[^"]*"|`[^`]*`|[ \n]+)/)) {
+    if (code.trim() && code[0] !== "#") {
       const op1 = code === "!"
       const op2 = "+-*/%|&<>=!".includes(code[0])
       tokens.push({code, lineno, offset, indent, ...(op1 && {op1}), ...(op2 && {op2})})
@@ -88,7 +95,7 @@ const parse = tokens => {
     h && h()
     return a
   }
-  const untilCode = code => until(t => t.code !== code, parseUnit, _ => ++pos)
+  const untilBy = code => until(t => t.code !== code, parseUnit, _ => ++pos)
   const parseUnit = () => {
     const t = tokens[pos++]
     if (!t) {
@@ -100,26 +107,25 @@ const parse = tokens => {
         [t, parseLine(tokens[pos])] :
         [t].concat(until(tt => tt.indent === indent, parseLine))
     }
-    const bracket = (t, close) => {
-      ++pos // drop open
-      const closely = tokens[pos-1].offset + tokens[pos-1].code.length === tokens[pos].offset
-      const args = untilCode(close)
-      return closely ? [t, ...args] : t
+    const link = t => {
+      const nospace = pos < tokens.length && tokens[pos-1].offset + tokens[pos-1].code.length === tokens[pos].offset
+      return pos >= tokens.length ? t :
+        tokens[pos].code === "." ? link([tokens[pos++], t, parseUnit()]) :
+        tokens[pos].code === "(" && nospace ? pos++ && link([t, ...untilBy(")")]) :
+        tokens[pos].code === "[" && nospace ? pos++ && link([[{code: "."}, t, {code: "at"}], ...untilBy("]")]) :
+        tokens[pos].op1 ? link([tokens[pos++], t]) :
+        tokens[pos].op2 ? link([tokens[pos++], t, parseUnit()]) :
+        t
     }
-    const link = t => pos >= tokens.length ? t :
-      tokens[pos].code === "." ? link([tokens[pos++], t, parseUnit()]) :
-      tokens[pos].code === "(" ? link(bracket(t, ")")) :
-      tokens[pos].code === "[" ? link(bracket(t, "]")) :
-      tokens[pos].code === "{" ? link(bracket(t, "}")) :
-      tokens[pos].op1 ? link([tokens[pos++], t]) :
-      tokens[pos].op2 ? link([tokens[pos++], t, parseUnit()]) :
-      t
-    return link(t.code === "(" ? [{parenthesis: true}, untilCode(")")[0]] : t)
+    return link(
+      t.code === "(" ? [{parenthesis: true}, untilBy(")")[0]] :
+      t.code === "[" ? [{code: "vec"}, ...untilBy("]")] :
+      t)
   }
   const parseLine = (t) => {
     const a = until(tt => t.lineno === tt.lineno && !")]}".includes(tt.code), parseUnit)
     if (a.length === 0) {
-      console.dir(tokens.slice(0, pos))
+      console.dir({next: t, tokens: tokens.slice(0)})
       throw new Error(`BUG a line has no elements ${pos}`)
     }
     return a.length === 1 ? a[0] : a
@@ -164,6 +170,7 @@ const generate = nodes => {
         return "(" + gen(tail[0]) + ")"
       } else {
         return head.code === ":" ? "{" + tail.map(gen).join(";\n") + "}" :
+          head.code === "(" ? gen(tail) :
           head.code === "assert" ? `assert(${gen(tail[0])}, () => [${tail.slice(1).map(gen)}].join(" "))` :
           head.code === "catch" ? `__catch(() => ${gen(tail[0])}, ${gen(tail[1])})` :
           head.code === "iif" ? geniif(tail.map(gen)) :
@@ -175,6 +182,7 @@ const generate = nodes => {
           head.code === "var" ? `let ${tail[0][1].code} = ${gen(tail[0][2])}` :
           head.code === "enum" ? tail[1].slice(1).map(genenum).join("\n") :
           head.code === "match" ? `;(({__tag, __val}) => ${genmatch(tail[1].slice(1))})(${gen(tail[0])})` :
+          head.code === "while" ? `while (${gen(tail[0])}) { ${gen(tail[1])} }` :
           head.code === "dec" ? "" :
           head.code === "interface" ? "" :
           gen(head) + "(" + tail.map(gen).join(", ") + ")"
@@ -212,10 +220,11 @@ const test = () => {
     if (logs.length) {
       actual = "log: " + logs.join("\n")
     }
-    assert.deepEqual(actual, expected, `${actual} != ${expected}\n\n${moa}\n\n${js}`)
+    assert.deepEqual(actual, expected, `${actual} != ${expected}\n\n# moa\n${moa}\n\n# js\n${js}\n\n# nodes\n${JSON.stringify(nodes, null, 2)}`)
     process.stdout.write(".")
   }
   process.stdout.write("\x1B[2J\x1B[0f") // clear console
+  eq([], "def f: return []\nf()")
 
   // Primitive
   eq(undefined, "void")
@@ -232,10 +241,13 @@ const test = () => {
   eq(null, "none")
   eq("a", 'tuple(1 "a").1')
   eq([1, 2], "vec(1 2)")
+  eq([1, 2], "[1 2]")
   eq(new Set([1, 2]), "set(1 1 2)")
   eq(new Map([["a", 1]]), 'map("a" 1)')
 
   // Methods
+  eq("a", '"ab"[0]')
+  eq(2, '"ab".size')
   eq(1, "some(1) ||| none")
   eq(1, "none ||| some(1)")
   eq(null, "none ||| none")
@@ -278,6 +290,7 @@ const test = () => {
   eq(1, "let a = 1\na")
   eq(3, "var a = 1\na += 2\na")
   eq(1, "def f: return 1\nf()")
+  eq([], "def f: return []\nf()")
   eq(1, "def f:\n  if true: return 1\n  return 2\nf()")
   eq(2, "def f:\n  if false: return 1\n  return 2\nf()")
   eq({x: 1, y:2}, "class p:\n  x int\n  y int\np(1 2)")
@@ -285,6 +298,12 @@ const test = () => {
   eq(2, "enum ab:\n  a\n  b int\nmatch b(2):\n  a: 1\n  b v: v")
   eq(undefined, "dec add: int int int")
   eq(undefined, "interface addable a: add a a a")
+
+  // Loop
+  eq(3, "var i = 1\nwhile i < 3:\n  i += 1\ni")
+
+  // Comment
+  eq(1, "1 # line comment\n# whole line comment")
 
   console.log("ok")
 }
