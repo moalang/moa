@@ -1,8 +1,2 @@
-test:
-	@node bootstrap.js test
-
-watch:
-	@node --watch bootstrap.js test
-
-boot:
+bootstrap:
 	@node --watch --watch-path=. bootstrap.js

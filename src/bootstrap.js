@@ -198,7 +198,7 @@ const generate = nodes => {
   return nodes.map(gen).join("\n")
 }
 
-const test = () => {
+const test1 = () => {
   const vm = require("node:vm")
   const assert = require('node:assert');
   const eq = (expected, moa) => {
@@ -221,10 +221,8 @@ const test = () => {
       actual = "log: " + logs.join("\n")
     }
     assert.deepEqual(actual, expected, `${actual} != ${expected}\n\n# moa\n${moa}\n\n# js\n${js}\n\n# nodes\n${JSON.stringify(nodes, null, 2)}`)
-    process.stdout.write(".")
+    process.stderr.write(".")
   }
-  process.stdout.write("\x1B[2J\x1B[0f") // clear console
-  eq([], "def f: return []\nf()")
 
   // Primitive
   eq(undefined, "void")
@@ -305,19 +303,27 @@ const test = () => {
   // Comment
   eq(1, "1 # line comment\n# whole line comment")
 
-  console.log("ok")
+  console.warn("ok")
 }
 
-
-if (process.argv[2] === "test") {
-  test()
-} else {
+const test2 = () => {
   const fs = require("node:fs")
   const vm = require("node:vm")
   const child_process = require("node:child_process")
-  const moa = fs.readFileSync(__dirname + "/moa.moa", "utf-8")
-  const js = generate(parse(tokenize(moa)))
-  const go = new vm.Script(runtime + `;\n${js}\ncompile(${JSON.stringify(moa)})`).runInNewContext({console})
-  fs.writeFileSync("/tmp/moa.go", go + "\n")
-  console.log(child_process.execSync("go run /tmp/moa.go").toString())
+  const js = generate(parse(tokenize(fs.readFileSync(__dirname + "/moa.moa", "utf-8"))))
+  const eq = (expected, moa) => {
+    const go = new vm.Script(runtime + `;\n${js}\ncompile(${JSON.stringify(moa)})`).runInNewContext({console})
+    fs.writeFileSync("/tmp/moa.go", go + "\n")
+    const actual = child_process.execSync("go run /tmp/moa.go 2>&1").toString()
+    if (actual !== expected) {
+      throw new Error(`${actual} !== ${expected}`)
+    }
+    process.stderr.write(".")
+  }
+  eq("moa-go\n", 'log("moa-go")')
+  console.warn("ok")
 }
+
+process.stderr.write("\x1B[2J\x1B[0f") // clear console
+test1()
+test2()
