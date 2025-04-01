@@ -2,12 +2,6 @@
 // echo 'def main: io.puts "hello"' | node bootstrap.js | node | grep hello
 
 const runtime = (() => {
-  class MoaError extends Error {
-    constructor(data) {
-      super(data)
-      this.data = data
-    }
-  }
   const some = v => v
   const none = null
   const tuple = (...a) => a
@@ -37,6 +31,8 @@ const runtime = (() => {
       return n => obj[n]
     } else if (name.match(/^[0-9]/)) {
       return obj[name]
+    } else if (Array.isArray(obj) && name === "push") {
+      return obj.push(...a)
     } else if (typeof obj === "object" && name in obj) {
       return obj[name]
     } else if (typeof obj === "string" && name === "size") {
@@ -47,6 +43,8 @@ const runtime = (() => {
   }
   const __op2 = (op2, lhs, f) =>
     op2 === "|||" ? (lhs === none ? f() : lhs) :
+    op2 === "||" ? lhs || f() :
+    op2 === "&&" ? lhs && f() :
     op2 === "==" ? __str(lhs) == __str(f()) :
     op2 === "!=" ? __str(lhs) != __str(f()) :
     op2 === "<"  ? lhs <  f() :
@@ -64,6 +62,12 @@ const runtime = (() => {
     o instanceof Set ? [...o].sort().join(" ") :
     typeof o === 'object' ? Object.keys(o).sort().map(key => key + "::" + __str(o[key])).join(" ") :
     JSON.stringify(o)
+  class MoaError extends Error {
+    constructor(data) {
+      super(data)
+      this.data = data
+    }
+  }
 }).toString().slice("() => {".length, -1).trim()
 
 const tokenize = moa => {
@@ -71,11 +75,12 @@ const tokenize = moa => {
   let offset = 0
   let indent = 0
   const tokens = []
-  for (const code of moa.split(/([ \n]+|#[^\n]*|[()\[\]{}]|[0-9+]+\.[0-9]+|[:.+\-*/%!=^|&?><]+|"[^"]*"|`[^`]*`|[ \n]+)/)) {
+  for (const code of moa.split(/([ \n]+|#[^\n]*|[()\[\]{}]|[0-9+]+\.[0-9]+|[:.+\-*/%!=^|&?><]+|"[^"]*"|'[^']*'|`[^`]*`|[ \n]+)/)) {
     if (code.trim() && code[0] !== "#") {
-      const op1 = code === "!"
-      const op2 = "+-*/%|&<>=!".includes(code[0])
-      tokens.push({code, lineno, offset, indent, ...(op1 && {op1}), ...(op2 && {op2})})
+      const nospace = !(" \t\n".includes(moa[offset+code.length]))
+      const op1 = nospace && "!-".includes(code)
+      const op2 = !op1 && "+-*/%|&<>=!".includes(code[0])
+      tokens.push({code, lineno, offset, indent, ...(nospace && {nospace}), ...(op1 && {op1}), ...(op2 && {op2})})
     }
     offset += code.length
     lineno += code.split("\n").length - 1
@@ -113,11 +118,11 @@ const parse = tokens => {
         tokens[pos].code === "." ? link([tokens[pos++], t, parseUnit()]) :
         tokens[pos].code === "(" && nospace ? pos++ && link([t, ...untilBy(")")]) :
         tokens[pos].code === "[" && nospace ? pos++ && link([[{code: "."}, t, {code: "at"}], ...untilBy("]")]) :
-        tokens[pos].op1 ? link([tokens[pos++], t]) :
         tokens[pos].op2 ? link([tokens[pos++], t, parseUnit()]) :
         t
     }
     return link(
+      t.op1 ? link([t, tokens[pos++]]) :
       t.code === "(" ? [{parenthesis: true}, untilBy(")")[0]] :
       t.code === "[" ? [{code: "vec"}, ...untilBy("]")] :
       t)
@@ -157,11 +162,13 @@ const generate = nodes => {
       } else if (head.code === "{") {
         const a = tail.map(gen)
         return "(() => {" + a.slice(0, -1).join(";\n") + ";\n return " + a.at(-1) + "})()"
-      } else if (head.op1) {
-        return head.code + gen(tail[0])
       } else if (head.code === ".") {
         const [field, ...args] = Array.isArray(tail[1]) ? tail[1].map(gen) : [gen(tail[1])]
         return `__prop(${gen(tail[0])}, "${field}"${args.map(s => " ," + s).join("")})`
+      } else if (head.code === "-" && tail.length === 1) {
+        return `-${gen(tail[0])}`
+      } else if (head.op1) {
+        return head.code + gen(tail[0])
       } else if (head.op2) {
         return head.code === "=>" ? `${gen(tail[0])} => ${gen(tail[1])}` :
           "+= -= *= /= %= **= ||= &&=".split(" ").includes(head.code) ? `${tail[0].code} = __op2("${head.code.slice(0, -1)}", ${gen(tail[0])}, () => ${gen(tail[1])})` :
@@ -169,7 +176,7 @@ const generate = nodes => {
       } else if (head.parenthesis) {
         return "(" + gen(tail[0]) + ")"
       } else {
-        return head.code === ":" ? "{" + tail.map(gen).join(";\n") + "}" :
+        return head.code === ":" ? "{" + tail.map(gen).join("\n") + "}" :
           head.code === "(" ? gen(tail) :
           head.code === "assert" ? `assert(${gen(tail[0])}, () => [${tail.slice(1).map(gen)}].join(" "))` :
           head.code === "catch" ? `__catch(() => ${gen(tail[0])}, ${gen(tail[1])})` :
@@ -200,7 +207,7 @@ const generate = nodes => {
 
 const test1 = () => {
   const vm = require("node:vm")
-  const assert = require('node:assert');
+  const assert = require('node:assert')
   const eq = (expected, moa) => {
     const tokens = tokenize(moa)
     const nodes = parse(tokens)
@@ -208,12 +215,13 @@ const test1 = () => {
     const logs = []
     const context = {
       console: {
+        log: (...a) => console.log(a),
         warn: (...a) => logs.push(a.join(" "))
       }
     }
     let actual = null
     try {
-      actual = new vm.Script(runtime + ";\n" + js).runInNewContext(context)
+      actual = new vm.Script(runtime + "\n" + js).runInNewContext(context)
     } catch (e) {
       actual = "error: " + e.message
     }
@@ -223,12 +231,15 @@ const test1 = () => {
     assert.deepEqual(actual, expected, `${actual} != ${expected}\n\n# moa\n${moa}\n\n# js\n${js}\n\n# nodes\n${JSON.stringify(nodes, null, 2)}`)
     process.stderr.write(".")
   }
+  eq(1, "2 + -1")
 
   // Primitive
   eq(undefined, "void")
   eq(1, "1")
+  eq(-1, "-1")
   eq(1.1, "1.1")
   eq("hi", '"hi"')
+  eq('"hi"', `'"hi"'`)
   eq('"hi"', '`"hi"`')
   eq('hi\n', '"hi\\n"')
   eq(true, "true")
@@ -253,9 +264,11 @@ const test1 = () => {
   eq(2, "some(1).then(a => a + 1)")
   eq(1, "none.or(() => 1)")
   eq(2, "some(2).or(() => 1)")
+  eq([1], "var a = []\na.push(1)\na")
 
   // Expression
   eq(3, "1 + 2")
+  eq(1, "2 + -1")
   eq(7, "1 + 2 * 3")
   eq(9, "(1 + 2) * 3")
   eq(true, "1 == 1")
@@ -263,6 +276,7 @@ const test1 = () => {
   eq(false, "set(1) == set(2)")
   eq(true, "map(1 2) == map(1 2)")
   eq(false, "map(1 2) == map(1 3)")
+  eq(true, "(1 == 1) && (2 == 2)")
 
   // Exception
   eq("error: 1", "throw(1)")
@@ -312,7 +326,7 @@ const test2 = () => {
   const child_process = require("node:child_process")
   const js = generate(parse(tokenize(fs.readFileSync(__dirname + "/moa.moa", "utf-8"))))
   const eq = (expected, moa) => {
-    const go = new vm.Script(runtime + `;\n${js}\ncompile(${JSON.stringify(moa)})`).runInNewContext({console})
+    const go = new vm.Script(runtime + `\n${js}\ncompile(${JSON.stringify(moa)})`).runInNewContext({console})
     fs.writeFileSync("/tmp/moa.go", go + "\n")
     const actual = child_process.execSync("go run /tmp/moa.go 2>&1").toString()
     if (actual !== expected) {
