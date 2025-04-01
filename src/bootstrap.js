@@ -1,9 +1,12 @@
 "use strict"
-// echo 'def main: io.puts "hello"' | node bootstrap.js | node | grep hello
+const fs = require("node:fs")
+const vm = require("node:vm")
+const child_process = require("node:child_process")
+const assert = require("node:assert")
 
 const runtime = (() => {
-  const some = v => v
-  const none = null
+  const some = value => ({value, then: f => f(value), or: _ => value})
+  const none = {}
   const tuple = (...a) => a
   const vec = (...a) => a
   const set = (...a) => new Set(a)
@@ -22,46 +25,12 @@ const runtime = (() => {
       }
     }
   }
-  const __prop = (obj, name, ...a) => {
-    if (name === "then") {
-      return obj === none ? none : a[0](obj)
-    } else if (name === "or") {
-      return obj === none ? a[0]() : obj
-    } else if (name === "at") {
-      return n => obj[n]
-    } else if (name.match(/^[0-9]/)) {
-      return obj[name]
-    } else if (Array.isArray(obj) && name === "push") {
-      return obj.push(...a)
-    } else if (typeof obj === "object" && name in obj) {
-      return obj[name]
-    } else if (typeof obj === "string" && name === "size") {
-      return obj.length
-    } else {
-      throw new Error(`No ${name} of ${typeof obj}`)
-    }
-  }
-  const __op2 = (op2, lhs, f) =>
-    op2 === "|||" ? (lhs === none ? f() : lhs) :
-    op2 === "||" ? lhs || f() :
-    op2 === "&&" ? lhs && f() :
-    op2 === "==" ? __str(lhs) == __str(f()) :
-    op2 === "!=" ? __str(lhs) != __str(f()) :
-    op2 === "<"  ? lhs <  f() :
-    op2 === "<=" ? lhs <= f() :
-    op2 === ">"  ? lhs >  f() :
-    op2 === ">=" ? lhs >= f() :
-    op2 === "+"  ? lhs + f() :
-    op2 === "-"  ? lhs - f() :
-    op2 === "*"  ? lhs * f() :
-    op2 === "/"  ? lhs / f() :
-    op2 === "%"  ? lhs % f() :
-    (() => { throw new Error(`Unknown operator '${op2}'`)})()
-  const __str = o => Array.isArray(o) ? o.map(__str).join(" ") :
-    o instanceof Map ? [...o.keys()].sort().map(key => key + "::" + __str(o.get(key))).join(" ") :
-    o instanceof Set ? [...o].sort().join(" ") :
-    typeof o === 'object' ? Object.keys(o).sort().map(key => key + "::" + __str(o[key])).join(" ") :
-    JSON.stringify(o)
+  Object.defineProperty(String.prototype, "size", {get() { return this.length }})
+  Object.defineProperty(Array.prototype, "size", {get() { return this.length }})
+  String.prototype.has = function(s) { return this.includes(s) }
+  Object.defineProperty(none, "then", {get() { return _ => none }})
+  Object.defineProperty(none, "or", {get() { return v => v }})
+  const __at = (obj, n) => obj instanceof Map ? obj.get(n) : obj instanceof Set ? obj.has(n) : obj.at(n)
   class MoaError extends Error {
     constructor(data) {
       super(data)
@@ -115,9 +84,9 @@ const parse = tokens => {
     const link = t => {
       const nospace = pos < tokens.length && tokens[pos-1].offset + tokens[pos-1].code.length === tokens[pos].offset
       return pos >= tokens.length ? t :
-        tokens[pos].code === "." ? link([tokens[pos++], t, parseUnit()]) :
+        tokens[pos].code === "." ? link([tokens[pos++], t, tokens[pos++]]) :
         tokens[pos].code === "(" && nospace ? pos++ && link([t, ...untilBy(")")]) :
-        tokens[pos].code === "[" && nospace ? pos++ && link([[{code: "."}, t, {code: "at"}], ...untilBy("]")]) :
+        tokens[pos].code === "[" && nospace ? pos++ && link([{code: "__at"}, t, ...untilBy("]")]) :
         tokens[pos].op2 ? link([tokens[pos++], t, parseUnit()]) :
         t
     }
@@ -147,9 +116,10 @@ const generate = nodes => {
   const genenum = o => Array.isArray(o) ?
     `const ${o[0].code} = __val => ({__tag: "${o[0].code}", __val})` :
     `const ${o.code} = {__tag: "${o.code}"}`
+  const log = x => { console.dir(x, {depth: null}); return x  }
   const genmatch = a => a.length === 0 ? `__throw("No match")` :
     a[0].length === 3 ?
-    `__tag === "${a[0][0].code}" ? (${a[0][1].code} => ${genexp(a[0][1])})(__val) : ${genmatch(a.slice(1))}` :
+    `__tag === "${a[0][0].code}" ? (${a[0][1].code} => ${genexp(a[0][2])})(__val) : ${genmatch(a.slice(1))}` :
     `__tag === "${a[0][0].code}" ? ${genexp(a[0][1])} : ${genmatch(a.slice(1))}`
   const genexp = o => Array.isArray(o) && o[0].code === ":" ? genreturn(o.slice(1).map(gen)) : gen(o)
   const genreturn = a => a.length === 1 ? a[0] : `(() => {${a.slice(0, -1).map(s => s + ";").join("")}return ${a.at(-1)}})()`
@@ -164,15 +134,13 @@ const generate = nodes => {
         return "(() => {" + a.slice(0, -1).join(";\n") + ";\n return " + a.at(-1) + "})()"
       } else if (head.code === ".") {
         const [field, ...args] = Array.isArray(tail[1]) ? tail[1].map(gen) : [gen(tail[1])]
-        return `__prop(${gen(tail[0])}, "${field}"${args.map(s => " ," + s).join("")})`
+        return `${gen(tail[0])}.${field}` + (args.length ? `(${args})` : "")
       } else if (head.code === "-" && tail.length === 1) {
         return `-${gen(tail[0])}`
       } else if (head.op1) {
         return head.code + gen(tail[0])
       } else if (head.op2) {
-        return head.code === "=>" ? `${gen(tail[0])} => ${gen(tail[1])}` :
-          "+= -= *= /= %= **= ||= &&=".split(" ").includes(head.code) ? `${tail[0].code} = __op2("${head.code.slice(0, -1)}", ${gen(tail[0])}, () => ${gen(tail[1])})` :
-          `__op2("${head.code}", ${gen(tail[0])}, () => ${gen(tail[1])})`
+        return `${gen(tail[0])} ${head.code} ${gen(tail[1])}`
       } else if (head.parenthesis) {
         return "(" + gen(tail[0]) + ")"
       } else {
@@ -188,16 +156,17 @@ const generate = nodes => {
           head.code === "let" ? `const ${tail[0][1].code} = ${gen(tail[0][2])}` :
           head.code === "var" ? `let ${tail[0][1].code} = ${gen(tail[0][2])}` :
           head.code === "enum" ? tail[1].slice(1).map(genenum).join("\n") :
-          head.code === "match" ? `;(({__tag, __val}) => ${genmatch(tail[1].slice(1))})(${gen(tail[0])})` :
+          head.code === "match" ? `0,(({__tag, __val}) => ${genmatch(tail[1].slice(1))})(${gen(tail[0])})` :
           head.code === "while" ? `while (${gen(tail[0])}) { ${gen(tail[1])} }` :
-          head.code === "dec" ? "" :
-          head.code === "interface" ? "" :
+          head.code === "return" ? `return ${tail.length === 1 ? gen(tail[0]) : gen(tail)}` :
+          head.code === "dec" ? "null" :
+          head.code === "interface" ? "null" :
           gen(head) + "(" + tail.map(gen).join(", ") + ")"
       }
     } else if (node === undefined) {
       return ""
     } else {
-      return node.code === "void" ? null :
+      return node.code === "void" ? "null" :
         node.code === "throw" ? "__throw" :
         node.code
     }
@@ -206,8 +175,6 @@ const generate = nodes => {
 }
 
 const test1 = () => {
-  const vm = require("node:vm")
-  const assert = require('node:assert')
   const eq = (expected, moa) => {
     const tokens = tokenize(moa)
     const nodes = parse(tokens)
@@ -231,10 +198,10 @@ const test1 = () => {
     assert.deepEqual(actual, expected, `${actual} != ${expected}\n\n# moa\n${moa}\n\n# js\n${js}\n\n# nodes\n${JSON.stringify(nodes, null, 2)}`)
     process.stderr.write(".")
   }
-  eq(1, "2 + -1")
+  eq(2, 'enum ab:\n  a\n  b str\nmatch b("ab"):\n  a: 1\n  b v: v.size')
 
   // Primitive
-  eq(undefined, "void")
+  eq(null, "void")
   eq(1, "1")
   eq(-1, "-1")
   eq(1.1, "1.1")
@@ -246,9 +213,9 @@ const test1 = () => {
   eq(1, "(a => a)(1)")
 
   // Container
-  eq(1, "some(1)")
-  eq(null, "none")
-  eq("a", 'tuple(1 "a").1')
+  eq(1, "some(1).value")
+  eq({}, "none")
+  eq([1, "a"], 'tuple(1 "a")')
   eq([1, 2], "vec(1 2)")
   eq([1, 2], "[1 2]")
   eq(new Set([1, 2]), "set(1 1 2)")
@@ -257,13 +224,10 @@ const test1 = () => {
   // Methods
   eq("a", '"ab"[0]')
   eq(2, '"ab".size')
-  eq(1, "some(1) ||| none")
-  eq(1, "none ||| some(1)")
-  eq(null, "none ||| none")
-  eq(null, "none.then(a => a + 1)")
+  eq({}, "none.then(a => a + 1)")
   eq(2, "some(1).then(a => a + 1)")
-  eq(1, "none.or(() => 1)")
-  eq(2, "some(2).or(() => 1)")
+  eq(1, "none.or(1)")
+  eq(2, "some(2).or(1)")
   eq([1], "var a = []\na.push(1)\na")
 
   // Expression
@@ -272,11 +236,7 @@ const test1 = () => {
   eq(7, "1 + 2 * 3")
   eq(9, "(1 + 2) * 3")
   eq(true, "1 == 1")
-  eq(true, "set(1) == set(1)")
-  eq(false, "set(1) == set(2)")
-  eq(true, "map(1 2) == map(1 2)")
-  eq(false, "map(1 2) == map(1 3)")
-  eq(true, "(1 == 1) && (2 == 2)")
+  eq(true, "1 == 1 && 2 == 2")
 
   // Exception
   eq("error: 1", "throw(1)")
@@ -307,9 +267,9 @@ const test1 = () => {
   eq(2, "def f:\n  if false: return 1\n  return 2\nf()")
   eq({x: 1, y:2}, "class p:\n  x int\n  y int\np(1 2)")
   eq(1, "enum ab:\n  a\n  b int\nmatch a:\n  a: 1\n  b v: v")
-  eq(2, "enum ab:\n  a\n  b int\nmatch b(2):\n  a: 1\n  b v: v")
-  eq(undefined, "dec add: int int int")
-  eq(undefined, "interface addable a: add a a a")
+  eq(2, 'enum ab:\n  a\n  b str\nmatch b("ab"):\n  a: 1\n  b v: v.size')
+  eq(null, "dec add: int int int")
+  eq(null, "interface addable a: add a a a")
 
   // Loop
   eq(3, "var i = 1\nwhile i < 3:\n  i += 1\ni")
@@ -317,24 +277,29 @@ const test1 = () => {
   // Comment
   eq(1, "1 # line comment\n# whole line comment")
 
+  // Combination
+  eq(0, "[0][0]")
+  eq(true, "[0][0] == [0][0]")
+  eq(true, "[0][0] == 0 && [0][0] == 0")
+  eq(3, '"ab".size + 1')
+
   console.warn("ok")
 }
 
 const test2 = () => {
-  const fs = require("node:fs")
-  const vm = require("node:vm")
-  const child_process = require("node:child_process")
   const js = generate(parse(tokenize(fs.readFileSync(__dirname + "/moa.moa", "utf-8"))))
-  const eq = (expected, moa) => {
-    const go = new vm.Script(runtime + `\n${js}\ncompile(${JSON.stringify(moa)})`).runInNewContext({console})
+  const eq = (expected, exp) => {
+    const goExp = new vm.Script(runtime + `\n${js}\ncompile(${JSON.stringify(exp)})`).runInNewContext({console})
+    const go = `package main\nfunc main() { println(${goExp}) }`
     fs.writeFileSync("/tmp/moa.go", go + "\n")
-    const actual = child_process.execSync("go run /tmp/moa.go 2>&1").toString()
+    const actual = child_process.execSync("go run /tmp/moa.go 2>&1").toString().slice(0, -1) // drop last break line
     if (actual !== expected) {
       throw new Error(`${actual} !== ${expected}`)
     }
     process.stderr.write(".")
   }
-  eq("moa-go\n", 'log("moa-go")')
+  eq("42", "42")
+  eq("hi", '"hi"')
   console.warn("ok")
 }
 

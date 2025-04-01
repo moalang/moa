@@ -88,7 +88,7 @@ enum opt a:
   none
   |||    : opt[a] opt[a]
   then b : fn[a b] opt[b]
-  or     : fn[a] a
+  or     : a a
 
 class vec a:
   __new    : ...[a]
