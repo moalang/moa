@@ -119,8 +119,9 @@ const generate = nodes => {
   const log = x => { console.dir(x, {depth: null}); return x  }
   const genmatch = a => a.length === 0 ? `__throw("No match")` :
     a[0].length === 3 ?
-    `__tag === "${a[0][0].code}" ? (${a[0][1].code} => ${genexp(a[0][2])})(__val) : ${genmatch(a.slice(1))}` :
-    `__tag === "${a[0][0].code}" ? ${genexp(a[0][1])} : ${genmatch(a.slice(1))}`
+    `${gencond(a[0][0].code)} ? (${a[0][1].code} => ${genexp(a[0][2])})(__val) : ${genmatch(a.slice(1))}` :
+    `${gencond(a[0][0].code)} ? ${genexp(a[0][1])} : ${genmatch(a.slice(1))}`
+  const gencond = name => name === "_" ? "true" : `__tag === "${name}"`
   const genexp = o => Array.isArray(o) && o[0].code === ":" ? genreturn(o.slice(1).map(gen)) : gen(o)
   const genreturn = a => a.length === 1 ? a[0] : `(() => {${a.slice(0, -1).map(s => s + ";").join("")}return ${a.at(-1)}})()`
   const gen = node => {
@@ -298,8 +299,10 @@ const test2 = () => {
     }
     process.stderr.write(".")
   }
-  eq("42", "42")
   eq("hi", '"hi"')
+  eq("3", "1 + 2")
+  eq("true", "!false")
+  eq("1", "2 + -1")
   console.warn("ok")
 }
 

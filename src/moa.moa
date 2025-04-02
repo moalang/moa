@@ -1,19 +1,14 @@
-class type:
-  tname str
-  targs vec[type]
-
 class token:
   code   str
   offset int
   lineno int
   indent int
+  op1    bool
+  op2    bool
 
 enum ast:
   leaf token
   node vec[ast]
-
-let tundef = type("undef" [])
-let stmt = token("stmt" 0 0 0)
 
 dec compile: str str
 def compile moa:
@@ -23,6 +18,7 @@ def compile moa:
 
 dec tokenize: str vec[token]
 def tokenize moa:
+  let ops = "+-*/%|&^<>!=~"
   def consume i:
     var c = moa[i]
     i += 1
@@ -37,6 +33,10 @@ def tokenize moa:
         i += 1
     else if (("A" <= c) && (c <= "Z")) || (("a" <= c) && (c <= "z")) || c == "_":
       while i < moa.size && ("A" <= moa[i] && moa[i] <= "Z") || ("a" <= moa[i] && moa[i] <= "z") || moa[i] == "_":
+        s += moa[i]
+        i += 1
+    else if ops.has(c):
+      while i < moa.size && ops.has(moa[i]):
         s += moa[i]
         i += 1
     else if c == '"':
@@ -58,13 +58,16 @@ def tokenize moa:
     let offset = i
     let s = consume(i)
     i += s.size
-    if moa[i] == " " || moa[i] == "\n":
+    if s[0] == " " || s[0] == "\n":
       lineno += s.split("\n").size - 1
       indent += iif(s.has("\n") s.split("\n").at(-1).size indent)
     else if "([{".has(s) && tokens.size > 0 && tokens[-1].offset + tokens[-1].code.size != offset:
-      tokens.push(token(" " + s offset lineno indent))
+      tokens.push(token(" " + s offset lineno indent false false))
+    else if ops.has(s[0]):
+      let op1 = i < moa.size && moa[i] != " "
+      tokens.push(token(s offset lineno indent op1 !op1))
     else:
-      tokens.push(token(s offset lineno indent))
+      tokens.push(token(s offset lineno indent false false))
   return tokens
 
 dec parse: vec[token] ast
@@ -80,15 +83,22 @@ def parse moa:
   def link a:
     if pos >= tokens.size:
       return a
-    if tokens[pos].code == "(":
+    let t = tokens[pos]
+    if t.code == "(":
       pos += 1
       return link(node([a].concat(untilBy(")"))))
+    else if t.op2:
+      pos += 1
+      return link(node([leaf(t) a consume()]))
     else:
       return a
   def consume:
     let t = tokens[pos]
     pos += 1
-    return link(leaf(t))
+    if t.op1:
+      return link(node([leaf(t) consume()]))
+    else:
+      return link(leaf(t))
 
   return [consume()]
 
@@ -97,7 +107,25 @@ def infer nodes:
   return
 
 dec gen: ast str
-def gen node:
-  return match node:
+def gen root:
+  def gennode head tail:
+    if tail.size == 0:
+      return match head:
+        leaf t: t.code
+        node n: gen(n)
+    else:
+      return match head:
+        leaf t: genapply t tail
+        node n: gencall n tail
+  def genapply t tail:
+    if t.op1:
+      return t.code + " " + gen(tail[0])
+    else if t.op2:
+      return gen(tail[0]) + " " + t.code + " " + gen(tail[1])
+    else:
+      return '"Not implemented yet"'
+  def gencall head tail:
+    return gen(head) + "(" + tail.map(gen).join(", ") + ")"
+  return match root:
     leaf t: t.code
-    node a: "not implemented yet"
+    node n: gennode n[0] n.slice(1)
