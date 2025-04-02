@@ -197,9 +197,8 @@ const test1 = () => {
       actual = "log: " + logs.join("\n")
     }
     assert.deepEqual(actual, expected, `${actual} != ${expected}\n\n# moa\n${moa}\n\n# js\n${js}\n\n# nodes\n${JSON.stringify(nodes, null, 2)}`)
-    process.stderr.write(".")
+    process.stdout.write(".")
   }
-  eq(2, 'enum ab:\n  a\n  b str\nmatch b("ab"):\n  a: 1\n  b v: v.size')
 
   // Primitive
   eq(null, "void")
@@ -269,6 +268,7 @@ const test1 = () => {
   eq({x: 1, y:2}, "class p:\n  x int\n  y int\np(1 2)")
   eq(1, "enum ab:\n  a\n  b int\nmatch a:\n  a: 1\n  b v: v")
   eq(2, 'enum ab:\n  a\n  b str\nmatch b("ab"):\n  a: 1\n  b v: v.size')
+  eq(0, 'enum ab:\n  a\n  b str\nmatch b("ab"):\n  _: 0')
   eq(null, "dec add: int int int")
   eq(null, "interface addable a: add a a a")
 
@@ -284,28 +284,40 @@ const test1 = () => {
   eq(true, "[0][0] == 0 && [0][0] == 0")
   eq(3, '"ab".size + 1')
 
-  console.warn("ok")
+  console.log("ok")
 }
 
 const test2 = () => {
-  const js = generate(parse(tokenize(fs.readFileSync(__dirname + "/moa.moa", "utf-8"))))
-  const eq = (expected, exp) => {
-    const goExp = new vm.Script(runtime + `\n${js}\ncompile(${JSON.stringify(exp)})`).runInNewContext({console})
-    const go = `package main\nfunc main() { println(${goExp}) }`
-    fs.writeFileSync("/tmp/moa.go", go + "\n")
-    const actual = child_process.execSync("go run /tmp/moa.go 2>&1").toString().slice(0, -1) // drop last break line
-    if (actual !== expected) {
-      throw new Error(`${actual} !== ${expected}`)
+  const eq = (() => {
+    const js = generate(parse(tokenize(fs.readFileSync(__dirname + "/moa.moa", "utf-8"))))
+    const tests = []
+    const f = (expected, exp) => tests.push({expected, exp})
+    f.run = () => {
+      const compile = new vm.Script(runtime + `\n${js}\ncompile`).runInNewContext({console})
+      const separator = "\n\t\n"
+      const main = tests.map(t => `func() { print(${compile(t.exp)}); print(${JSON.stringify(separator)}) }()`).join("\n")
+      const go = `package main\nfunc main() { ${main} }`
+      fs.writeFileSync("/tmp/test.go", go + "\n")
+      const output = child_process.execSync("go run /tmp/test.go 2>&1").toString()
+      const actuals = output.split(separator)
+      for (var i=0; i<tests.length; i++) {
+        if (actuals[i] !== tests[i].expected) {
+          throw new Error(`${actuals[i]} !== ${tests[i].expected} :: ${tests[i].exp}`)
+        }
+        process.stdout.write(".")
+      }
     }
-    process.stderr.write(".")
-  }
+    return f
+  })()
   eq("hi", '"hi"')
   eq("3", "1 + 2")
   eq("true", "!false")
   eq("1", "2 + -1")
-  console.warn("ok")
+
+  eq.run()
+  console.log("ok")
 }
 
-process.stderr.write("\x1B[2J\x1B[0f") // clear console
+process.stdout.write("\x1B[2J\x1B[0f") // clear console
 test1()
 test2()

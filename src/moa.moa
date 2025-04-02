@@ -115,17 +115,14 @@ def gen root:
         node n: gen(n)
     else:
       return match head:
-        leaf t: genapply t tail
-        node n: gencall n tail
-  def genapply t tail:
-    if t.op1:
-      return t.code + " " + gen(tail[0])
-    else if t.op2:
-      return gen(tail[0]) + " " + t.code + " " + gen(tail[1])
-    else:
-      return '"Not implemented yet"'
-  def gencall head tail:
-    return gen(head) + "(" + tail.map(gen).join(", ") + ")"
+        leaf t:
+          iif(
+            t.op1 "(" + t.code + gen(tail[0]) + ")"
+            t.op2 gen(tail[0]) + " " + t.code + " " + gen(tail[1])
+            '"Not implemented yet"'
+            )
+        node n:
+          gen(n) + "(" + tail.map(gen).join(", ") + ")"
   return match root:
     leaf t: t.code
     node n: gennode n[0] n.slice(1)
