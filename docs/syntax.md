@@ -249,19 +249,19 @@ def fib n:
 
 idea: Pattern matching
 ```
-match: "match" exp+ ":" (cond1 | cond2)+
-cond1: "\n  " top+ ("if" exp)? ":" block
-cond2: "\n  " top+ "if:" ("\n    " exp ":" block)
-cond2: "\n  " top+ "match" match
-top:
-| type (id | bottom)?                  # enum
-| bottom
-bottom:
-| '"' [^"]* '"'                        # string
-| "-"? [0-9]+ ("." [0-9]+)?            # number
+match: "match" exp ("," exp)* ":" case
+case:
+| "\n  "matcher ("if" exp)? ":" block
+| "\n  "matcher "if:" ("\n    " exp ":" block)
+| "\n  "matcher "match" match
+matcher: pattern ("," pattern)*
+pattern:
 | "(" top ")"                          # group
 | "[" bottom* ("..." id?)? bottom* "]" # vec
 | "{" (id ("=" bottom)?)+ "}"          # class
+| type ("(" id? pattern? ")")?         # type
+| '"' [^"]* '"'                        # string
+| "-"? [0-9]+ ("." [0-9]+)?            # number
 type: id ("." id)* ("[" type+ "]")?
 
 enum tree t:
@@ -274,11 +274,20 @@ enum tree t:
 def validate t:
   return match t:
     leaf: true
-    node n match n.left n.right:
-      leaf leaf: n.value.isnan
-      node node: n.left.value <= n.value <= n.right.valuer && validate(n.left) && validate(n.right)
-      node leaf: n.left.value <= n.value                   && validate(n.left)
-      leaf node:                 n.value <= n.right.value  && validate(n.right)
+    node n match n.left, n.right:
+      leaf, leaf: n >= 0
+      node, node: n.left.value <= n.value <= n.right.valuer && validate(n.left) && validate(n.right)
+      node, leaf: n.left.value <= n.value                   && validate(n.left)
+      leaf, node:                 n.value <= n.right.value  && validate(n.right)
+
+def validate t:
+  return match t:
+    leaf: true
+    node n if:
+      n.left === leaf && n.right === leaf: n >= 0
+      n.left === node && n.right === node: n.left.value <= n.value <= n.right.valuer && validate(n.left) && validate(n.right)
+      n.left === node && n.right === leaf: n.left.value <= n.value                   && validate(n.left)
+      n.left === leaf && n.right === node:                 n.value <= n.right.value  && validate(n.right)
 ```
 
 idea: Foreign function interface
