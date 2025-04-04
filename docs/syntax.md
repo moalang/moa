@@ -249,13 +249,19 @@ def fib n:
 
 idea: Pattern matching
 ```
-match: "match" exp ":" ("\n  " pattern id? ("if" exp) ":" block)+
-pattern:
-| '"' [^"]* '"'                    # string
-| "-"? [0-9]+ ("." [0-9]+)?        # number
-| "[" case* ("..." id?)? case* "]" # vec
-| "{" ((id "=" exp) | type)+ "}"   # class
-| type
+match: "match" exp+ ":" (cond1 | cond2)+
+cond1: "\n  " top+ ("if" exp)? ":" block
+cond2: "\n  " top+ "if:" ("\n    " exp ":" block)
+cond2: "\n  " top+ "match" match
+top:
+| type (id | bottom)?                  # enum
+| bottom
+bottom:
+| '"' [^"]* '"'                        # string
+| "-"? [0-9]+ ("." [0-9]+)?            # number
+| "(" top ")"                          # group
+| "[" bottom* ("..." id?)? bottom* "]" # vec
+| "{" (id ("=" bottom)?)+ "}"          # class
 type: id ("." id)* ("[" type+ "]")?
 
 enum tree t:
@@ -267,11 +273,12 @@ enum tree t:
 
 def validate t:
   return match t:
-    leaf                                          -> true
-    node n if n.left === leaf && n.right === leaf -> n.value.isnan
-    node n if n.left === node && n.right === node -> n.left.value <= n.value <= n.right.valuer && validate(n.left) && validate(n.right)
-    node n if n.left === node && n.right === leaf -> n.left.value <= n.value                   && validate(n.left)
-    node n if n.left === leaf && n.right === node ->                 n.value <= n.right.value  && validate(n.right)
+    leaf: true
+    node n match n.left n.right:
+      leaf leaf: n.value.isnan
+      node node: n.left.value <= n.value <= n.right.valuer && validate(n.left) && validate(n.right)
+      node leaf: n.left.value <= n.value                   && validate(n.left)
+      leaf node:                 n.value <= n.right.value  && validate(n.right)
 ```
 
 idea: Foreign function interface

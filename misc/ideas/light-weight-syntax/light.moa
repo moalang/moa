@@ -18,7 +18,7 @@ compile moa =
 
 tokenize:: str vec[token]
 tokenize moa =
-  var i = 0
+  var pos = 0
   var lineno = 1
   var indent = 0
   var tokens = []
@@ -27,18 +27,18 @@ tokenize moa =
   isnum c   = "0" <= c <= "9"
   isid c    = "A" <= c <= "Z" || "a" <= c <= "z" || c == "_"
   isidnum c = isid(c) || isnum(c)
-  skip f = while i < moa.size && f(moa[i]): i++
-  while i < moa.size:
-    offset = i
-    c = moa[i]
+  skip f = while pos < moa.size && f(moa[pos]): pos++
+  while pos < moa.size:
+    offset = pos
+    c = moa[pos]
     if:
       isspace(c): skip isspace
       isnum(c)  : skip isnum
       isid(c)   : skip isidnum
       isop(c)   : skip isop
-      c == '"'  : skip (c => c == '"'); i++
+      c == '"'  : skip (c => c == '"'); pos++
       throw "unknown character " ++ c
-    s = moa.slice offset i
+    s = moa.slice offset pos
     if isspace c:
       lineno += s.split("\n").size - 1
       indent := iif s.has("\n") s.split("\n").at(-1).size indent
@@ -52,8 +52,8 @@ tokenize moa =
 
 parse:: vec[token] ast
 parse moa =
+  var pos = 0
   tokens = tokenize(moa)
-  pos = 0
   untilBy code =
     var a = []
     while pos < tokens.size && tokens[pos].code != code:
@@ -86,4 +86,4 @@ gen root = match root:
   node [(leaf t) ...r] if:
     t.op1: ++ "(" t.code gen(r[0]) ")"
     t.op2: ++ gen(tail[0]) " " t.code " " gen(tail[1])
-  node [(node a) ...r]: ++ gen(node(a)) "(" r.map(gen).join(", ") ")"
+  node [a ...r]: ++ gen(a) "(" r.map(gen).join(", ") ")"
