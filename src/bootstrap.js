@@ -99,7 +99,6 @@ const parse = tokens => {
   const parseLine = (t) => {
     const a = until(tt => t.lineno === tt.lineno && !")]}".includes(tt.code), parseUnit)
     if (a.length === 0) {
-      console.dir({next: t, tokens: tokens.slice(0)})
       throw new Error(`BUG a line has no elements ${pos}`)
     }
     return a.length === 1 ? a[0] : a
@@ -108,13 +107,20 @@ const parse = tokens => {
 }
 
 const generate = nodes => {
-  const geniif = a =>
+  const geniif = a => a.length === 2 ? gen(a[0]) + " ? " + gen(a[1][1]) + " : " + gen(a[1].length === 3 ? a[1][2] : a[1].slice(2)) :
+    _geniif(a)
+  const _geniif = a =>
     a.length === 0 ? '(() => { throw new Error("no iif") })' :
-    a.length === 1 && Array.isArray(a[0]) && a[0][0].code === ":" ? geniif(a[0].slice(1).flatMap(x => [x[0], x[1].length === 2 ? x[1][1] : x[1].slice(1)])) :
+    a.length === 1 && Array.isArray(a[0]) && a[0][0].code === ":" ? _geniif(a[0].slice(1).flatMap(x => [x[0], x[1].length === 2 ? x[1][1] : x[1].slice(1)])) :
     a.length === 1 ? gen(a[0]) :
-    gen(a[0]) + " ? " + gen(a[1]) + " : " + geniif(a.slice(2))
-  const genif = a => `if ((${a.slice(0, -1).join(") && (")})) ${a.at(-1)}`
-  const genelse = a => "else " + (a[0].code === "if" ? genif(a.slice(1).map(gen)) : gen(a[0]))
+    gen(a[0]) + " ? " + gen(a[1]) + " : " + _geniif(a.slice(2))
+  const genif = a =>
+    a.length === 1 && a[0][0].code === ":" ? a[0].slice(1).map(_genif).join("\n") :
+    `if ((${a.slice(0, -1).map(gen).join(") && (")})) ${gen(a.at(-1))}`
+  const _genif = (a, i) => a.length === 2 ?
+    `${i == 0 ? "if " : "else if "} (${gen(a[0])}) { ${gen(a[1])} }` :
+    `else { ${gen(a)} }`
+  const genelse = a => "else " + (a[0].code === "if" ? genif(a.slice(1)) : gen(a[0]))
   const gendef = (a, body) => `const ${a[0]} = (${a.slice(1)}) => ${body}`
   const genclass = (name, fields) => `const ${name} = (${fields}) => ({${fields}})`
   const genenum = o => Array.isArray(o) ?
@@ -153,7 +159,7 @@ const generate = nodes => {
           head.code === "assert" ? `assert(${gen(tail[0])}, () => [${tail.slice(1).map(gen)}].join(" "))` :
           head.code === "catch" ? `__catch(() => ${gen(tail[0])}, ${gen(tail[1])})` :
           head.code === "iif" ? geniif(tail) :
-          head.code === "if" ? genif(tail.map(gen)) :
+          head.code === "if" ? genif(tail) :
           head.code === "else" ? genelse(tail) :
           head.code === "def" ? gendef(tail.slice(0, -1).map(node => node.code), gen(tail.at(-1))) :
           head.code === "class" ? genclass(tail[0].code, tail[1].slice(1).map(x => x[0].code)) :
@@ -193,16 +199,16 @@ const test1 = () => {
     let actual = null
     try {
       actual = new vm.Script(runtime + "\n" + js).runInNewContext(context)
+      if (logs.length) {
+        actual = "log: " + logs.join("\n")
+      }
     } catch (e) {
       actual = "error: " + e.message
-    }
-    if (logs.length) {
-      actual = "log: " + logs.join("\n")
     }
     assert.deepEqual(actual, expected, `${actual} != ${expected}\n\n# moa\n${moa}\n\n# js\n${js}\n\n# nodes\n${JSON.stringify(nodes, null, 2)}`)
     process.stdout.write(".")
   }
-  eq(1, "iif:\n  true: 1\n  false: 2")
+  eq("log: 2", "if:\n  false: log(1)\n  true:\n    log 2\n    1")
 
   // Primitive
   eq(null, "void")
@@ -258,8 +264,13 @@ const test1 = () => {
   eq(3, "iif(false 1 false 2 3)")
   eq(1, "iif:\n  true: 1\n  true: 2")
   eq(2, "iif:\n  false: 1\n  true: 2")
+  eq(1, "iif true:\n  1\n  2")
+  eq(2, "iif false:\n  1\n  2")
   eq(2, "if false: log(1)\n2")
   eq("log: 1", "if true: log(1)\n2")
+  eq("log: 1", "if:\n  true: log(1)\n  true: log(2)")
+  eq("log: 2", "if:\n  false: log(1)\n  true: log(2)")
+  eq("log: 2", "if:\n  false: log(1)\n  true:\n    log 2\n    1")
   eq("log: 2", "if false: log(1)\nelse: log(2)")
   eq("log: 2", "if false: log(1)\nelse if true: log(2)")
   eq("log: 3", "if false: log(1)\nelse if false: log(2)\nelse: log(3)")

@@ -27,21 +27,21 @@ def tokenize moa:
   def isnum c  : return "0" <= c && c <= "9"
   def isid c   : return (("A" <= c) && (c <= "Z")) || (("a" <= c) && (c <= "z")) || c == "_"
   def isidnum c: return isid(c) || isnum(c)
-  def skip f:
-    while pos < moa.size && f(moa[pos]):
-      pos += 1
+  def skip f: while pos < moa.size && f(moa[pos]): pos += 1
+  def skip1 f:
+    skip f
+    pos += 1
   while pos < moa.size:
     let offset = pos
     let c = moa[pos]
     pos += 1
-    if      isspace(c): skip isspace
-    else if isnum(c)  : skip isnum
-    else if isid(c)   : skip isidnum
-    else if isop(c)   : skip isop
-    else if c == '"'  :
-      skip (c => c != '"')
-      pos += 1
-    else:
+    if:
+      isspace(c): skip isspace
+      isnum(c)  : skip isnum
+      isid(c)   : skip isidnum
+      isop(c)   : skip isop
+      c == '"'  : skip1 c => c != '"'
+      c == "'"  : skip1 c => c != "'"
       throw "Unknown character " + c
     let s = moa.slice(offset pos)
     if isspace(c):
@@ -50,7 +50,7 @@ def tokenize moa:
     else:
       let op1 = isop(c) && pos < moa.size && moa[pos] != " "
       let op2 = isop(c) && !op1
-      let prefix = iif(offset === 0 || moa[offset - 1] == " " && "([{".has(c) " " "")
+      let prefix = iif((offset === 0 || moa[offset - 1] == " ") && "([{".has(c) " " "")
       tokens.push token(prefix + s offset lineno indent op1 op2)
   return tokens
 
@@ -79,10 +79,9 @@ def parse moa:
   def consume:
     let t = tokens[pos]
     pos += 1
-    if t.op1:
-      return link(node([leaf(t) consume()]))
-    else:
-      return link(leaf(t))
+    return iif t.op1:
+      link node([leaf(t) consume()])
+      link leaf(t)
 
   return [consume()]
 
