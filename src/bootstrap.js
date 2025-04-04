@@ -107,8 +107,13 @@ const parse = tokens => {
   return until(() => true, parseLine)
 }
 
+const log = x => { console.dir(x); return x }
 const generate = nodes => {
-  const geniif = a => a.length === 1 ? a[0] : a[0] + " ? " + a[1] + " : " + geniif(a.slice(2))
+  const geniif = a =>
+    a.length === 0 ? '(() => { throw new Error("no iif") })' :
+    a.length === 1 && Array.isArray(a[0]) && a[0][0].code === ":" ? geniif(a[0].slice(1).flatMap(x => [x[0], x[1].length === 2 ? x[1][1] : x[1].slice(1)])) :
+    a.length === 1 ? gen(a[0]) :
+    gen(a[0]) + " ? " + gen(a[1]) + " : " + geniif(a.slice(2))
   const genif = a => `if ((${a.slice(0, -1).join(") && (")})) ${a.at(-1)}`
   const genelse = a => "else " + (a[0].code === "if" ? genif(a.slice(1).map(gen)) : gen(a[0]))
   const gendef = (a, body) => `const ${a[0]} = (${a.slice(1)}) => ${body}`
@@ -149,7 +154,7 @@ const generate = nodes => {
           head.code === "(" ? gen(tail) :
           head.code === "assert" ? `assert(${gen(tail[0])}, () => [${tail.slice(1).map(gen)}].join(" "))` :
           head.code === "catch" ? `__catch(() => ${gen(tail[0])}, ${gen(tail[1])})` :
-          head.code === "iif" ? geniif(tail.map(gen)) :
+          head.code === "iif" ? geniif(tail) :
           head.code === "if" ? genif(tail.map(gen)) :
           head.code === "else" ? genelse(tail) :
           head.code === "def" ? gendef(tail.slice(0, -1).map(node => node.code), gen(tail.at(-1))) :
@@ -199,6 +204,7 @@ const test1 = () => {
     assert.deepEqual(actual, expected, `${actual} != ${expected}\n\n# moa\n${moa}\n\n# js\n${js}\n\n# nodes\n${JSON.stringify(nodes, null, 2)}`)
     process.stdout.write(".")
   }
+  eq(1, "iif:\n  true: 1\n  false: 2")
 
   // Primitive
   eq(null, "void")
@@ -252,6 +258,8 @@ const test1 = () => {
   eq(1, "iif(true 1 2)")
   eq(2, "iif(false throw(1) 2)")
   eq(3, "iif(false 1 false 2 3)")
+  eq(1, "iif:\n  true: 1\n  true: 2")
+  eq(2, "iif:\n  false: 1\n  true: 2")
   eq(2, "if false: log(1)\n2")
   eq("log: 1", "if true: log(1)\n2")
   eq("log: 2", "if false: log(1)\nelse: log(2)")
