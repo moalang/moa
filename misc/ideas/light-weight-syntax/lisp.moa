@@ -106,23 +106,13 @@ dec infer: ast void
 def infer nodes:
   return
 
-dec gen: ast str
 def gen root:
   def gennode head tail:
-    if tail.size == 0:
-      return match head:
-        leaf t: t.code
-        node n: gen(n)
-    else:
-      return match head:
-        leaf t:
-          iif(
-            t.op1 "(" + t.code + gen(tail[0]) + ")"
-            t.op2 gen(tail[0]) + " " + t.code + " " + gen(tail[1])
-            '"Not implemented yet"'
-            )
-        node n:
-          gen(n) + "(" + tail.map(gen).join(", ") + ")"
+    return match head:
+      node n: gen(n) + "(" + tail.map(gen).join(", ") + ")"
+      leaf t: iif:
+        t.op1: "(" + t.code + gen(tail[0]) + ")"
+        t.op2: gen(tail[0]) + " " + t.code + " " + gen(tail[1])
   return match root:
-    leaf t: t.code
     node n: gennode n[0] n.slice(1)
+    leaf t: t.code

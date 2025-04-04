@@ -107,7 +107,6 @@ const parse = tokens => {
   return until(() => true, parseLine)
 }
 
-const log = x => { console.dir(x); return x }
 const generate = nodes => {
   const geniif = a =>
     a.length === 0 ? '(() => { throw new Error("no iif") })' :
@@ -121,7 +120,6 @@ const generate = nodes => {
   const genenum = o => Array.isArray(o) ?
     `const ${o[0].code} = __val => ({__tag: "${o[0].code}", __val})` :
     `const ${o.code} = {__tag: "${o.code}"}`
-  const log = x => { console.dir(x, {depth: null}); return x  }
   const genmatch = a => a.length === 0 ? `__throw("No match")` :
     a[0].length === 3 ?
     `${gencond(a[0][0].code)} ? (${a[0][1].code} => ${genexp(a[0][2])})(__val) : ${genmatch(a.slice(1))}` :
