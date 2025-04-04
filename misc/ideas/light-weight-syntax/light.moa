@@ -1,0 +1,89 @@
+class token:
+  code   str
+  offset int
+  lineno int
+  indent int
+  op1    bool
+  op2    bool
+
+enum ast:
+  leaf token
+  node vec[ast]
+
+compile:: str str
+compile moa =
+  nodes = parse moa
+  infer nodes
+  return nodes.map(gen).join("\n")
+
+tokenize:: str vec[token]
+tokenize moa =
+  var i = 0
+  var lineno = 1
+  var indent = 0
+  var tokens = []
+  isop c    = "+-*/%|&^<>!=~".has c
+  isspace c = c == " " || c == "\n"
+  isnum c   = "0" <= c <= "9"
+  isid c    = "A" <= c <= "Z" || "a" <= c <= "z" || c == "_"
+  isidnum c = isid(c) || isnum(c)
+  skip f = while i < moa.size && f(moa[i]): i++
+  while i < moa.size:
+    offset = i
+    c = moa[i]
+    if:
+      isspace(c): skip isspace
+      isnum(c)  : skip isnum
+      isid(c)   : skip isidnum
+      isop(c)   : skip isop
+      c == '"'  : skip (c => c == '"'); i++
+      throw "unknown character " ++ c
+    s = moa.slice offset i
+    if isspace c:
+      lineno += s.split("\n").size - 1
+      indent := iif s.has("\n") s.split("\n").at(-1).size indent
+    else:
+      lspace = offset === 0 || moa[offset - 1] == " "
+      op1 = isop(c) && lspace
+      op2 = isop(c) && !op1
+      prefix = iif lspace && "([{".has(c) " " ""
+      tokens.push token(prefix ++ s offset lineno indent op1 op2))
+  return tokens
+
+parse:: vec[token] ast
+parse moa =
+  tokens = tokenize(moa)
+  pos = 0
+  untilBy code =
+    var a = []
+    while pos < tokens.size && tokens[pos].code != code:
+      a.push consume()
+    pos += 1
+    return a
+  link a =
+    if pos >= tokens.size:
+      return a
+    t = tokens[pos]
+    return iif:
+      t.code == "(": pos += 1; link node([a].concat(untilBy(")")))
+      t.op2        : pos += 1; link node([leaf(t) a consume()])
+      a
+  consume = () =>
+    t = tokens[pos]
+    pos += 1
+    return link iif t.op1:
+      node [leaf(t) consume()]
+      leaf t
+
+  return [consume()]
+
+infer:: ast void
+infer nodes = return
+
+gen:: ast str
+gen root = match root:
+  leaf t: t.code
+  node [(leaf t) ...r] if:
+    t.op1: ++ "(" t.code gen(r[0]) ")"
+    t.op2: ++ gen(tail[0]) " " t.code " " gen(tail[1])
+  node [(node a) ...r]: ++ gen(node(a)) "(" r.map(gen).join(", ") ")"

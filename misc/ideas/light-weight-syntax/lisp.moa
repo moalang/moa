@@ -1,0 +1,128 @@
+class token:
+  code   str
+  offset int
+  lineno int
+  indent int
+  op1    bool
+  op2    bool
+
+enum ast:
+  leaf token
+  node vec[ast]
+
+dec compile: str str
+def compile moa:
+  let nodes = parse(moa)
+  infer nodes
+  return nodes.map(gen).join("\n")
+
+dec tokenize: str vec[token]
+def tokenize moa:
+  let ops = "+-*/%|&^<>!=~"
+  def consume i:
+    var c = moa[i]
+    i += 1
+    var s = c
+    if c == " " || c == "\n":
+      while i < moa.size && (moa[i] == " " || moa[i] == "\n"):
+        s += moa[i]
+        i += 1
+    else if "0" <= c && c <= "9":
+      while i < moa.size && "0" <= moa[i] && moa[i] <= "9":
+        s += moa[i]
+        i += 1
+    else if (("A" <= c) && (c <= "Z")) || (("a" <= c) && (c <= "z")) || c == "_":
+      while i < moa.size && ("A" <= moa[i] && moa[i] <= "Z") || ("a" <= moa[i] && moa[i] <= "z") || moa[i] == "_":
+        s += moa[i]
+        i += 1
+    else if ops.has(c):
+      while i < moa.size && ops.has(moa[i]):
+        s += moa[i]
+        i += 1
+    else if c == '"':
+      let j = i - 1
+      while i < moa.size && moa[i] != '"':
+        i += 1
+      s = moa.slice(j i+1)
+    else if "()[]{}".has(c):
+      s = c
+    else:
+      throw "Unknown charactor " + c
+    return s
+
+  var lineno = 1
+  var indent = 0
+  var tokens = []
+  var i = 0
+  while i < moa.size:
+    let offset = i
+    let s = consume(i)
+    i += s.size
+    if s[0] == " " || s[0] == "\n":
+      lineno += s.split("\n").size - 1
+      indent += iif(s.has("\n") s.split("\n").at(-1).size indent)
+    else if "([{".has(s) && tokens.size > 0 && tokens[-1].offset + tokens[-1].code.size != offset:
+      tokens.push(token(" " + s offset lineno indent false false))
+    else if ops.has(s[0]):
+      let op1 = i < moa.size && moa[i] != " "
+      tokens.push(token(s offset lineno indent op1 !op1))
+    else:
+      tokens.push(token(s offset lineno indent false false))
+  return tokens
+
+dec parse: vec[token] ast
+def parse moa:
+  let tokens = tokenize(moa)
+  var pos = 0
+  def untilBy code:
+    var a = []
+    while pos < tokens.size && tokens[pos].code != code:
+      a.push consume()
+    pos += 1
+    return a
+  def link a:
+    if pos >= tokens.size:
+      return a
+    let t = tokens[pos]
+    if t.code == "(":
+      pos += 1
+      return link(node([a].concat(untilBy(")"))))
+    else if t.op2:
+      pos += 1
+      return link(node([leaf(t) a consume()]))
+    else:
+      return a
+  def consume:
+    let t = tokens[pos]
+    pos += 1
+    if t.op1:
+      return link(node([leaf(t) consume()]))
+    else:
+      return link(leaf(t))
+
+  return [consume()]
+
+dec infer: ast void
+def infer nodes:
+  return
+
+dec gen: ast str
+def gen root:
+  def gennode head tail:
+    if tail.size == 0:
+      return match head:
+        leaf t: t.code
+        node n: gen(n)
+    else:
+      return match head:
+        leaf t:
+          iif(
+            t.op1 "(" + t.code + gen(tail[0]) + ")"
+            t.op2 gen(tail[0]) + " " + t.code + " " + gen(tail[1])
+            '"Not implemented yet"'
+            )
+        node n:
+          gen(n) + "(" + tail.map(gen).join(", ") + ")"
+  return match root:
+    leaf t: t.code
+    node n: gennode n[0] n.slice(1)
