@@ -28,9 +28,6 @@ def tokenize moa:
   def isid c   : return (("A" <= c) && (c <= "Z")) || (("a" <= c) && (c <= "z")) || c == "_"
   def isidnum c: return isid(c) || isnum(c)
   def skip f: while pos < moa.size && f(moa[pos]): pos += 1
-  def skip1 f:
-    skip f
-    pos += 1
   while pos < moa.size:
     let offset = pos
     let c = moa[pos]
@@ -40,8 +37,9 @@ def tokenize moa:
       isnum(c)  : skip isnum
       isid(c)   : skip isidnum
       isop(c)   : skip isop
-      c == '"'  : skip1 c => c != '"'
-      c == "'"  : skip1 c => c != "'"
+      c == '"'  :
+        skip c => c != '"'
+        pos += 1
       throw "Unknown character " + c
     let s = moa.slice(offset pos)
     if isspace(c):
@@ -93,10 +91,9 @@ def gen root:
   def gennode head tail:
     return match head:
       node n: gen(n) + "(" + tail.map(gen).join(", ") + ")"
-      leaf t:
-        iif:
-          t.op1: t.code + "(" + (gen(tail[0])) + ")"
-          t.op2: gen(tail[0]) + " " + t.code + " " + gen(tail[1])
+      leaf t: iif:
+        t.op1: t.code + "(" + (gen(tail[0])) + ")"
+        t.op2: gen(tail[0]) + " " + t.code + " " + gen(tail[1])
   return match root:
     leaf t: t.code
     node n: gennode n[0] n.slice(1)
