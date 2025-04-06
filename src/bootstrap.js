@@ -44,7 +44,7 @@ const tokenize = moa => {
   let offset = 0
   let indent = 0
   const tokens = []
-  for (const code of moa.split(/([ \n]+|#[^\n]*|[()\[\]{}]|[0-9+]+\.[0-9]+|[:.+\-*/%!=^|&?><]+|"[^"]*"|'[^']*'|`[^`]*`|[ \n]+)/)) {
+  for (const code of moa.split(/([ \n]+|#[^\n]*|[()\[\]{}]|[0-9+]+\.[0-9]+|[:.+\-*/%!=^|&?><]+|"[^"]*"|`[^`]*`|`[^`]*`|[ \n]+)/)) {
     if (code.trim() && code[0] !== "#") {
       const nospace = !(" \t\n".includes(moa[offset+code.length]))
       const op1 = nospace && "!-".includes(code)
@@ -107,7 +107,8 @@ const parse = tokens => {
 }
 
 const generate = nodes => {
-  const geniif = a => a.length === 2 ? gen(a[0]) + " ? " + gen(a[1][1]) + " : " + gen(a[1].length === 3 ? a[1][2] : a[1].slice(2)) :
+  const geniif = a => a.length === 2 ?
+    gen(a[0]) + " ? " + gen(a[1][1]) + " : " + gen(a[1].length === 3 ? a[1][2] : a[1].slice(2)) :
     _geniif(a)
   const _geniif = a =>
     a.length === 0 ? '(() => { throw new Error("no iif") })' :
@@ -150,7 +151,9 @@ const generate = nodes => {
       } else if (head.op1) {
         return head.code + gen(tail[0])
       } else if (head.op2) {
-        return `${gen(tail[0])} ${head.code} ${gen(tail[1])}`
+        return head.code === "++" ?
+          `${gen(tail[0])} + ${gen(tail[1])}`:
+          `${gen(tail[0])} ${head.code} ${gen(tail[1])}`
       } else if (head.parenthesis) {
         return "(" + gen(tail[0]) + ")"
       } else {
@@ -205,10 +208,9 @@ const test1 = () => {
     } catch (e) {
       actual = "error: " + e.message
     }
-    assert.deepEqual(actual, expected, `${actual} != ${expected}\n\n# moa\n${moa}\n\n# js\n${js}\n\n# nodes\n${JSON.stringify(nodes, null, 2)}`)
+    assert.deepEqual(actual, expected, `${expected} != ${actual} \n\n# moa\n${moa}\n\n# js\n${js}\n\n# nodes\n${JSON.stringify(nodes, null, 2)}`)
     process.stdout.write(".")
   }
-  eq("log: 2", "if:\n  false: log(1)\n  true:\n    log 2\n    1")
 
   // Primitive
   eq(null, "void")
@@ -216,7 +218,6 @@ const test1 = () => {
   eq(-1, "-1")
   eq(1.1, "1.1")
   eq("hi", '"hi"')
-  eq('"hi"', `'"hi"'`)
   eq('"hi"', '`"hi"`')
   eq('hi\n', '"hi\\n"')
   eq(true, "true")
@@ -245,6 +246,7 @@ const test1 = () => {
   eq(1, "2 + -1")
   eq(7, "1 + 2 * 3")
   eq(9, "(1 + 2) * 3")
+  eq("ab", '"a" ++ "b"')
   eq(true, "1 == 1")
   eq(true, "1 == 1 && 2 == 2")
 
@@ -307,29 +309,120 @@ const test1 = () => {
 const test2 = () => {
   const eq = (() => {
     const js = generate(parse(tokenize(fs.readFileSync(__dirname + "/moa.moa", "utf-8"))))
+    const goRuntime = fs.readFileSync(__dirname + "/runtime.go", "utf-8")
     const tests = []
     const f = (expected, exp) => tests.push({expected, exp})
     f.run = () => {
       const compile = new vm.Script(runtime + `\n${js}\ncompile`).runInNewContext({console})
       const separator = "\n\t\n"
-      const main = tests.map(t => `func() { print(${compile(t.exp)}); print(${JSON.stringify(separator)}) }()`).join("\n")
-      const go = `package main\nfunc main() { ${main} }`
+      const main = tests.map(t => `func() { fmt.Print(moa__show(${compile(t.exp)})); fmt.Print(${JSON.stringify(separator)}) }()`).join("\n")
+      const go = goRuntime + `\nfunc main() { ${main} }`
       fs.writeFileSync("/tmp/test.go", go + "\n")
-      const output = child_process.execSync("go run /tmp/test.go 2>&1").toString()
+      const output = child_process.execSync("go run /tmp/test.go 2>&1; echo").toString()
       const actuals = output.split(separator)
       for (var i=0; i<tests.length; i++) {
-        if (actuals[i] !== tests[i].expected) {
-          throw new Error(`${actuals[i]} !== ${tests[i].expected} :: ${tests[i].exp}`)
+        if (actuals[i] !== tests[i].expected.toString()) {
+          throw new Error(`${tests[i].expected} != ${actuals[i]} :: ${tests[i].exp}`)
         }
         process.stdout.write(".")
       }
     }
     return f
   })()
-  eq("hi", '"hi"')
-  eq("3", "1 + 2")
-  eq("true", "!false")
+
+  // Primitive
+  eq("moa-void", "void")
+  eq('"hi"', '"hi"')
+  eq(1, "1")
+  eq(-1, "-1")
+  eq(1.0, "1.0")
+  eq('"hi"', '"hi"')
+  eq('"\\"hi\\""', '`"hi"`')
+  eq('"hi\\n"', '"hi\\n"')
+  eq(true, "true")
+//  eq(1, "(a => a)(1)") // uncomment after type inference implemented
+
+  // Container
+  eq("[1 2]", "vec(1 2)")
+  eq(1, "some(1).value")
+  eq("none", "none")
+  eq('tuple(1 "a")', 'tuple(1 "a")')
+  eq("[1 2]", "vec(1 2)")
+  eq("[1 2]", "[1 2]")
+  eq("set(1 2)", "set(1 1 2)")
+  eq('map("a" 1)', 'map("a" 1)')
+
+//  // Methods
+//  eq("a", '"ab"[0]')
+//  eq(2, '"ab".size')
+//  eq({}, "none.then(a => a + 1)")
+//  eq(2, "some(1).then(a => a + 1)")
+//  eq(1, "none.or(1)")
+//  eq(2, "some(2).or(1)")
+//  eq([1], "var a = []\na.push(1)\na")
+//
+//  // Expression
+//  eq("true", "!false")
+  eq(3, "1 + 2")
   eq("1", "2 + -1")
+//  eq(1, "2 + -1")
+//  eq(7, "1 + 2 * 3")
+//  eq(9, "(1 + 2) * 3")
+//  eq(true, "1 == 1")
+//  eq(true, "1 == 1 && 2 == 2")
+//
+//  // Exception
+//  eq("error: 1", "throw(1)")
+//  eq(1, "catch(1 n => n + 1)")
+//  eq(2, "catch(throw(1) n => n + 1)")
+//
+//  // Embedded
+//  eq("log: 1 2", "log(1 2)")
+//  eq("1", "assert(true)\n1")
+//  eq("error: 1 2", "assert(false 1 2)\n1")
+//
+//  // Branch
+//  eq(1, "iif(true 1 2)")
+//  eq(2, "iif(false throw(1) 2)")
+//  eq(3, "iif(false 1 false 2 3)")
+//  eq(1, "iif:\n  true: 1\n  true: 2")
+//  eq(2, "iif:\n  false: 1\n  true: 2")
+//  eq(1, "iif true:\n  1\n  2")
+//  eq(2, "iif false:\n  1\n  2")
+//  eq(2, "if false: log(1)\n2")
+//  eq("log: 1", "if true: log(1)\n2")
+//  eq("log: 1", "if:\n  true: log(1)\n  true: log(2)")
+//  eq("log: 2", "if:\n  false: log(1)\n  true: log(2)")
+//  eq("log: 2", "if:\n  false: log(1)\n  true:\n    log 2\n    1")
+//  eq("log: 2", "if false: log(1)\nelse: log(2)")
+//  eq("log: 2", "if false: log(1)\nelse if true: log(2)")
+//  eq("log: 3", "if false: log(1)\nelse if false: log(2)\nelse: log(3)")
+//
+//  // Declare
+//  eq(1, "let a = 1\na")
+//  eq(3, "var a = 1\na += 2\na")
+//  eq(1, "def f: return 1\nf()")
+//  eq([], "def f: return []\nf()")
+//  eq(1, "def f:\n  if true: return 1\n  return 2\nf()")
+//  eq(2, "def f:\n  if false: return 1\n  return 2\nf()")
+//  eq({x: 1, y:2}, "class p:\n  x int\n  y int\np(1 2)")
+//  eq(1, "enum ab:\n  a\n  b int\nmatch a:\n  a: 1\n  b v: v")
+//  eq(2, 'enum ab:\n  a\n  b str\nmatch b("ab"):\n  a: 1\n  b v: v.size')
+//  eq(0, 'enum ab:\n  a\n  b str\nmatch b("ab"):\n  _: 0')
+//  eq(null, "dec add: int int int")
+//  eq(null, "interface addable a: add a a a")
+//
+//  // Loop
+//  eq(3, "var i = 1\nwhile i < 3:\n  i += 1\ni")
+//
+//  // Comment
+//  eq(1, "1 # line comment\n# whole line comment")
+//
+//  // Combination
+//  eq(0, "[0][0]")
+//  eq(true, "[0][0] == [0][0]")
+//  eq(true, "[0][0] == 0 && [0][0] == 0")
+//  eq(3, '"ab".size + 1')
 
   eq.run()
   console.log("ok")
