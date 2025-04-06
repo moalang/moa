@@ -7,7 +7,7 @@ endif
 syn match  Comment /#.*/
 
 " Constant
-syn region String start=+\z(["']\)+ skip=+\\\%(\z1\|$\)+ end=+\z1+
+syn region String start=+\z(["'`]\)+ skip=+\\\%(\z1\|$\)+ end=+\z1+
 syn region String start=+\z(```\|"""\|'''\)+ skip=+\\\%(\z1\|$\)+ end=+\z1+
 syn region String start=+r\z([`"'/]\)+ skip=+\\\%(\z1\|$\)+ end=+\z1+
 syn match Number /\%([ \n(\[]\)\@<=[0-9]\+[xob]\?[A-Fa-f0-9_hmsun]*\(\.[A-Fa-f0-9_]\+\)\?/

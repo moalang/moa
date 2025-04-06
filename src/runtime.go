@@ -61,6 +61,8 @@ func moa__show(o any) string {
 			return "true"
 		}
 		return "false"
+	case rune:
+		return string(v)
 	case MoaVoid:
 		return "moa-void"
 	case fmt.Stringer:
@@ -95,6 +97,7 @@ func (m MoaMap[K, T]) String() string {
 	for k, v := range m {
 		s = append(s, moa__show(k)+" "+moa__show(v))
 	}
+	sort.Strings(s)
 	return "map(" + strings.Join(s, " ") + ")"
 }
 
@@ -146,6 +149,10 @@ func moa_map2[K comparable, V any](k K, v V) MoaMap[K, V] {
 
 func moa_map4[K comparable, V any](k1 K, v1 V, k2 K, v2 V) MoaMap[K, V] {
 	return map[K]V{k1: v1, k2: v2}
+}
+
+func moa_map6[K comparable, V any](k1 K, v1 V, k2 K, v2 V, k3 K, v3 V) MoaMap[K, V] {
+	return map[K]V{k1: v1, k2: v2, k3: v3}
 }
 
 func moa_tuple1[A any](a A) MoaTuple1[A] {

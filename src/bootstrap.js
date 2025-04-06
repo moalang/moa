@@ -350,9 +350,10 @@ const test2 = () => {
   eq("[1 2]", "vec(1 2)")
   eq("[1 2]", "[1 2]")
   eq("set(1 2)", "set(1 1 2)")
-  eq('map("a" 1)', 'map("a" 1)')
+  eq('map("a" 1 "b" 2)', 'map("a" 1 "b" 2 "a" 1)')
 
-//  // Methods
+  // Methods
+// uncomments after type inference implemented
 //  eq("a", '"ab"[0]')
 //  eq(2, '"ab".size')
 //  eq({}, "none.then(a => a + 1)")
@@ -361,17 +362,16 @@ const test2 = () => {
 //  eq(2, "some(2).or(1)")
 //  eq([1], "var a = []\na.push(1)\na")
 //
-//  // Expression
-//  eq("true", "!false")
+  // Expression
+  eq("true", "!false")
   eq(3, "1 + 2")
   eq("1", "2 + -1")
-//  eq(1, "2 + -1")
-//  eq(7, "1 + 2 * 3")
-//  eq(9, "(1 + 2) * 3")
-//  eq(true, "1 == 1")
-//  eq(true, "1 == 1 && 2 == 2")
-//
-//  // Exception
+  eq(7, "1 + 2 * 3")
+  eq(9, "(1 + 2) * 3")
+  eq(true, "1 == 1")
+  eq(true, "1 == 1 && 2 == 2")
+
+  // Exception
 //  eq("error: 1", "throw(1)")
 //  eq(1, "catch(1 n => n + 1)")
 //  eq(2, "catch(throw(1) n => n + 1)")
