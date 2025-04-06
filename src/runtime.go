@@ -46,6 +46,15 @@ func (s MoaSet[T]) has(item T) bool {
 	return ok
 }
 
+func moa_assert(s string, b bool, params ...any) MoaVoid {
+	if !b {
+		a := []any{s}
+		a = append(a, params...)
+		panic(a)
+	}
+	return moa_void
+}
+
 func moa_throw(o any) any {
 	panic(o)
 	return struct{}{}
@@ -58,6 +67,67 @@ func moa_log[T any](v T, o ...any) T {
 	}
 	fmt.Print(s)
 	return v
+}
+
+var moa_void = MoaVoid{}
+
+const moa_true = true
+const moa_false = false
+
+var moa_none = MoaOption[int]{valid: false}
+
+func moa_some[T any](value T) MoaOption[T] {
+	return MoaOption[T]{value: value, valid: true}
+}
+
+func moa_vec[T any](args ...T) []T {
+	return args
+}
+
+func moa_set[T comparable](args ...T) MoaSet[T] {
+	s := MoaSet[T]{}
+	for _, x := range args {
+		s[x] = struct{}{}
+	}
+	return s
+}
+
+func moa_map2[K comparable, V any](k K, v V) MoaMap[K, V] {
+	return map[K]V{k: v}
+}
+
+func moa_map4[K comparable, V any](k1 K, v1 V, k2 K, v2 V) MoaMap[K, V] {
+	return map[K]V{k1: v1, k2: v2}
+}
+
+func moa_map6[K comparable, V any](k1 K, v1 V, k2 K, v2 V, k3 K, v3 V) MoaMap[K, V] {
+	return map[K]V{k1: v1, k2: v2, k3: v3}
+}
+
+func moa_tuple1[A any](a A) MoaTuple1[A] {
+	return MoaTuple1[A]{value1: a}
+}
+
+func moa_tuple2[A any, B any](a A, b B) MoaTuple2[A, B] {
+	return MoaTuple2[A, B]{value1: a, value2: b}
+}
+
+func moa_tuple3[A any, B any, C any](a A, b B, c C) MoaTuple3[A, B, C] {
+	return MoaTuple3[A, B, C]{value1: a, value2: b, value3: c}
+}
+
+func moa__show_recover(v any) string {
+	if reflect.TypeOf(v).Kind() == reflect.Slice {
+		a := reflect.ValueOf(v)
+		s := ""
+		for i := 0; i < a.Len(); i++ {
+			x := a.Index(i).Interface()
+			s += moa__show(x) + " "
+		}
+		return s[:len(s)-1]
+	} else {
+		return moa__show(v)
+	}
 }
 
 func moa__show(o any) string {
@@ -78,7 +148,7 @@ func moa__show(o any) string {
 	case rune:
 		return string(v)
 	case MoaVoid:
-		return "moa-void"
+		return ""
 	case fmt.Stringer:
 		return v.String()
 	case nil:
@@ -132,55 +202,4 @@ func (t MoaTuple2[A, B]) String() string {
 
 func (t MoaTuple3[A, B, C]) String() string {
 	return fmt.Sprintf("tuple(%s %s %s)", moa__show(t.value1), moa__show(t.value2), moa__show(t.value3))
-}
-
-var moa_void = MoaVoid{}
-
-const moa_true = true
-const moa_false = false
-
-var moa_none = MoaOption[int]{valid: false}
-
-func dummy() {
-	fmt.Printf("")
-}
-
-func moa_vec[T any](args ...T) []T {
-	return args
-}
-
-func moa_set[T comparable](args ...T) MoaSet[T] {
-	s := MoaSet[T]{}
-	for _, x := range args {
-		s[x] = struct{}{}
-	}
-	return s
-}
-
-func moa_map2[K comparable, V any](k K, v V) MoaMap[K, V] {
-	return map[K]V{k: v}
-}
-
-func moa_map4[K comparable, V any](k1 K, v1 V, k2 K, v2 V) MoaMap[K, V] {
-	return map[K]V{k1: v1, k2: v2}
-}
-
-func moa_map6[K comparable, V any](k1 K, v1 V, k2 K, v2 V, k3 K, v3 V) MoaMap[K, V] {
-	return map[K]V{k1: v1, k2: v2, k3: v3}
-}
-
-func moa_tuple1[A any](a A) MoaTuple1[A] {
-	return MoaTuple1[A]{value1: a}
-}
-
-func moa_tuple2[A any, B any](a A, b B) MoaTuple2[A, B] {
-	return MoaTuple2[A, B]{value1: a, value2: b}
-}
-
-func moa_tuple3[A any, B any, C any](a A, b B, c C) MoaTuple3[A, B, C] {
-	return MoaTuple3[A, B, C]{value1: a, value2: b, value3: c}
-}
-
-func moa_some[T any](value T) MoaOption[T] {
-	return MoaOption[T]{value: value, valid: true}
 }

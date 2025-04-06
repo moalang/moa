@@ -113,6 +113,24 @@ dec infer: ast void
 def infer nodes:
   return
 
+dec show: ast str
+def show root:
+  def shownode head tail:
+    return match head:
+      node n: show(n) + "(" + tail.map(show).join(", ") + ")"
+      leaf t:
+        iif:
+          t.op1: t.code + show(tail[0])
+          t.op2: show(tail[0]) + " " + t.code + " " + show(tail[1])
+          t.code[0] == ".": show(tail[0]) + t.code
+          t.code == " [": "[" + tail.map(show).join(", ") + "]"
+          t.code == " (": "(" + show(tail[0]) + ")"
+          true: show(leaf(t)) + "(" + tail.map(show).join(", ") + ")"
+  return match root:
+    leaf t: t.code
+    node n: shownode n[0] n.slice(1)
+
+dec gen: ast str
 def gen root:
   def gennode head tail:
     return match head:
@@ -122,6 +140,7 @@ def gen root:
           t.op1: t.code + "(" + (gen(tail[0])) + ")"
           t.op2: gen(tail[0]) + " " + t.code + " " + gen(tail[1])
           t.code[0] == ".": gen(tail[0]) + t.code
+          t.code == "assert": gen(leaf(t)) + "(" + show(tail[0]).quote + ", " + tail.map(gen).join(", ") + ")"
           t.code == "tuple": gen(leaf(t)) + tail.size + "(" + tail.map(gen).join(", ") + ")"
           t.code == "map": gen(leaf(t)) + tail.size + "(" + tail.map(gen).join(", ") + ")"
           t.code == " [": "moa_vec(" + tail.map(gen).join(", ") + ")"

@@ -26,6 +26,7 @@ const runtime = (() => {
     }
   }
   Object.defineProperty(String.prototype, "size", {get() { return this.length }})
+  Object.defineProperty(String.prototype, "quote", {get() { return JSON.stringify(this) }})
   Object.defineProperty(Array.prototype, "size", {get() { return this.length }})
   String.prototype.has = function(s) { return this.includes(s) }
   Object.defineProperty(none, "then", {get() { return _ => none }})
@@ -318,7 +319,7 @@ const test2 = () => {
       const main = tests.map(t => `func() {
         defer func() {
             if r := recover(); r != nil {
-              fmt.Print("error: " + moa__show(r))
+              fmt.Print("error: " + moa__show_recover(r))
               fmt.Print(${JSON.stringify(separator)})
             }
         }()
@@ -340,7 +341,7 @@ const test2 = () => {
   })()
 
   // Primitive
-  eq("moa-void", "void")
+  eq("", "void")
   eq('"hi"', '"hi"')
   eq(1, "1")
   eq(-1, "-1")
@@ -388,8 +389,9 @@ const test2 = () => {
 
   // Embedded
   eq("log: 1 21", "log 1 2")
-//  eq("1", "assert(true)\n1")
-//  eq("error: 1 2", "assert(false 1 2)\n1")
+  eq("", "assert(true)")
+  eq('error: "false" 1 2', "assert(false 1 2)\n1")
+  eq('error: "3 < 2" 1 2', "assert(3 < 2 1 2)\n1")
 
   // Branch
 //  eq(1, "iif(true 1 2)")
