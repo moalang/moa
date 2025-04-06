@@ -46,6 +46,20 @@ func (s MoaSet[T]) has(item T) bool {
 	return ok
 }
 
+func moa_throw(o any) any {
+	panic(o)
+	return struct{}{}
+}
+
+func moa_log[T any](v T, o ...any) T {
+	s := "log: " + moa__show(v)
+	for _, v := range o {
+		s += " " + moa__show(v)
+	}
+	fmt.Print(s)
+	return v
+}
+
 func moa__show(o any) string {
 	switch v := any(o).(type) {
 	case string:

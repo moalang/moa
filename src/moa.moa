@@ -45,16 +45,19 @@ def tokenize moa:
       c == `"`  : skip1 (c => c != `"`])
       c == "`"  : skip1 (c => c != "`"])
       c == "."  : skip1 isidnum
+      c == "#"  : skip1 (c => c != "\n")
       throw "Unknown character " + c
+    if c == "#":
+      continue
     let s = moa.slice(offset pos)
     if isspace(c):
       lineno += s.split("\n").size - 1
       indent = iif(s.has("\n") s.split("\n").at(-1).size indent)
-    else:
-      let op1 = isop(c) && pos < moa.size && moa[pos] != " "
-      let op2 = isop(c) && !op1
-      let prefix = iif((offset === 0 || moa[offset - 1] == " ") && "([{".has(c) " " "")
-      tokens.push token(prefix + s offset lineno indent isid(c) op1 op2)
+      continue
+    let op1 = isop(c) && pos < moa.size && moa[pos] != " "
+    let op2 = isop(c) && !op1
+    let prefix = iif((offset === 0 || moa[offset - 1] == " ") && "([{".has(c) " " "")
+    tokens.push token(prefix + s offset lineno indent isid(c) op1 op2)
   return tokens
 
 dec parse: vec[token] ast

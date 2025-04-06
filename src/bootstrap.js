@@ -315,7 +315,16 @@ const test2 = () => {
     f.run = () => {
       const compile = new vm.Script(runtime + `\n${js}\ncompile`).runInNewContext({console})
       const separator = "\n\t\n"
-      const main = tests.map(t => `func() { fmt.Print(moa__show(${compile(t.exp)})); fmt.Print(${JSON.stringify(separator)}) }()`).join("\n")
+      const main = tests.map(t => `func() {
+        defer func() {
+            if r := recover(); r != nil {
+              fmt.Print("error: " + moa__show(r))
+              fmt.Print(${JSON.stringify(separator)})
+            }
+        }()
+        fmt.Print(moa__show(${compile(t.exp)}))
+        fmt.Print(${JSON.stringify(separator)})
+      }()`).join("\n")
       const go = goRuntime + `\nfunc main() { ${main} }`
       fs.writeFileSync("/tmp/test.go", go + "\n")
       const output = child_process.execSync("go run /tmp/test.go 2>&1; echo").toString()
@@ -372,16 +381,17 @@ const test2 = () => {
   eq(true, "1 == 1 && 2 == 2")
 
   // Exception
-//  eq("error: 1", "throw(1)")
+  eq("error: 1", "throw(1)")
+// uncomments after type inference implemented
 //  eq(1, "catch(1 n => n + 1)")
 //  eq(2, "catch(throw(1) n => n + 1)")
-//
-//  // Embedded
-//  eq("log: 1 2", "log(1 2)")
+
+  // Embedded
+  eq("log: 1 21", "log 1 2")
 //  eq("1", "assert(true)\n1")
 //  eq("error: 1 2", "assert(false 1 2)\n1")
-//
-//  // Branch
+
+  // Branch
 //  eq(1, "iif(true 1 2)")
 //  eq(2, "iif(false throw(1) 2)")
 //  eq(3, "iif(false 1 false 2 3)")
@@ -415,8 +425,8 @@ const test2 = () => {
 //  // Loop
 //  eq(3, "var i = 1\nwhile i < 3:\n  i += 1\ni")
 //
-//  // Comment
-//  eq(1, "1 # line comment\n# whole line comment")
+  // Comment
+  eq(1, "1 # line comment\n# whole line comment")
 //
 //  // Combination
 //  eq(0, "[0][0]")
