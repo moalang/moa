@@ -12,7 +12,17 @@ const runtime = (() => {
   const set = (...a) => new Set(a)
   const map = (...a) => new Map([...new Array(a.length / 2)].map((_, i) => [a[i*2], a[i*2+1]]))
   const log = (a, ...b) => { console.warn(a, ...b); return a }
-  const assert = (cond, f) => cond || __throw(f())
+  const __assert = (cond, f) => cond || __throw(f())
+  const __fn = f => (...args) => {
+    try {
+      return f(...args)
+    } catch (e) {
+      if (e instanceof MoaReturn) {
+        return e.data
+      }
+    }
+  }
+  const __at = (obj, n) => obj instanceof Map ? obj.get(n) : obj instanceof Set ? obj.has(n) : obj.at(n)
   const __throw = s => { throw new MoaError(s) }
   const __catch = (f, g) => {
     try {
@@ -31,10 +41,15 @@ const runtime = (() => {
   String.prototype.has = function(s) { return this.includes(s) }
   Object.defineProperty(none, "then", {get() { return _ => none }})
   Object.defineProperty(none, "or", {get() { return v => v }})
-  const __at = (obj, n) => obj instanceof Map ? obj.get(n) : obj instanceof Set ? obj.has(n) : obj.at(n)
   class MoaError extends Error {
     constructor(data) {
       super(data)
+      this.data = data
+    }
+  }
+  class MoaReturn extends Error {
+    constructor(data) {
+      super()
       this.data = data
     }
   }
@@ -112,7 +127,7 @@ const generate = nodes => {
     gen(a[0]) + " ? " + gen(a[1][1]) + " : " + gen(a[1].length === 3 ? a[1][2] : a[1].slice(2)) :
     _geniif(a)
   const _geniif = a =>
-    a.length === 0 ? '(() => { throw new Error("no iif") })' :
+    a.length === 0 ? 'null' :
     a.length === 1 && Array.isArray(a[0]) && a[0][0].code === ":" ? _geniif(a[0].slice(1).flatMap(x => [x[0], x[1].length === 2 ? x[1][1] : x[1].slice(1)])) :
     a.length === 1 ? gen(a[0]) :
     gen(a[0]) + " ? " + gen(a[1]) + " : " + _geniif(a.slice(2))
@@ -123,7 +138,7 @@ const generate = nodes => {
     `${i == 0 ? "if " : "else if "} (${gen(a[0])}) { ${gen(a[1])} }` :
     `else { ${gen(a)} }`
   const genelse = a => "else " + (a[0].code === "if" ? genif(a.slice(1)) : gen(a[0]))
-  const gendef = (a, body) => `const ${a[0]} = (${a.slice(1)}) => ${body}`
+  const gendef = (a, body) => `const ${a[0]} = __fn((${a.slice(1)}) => ${body})`
   const genclass = (name, fields) => `const ${name} = (${fields}) => ({${fields}})`
   const genenum = o => Array.isArray(o) ?
     `const ${o[0].code} = __val => ({__tag: "${o[0].code}", __val})` :
@@ -160,19 +175,19 @@ const generate = nodes => {
       } else {
         return head.code === ":" ? "{" + tail.map(gen).join("\n") + "}" :
           head.code === "(" ? gen(tail) :
-          head.code === "assert" ? `assert(${gen(tail[0])}, () => [${tail.slice(1).map(gen)}].join(" "))` :
+          head.code === "assert" ? `__assert(${gen(tail[0])}, () => [${tail.slice(1).map(gen)}].join(" "))` :
           head.code === "catch" ? `__catch(() => ${gen(tail[0])}, ${gen(tail[1])})` :
           head.code === "iif" ? geniif(tail) :
           head.code === "if" ? genif(tail) :
           head.code === "else" ? genelse(tail) :
-          head.code === "def" ? gendef(tail.slice(0, -1).map(node => node.code), gen(tail.at(-1))) :
           head.code === "class" ? genclass(tail[0].code, tail[1].slice(1).map(x => x[0].code)) :
+          head.code === "enum" ? tail[1].slice(1).map(genenum).join("\n") :
+          head.code === "def" ? gendef(tail.slice(0, -1).map(node => node.code), gen(tail.at(-1))) :
           head.code === "let" ? `const ${tail[0][1].code} = ${gen(tail[0][2])}` :
           head.code === "var" ? `let ${tail[0][1].code} = ${gen(tail[0][2])}` :
-          head.code === "enum" ? tail[1].slice(1).map(genenum).join("\n") :
-          head.code === "match" ? `0,(({__tag, __val}) => ${genmatch(tail[1].slice(1))})(${gen(tail[0])})` :
-          head.code === "while" ? `while (${gen(tail[0])}) { ${gen(tail[1])} }` :
-          head.code === "return" ? `return ${tail.length === 1 ? gen(tail[0]) : gen(tail)}` :
+          head.code === "match" ? `1 && (({__tag, __val}) => ${genmatch(tail[1].slice(1))})(${gen(tail[0])})` :
+          head.code === "while" ? `1 && (() => { while (${gen(tail[0])}) { ${gen(tail[1])} } })()` :
+          head.code === "return" ? `throw new MoaReturn(${tail.length === 1 ? gen(tail[0]) : gen(tail)})` :
           head.code === "dec" ? "null" :
           head.code === "interface" ? "null" :
           gen(head) + "(" + tail.map(gen).join(", ") + ")"
@@ -309,12 +324,12 @@ const test1 = () => {
 
 const test2 = () => {
   const eq = (() => {
-    const js = generate(parse(tokenize(fs.readFileSync(__dirname + "/moa.moa", "utf-8"))))
+    const moajs = generate(parse(tokenize(fs.readFileSync(__dirname + "/moa.moa", "utf-8"))))
+    const compile = new vm.Script(runtime + `\n${moajs}\ncompile`).runInNewContext({console})
     const goRuntime = fs.readFileSync(__dirname + "/runtime.go", "utf-8")
     const tests = []
     const f = (expected, exp) => tests.push({expected, exp})
-    f.run = () => {
-      const compile = new vm.Script(runtime + `\n${js}\ncompile`).runInNewContext({console})
+    f.wait = () => {
       const separator = "\n\t\n"
       const main = tests.map(t => `func() {
         defer func() {
@@ -328,7 +343,7 @@ const test2 = () => {
       }()`).join("\n")
       const go = goRuntime + `\nfunc main() { ${main} }`
       fs.writeFileSync("/tmp/test.go", go + "\n")
-      const output = child_process.execSync("go run /tmp/test.go 2>&1; echo").toString()
+      const output = child_process.execSync("go run /tmp/test.go 2>&1").toString()
       const actuals = output.split(separator)
       for (var i=0; i<tests.length; i++) {
         if (actuals[i] !== tests[i].expected.toString()) {
@@ -436,7 +451,7 @@ const test2 = () => {
 //  eq(true, "[0][0] == 0 && [0][0] == 0")
 //  eq(3, '"ab".size + 1')
 
-  eq.run()
+  eq.wait()
   console.log("ok")
 }
 

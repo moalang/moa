@@ -42,9 +42,9 @@ def tokenize moa:
       isnum(c)  : skip isfloat
       isid(c)   : skip isidnum
       isop(c)   : skip isop
+      c == "."  : skip isidnum
       c == `"`  : skip1 (c => c != `"`])
       c == "`"  : skip1 (c => c != "`"])
-      c == "."  : skip1 isidnum
       c == "#"  : skip1 (c => c != "\n")
       throw "Unknown character " + c
     if c == "#":
@@ -98,8 +98,8 @@ def parse moa:
     pos += 1
     return iif:
       t.op1: link node([leaf(t) consume()])
-      t.code == " [": link(node([leaf(t)].concat(untilBy("]"))))
-      t.code == " (": link(node([leaf(t)].concat(untilBy(")"))))
+      t.code == " [": link node([leaf(t)].concat(untilBy("]")))
+      t.code == " (": link node([leaf(t)].concat(untilBy(")")))
       true: link leaf(t)
   def line:
     let lineno = tokens[pos].lineno
@@ -115,39 +115,42 @@ def infer nodes:
 
 dec show: ast str
 def show root:
-  def shownode head tail:
-    return match head:
-      node n: show(n) + "(" + tail.map(show).join(", ") + ")"
-      leaf t:
-        iif:
-          t.op1: t.code + show(tail[0])
-          t.op2: show(tail[0]) + " " + t.code + " " + show(tail[1])
-          t.code[0] == ".": show(tail[0]) + t.code
-          t.code == " [": "[" + tail.map(show).join(", ") + "]"
-          t.code == " (": "(" + show(tail[0]) + ")"
-          true: show(leaf(t)) + "(" + tail.map(show).join(", ") + ")"
+  def showleaf t tail:
+    return iif:
+      t.op1: t.code + show(tail[0])
+      t.op2: show(tail[0]) + " " + t.code + " " + show(tail[1])
+      t.code[0] == ".": show(tail[0]) + t.code
+      t.code == " [": "[" + tail.map(show).join(", ") + "]"
+      t.code == " (": "(" + show(tail[0]) + ")"
+      true: show(leaf(t)) + "(" + tail.map(show).join(", ") + ")"
   return match root:
     leaf t: t.code
-    node n: shownode n[0] n.slice(1)
+    node n:
+      let head = n[0]
+      let tail = n.slice(1)
+      match head:
+        node n: show(n) + "(" + tail.map(show).join(", ") + ")"
+        leaf t: showleaf t tail
 
 dec gen: ast str
 def gen root:
+  def genleaf t tail:
+    return iif:
+      t.op1: t.code + "(" + (gen(tail[0])) + ")"
+      t.op2: gen(tail[0]) + " " + t.code + " " + gen(tail[1])
+      t.code[0] == ".": gen(tail[0]) + t.code
+      t.code == "assert": gen(leaf(t)) + "(" + show(tail[0]).quote + ", " + tail.map(gen).join(", ") + ")"
+      t.code == "tuple": gen(leaf(t)) + tail.size + "(" + tail.map(gen).join(", ") + ")"
+      t.code == "map": gen(leaf(t)) + tail.size + "(" + tail.map(gen).join(", ") + ")"
+      t.code == " [": "moa_vec(" + tail.map(gen).join(", ") + ")"
+      t.code == " (": "(" + gen(tail[0]) + ")"
+      true: gen(leaf(t)) + "(" + tail.map(gen).join(", ") + ")"
   def gennode head tail:
     return match head:
       node n: gen(n) + "(" + tail.map(gen).join(", ") + ")"
-      leaf t:
-        iif:
-          t.op1: t.code + "(" + (gen(tail[0])) + ")"
-          t.op2: gen(tail[0]) + " " + t.code + " " + gen(tail[1])
-          t.code[0] == ".": gen(tail[0]) + t.code
-          t.code == "assert": gen(leaf(t)) + "(" + show(tail[0]).quote + ", " + tail.map(gen).join(", ") + ")"
-          t.code == "tuple": gen(leaf(t)) + tail.size + "(" + tail.map(gen).join(", ") + ")"
-          t.code == "map": gen(leaf(t)) + tail.size + "(" + tail.map(gen).join(", ") + ")"
-          t.code == " [": "moa_vec(" + tail.map(gen).join(", ") + ")"
-          t.code == " (": "(" + gen(tail[0]) + ")"
-          true: gen(leaf(t)) + "(" + tail.map(gen).join(", ") + ")"
+      leaf t: genleaf t tail
   return match root:
-    leaf t: iif:
-      t.id: "moa_" + t.code
-      true: t.code
+    leaf t: iif t.id:
+      "moa_" + t.code
+      t.code
     node n: gennode n[0] n.slice(1)
