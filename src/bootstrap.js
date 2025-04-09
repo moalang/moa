@@ -101,7 +101,7 @@ const parse = tokens => {
       const nospace = pos < tokens.length && tokens[pos-1].offset + tokens[pos-1].code.length === tokens[pos].offset
       return pos >= tokens.length ? t :
         tokens[pos].code === "." ? link([tokens[pos++], t, tokens[pos++]]) :
-        tokens[pos].code === "(" && nospace ? pos++ && link([t, ...untilBy(")")]) :
+        tokens[pos].code === "(" && nospace ? pos++ && link([{call: true}, t, ...untilBy(")")]) :
         tokens[pos].code === "[" && nospace ? pos++ && link([{code: "__at"}, t, ...untilBy("]")]) :
         tokens[pos].op2 ? link([tokens[pos++], t, parseUnit()]) :
         t
@@ -109,7 +109,7 @@ const parse = tokens => {
     return link(
       t.op1 ? link([t, tokens[pos++]]) :
       t.code === "(" ? [{parenthesis: true}, untilBy(")")[0]] :
-      t.code === "[" ? [{code: "vec"}, ...untilBy("]")] :
+      t.code === "[" ? [{call: true}, {code: "vec"}, ...untilBy("]")] :
       t)
   }
   const parseLine = (t) => {
@@ -154,7 +154,9 @@ const generate = nodes => {
     if (Array.isArray(node)) {
       const head = node[0]
       const tail = node.slice(1)
-      if (head.code === "[") {
+      if (tail.length === 0) {
+        return gen(head)
+      } else if (head.code === "[") {
         return "[" + tail.map(gen) + "]"
       } else if (head.code === "{") {
         const a = tail.map(gen)
@@ -172,6 +174,8 @@ const generate = nodes => {
           `${gen(tail[0])} ${head.code} ${gen(tail[1])}`
       } else if (head.parenthesis) {
         return "(" + gen(tail[0]) + ")"
+      } else if (head.call) {
+        return tail.length === 1 ? gen(tail[0]) + "()" : gen(tail)
       } else {
         return head.code === ":" ? "{" + tail.map(gen).join("\n") + "}" :
           head.code === "(" ? gen(tail) :
@@ -192,8 +196,6 @@ const generate = nodes => {
           head.code === "interface" ? "null" :
           gen(head) + "(" + tail.map(gen).join(", ") + ")"
       }
-    } else if (node === undefined) {
-      return ""
     } else {
       return node.code === "void" ? "null" :
         node.code === "throw" ? "__throw" :
