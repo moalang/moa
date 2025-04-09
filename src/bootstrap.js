@@ -15,15 +15,6 @@ const runtime = (() => {
   const map = (...a) => new Map([...new Array(a.length / 2)].map((_, i) => [a[i*2], a[i*2+1]]))
   const log = (a, ...b) => { console.warn(a, ...b); return a }
   const __assert = (cond, f) => cond || __throw(f())
-  const __fn = f => (...args) => {
-    try {
-      return f(...args)
-    } catch (e) {
-      if (e instanceof MoaReturn) {
-        return e.data
-      }
-    }
-  }
   const __at = (obj, n) => obj instanceof Map ? obj.get(n) : obj instanceof Set ? obj.has(n) : obj.at(n)
   const __throw = s => { throw new MoaError(s) }
   const __catch = (f, g) => {
@@ -46,12 +37,6 @@ const runtime = (() => {
   class MoaError extends Error {
     constructor(data) {
       super(data)
-      this.data = data
-    }
-  }
-  class MoaReturn extends Error {
-    constructor(data) {
-      super()
       this.data = data
     }
   }
@@ -125,7 +110,7 @@ const parse = tokens => {
 
 const generate = nodes => {
   let vid = 1
-  const uid = `__${vid++}`
+  const uid = () => `__${vid++}`
   const geniif = a => a.length === 2 ?
     gen(a[0]) + " ? " + gen(a[1][1]) + " : " + gen(a[1].length === 3 ? a[1][2] : a[1].slice(2)) :
     _geniif(a)
@@ -141,7 +126,7 @@ const generate = nodes => {
     `${i == 0 ? "if " : "else if "} (${gen(a[0])}) { ${gen(a[1])} }` :
     `else { ${gen(a)} }`
   const genelse = a => "else " + (a[0].code === "if" ? genif(a.slice(1)) : gen(a[0]))
-  const gendef = (a, body) => `const ${a[0]} = __fn((${a.slice(1)}) => ${body})`
+  const gendef = (a, body) => `const ${a[0]} = (${a.slice(1)}) => ${body}`
   const genclass = (name, fields) => `const ${name} = (${fields}) => ({${fields}})`
   const genenum = o => Array.isArray(o) ?
     `const ${o[0].code} = __val => ({__tag: "${o[0].code}", __val})` :
@@ -165,10 +150,11 @@ const generate = nodes => {
         const a = tail.map(gen)
         return "(() => {" + a.slice(0, -1).join(";\n") + ";\n return " + a.at(-1) + "})()"
       } else if (head.code === ".") {
-        const [field, ...args] = Array.isArray(tail[1]) ? tail[1].map(gen) : [gen(tail[1])]
+        const field = tail[1].code
+        const args = tail.slice(2).map(gen)
         return `${gen(tail[0])}.${field}` + (args.length ? `(${args})` : "")
       } else if (head.code === "-" && tail.length === 1) {
-        return `-${gen(tail[0])}`
+        return `(-${gen(tail[0])})`
       } else if (head.op1) {
         return head.code + gen(tail[0])
       } else if (head.op2) {
@@ -194,7 +180,7 @@ const generate = nodes => {
           head.code === "var" ? `let ${tail[0][1].code} = ${gen(tail[0][2])}` :
           head.code === "match" ? `1 && (({__tag, __val}) => ${genmatch(tail[1].slice(1))})(${gen(tail[0])})` :
           head.code === "while" ? `1 && (() => { while (${gen(tail[0])}) { ${gen(tail[1])} } })()` :
-          head.code === "return" ? `throw new MoaReturn(${tail.length === 1 ? gen(tail[0]) : gen(tail)})` :
+          head.code === "return" ? `return ${tail.length === 1 ? gen(tail[0]) : gen(tail)}` :
           head.code === "dec" ? "null" :
           head.code === "interface" ? "null" :
           gen(head) + "(" + tail.map(gen).join(", ") + ")"
