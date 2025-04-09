@@ -1,4 +1,6 @@
 "use strict"
+// Generate statement based JavaScript
+// [ ] Assign expressions to unique variables for function arguments, binary operations, return values
 const fs = require("node:fs")
 const vm = require("node:vm")
 const child_process = require("node:child_process")
@@ -62,10 +64,9 @@ const tokenize = moa => {
   const tokens = []
   for (const code of moa.split(/([ \n]+|#[^\n]*|[()\[\]{}]|[0-9+]+\.[0-9]+|[:.+\-*/%!=^|&?><]+|"[^"]*"|`[^`]*`|`[^`]*`|[ \n]+)/)) {
     if (code.trim() && code[0] !== "#") {
-      const nospace = !(" \t\n".includes(moa[offset+code.length]))
-      const op1 = nospace && "!-".includes(code)
+      const op1 = !(" \t\n".includes(moa[offset+code.length])) && "!-".includes(code)
       const op2 = !op1 && "+-*/%|&<>=!".includes(code[0])
-      tokens.push({code, lineno, offset, indent, ...(nospace && {nospace}), ...(op1 && {op1}), ...(op2 && {op2})})
+      tokens.push({code, lineno, offset, indent, ...(op1 && {op1}), ...(op2 && {op2})})
     }
     offset += code.length
     lineno += code.split("\n").length - 1
@@ -123,6 +124,8 @@ const parse = tokens => {
 }
 
 const generate = nodes => {
+  let vid = 1
+  const uid = `__${vid++}`
   const geniif = a => a.length === 2 ?
     gen(a[0]) + " ? " + gen(a[1][1]) + " : " + gen(a[1].length === 3 ? a[1][2] : a[1].slice(2)) :
     _geniif(a)
