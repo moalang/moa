@@ -142,49 +142,35 @@ const generate = nodes => {
     if (Array.isArray(node)) {
       const head = node[0]
       const tail = node.slice(1)
-      if (tail.length === 0) {
-        return gen(head)
-      } else if (head.code === "[") {
-        return "[" + tail.map(gen) + "]"
-      } else if (head.code === "{") {
-        const a = tail.map(gen)
-        return "(() => {" + a.slice(0, -1).join(";\n") + ";\n return " + a.at(-1) + "})()"
-      } else if (head.code === ".") {
-        const field = tail[1].code
-        const args = tail.slice(2).map(gen)
-        return `${gen(tail[0])}.${field}` + (args.length ? `(${args})` : "")
-      } else if (head.code === "-" && tail.length === 1) {
-        return `(-${gen(tail[0])})`
-      } else if (head.op1) {
-        return head.code + gen(tail[0])
-      } else if (head.op2) {
-        return head.code === "++" ?
+      return tail.length === 0 ? gen(head) :
+        head.code === "[" ? "[" + tail.map(gen) + "]" :
+        head.code === "{" ? (a => "(() => {" + a.slice(0, -1).join(";\n") + ";\n return " + a.at(-1) + "})()")(tail.map(gen)) :
+        head.code === "." ? `${gen(tail[0])}.${tail[1].code}` + (tail.length >= 3 ? `(${tail.slice(2).map(gen)})` : "") :
+        head.code === "-" && tail.length === 1 ? `-${gen(tail[0])}` :
+        head.op1          ? head.code + gen(tail[0]) :
+        head.op2          ? (head.code === "++" ?
           `${gen(tail[0])} + ${gen(tail[1])}`:
-          `${gen(tail[0])} ${head.code} ${gen(tail[1])}`
-      } else if (head.parenthesis) {
-        return "(" + gen(tail[0]) + ")"
-      } else if (head.call) {
-        return tail.length === 1 ? gen(tail[0]) + "()" : gen(tail)
-      } else {
-        return head.code === ":" ? "{" + tail.map(gen).join("\n") + "}" :
-          head.code === "(" ? gen(tail) :
-          head.code === "assert" ? `__assert(${gen(tail[0])}, () => [${tail.slice(1).map(gen)}].join(" "))` :
-          head.code === "catch" ? `__catch(() => ${gen(tail[0])}, ${gen(tail[1])})` :
-          head.code === "iif" ? geniif(tail) :
-          head.code === "if" ? genif(tail) :
-          head.code === "else" ? genelse(tail) :
-          head.code === "class" ? genclass(tail[0].code, tail[1].slice(1).map(x => x[0].code)) :
-          head.code === "enum" ? tail[1].slice(1).map(genenum).join("\n") :
-          head.code === "def" ? gendef(tail.slice(0, -1).map(node => node.code), gen(tail.at(-1))) :
-          head.code === "let" ? `const ${tail[0][1].code} = ${gen(tail[0][2])}` :
-          head.code === "var" ? `let ${tail[0][1].code} = ${gen(tail[0][2])}` :
-          head.code === "match" ? `1 && (({__tag, __val}) => ${genmatch(tail[1].slice(1))})(${gen(tail[0])})` :
-          head.code === "while" ? `1 && (() => { while (${gen(tail[0])}) { ${gen(tail[1])} } })()` :
-          head.code === "return" ? `return ${tail.length === 1 ? gen(tail[0]) : gen(tail)}` :
-          head.code === "dec" ? "null" :
-          head.code === "interface" ? "null" :
-          gen(head) + "(" + tail.map(gen).join(", ") + ")"
-      }
+          `${gen(tail[0])} ${head.code} ${gen(tail[1])}`) :
+        head.parenthesis ? "(" + gen(tail[0]) + ")" :
+        head.call ? tail.length === 1 ? gen(tail[0]) + "()" : gen(tail) :
+        head.code === ":"         ? "{" + tail.map(gen).join("\n") + "}" :
+        head.code === "("         ? gen(tail) :
+        head.code === "assert"    ? `__assert(${gen(tail[0])}, () => [${tail.slice(1).map(gen)}].join(" "))` :
+        head.code === "catch"     ? `__catch(() => ${gen(tail[0])}, ${gen(tail[1])})` :
+        head.code === "iif"       ? geniif(tail) :
+        head.code === "if"        ? genif(tail) :
+        head.code === "else"      ? genelse(tail) :
+        head.code === "class"     ? genclass(tail[0].code, tail[1].slice(1).map(x => x[0].code)) :
+        head.code === "enum"      ? tail[1].slice(1).map(genenum).join("\n") :
+        head.code === "def"       ? gendef(tail.slice(0, -1).map(node => node.code), gen(tail.at(-1))) :
+        head.code === "let"       ? `const ${tail[0][1].code} = ${gen(tail[0][2])}` :
+        head.code === "var"       ? `let ${tail[0][1].code} = ${gen(tail[0][2])}` :
+        head.code === "match"     ? `1 && (({__tag, __val}) => ${genmatch(tail[1].slice(1))})(${gen(tail[0])})` :
+        head.code === "while"     ? `1 && (() => { while (${gen(tail[0])}) { ${gen(tail[1])} } })()` :
+        head.code === "return"    ? `return ${tail.length === 1 ? gen(tail[0]) : gen(tail)}` :
+        head.code === "dec"       ? "null" :
+        head.code === "interface" ? "null" :
+        gen(head) + "(" + tail.map(gen).join(", ") + ")"
     } else {
       return node.code === "void" ? "null" :
         node.code === "throw" ? "__throw" :
