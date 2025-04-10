@@ -126,7 +126,6 @@ const generate = nodes => {
     `${i == 0 ? "if " : "else if "} (${gen(a[0])}) { ${gen(a[1])} }` :
     `else { ${gen(a)} }`
   const genelse = a => "else " + (a[0].code === "if" ? genif(a.slice(1)) : gen(a[0]))
-  const gendef = (a, body) => `const ${a[0]} = (${a.slice(1)}) => ${body}`
   const genclass = (name, fields) => `const ${name} = (${fields}) => ({${fields}})`
   const genenum = o => Array.isArray(o) ?
     `const ${o[0].code} = __val => ({__tag: "${o[0].code}", __val})` :
@@ -148,9 +147,7 @@ const generate = nodes => {
         head.code === "." ? `${gen(tail[0])}.${tail[1].code}` + (tail.length >= 3 ? `(${tail.slice(2).map(gen)})` : "") :
         head.code === "-" && tail.length === 1 ? `-${gen(tail[0])}` :
         head.op1          ? head.code + gen(tail[0]) :
-        head.op2          ? (head.code === "++" ?
-          `${gen(tail[0])} + ${gen(tail[1])}`:
-          `${gen(tail[0])} ${head.code} ${gen(tail[1])}`) :
+        head.op2          ? `${gen(tail[0])} ${head.code === "++" ? "+" : head.code} ${gen(tail[1])}` :
         head.parenthesis ? "(" + gen(tail[0]) + ")" :
         head.call ? tail.length === 1 ? gen(tail[0]) + "()" : gen(tail) :
         head.code === ":"         ? "{" + tail.map(gen).join("\n") + "}" :
@@ -162,7 +159,7 @@ const generate = nodes => {
         head.code === "else"      ? genelse(tail) :
         head.code === "class"     ? genclass(tail[0].code, tail[1].slice(1).map(x => x[0].code)) :
         head.code === "enum"      ? tail[1].slice(1).map(genenum).join("\n") :
-        head.code === "def"       ? gendef(tail.slice(0, -1).map(node => node.code), gen(tail.at(-1))) :
+        head.code === "def"       ? `const ${tail[0].code} = (${tail.slice(1, -1).map(x => x.code)}) => ${gen(tail.at(-1))}` :
         head.code === "let"       ? `const ${tail[0][1].code} = ${gen(tail[0][2])}` :
         head.code === "var"       ? `let ${tail[0][1].code} = ${gen(tail[0][2])}` :
         head.code === "match"     ? `1 && (({__tag, __val}) => ${genmatch(tail[1].slice(1))})(${gen(tail[0])})` :
