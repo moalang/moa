@@ -117,7 +117,7 @@ if:
   cond1: log 1
   cond2: log 2
   _    : log 3
-catch throw(3) fn(e => log e.message e.stack
+catch throw(3) fn(e: log e.message e.stack)
 catch throw(b(1)) e => match e.data:
   a: "a"
   b v: "b {}".format(v)

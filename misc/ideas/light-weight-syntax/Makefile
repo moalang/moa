@@ -1,0 +1,2 @@
+calc:
+	ruby calc.rb

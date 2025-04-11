@@ -3,9 +3,6 @@ if exists("b:current_syntax")
   finish
 endif
 
-" Comments
-syn match  Comment /#.*/
-
 " Constant
 syn region String start=+\z(["'`]\)+ skip=+\\\%(\z1\|$\)+ end=+\z1+
 syn region String start=+\z(```\|"""\|'''\)+ skip=+\\\%(\z1\|$\)+ end=+\z1+
@@ -27,6 +24,10 @@ syn match Operator /[-+%<>!&|^*=]=\?/
 syn match Operator "||"
 syn match Operator "&&"
 syn match goOperator /\~/
+
+" Comments
+syn match Comment /#.*/
+syn match Statement /^-- .*/
 
 
 "*Comment        o コメント
