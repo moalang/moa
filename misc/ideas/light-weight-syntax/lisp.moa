@@ -29,8 +29,8 @@ def tokenize moa:
   def isidnum c: isid(c) || isnum(c)
   def skip f: while pos < moa.size && f(moa[pos]): pos++
   while pos < moa.size:
-    offset = pos
-    c = moa[pos]
+    let offset = pos
+    let c = moa[pos]
     if:
       isspace(c): skip isspace
       isnum(c)  : skip isnum
@@ -63,13 +63,13 @@ def parse moa:
   def link a:
     if pos >= tokens.size:
       return a
-    t = tokens[pos]
+    let t = tokens[pos]
     return iif:
       t.code == "(": pos += 1; link node([a].concat(untilBy(")")))
       t.op2        : pos += 1; link node([leaf(t) a consume()])
       a
   def consume:
-    t = tokens[pos]
+    let t = tokens[pos]
     pos += 1
     return link iif t.op1:
       node [leaf(t) consume()]
