@@ -62,7 +62,7 @@ parse moa = return [consume()]:
     pos < tokens.size && tokens[pos].code == "(": pos += 1; link node([a].concat(untilBy(")")))
     pos < tokens.size && tokens[pos].op2        :           link node([leaf(tokens[pos+=1]) a consume()])
     a
-  consume = () =>
+  consume = fn:
     t = tokens[pos]
     pos += 1
     iif t.op1:
