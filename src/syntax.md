@@ -2,7 +2,7 @@
 ```
 top: line*
 line: exp+ comment? "\n"
-exp: op1? atom (prop | call)* (op2 exp)?
+exp: op1? atom (prop | call | index)* (op2 exp)?
 atom:
 | "(" exp* ")"
 | "{" line+ "}"
@@ -11,11 +11,12 @@ atom:
 | '"' [^"]* '"'                           # "string"
 | '"""' [^"]* '"""'                       # """a="b"""" -> "a=\"b\""
 | '`' [^"]* '`'                           # `regexp`
-| id "?"?
+| id
 prop: "." (id | [0-9]+)                   # property access
 call: "(" exp* ")"                        # call function
+call: "[" exp "]"                         # index access
 op1: [!-~] | "..."
 op2: [+-*/%<>|&^=!]+
-id: [A-Za-z_][A-Za-z0-9_]*
+id: [A-Za-z_][A-Za-z0-9_]* [!?]?
 comment: "#" [^\n]*
 ```
