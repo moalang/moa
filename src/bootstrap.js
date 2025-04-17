@@ -78,14 +78,15 @@ const compile = program => {
   }
 
   const generate = root => {
-    const genreturn = a => `0,(() => { ${a.slice(0, -1).join(";")};return ${a.at(-1)} })()`
     const geniif = a => a.length === 1 ? a[0] : `${a[0]} ? ${a[1]} : ${geniif(a.slice(2))}`
-    const genenum = a => a.map(gentag).join("\n")
+    const genenum = a => a.map(gentag).join(";")
     const gentag = t => Array.isArray(t) ? `let ${t[0].code} = (__value) => ({__tag: "${t[0].code}", __value})` : `let ${t.code} = {__tag: "${t.code}"}`
     const genmatch = a => a.length === 0 ? "(() => { throw new Error(`No match for ${JSON.stringify(__target)}`) })()" :
       a.length === 1 ? gen(a[0]) :
       `__target.__tag === "${a[0].code}" ? ${gencase(a[1])} : ${genmatch(a.slice(2))}`
     const gencase = x => Array.isArray(x) && x[0].code === "fn" ? `${gen(x)}(__target.__value)` : gen(x)
+    const genbody = x => Array.isArray(x) && x[0].code === "{" ? "{" + genreturn(x.slice(1).map(gen)) + "}" : gen(x)
+    const genreturn = a => a.slice(0, -1).join(";") + ";" + a.at(-1)
     const gen = node => {
       if (Array.isArray(node)) {
         const head = node[0]
@@ -93,15 +94,15 @@ const compile = program => {
         return head.op2 ? gen(tail[0]) + head.code + gen(tail[1]) :
           head.dot ? gen(tail[0]) + "." + tail[1].code :
           head.code === "("      ? "(" + gen(tail[0]) + ")" :
-          head.code === "{"      ? tail.length === 1 ? gen(tail[0]) : genreturn(tail.map(gen)) :
-          head.code === "fn"     ? `null ?? ((${tail.slice(0, -1).map(gen)}) => ${gen(tail.at(-1))})` :
+          head.code === "{"      ? tail.length === 1 ? gen(tail[0]) : tail.map(gen) :
+          head.code === "fn"     ? `((${tail.slice(0, -1).map(gen)}) => ${genbody(tail.at(-1))})` :
           head.code === "iif"    ? geniif(tail.map(gen)) :
-          head.code === "throw"  ? `null ?? (() => { throw(${tail.map(gen)}) })()` :
-          head.code === "catch"  ? `null ?? (() => { try { return ${gen(tail[0])} } catch (__e) { return (${gen(tail[1])})(__e) } })()` :
+          head.code === "throw"  ? `(() => { throw(${tail.map(gen)}) })()` :
+          head.code === "catch"  ? `(() => { try { return ${gen(tail[0])} } catch (__e) { return (${gen(tail[1])})(__e) } })()` :
           head.code === "let"    ? `let ${tail[0][1].code} = ${gen(tail[0][2])}` :
           head.code === "enum"   ? `${genenum(tail[1].slice(1))}\nlet ${tail[0].code} = {${tail[1].slice(1).map(x => Array.isArray(x) ? x[0].code : x.code)}}` :
           head.code === "class"  ? `let ${tail[0].code} = ${(a => `(${a}) => ({${a}})`)(tail[1].slice(1).map(t => t[0].code))}` :
-          head.code === "match"  ? `null ?? (__target => ${genmatch(tail.slice(1))})(${gen(tail[0])})` :
+          head.code === "match"  ? `(__target => ${genmatch(tail.slice(1))})(${gen(tail[0])})` :
           gen(head) + "(" + tail.map(gen).join(", ") + ")"
       } else {
         const c = node.code
@@ -115,7 +116,7 @@ const compile = program => {
 
   const tokens = tokenize(program)
   const trees = parse(tokens)
-  const js = trees.map(generate).join("\n")
+  const js = trees.map(generate).join(";")
   return { tokens, trees, js }
 }
 
@@ -195,6 +196,8 @@ const runTest = eq => {
   test("iif false throw(1) 2", 2)
   test("iif false throw(1) true 2 throw(3)", 2)
   test("iif false throw(1) false throw(2) 3", 3)
+
+  // Test statement
 
   console.log("ok")
 }
