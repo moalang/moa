@@ -152,11 +152,6 @@ const runTest = eq => {
   test("fn(a b a + b)(1 2)", 3)
 
   // Test syntax sugars
-  const a = 1
-  const b = 2
-  const c = 3
-  const s = "abc"
-  const f = (...a) => a.reduce((acc, x) => acc + x, 0)
   test("1 #a", 1)
   test("fn(a a) 1", 1)
   test("fn(a a) 1 #b", 1)
@@ -164,8 +159,8 @@ const runTest = eq => {
   test("1 + 2", 3)
   test("fn(1)()", 1)
   test('"abc".size', 3)
-  test('"abc".slice(1)', "bc", {s})
-  test('"abc".slice(1 -1)',"b", {s})
+  test('"abc".slice(1)', "bc")
+  test('"abc".slice(1 -1)',"b")
   test("1e2", 100)
   test("0xff", 255)
   test("-0xFF", -255)
@@ -204,34 +199,25 @@ const runTest = eq => {
   console.log("ok")
 }
 
-const testInterpriter = () => {
-  const eq = (code, expected) => {
-    const {tokens, trees, js} = compile(code)
-    const actual = runJs(js)
-    return (expected instanceof RegExp ? expected.toString() === actual.toString() : expected === actual) || `Test failed
+const testInterpriter = () => runTest((code, expected) => {
+  const {tokens, trees, js} = compile(code)
+  const actual = runJs(js)
+  return (expected instanceof RegExp ? expected.toString() === actual.toString() : expected === actual) || `Test failed
 Expected: ${expected}
 Actual: ${actual}
 Code: ${code}
 JS: ${js}
 Trees: ${trees.map(showNode)}
 Tokens: ${tokens.map(showToken).join("\n")}`
-  }
-  runTest(eq)
-}
+})
+
 
 const testCompiler = () => {
   const js = compile(fs.readFileSync("moa.moa", "utf-8")).js + "; compile"
   const compileToGo = runJs(js)
-  const eq = (exp, expected) => {
+  runTest((exp, expected) => {
     const goExp = compileToGo(exp)
-    const goProgram = `package main
-
-import "fmt"
-
-func main() {
-	fmt.Print(${goExp})
-}
-`
+    const goProgram = `package main; import "fmt"; func main() { fmt.Print(${goExp}) }`
     fs.writeFileSync("/tmp/moa.go", goProgram)
     const actual = child_process.execSync("go run /tmp/moa.go 2>&1", {encoding: "utf-8"})
     return expected.toString() === actual || Error(`Test failed
@@ -239,8 +225,7 @@ Expected: ${expected}
 Actual: ${actual}
 Code: ${exp}
 Go: ${goExp}`)
-  }
-  runTest(eq)
+  })
 }
 
 testInterpriter()
