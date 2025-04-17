@@ -202,6 +202,7 @@ const runTest = eq => {
   test("iif false throw(1) false throw(2) 3", 3)
 
   // Statements
+  test("1; 2", 2)
   test("if true { throw 1 }", "error: 1")
   test("if false { throw 1 }; 2", 2)
   test("if false { throw 1 } true { throw 2 }", "error: 2")
@@ -224,11 +225,11 @@ const testInterpriter = () => runTest((code, expected) => {
   const actual = runJs(js)
   return (expected instanceof RegExp ? expected.toString() === actual.toString() : expected === actual) || `Test failed
 Expected: ${expected}
-Actual: ${actual}
-Code: ${code}
-JS: ${js}
-Trees: ${trees.map(showNode)}
-Tokens: ${tokens.map(showToken).join("\n")}`
+  Actual: ${actual}
+    Code: ${code}
+      JS: ${js}
+   Trees: ${trees.map(showNode)}
+  Tokens: ${tokens.map(showToken).join("\n")}`
 })
 
 
@@ -240,11 +241,11 @@ const testCompiler = () => {
     const goProgram = `package main; import "fmt"; func main() { fmt.Print(${goExp}) }`
     fs.writeFileSync("/tmp/moa.go", goProgram)
     const actual = child_process.execSync("go run /tmp/moa.go 2>&1", {encoding: "utf-8"})
-    return expected.toString() === actual || Error(`Test failed
+    return expected.toString() === actual || `Test failed
 Expected: ${expected}
-Actual: ${actual}
-Code: ${exp}
-Go: ${goExp}`)
+  Actual: ${actual}
+    Code: ${exp}
+      Go: ${goExp}`
   })
 }
 
