@@ -78,7 +78,7 @@ const compile = program => {
   }
 
   const generate = root => {
-    const genif = a => a.length === 1 ? a[0] : `if (${a[0]}) { ${a[1]} }${a.length == 2 ? ";" : " else " + genif(a.slice(2))}`
+    const genif = a => a.length === 1 ? a[0] : `if (${a[0]}) { ${a[1]} }${a.length == 2 ? "" : " else " + genif(a.slice(2))}`
     const geniif = a => a.length === 1 ? a[0] : `${a[0]} ? ${a[1]} : ${geniif(a.slice(2))}`
     const genenum = a => a.map(gentag).join(";")
     const gentag = t => Array.isArray(t) ? `let ${t[0].code} = (__value) => ({__tag: "${t[0].code}", __value})` : `let ${t.code} = {__tag: "${t.code}"}`
@@ -86,8 +86,8 @@ const compile = program => {
       a.length === 1 ? gen(a[0]) :
       `__target.__tag === "${a[0].code}" ? ${gencase(a[1])} : ${genmatch(a.slice(2))}`
     const gencase = x => Array.isArray(x) && x[0].code === "fn" ? `${gen(x)}(__target.__value)` : gen(x)
-    const genbody = x => Array.isArray(x) && x[0].code === "{" ? "{" + genreturn(x.slice(1).map(gen)) + "}" : gen(x)
-    const genreturn = a => a.slice(0, -1).join(";") + ";" + a.at(-1)
+    const genbody = x => Array.isArray(x) && "{ if while return".split(" ").includes(x[0].code) ? "{" + genreturn(x.slice(1).map(gen)) + "}" : gen(x)
+    const genreturn = a => a.slice(0, -1).join(";") + ";" + (a.at(-1).startsWith("return") ? a.at(-1) : "return " + a.at(-1))
     const gen = node => {
       if (Array.isArray(node)) {
         const head = node[0]
@@ -95,16 +95,18 @@ const compile = program => {
         return head.op2 ? gen(tail[0]) + head.code + gen(tail[1]) :
           head.dot ? gen(tail[0]) + "." + tail[1].code :
           head.code === "("      ? "(" + gen(tail[0]) + ")" :
-          head.code === "{"      ? tail.length === 1 ? gen(tail[0]) : tail.map(gen) :
+          head.code === "{"      ? tail.length === 1 ? gen(tail[0]) : tail.map(gen).join(";") :
           head.code === "fn"     ? `((${tail.slice(0, -1).map(gen)}) => ${genbody(tail.at(-1))})` :
-          head.code === "if"     ? genif(tail.map(gen)) :
           head.code === "iif"    ? geniif(tail.map(gen)) :
-          head.code === "throw"  ? `(() => { throw(${tail.map(gen)}) })()` :
-          head.code === "catch"  ? `(() => { try { return ${gen(tail[0])} } catch (__e) { return (${gen(tail[1])})(__e) } })()` :
-          head.code === "let"    ? `let ${tail[0][1].code} = ${gen(tail[0][2])}` :
+          head.code === "match"  ? `(__target => ${genmatch(tail.slice(1))})(${gen(tail[0])})` :
+          head.code === "var"    ? `let ${tail[0][1].code} = ${gen(tail[0][2])}` :
+          head.code === "let"    ? `const ${tail[0][1].code} = ${gen(tail[0][2])}` :
           head.code === "enum"   ? `${genenum(tail[1].slice(1))}\nlet ${tail[0].code} = {${tail[1].slice(1).map(x => Array.isArray(x) ? x[0].code : x.code)}}` :
           head.code === "class"  ? `let ${tail[0].code} = ${(a => `(${a}) => ({${a}})`)(tail[1].slice(1).map(t => t[0].code))}` :
-          head.code === "match"  ? `(__target => ${genmatch(tail.slice(1))})(${gen(tail[0])})` :
+          head.code === "if"     ? genif(tail.map(gen)) :
+          head.code === "while"  ? `while (${gen(tail[0])}) { ${gen(tail[1])} }` :
+          head.code === "throw"  ? `(() => { throw(${tail.map(gen)}) })()` :
+          head.code === "catch"  ? `(() => { try { return ${gen(tail[0])} } catch (__e) { return (${gen(tail[1])})(__e) } })()` :
           gen(head) + "(" + tail.map(gen).join(", ") + ")"
       } else {
         const c = node.code
@@ -204,6 +206,15 @@ const runTest = eq => {
   test("if false { throw 1 }; 2", 2)
   test("if false { throw 1 } true { throw 2 }", "error: 2")
   test("if false { throw 1 } false { throw 2 }; 3", 3)
+  test("var n = 0; while n < 3 n += 1; n", 3)
+  test("var n = 0; while n < 3 { n += 1; if n == 2 { break } }; n", 2)
+  test("var n = 0; while n < 3 { n += 1; if true { continue }; throw(1) }; n", 3)
+  test("fn({1; 2})()", 2)
+  test("fn({return 1; 2})()", 1)
+  test("fn({1; return 2})()", 2)
+  test("fn(if(true {return 1}))()", 1)
+  test("fn(if(false 1 { return 2 }))()", 2)
+  test("fn(while(true {return 1}))()", 1)
 
   console.log("ok")
 }
