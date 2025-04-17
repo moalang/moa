@@ -15,6 +15,7 @@ const showToken = t => t.code + "\t" + [t.op2 && "op2", t.op1 && "op1", t.call &
 const runtime = (() => {
   "use strict"
   Object.defineProperty(String.prototype, "size", { get() { return this.length } })
+  const log = (...a) => (a.map(x => console.dir(x, {depth: null})), a[0])
 }).toString().slice("(() => {".length, -("})".length)) + ";\n"
 
 const compile = program => {
@@ -66,7 +67,9 @@ const compile = program => {
         node
       const t = tokens[pos++]
       return t.code === "(" ? link([t, ...untilBy(")")]) :
-        t.code === "{" ? link([t, ...drop(parseTop(), "}")]) : link(t)
+        t.code === "[" ? link([t, ...untilBy("]")]) :
+        t.code === "{" ? link([t, ...drop(parseTop(), "}")]) :
+        link(t)
     }
     const parseLine = () => {
       const lineno = tokens[pos].lineno
@@ -95,12 +98,14 @@ const compile = program => {
         return head.op2 ? gen(tail[0]) + head.code + gen(tail[1]) :
           head.dot ? gen(tail[0]) + "." + tail[1].code :
           head.code === "("      ? "(" + gen(tail[0]) + ")" :
+          head.code === "["      ? "[" + tail.map(gen) + "]" :
           head.code === "{"      ? tail.length === 1 ? gen(tail[0]) : tail.map(gen).join(";") :
           head.code === "fn"     ? `((${tail.slice(0, -1).map(gen)}) => ${genbody(tail.at(-1))})` :
           head.code === "iif"    ? geniif(tail.map(gen)) :
           head.code === "match"  ? `(__target => ${genmatch(tail.slice(1))})(${gen(tail[0])})` :
           head.code === "var"    ? `let ${tail[0][1].code} = ${gen(tail[0][2])}` :
           head.code === "let"    ? `const ${tail[0][1].code} = ${gen(tail[0][2])}` :
+          head.code === "def"    ? `const ${tail[0].code} = (${tail.slice(1, -1).map(gen).join(", ")}) => ${genbody(tail.at(-1))}` :
           head.code === "enum"   ? `${genenum(tail[1].slice(1))}\nlet ${tail[0].code} = {${tail[1].slice(1).map(x => Array.isArray(x) ? x[0].code : x.code)}}` :
           head.code === "class"  ? `let ${tail[0].code} = ${(a => `(${a}) => ({${a}})`)(tail[1].slice(1).map(t => t[0].code))}` :
           head.code === "if"     ? genif(tail.map(gen)) :
@@ -124,9 +129,9 @@ const compile = program => {
   return { tokens, trees, js }
 }
 
-const runJs = js => {
+const runJs = (js, context={}) => {
   try {
-    return new vm.Script(runtime + js).runInNewContext({})
+    return new vm.Script(runtime + js).runInNewContext({console, ...context})
   } catch(e) {
     return `error: ${e}`
   }
@@ -180,11 +185,18 @@ const runTest = eq => {
   test("{ fn(a a) 1 }", 1)
   test("{ 1; fn(a a) 2 }", 2)
   test("{ 1\nfn(a a) 2 }", 2)
+  test("[1]", [1])
+  test("[1 2]", [1, 2])
 
   // Definitions
   test("let a = 1; a", 1)
   test("let f = fn(1); f()", 1)
   test("let f = fn(a a); f(2)", 2)
+  test("def f 1; f()", 1)
+  test("def f a a; f 1", 1)
+  test("def f a b a + b; f 1 2", 3)
+  test("def f a b { a + b }; f 1 2", 3)
+  test("def f a b { return a + b }; f 1 2", 3)
   test("enum ab { a; b }; match a a 1", 1)
   test("enum ab { a; b int }; match b(2) a 1 b fn(n n)", 2)
   test("class ab { a int; b int }; ab(1 2).a", 1)
@@ -217,13 +229,18 @@ const runTest = eq => {
   test("fn(if(false 1 { return 2 }))()", 2)
   test("fn(while(true {return 1}))()", 1)
 
+  // Debug
+  test("log 1 2", 1)
+
+  // Methods
+
   console.log("ok")
 }
 
 const testInterpriter = () => runTest((code, expected) => {
   const {tokens, trees, js} = compile(code)
-  const actual = runJs(js)
-  return (expected instanceof RegExp ? expected.toString() === actual.toString() : expected === actual) || `Test failed
+  const actual = runJs(js, {console: {dir: () => null}})
+  return (typeof expected === "object" ? JSON.stringify(expected) === JSON.stringify(actual) : expected === actual) || `Test failed
 Expected: ${expected}
   Actual: ${actual}
     Code: ${code}

@@ -1,1 +1,9 @@
-let compile = fn(src "1")
+class token {
+  code string
+}
+def tokenize program {
+  return [token(program)]
+}
+def compile program {
+  "1"
+}
