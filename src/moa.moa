@@ -2,6 +2,10 @@ class Token {
   code string
   lineno int
 }
+enum Tree {
+  Leaf Token
+  Node vec[Tree]
+}
 def tokenize program {
   var pos = 0
   var lineno = 0
@@ -23,51 +27,61 @@ def tokenize program {
   tokens
 }
 def parse tokens {
-  let pos = 0
+  var pos = 0
   def until f g h? {
     let a = []
     while pos < tokens.size && f(tokens[pos]) {
       a.push g()
     }
-#    h?()
+    h?()
     a
   }
-#  def untilBy code until(fn(t t.code != code) parseAtom fn(pos+=1))
-#  def drop node code {
-#    if pos < tokens.size && tokens[pos].code == code {
-#      pos += 1
-#      return node
-#    } {
-#      throw `No '${code}' after ${showNode(node)}`
-#    }
-#  }
-#  def isClose s ")]}".has(s[0])
-#  def parseAtom {
-#    def link node iif(
-#      pos < tokens.length && tokens[pos].dot link([tokens[pos++], node, tokens[pos++]])
-#      pos < tokens.length && tokens[pos].op2 link([tokens[pos++], node, parseAtom()])
-#      pos < tokens.length && tokens[pos].call (pos++, link([node, ...untilBy(")")]))
-#      pos < tokens.length && tokens[pos].index link([tokens[pos++], node, ...untilBy("]")])
-#      node)
-#    let t = tokens[pos]
-#    pos += 1
-#    iif(t.code == "(" link([t, ...untilBy(")")])
-#        t.code == "[" link([t, ...untilBy("]")])
-#        t.code == "{" link([t, ...drop(parseTop(), "}")])
-#        t.op1          link([t, parseAtom()])
-#        link(t))
-#  }
-#  def parseLine {
-#    let lineno = tokens[pos].lineno
-#    let a = until(fn(t t.lineno == lineno && !isClose(t.code)) parseAtom)
-#    iif a.length == 1 a[0] a
-#  }
-#  def parseTop until(fn(t !isClose(t.code)) parseLine)
-#  parseTop()
-  ""
+  def untilBy code until(fn(t t.code != code) parseAtom fn(pos += 1))
+  def drop node code {
+    if pos < tokens.size && tokens[pos].code == code {
+      pos += 1
+      return node
+    } {
+      throw `No '${code}' after ${showNode(node)}`
+    }
+  }
+  def isClose s ")]}".has(s[0])
+  def parseAtom {
+    def next {
+      let t = tokens[pos]
+      pos += 1
+      Leaf t
+    }
+    def call node {
+      pos += 1
+      link Node([node ...untilBy(")")])
+    }
+    def link node iif(
+      pos < tokens.length && tokens[pos].dot link(Node([next() node next()]))
+      pos < tokens.length && tokens[pos].op2 link(Node([next() node parseAtom()]))
+      pos < tokens.length && tokens[pos].call call(node)
+      pos < tokens.length && tokens[pos].index link(Node([next() node ...untilBy("]")]))
+      node)
+    let t = tokens[pos]
+    let l = Leaf(t)
+    pos += 1
+    iif(t.code == "(" link(Node([l ...untilBy(")")]))
+        t.code == "[" link(Node([l ...untilBy("]")]))
+        t.code == "{" link(Node([l ...drop(parseTop() "}")]))
+        t.op1         link(Node([l parseAtom()]))
+        link(l))
+  }
+  def parseLine {
+    let lineno = tokens[pos].lineno
+    let a = until(fn(t t.lineno == lineno && !isClose(t.code)) parseAtom)
+    iif a.length == 1 a[0] Node(a)
+  }
+  def parseTop until(fn(t !isClose(t.code)) parseLine)
+  parseTop()
 }
 def compile program {
   let tokens = tokenize(program)
   let nodes = parse(tokens)
+  log nodes
   "1"
 }
