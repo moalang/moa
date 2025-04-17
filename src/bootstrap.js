@@ -78,6 +78,7 @@ const compile = program => {
   }
 
   const generate = root => {
+    const genif = a => a.length === 1 ? a[0] : `if (${a[0]}) { ${a[1]} }${a.length == 2 ? ";" : " else " + genif(a.slice(2))}`
     const geniif = a => a.length === 1 ? a[0] : `${a[0]} ? ${a[1]} : ${geniif(a.slice(2))}`
     const genenum = a => a.map(gentag).join(";")
     const gentag = t => Array.isArray(t) ? `let ${t[0].code} = (__value) => ({__tag: "${t[0].code}", __value})` : `let ${t.code} = {__tag: "${t.code}"}`
@@ -96,6 +97,7 @@ const compile = program => {
           head.code === "("      ? "(" + gen(tail[0]) + ")" :
           head.code === "{"      ? tail.length === 1 ? gen(tail[0]) : tail.map(gen) :
           head.code === "fn"     ? `((${tail.slice(0, -1).map(gen)}) => ${genbody(tail.at(-1))})` :
+          head.code === "if"     ? genif(tail.map(gen)) :
           head.code === "iif"    ? geniif(tail.map(gen)) :
           head.code === "throw"  ? `(() => { throw(${tail.map(gen)}) })()` :
           head.code === "catch"  ? `(() => { try { return ${gen(tail[0])} } catch (__e) { return (${gen(tail[1])})(__e) } })()` :
@@ -138,7 +140,7 @@ const runTest = eq => {
     }
   }
 
-  // Test internal syntax
+  // Internal syntax
   test("true", true)
   test("1", 1)
   test("1.5", 1.5)
@@ -147,12 +149,12 @@ const runTest = eq => {
   test('"a"', "a")
   test('"a b"', "a b")
 
-  // Test primitives
+  // Primitives
   test("fn(1)()", 1)
   test("fn(a a)(1)", 1)
   test("fn(a b a + b)(1 2)", 3)
 
-  // Test syntax sugars
+  // Syntax sugars
   test("1 #a", 1)
   test("fn(a a) 1", 1)
   test("fn(a a) 1 #b", 1)
@@ -177,7 +179,7 @@ const runTest = eq => {
   test("{ 1; fn(a a) 2 }", 2)
   test("{ 1\nfn(a a) 2 }", 2)
 
-  // Test naming
+  // Definitions
   test("let a = 1; a", 1)
   test("let f = fn(1); f()", 1)
   test("let f = fn(a a); f(2)", 2)
@@ -186,7 +188,7 @@ const runTest = eq => {
   test("class ab { a int; b int }; ab(1 2).a", 1)
   test("class ab { a int; b int }; ab(1 2).b", 2)
 
-  // Test branch
+  // Branches
   test("throw 1", "error: 1")
   test("catch throw(1) n => n", 1)
   test("iif true 1 2", 1)
@@ -197,7 +199,11 @@ const runTest = eq => {
   test("iif false throw(1) true 2 throw(3)", 2)
   test("iif false throw(1) false throw(2) 3", 3)
 
-  // Test statement
+  // Statements
+  test("if true { throw 1 }", "error: 1")
+  test("if false { throw 1 }; 2", 2)
+  test("if false { throw 1 } true { throw 2 }", "error: 2")
+  test("if false { throw 1 } false { throw 2 }; 3", 3)
 
   console.log("ok")
 }
