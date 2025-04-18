@@ -37,7 +37,7 @@ moa repl
 http.moa
 ```
 def main {
-  io.http.serve ":8000" req => (text:"hello")
+  io.http.serve ":8000" req => (text: "hello")
 }
 
 def test t {
@@ -82,14 +82,23 @@ struct Todo {
 }
 
 def main {
-  io.http.serve ":8000" req => io.db[Schema] "db.jsonl" db => match req {
+  io.httpd ":8000" req => io.db[Schema] "db.jsonl" db => match(req
     (path:"/")                    io.fs("index.html")
     (path:"/todos" method:"get")  (json:db)
     (path:"/todos" method:"post") {
       db.todos.push title:req.post("title") created_at:io.now
       (status:204)
     }
-  }
+    (path:`/todos/([0-9]+)` method:"post") path => {
+      db.todos.merge path.1.int title:req.post("title") done:req.post("done").bool
+      (status:204)
+    }
+    (path:`/todos/([0-9]+)` method:"delete") path => {
+      db.todos.delete path.1.int
+      (status:204)
+    }
+    _ (status:400 text:"not found")
+  )
 }
 ```
 
