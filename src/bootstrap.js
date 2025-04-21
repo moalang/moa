@@ -10,7 +10,7 @@ const log = x => {
 }
 
 const showNode = node => Array.isArray(node) ? "(" + node.map(showNode).join(" ") + ")" : node.code
-const showToken = t => t.code + "\t" + [t.op2 && "op2", t.op1 && "op1", t.call && "call", t.index && "index"].filter(s => s).join(",")
+const showToken = t => t.code + [t.op2 && ":op2", t.op1 && ":op1", t.call && ":call", t.index && ":index"].filter(s => s)
 
 const runtime = (() => {
   "use strict"
@@ -20,7 +20,7 @@ const runtime = (() => {
   Object.defineProperty(String.prototype, "present", { get() { return this.length > 0 } })
   Object.defineProperty(String.prototype, "has", { get() { return s => this.includes(s) } })
   Object.defineProperty(RegExp.prototype, "split", { get() { return s => s.split(this) } })
-  const log = (...a) => (a.map(x => console.dir(x, {depth: null})), a[0])
+  const log = (...a) => (console.dir(a, {depth: null}), a[0])
   const some = value => {
     const f = (...a) => value(...a)
     f.value = value
@@ -31,6 +31,7 @@ const runtime = (() => {
   const none = () => none
   none.then = () => none
   none.or = v => v
+  const __case = (o, value) => typeof o === "function" ? o(value) : o
 }).toString().slice("(() => {".length, -("})".length)) + ";\n"
 
 const compile = program => {
@@ -43,11 +44,13 @@ const compile = program => {
         lineno += code.split(/\n|;/).length - 1
       } else {
         const op = /^[+\-*/%|&<>=!]+$/.test(code)
-        const op2 = op && (" \n\t".includes(program[pos + code.length]) || (pos > 0 && !(" \n\t".includes(program[pos - 1]))))
+        const lc = pos > 0 ? program[pos - 1] : ''
+        const rc = program[pos + code.length]
+        const op2 = op && lc === " " && rc === " "
         const op1 = (op || code === "...") && !op2
         const dot = code === "."
-        const call = code === "(" && (pos > 0 && !("\n\t ".includes(program[pos-1])))
-        const index = code === "[" && (pos > 0 && !("\n\t .".includes(program[pos-1])))
+        const call = code === "(" && /[A-Za-z0-9_)\]?]/.test(lc)
+        const index = code === "[" && /[A-Za-z0-9_)\]?]/.test(lc)
         tokens.push({code, lineno, op, op1, op2, dot, call, index})
       }
       pos += code.length
@@ -83,7 +86,8 @@ const compile = program => {
         pos < tokens.length && tokens[pos].index ? link([tokens[pos++], node, ...untilBy("]")]) :
         node
       const t = tokens[pos++]
-      return t.code === "(" ? link([t, ...untilBy(")")]) :
+      return t.code === "(" && tokens[pos].op1 ? link([tokens[pos++], ...untilBy(")")]) :
+        t.code === "(" ? link([t, ...untilBy(")")]) :
         t.code === "[" ? link([t, ...untilBy("]")]) :
         t.code === "{" ? link([t, ...drop(parseTop(), "}")]) :
         t.op1 ? link([t, parseAtom()]) :
@@ -105,17 +109,18 @@ const compile = program => {
     const gentag = t => Array.isArray(t) ? `let ${t[0].code} = (__value) => ({__tag: "${t[0].code}", __value})` : `let ${t.code} = {__tag: "${t.code}"}`
     const genmatch = a => a.length === 0 ? "(() => { throw new Error(`No match for ${JSON.stringify(__target)}`) })()" :
       a.length === 1 ? gen(a[0]) :
-      `__target.__tag === "${a[0].code}" ? ${gencase(a[1])} : ${genmatch(a.slice(2))}`
-    const gencase = x => Array.isArray(x) && x[0].code === "fn" ? `${gen(x)}(__target.__value)` : gen(x)
+      `__target.__tag === "${a[0].code}" ? __case(${gen(a[1])}, __target.__value) : ${genmatch(a.slice(2))}`
     const genbody = x => Array.isArray(x) && "{ if while return".split(" ").includes(x[0].code) ? "{" + genreturn(x.slice(1).map(gen)) + "}" : gen(x)
     const genreturn = a => a.slice(0, -1).join(";\n") + ";" + (a.at(-1).startsWith("return") ? a.at(-1) : "return " + a.at(-1))
     const genarg = (s, t) => t.code.endsWith("?") ? `_${s}=none,${s}=(_${s} === none ? none : some(_${s}))` : s
+    const genop = t => t.code === "++" ? "+" : t.code
     const gen = node => {
       if (Array.isArray(node)) {
         const head = node[0]
         const tail = node.slice(1)
-        return head.op1 ? head.code + gen(tail[0]) :
-          head.op2 ? gen(tail[0]) + head.code + gen(tail[1]) :
+        return head.op1 && tail.length >= 2 ? tail.map(gen).join(genop(head)) :
+          head.op1 ? genop(head) + gen(tail[0]) :
+          head.op2 ? gen(tail[0]) + genop(head) + gen(tail[1]) :
           head.dot ? gen(tail[0]) + "." + tail[1].code :
           head.index ? gen(tail[0]) + ".at(" + gen(tail[1]) + ")" :
           head.code === "("      ? "(" + gen(tail[0]) + ")" :
@@ -153,21 +158,22 @@ const compile = program => {
   return { tokens, trees, js }
 }
 
-const runJs = (js, context={}) => {
+const safe = f => {
   try {
-    return new vm.Script(runtime + js).runInNewContext({console, ...context})
-  } catch(e) {
+    return f()
+  } catch (e) {
     return `error: ${e}`
   }
 }
 
+const runJs = (js, context={}) => safe(() => new vm.Script(runtime + js).runInNewContext({console, ...context}))
+
 const runTest = eq => {
   const test = (...a) => {
     const result = eq(...a)
-    if (result === true) {
-      process.stdout.write(".")
-    } else {
-      throw new Error(result)
+    if (result !== true) {
+      console.log(result)
+      process.exit(-1)
     }
   }
 
@@ -192,7 +198,6 @@ const runTest = eq => {
   test("1\nfn(a a) 2", 2)
   test("!true", false)
   test("1 + 2", 3)
-  test("1+2", 3)
   test("fn(1)()", 1)
   test('"abc".size', 3)
   test('"abc".slice(1)', "bc")
@@ -230,6 +235,11 @@ const runTest = eq => {
   test("fn(a b a + b) ...[1 2]", 3)
   test("[...[1]]", [1])
   test("[...[1 2]]", [1, 2])
+  test("[1 2 ...[3] ...[4]]", [1, 2, 3, 4])
+  test("(+ 1)", 1)
+  test("(+ 1 2)", 3)
+  test("(+ 1 2 3)", 6)
+  test('(++ "a" "b")', "ab")
 
   // Definitions
   test("let a = 1; a", 1)
@@ -287,9 +297,10 @@ const runTest = eq => {
   test('"".size', 0)
   test('[].size', 0)
 
-  // Others
+  // Bugs
   test("let x = true && !false; x", true)
-  console.log("ok")
+  test("def f a a; f([1 ...[2]])", [1, 2])
+  test("def f x 1; enum ab { a; b }; match(a a f)", 1)
 }
 
 const testInterpriter = () => runTest((code, expected) => {
@@ -298,13 +309,13 @@ const testInterpriter = () => runTest((code, expected) => {
   const str = o => typeof o === "function" || o.constructor.name === "RegExp" ? o.toString() :
     typeof o === "object" ? JSON.stringify(o) :
     o
-  return (str(expected) === str(actual)) || `Test failed
+  return (str(expected) === str(actual)) || `${expected} != ${actual}
 Expected: ${expected} :: ${typeof expected}
   Actual: ${actual} :: ${typeof actual}
     Code: ${code}
       JS: ${js}
    Trees: ${trees.map(showNode)}
-  Tokens: ${tokens.map(showToken).join("\n")}`
+  Tokens: ${tokens.map(showToken).join(" ")}`
 })
 
 
@@ -315,14 +326,11 @@ const testCompiler = () => {
     const goExp = compileToGo(exp)
     const goProgram = `package main; import "fmt"; func main() { fmt.Print(${goExp}) }`
     fs.writeFileSync("/tmp/moa.go", goProgram)
-    const actual = child_process.execSync("go run /tmp/moa.go 2>&1", {encoding: "utf-8"})
-    return expected.toString() === actual || `Test failed
-Expected: ${expected}
-  Actual: ${actual}
-    Code: ${exp}
-      Go: ${goExp}`
+    const actual = safe(() => child_process.execSync("go run /tmp/moa.go 2>&1", {encoding: "utf-8"}))
+    return expected.toString() === actual || `${expected} != ${actual}\n'${exp}' -> '${goExp}'`
   })
 }
 
+console.clear()
 testInterpriter()
 testCompiler()

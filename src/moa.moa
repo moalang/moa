@@ -1,11 +1,22 @@
 class Token {
   code string
   lineno int
+  op1    bool
+  op2    bool
+  dot    bool
+  call   bool
+  index  bool
 }
+
 enum Tree {
   Leaf Token
   Node vec[Tree]
 }
+
+def show node match(node
+  Leaf fn(t t.code)
+  Node fn(a (++ "(" a.map(show).join(" ") ")")))
+
 def tokenize program {
   var pos = 0
   var lineno = 0
@@ -16,16 +27,20 @@ def tokenize program {
       lineno += `\n|;`.split(code).size - 1
     } {
       let op = `^[+\-*/%|&<>=!]+$`.test(code)
-      let op2 = op && " \n\t".has(program[pos + code.length])
-      let op1 = op && op2
-      let dot = code == "."
-      let call = code == "(" && (pos > 0 && !("\n\t ".has(program[pos-1])))
-      tokens.push Token(code lineno)
+      let lc = pos > 0 ? program[pos - 1] : ''
+      let rc = program[pos + code.length]
+      let op2 = op && lc === " " && rc === " "
+      let op1 = (op || code === "...") && !op2
+      let dot = code === "."
+      let call = code === "(" && `[A-Za-z0-9_)\]?]`.test(lc)
+      let index = code === "[" && `[A-Za-z0-9_)\]?]`.test(lc)
+      tokens.push Token(code lineno op1 op2 dot call index)
     }
     pos += code.size
   }
   tokens
 }
+
 def parse tokens {
   var pos = 0
   def until f g h? {
@@ -79,9 +94,24 @@ def parse tokens {
   def parseTop until(fn(t !isClose(t.code)) parseLine)
   parseTop()
 }
+
+def generate node {
+  def genleafnode t tail {
+    iif(t.code === "fn" (++ "func() { return " generate(tail[-1]) + "}")
+      (++ generate(Leaf(t)) "(" tail.map(generate).join(", ") ")"))
+  }
+  def gennode head tail {
+    match(head
+      Leaf fn(t genleafnode(t tail))
+      Node (++ generate(head) "(" tail.map(generate).join(", ") ")"))
+  }
+  match(node
+    Leaf fn(t t.code)
+    Node fn(a gennode(a[0] a.slice(1))))
+}
+
 def compile program {
   let tokens = tokenize(program)
   let nodes = parse(tokens)
-  log nodes
-  "1"
+  nodes.map(generate).join("\n")
 }
