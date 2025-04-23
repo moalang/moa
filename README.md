@@ -12,8 +12,8 @@ bash -c "$(curl -fsS https://raw.githubusercontent.com/moalang/moa/main/misc/ins
 
 Hello world
 ```
-echo 'def main io.puts("Hello world")' > hello.moa
-moa dev hello.moa
+echo 'main io.puts("Hello world")' > hello.moa
+moa run hello.moa
 ```
 
 ```
@@ -36,13 +36,9 @@ moa repl
 
 http.moa
 ```
-def main {
-  io.http.serve ":8000" req => (text: "hello")
-}
+main io.http.serve(":8000" req => (text="hello"))
 
-def test t {
-  t.eq "hello" main.get("/").body
-}
+test("hello" main.get("/").body)
 ```
 
 ```
@@ -50,11 +46,11 @@ moa test http.moa
 ```
 
 ```
-.ok
+1 / 1 100%
 ```
 
 ```
-moa dev http.moa
+moa run http.moa
 ```
 
 ```
@@ -71,39 +67,43 @@ hello
 
 http.moa
 ```
-struct Schema {
+Schema {
   todos list[Todo]
 }
-struct Todo {
+
+Todo {
   id         i64
   title      string
-  done       bool
-  created_at time
+  done       bool = false
+  created_at time = io.now
 }
 
-def main {
-  io.httpd ":8000" req => io.db[Schema] "db.jsonl" db => match(req
-    (path:"/")                    io.fs("index.html")
-    (path:"/todos" method:"get")  (json:db)
-    (path:"/todos" method:"post") {
-      db.todos.push title:req.post("title") created_at:io.now
-      (status:204)
-    }
-    (path:`/todos/([0-9]+)` method:"post") path => {
-      db.todos.merge path.1.int title:req.post("title") done:req.post("done").bool
-      (status:204)
-    }
-    (path:`/todos/([0-9]+)` method:"delete") path => {
-      db.todos.delete path.1.int
-      (status:204)
-    }
-    _ (status:400 text:"not found")
-  )
-}
+main io.httpd(":8000" req =>
+    catch(
+      io.db[Schema]("db.jsonl" db => dispatch(db req))
+      e => (status=500 text="internal server error")))
+
+dispatch db,req => match(req
+  (path="/")                    (file="index.html")
+  (path="/todos" method="get")  (json=db)
+  (path="/todos" method="post") {
+    db.todos.push(req{title})
+    (status=204)
+  }
+  (path=`/todos/([0-9]+)` method="post") id => { 
+    db.todos.merge(id req{title done})
+    (status=204)
+  }
+  (path=`/todos/([0-9]+)` method="delete") id => {
+    db.todos.delete(id)
+    (status=204)
+  }
+  _ (status=400 text="not found")
+)
 ```
 
 ```
-moa dev http.moa
+moa run http.moa
 ```
 
 ```
@@ -112,7 +112,7 @@ curl http://localhost:8000/todos
 ```
 
 ```
-{"todos": [{"title":"walking","created_at":"2000-01-02T03:04:05Z"}]}
+{"todos": [{"id":1,"title":"walking","created_at":"2000-01-02T03:04:05Z"}]}
 ```
 
 ```
@@ -120,5 +120,5 @@ cat db.jsonl
 ```
 
 ```
-{"todos": [{"title":"walking","created_at":"2000-01-02T03:04:05Z"}]}
+{"todos": [{"id":1,"title":"walking","created_at":"2000-01-02T03:04:05Z"}]}
 ```
