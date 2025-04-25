@@ -1,4 +1,11 @@
-# Syntax
+# Internal Syntax
+```
+term: "(" term* ")"
+| '"' [^"]* '"'
+| [^ ]+
+```
+
+# Syntax sugar
 ```
 top: line*
 line: exp+ comment? "\n"
@@ -21,3 +28,4 @@ op2: [+-*/%<>|&^=!]+
 id: [A-Za-z_][A-Za-z0-9_]* [!?]?
 comment: "#" [^\n]*
 ```
+
