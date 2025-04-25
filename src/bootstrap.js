@@ -14,6 +14,8 @@
 
 const log = x => { console.dir(x, {depth: null}); return x }
 
+const infer = nodes => new Map()
+
 const compile = code => {
   const tokens = code.split(/([()]|[^ ()]+)/).filter(s => s.trim())
   const parse = (acc, [t, ...ts]) =>
@@ -21,13 +23,16 @@ const compile = code => {
     t === ")" ? acc.concat(parse([], ts)) :
     t === "(" ? acc.concat([parse([], ts)]) :
     parse(acc.concat(t), ts)
-  const string = x => Array.isArray(x) ? `(${x.map(string).join(" ")})` : x
+  const show = x => Array.isArray(x) ? `(${x.map(show).join(" ")})` : x
   const genstmt = x => !Array.isArray(x) ? `return ${gen(x)}` : x.slice(0, -1).map(gen).join(";\n") + `return ${gen(x.at(-1))}`
   const gen = x => !Array.isArray(x) ? x :
-    x[0] === "fn" ? `__Fn[func () int]{fn: func () int { ${genstmt(x.at(-1))} }, code: ${JSON.stringify(string(x))}}` :
+    x[0] === "fn" ? `__Fn[func () int]{fn: func () int { ${genstmt(x.at(-1))} }, code: ${JSON.stringify(show(x))}}` :
     gen(x[0]) + "(" + x.slice(1).map(gen).join(", ") + ")"
   log(parse([], tokens))
-  return parse([], tokens).map(gen).join("\n")
+  const nodes = parse([], tokens)
+  const tenv = infer(nodes)
+  const go = nodes.map(gen).join("\n")
+  return go
 }
 
 const testMain = () => {
