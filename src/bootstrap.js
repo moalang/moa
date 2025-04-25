@@ -10,6 +10,7 @@
 // - [ ] vec
 // - [ ] set
 // - [ ] map
+// - [x] operators
 // - [x] do
 // - [ ] let
 // - [ ] type
