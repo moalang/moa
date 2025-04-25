@@ -30,7 +30,7 @@ const infer = root => {
   const tbool = newtype("bool")
   const tint = newtype("int")
   const tfloat = newtype("float64")
-  const tstring = newtype("tstring")
+  const tstring = newtype("string")
   const inferWith = (top, local, ng) => {
     const _inf = node => {
       if (Array.isArray(node)) {
@@ -59,7 +59,6 @@ const infer = root => {
 
   const env = {}
   root.map(node => inferWith(node, env, []))
-  log(root.map(show).join("\n"))
   return root
 }
 
@@ -83,12 +82,17 @@ const testMain = runGoExp => {
     }
   }
 
+  // Value
   test("true", "true")
   test("1", "1")
   test("1.2", "1.2")
   test("hi", '"hi"')
+
+  // Lambda
+  test("(fn true)", "(fn true)")
   test("(fn 1)", "(fn 1)")
   test("(fn 1.2)", "(fn 1.2)")
+  test('(fn "hi")', '(fn "hi")')
 }
 
 const main = () => {
