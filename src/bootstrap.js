@@ -6,14 +6,14 @@
 // - [x] string literal
 // - [x] fn
 // - [x] tuple
-// - [x] struct
-// - [ ] vec
-// - [ ] set
-// - [ ] map
+// - [x] new
+// - [x] vec
+// - [x] set
+// - [x] map
 // - [x] operators
 // - [x] do
-// - [ ] let
-// - [ ] type
+// - [x] let
+// - [ ] class
 
 const log = x => { console.dir(x, {depth: null}); return x }
 
@@ -33,7 +33,10 @@ const infer = root => {
   const newtype = (name, args=[]) => ({name, args})
   const newfn = args => newtype("fn", args)
   const newtuple = args => newtype("tuple", args)
-  const newstruct = (fields, args) => ({...newtype("struct__" + fields.join("__"), args), fields})
+  const newnew = (fields, args) => ({...newtype("new", args), fields})
+  const newvec = t => newtype("vec", [t])
+  const newset = t => newtype("set", [t])
+  const newmap = (k, v) => newtype("map", [k, v])
   let varId = 0
   const newvar = () => newtype(varId++)
   const tv1 = newvar()
@@ -49,31 +52,31 @@ const infer = root => {
       throw new Error(`No ${field} in ${t.name}`)
     }
   }
+  const unify = (a, b) => {
+    if (typeof a.name === "number") {
+      a.instance = b
+    } else if (typeof b.name === "number") {
+      unify(b, a)
+    } else {
+      if (a.name !== b.name) {
+        throw new Error(`Type name ${a.name} != ${b.name}`)
+      }
+      if (a.args.length !== b.args.length) {
+        throw new Error(`Type args ${a.args} != ${b.args}`)
+      }
+      a.args.map((x, i) => unify(x, b[i]))
+    }
+  }
+  const apply = (f, args) => {
+    if ((f.args.length - 1) !== args.length) {
+      throw new Error(`Calling ${f.args.length - 1} != ${args.length}`)
+    }
+    args.map((x, i) => unify(x, f.args[i]))
+    return f.args.at(-1)
+  }
+  const iscmp = s => "== != < > >= <=".split(" ").includes(s)
+  const islogical = s => s === "||" || s === "&&"
   const inferWith = (top, local, ng) => {
-    const unify = (a, b) => {
-      if (typeof a.name === "number") {
-        a.instance = b
-      } else if (typeof b.name === "number") {
-        unify(b, a)
-      } else {
-        if (a.name !== b.name) {
-          throw new Error(`Type name ${a.name} != ${b.name}`)
-        }
-        if (a.args.length !== b.args.length) {
-          throw new Error(`Type args ${a.args} != ${b.args}`)
-        }
-        a.args.map((x, i) => unify(x, b[i]))
-      }
-    }
-    const apply = (f, args) => {
-      if ((f.args.length - 1) !== args.length) {
-        throw new Error(`Calling ${f.args.length - 1} != ${args.length}`)
-      }
-      args.map((x, i) => unify(x, f.args[i]))
-      return f.args.at(-1)
-    }
-    const iscmp = s => "== != < > >= <=".split(" ").includes(s)
-    const islogical = s => s === "||" || s === "&&"
     const _inf = node => {
       if (Array.isArray(node)) {
         const head = node[0]
@@ -90,20 +93,26 @@ const infer = root => {
             const ret = tail.find(x => x[0].code === "return")
             tail.map(inf)
             return ret ? ret[1].type : tvoid
+          } else if (s === "let") {
+            return local[tail[0].code] = inf(tail[1])
           } else if (s === "tuple") {
             return newtuple(tail.map(inf))
-          } else if (s === "struct") {
+          } else if (s === "new") {
             const fields = range(tail.length / 2).map(i => tail[i*2].code)
             const values = range(tail.length / 2).map(i => inf(tail[i*2+1]))
-            return newstruct(fields, values)
+            return newnew(fields, values)
+          } else if (s === "vec") {
+            return newvec(same(tail))
+          } else if (s === "set") {
+            return newset(same(tail))
+          } else if (s === "map") {
+            const keys = range(tail.length / 2).map(i => inf(tail[i*2]))
+            const values = range(tail.length / 2).map(i => inf(tail[i*2+1]))
+            return newmap(keys[0], values[0])
           } else if (islogical(s)) {
-            tail.map(inf).map(t => unify(tbool, t))
-            return tbool
+            return same(tail)
           } else if ("+-*/%^=".includes(s) || iscmp(s)) {
-            const [t, ...ts] = tail.map(inf)
-            ts.map(x => unify(t, x))
-            newfn(range(tail.length + 1).map(_ => t))
-            return iscmp(s) ? tbool : t
+            return iscmp(s) ? tbool : same(tail)
           } else if (s === ".") {
             const target = inf(tail[0])
             if (target.name === "tuple") {
@@ -131,6 +140,7 @@ const infer = root => {
       }
     }
     const inf = node => node.type = _inf(node)
+    const same = a => (([x, ...ts]) => (ts.map(t => unify(t, x)), x))(a.map(inf))
     return inf(top)
   }
   const fix = node => {
@@ -158,10 +168,14 @@ const generate = root => {
   const genop2 = (op, xs) => xs.length === 1 ? gen(xs[0]) : `${gen(xs[0])} ${op} ${genop2(op, xs.slice(1))}`
   const gentype = t => t.args.length ? `${t.name}[${t.args.map(gentype)}` : t.name
   const gen = x => !Array.isArray(x) ? x.code :
-    x[0].code === "fn" ? `func (${x.slice(1, -1).map(a => `${a.code} ${gentype(a.type)}`)}) ${gentype(x.at(-1).type)} { ${genreturn(x.at(-1))} }` :
     x[0].code === "do" ? x.slice(1).map(gen).join("\n") :
+    x[0].code === "let" ? `${x[1].code} := ${gen(x[2])}` :
+    x[0].code === "fn" ? `func (${x.slice(1, -1).map(a => `${a.code} ${gentype(a.type)}`)}) ${gentype(x.at(-1).type)} { ${genreturn(x.at(-1))} }` :
     x[0].code === "tuple" ? `__tuple${x.length - 1}[${x.slice(1).map(node => gentype(node.type))}]{ ${x.slice(1).map(gen)} }` :
-    x[0].code === "struct" ? `struct { ${x.type.name.split("__").slice(1).map((field, i) => `${field} ${gentype(x.type.args[i])}`).join("\n")} }{${range((x.length-1)/2).map(i => gen(x[i*2+2]))}}` :
+    x[0].code === "new" ? `struct { ${x.type.fields.map((field, i) => `${field} ${gentype(x.type.args[i])}`).join("\n")} }{${range((x.length-1)/2).map(i => gen(x[i*2+2]))}}` :
+    x[0].code === "vec" ? `[]${gentype(x[1].type)}{ ${x.slice(1).map(gen)} }` :
+    x[0].code === "map" ? `map[${gentype(x[1].type)}]${gentype(x[2].type)}{ ${range((x.length-1)/2).map(i => `${gen(x[i*2+1])}: ${gen(x[i*2+2])}`)} }` :
+    x[0].code === "set" ? `map[${gentype(x[1].type)}]struct{}{ ${x.slice(1).map(n => `${gen(n)}: struct{}{}`)} }` :
     x[0].code === "!" ? `${x[0].code} ${gen(x[1])}` :
     x[0].code === "." && x[1]?.type?.name === "tuple" ? `${gen(x[1])}.v${x[2].code}` :
     /[+\-*/%^<>!=|&.]/.test(x[0].code) ? genop(x[0].code, x.slice(1)) :
@@ -187,8 +201,15 @@ const testMain = runGoExp => {
   test("hi", '"hi"')
   test("{1}", "(tuple 1)")
   test("{1 2}", "(tuple 1 2)")
-  test("{1}", "(struct a 1)")
-  test("{1 2}", "(struct a 1 b 2)")
+  test("{1}", "(new a 1)")
+  test("{1 2}", "(new a 1 b 2)")
+  test("[1]", "(vec 1)")
+  test("[1 2]", "(vec 1 2)")
+  test("[true]", "(vec true)")
+  test("map[1:true]", "(map 1 true)")
+  test("map[1:true 2:false]", "(map 1 true 2 false)")
+  test("map[1:{}]", "(set 1)")
+  test("map[1:{} 2:{}]", "(set 1 2)")
 
   // Operator
   test("false", "(! true)")
@@ -211,8 +232,8 @@ const testMain = runGoExp => {
   // Method
   test("1", "(. (tuple 1) 0)")
   test("2", "(. (tuple 1 2) 1)")
-  test("1", "(. (struct a 1) a)")
-  test("2", "(. (struct a 1 b 2) b)")
+  test("1", "(. (new a 1) a)")
+  test("2", "(. (new a 1 b 2) b)")
 
   // Lambda
   test("true", "((fn true))")
@@ -225,6 +246,7 @@ const testMain = runGoExp => {
   // Statement
   test("1", '((fn a (do (return a))) 1)')
   test("2", '((fn a b (do (return b))) 1 2)')
+  test("1", '((fn (do (let a 1) (return a))))')
 
   // Container
 }
