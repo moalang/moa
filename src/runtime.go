@@ -2,13 +2,13 @@ package main
 
 import "fmt"
 
-type __Fn[T any] struct {
-	fn   T
-	code string
+type __tuple1[A any] struct {
+	v0 A
 }
 
-func (f __Fn[T]) String() string {
-	return f.code
+type __tuple2[A any, B any] struct {
+	v0 A
+	v1 B
 }
 
 func __dummy() {
