@@ -13,7 +13,7 @@
 // - [x] operators
 // - [x] do
 // - [x] let
-// - [ ] class
+// - [x] struct
 
 const log = x => { console.dir(x, {depth: null}); return x }
 
@@ -32,15 +32,16 @@ const infer = root => {
   const prune = x => x.instance ? x.instance = prune(x.instance) : x
   const newtype = (name, args=[]) => ({name, args})
   const newfn = args => newtype("fn", args)
+  const newstruct = args => ({...newfn(args), struct: true})
   const newtuple = args => newtype("tuple", args)
-  const newnew = (fields, args) => ({...newtype("new", args), fields})
+  const newnew = fields => ({...newtype("new", fields.map(a => a.type)), fields})
   const newvec = t => newtype("vec", [t])
   const newset = t => newtype("set", [t])
   const newmap = (k, v) => newtype("map", [k, v])
   let varId = 0
   const newvar = () => newtype(varId++)
   const tv1 = newvar()
-  const tvoid = newtype("")
+  const tvoid = newtype("struct{}")
   const tbool = newtype("bool")
   const tint = newtype("int")
   const tfloat = newtype("float64")
@@ -95,12 +96,14 @@ const infer = root => {
             return ret ? ret[1].type : tvoid
           } else if (s === "let") {
             return local[tail[0].code] = inf(tail[1])
+          } else if (s === "struct") {
+            const [t, ...ts] = tail
+            const args = range(ts.length / 2).map(i => (ts[i*2].type = inf(ts[i*2+1]), ts[i*2]))
+            return local[t.code] = newstruct(args.map(a => a.type).concat(newnew(args)))
           } else if (s === "tuple") {
             return newtuple(tail.map(inf))
           } else if (s === "new") {
-            const fields = range(tail.length / 2).map(i => tail[i*2].code)
-            const values = range(tail.length / 2).map(i => inf(tail[i*2+1]))
-            return newnew(fields, values)
+            return newnew(range(tail.length / 2).map(i => (tail[i*2].type = inf(tail[i*2+1]), tail[i*2])))
           } else if (s === "vec") {
             return newvec(same(tail))
           } else if (s === "set") {
@@ -139,7 +142,7 @@ const infer = root => {
         return t
       }
     }
-    const inf = node => node.type = _inf(node)
+    const inf = node => node.type ||= _inf(node)
     const same = a => (([x, ...ts]) => (ts.map(t => unify(t, x)), x))(a.map(inf))
     return inf(top)
   }
@@ -155,7 +158,11 @@ const infer = root => {
 
   const env = {
     "!": newfn([tbool, tbool]),
-    "return": newfn([tv1, tv1])
+    "return": newfn([tv1, tv1]),
+    "bool": tbool,
+    "int": tint,
+    "float": tfloat,
+    "string": tstring,
   }
   root.map(node => inferWith(node, env, []))
   root.map(fix)
@@ -163,34 +170,38 @@ const infer = root => {
 }
 
 const generate = root => {
+  const defs = []
   const genreturn = x => x[0]?.code === "do" ? gen(x) : `return ${gen(x)}`
   const genop = (op, xs) => xs.length === 1 ? `${op} ${gen(xs[0])}` : genop2(op, xs)
   const genop2 = (op, xs) => xs.length === 1 ? gen(xs[0]) : `${gen(xs[0])} ${op} ${genop2(op, xs.slice(1))}`
   const gentype = t => t.args.length ? `${t.name}[${t.args.map(gentype)}` : t.name
+  const genstruct = t => `struct { ${t.fields.map(f => `${f.code} ${gentype(f.type)}`).join("\n")} }`
   const gen = x => !Array.isArray(x) ? x.code :
     x[0].code === "do" ? x.slice(1).map(gen).join("\n") :
     x[0].code === "let" ? `${x[1].code} := ${gen(x[2])}` :
+    x[0].code === "struct" ? (defs.push(`type ${x[1].code} ${genstruct(x.type.args.at(-1))}`), "") :
     x[0].code === "fn" ? `func (${x.slice(1, -1).map(a => `${a.code} ${gentype(a.type)}`)}) ${gentype(x.at(-1).type)} { ${genreturn(x.at(-1))} }` :
     x[0].code === "tuple" ? `__tuple${x.length - 1}[${x.slice(1).map(node => gentype(node.type))}]{ ${x.slice(1).map(gen)} }` :
-    x[0].code === "new" ? `struct { ${x.type.fields.map((field, i) => `${field} ${gentype(x.type.args[i])}`).join("\n")} }{${range((x.length-1)/2).map(i => gen(x[i*2+2]))}}` :
+    x[0].code === "new" ? `${genstruct(x.type)}{${range((x.length-1)/2).map(i => gen(x[i*2+2]))}}` :
     x[0].code === "vec" ? `[]${gentype(x[1].type)}{ ${x.slice(1).map(gen)} }` :
     x[0].code === "map" ? `map[${gentype(x[1].type)}]${gentype(x[2].type)}{ ${range((x.length-1)/2).map(i => `${gen(x[i*2+1])}: ${gen(x[i*2+2])}`)} }` :
     x[0].code === "set" ? `map[${gentype(x[1].type)}]struct{}{ ${x.slice(1).map(n => `${gen(n)}: struct{}{}`)} }` :
     x[0].code === "!" ? `${x[0].code} ${gen(x[1])}` :
     x[0].code === "." && x[1]?.type?.name === "tuple" ? `${gen(x[1])}.v${x[2].code}` :
     /[+\-*/%^<>!=|&.]/.test(x[0].code) ? genop(x[0].code, x.slice(1)) :
+    x[0].type.struct ?  gen(x[0]) + "{" + x.slice(1).map(gen).join(", ") + "}" :
     gen(x[0]) + "(" + x.slice(1).map(gen).join(", ") + ")"
-  return root.map(gen).join(";\n")
+  return { defs, exp: root.map(gen).filter(s => s).join(";\n") }
 }
 
 const compile = code => generate(infer(parse(tokenize(code))))
 
-const testMain = runGoExp => {
+const testMain = runGo => {
   const test = (expected, exp) => {
-    const goExp = compile(exp)
-    const actual = runGoExp(goExp)
+    const go = compile(exp)
+    const actual = runGo(go)
     if (expected !== actual) {
-      throw new Error(`${expected} != ${actual}\n# exp\n${exp}\n# go\n${goExp}`)
+      throw new Error(`${expected} != ${actual}\n# exp\n${exp}\n# go\n${go.exp}\n${go.defs}`)
     }
   }
 
@@ -248,7 +259,11 @@ const testMain = runGoExp => {
   test("2", '((fn a b (do (return b))) 1 2)')
   test("1", '((fn (do (let a 1) (return a))))')
 
-  // Container
+  // Struct
+  test("{1}", "(struct s a int)(s 1)")
+  test("{1 true}", "(struct s a int b bool)(s 1 true)")
+  test("1", "(struct s a int)(. (s 1) a)")
+  test("false", "(struct s a int b bool)(. (s 1 false) b)")
 }
 
 const main = () => {
@@ -258,15 +273,15 @@ const main = () => {
   const safe = (f, g) => { try { return f() } catch(e) { return g(e) } }
   const cache = safe(() => require("/tmp/moa_test_cache.json"), () => ({}))
   try {
-    const runGoExp = goExp => {
-      const go = `${runtime}\nfunc main() { fmt.Print(${goExp}) }\n`
+    const runGo = ({exp, defs}) => {
+      const go = `${runtime}\n${defs.join("\n")}\nfunc main() { fmt.Print(${exp}) }\n`
       if (go in cache) {
         return cache[go]
       }
       fs.writeFileSync("/tmp/moa_test_exp.go", go)
       return cache[go] = safe(() => child_process.execSync("go run /tmp/moa_test_exp.go").toString(), e => `error: ${e}`)
     }
-    testMain(runGoExp)
+    testMain(runGo)
   } catch (e) {
     console.error(e.stack)
     return 1
