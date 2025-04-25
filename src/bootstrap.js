@@ -71,6 +71,8 @@ const infer = root => {
       args.map((x, i) => unify(x, f.args[i]))
       return f.args.at(-1)
     }
+    const iscmp = s => "== != < > >= <=".split(" ").includes(s)
+    const islogical = s => s === "||" || s === "&&"
     const _inf = node => {
       if (Array.isArray(node)) {
         const head = node[0]
@@ -82,17 +84,25 @@ const infer = root => {
           if (s === "fn") {
             const args = tail.slice(0, -1).map(t => [t.code, t.type = newvar()])
             const body = inferWith(tail.at(-1), {...local, ...Object.fromEntries(args)}, ng)
-            return head.type = newfn([...args.map(a => a[1]), body])
+            return newfn([...args.map(a => a[1]), body])
           } else if (s === "do") {
             const ret = tail.find(x => x[0].code === "return")
             tail.map(inf)
-            return head.type = ret ? ret[1].type : tvoid
+            return ret ? ret[1].type : tvoid
           } else if (s === "tuple") {
             return newtuple(tail.map(inf))
           } else if (s === "struct") {
             const fields = range(tail.length / 2).map(i => tail[i*2].code)
             const values = range(tail.length / 2).map(i => inf(tail[i*2+1]))
             return newstruct(fields, values)
+          } else if (islogical(s)) {
+            tail.map(inf).map(t => unify(tbool, t))
+            return tbool
+          } else if ("+-*/%^=".includes(s) || iscmp(s)) {
+            const [t, ...ts] = tail.map(inf)
+            ts.map(x => unify(t, x))
+            newfn(range(tail.length + 1).map(_ => t))
+            return iscmp(s) ? tbool : t
           } else if (s === ".") {
             const target = inf(tail[0])
             if (target.name === "tuple") {
@@ -100,7 +110,7 @@ const infer = root => {
             } else {
               const field = tail[1].code
               const args = tail.slice(2).map(inf)
-              return head.type = method(target, field)
+              return method(target, field)
             }
           } else {
             return apply(inf(head), tail.map(inf))
@@ -133,7 +143,6 @@ const infer = root => {
   }
 
   const env = {
-    "+": newfn([tint, tint, tint]),
     "!": newfn([tbool, tbool]),
     "return": newfn([tv1, tv1])
   }
@@ -144,6 +153,8 @@ const infer = root => {
 
 const generate = root => {
   const genreturn = x => x[0]?.code === "do" ? gen(x) : `return ${gen(x)}`
+  const genop = (op, xs) => xs.length === 1 ? `${op} ${gen(xs[0])}` : genop2(op, xs)
+  const genop2 = (op, xs) => xs.length === 1 ? gen(xs[0]) : `${gen(xs[0])} ${op} ${genop2(op, xs.slice(1))}`
   const gentype = t => t.args.length ? `${t.name}[${t.args.map(gentype)}` : t.name
   const gen = x => !Array.isArray(x) ? x.code :
     x[0].code === "fn" ? `func (${x.slice(1, -1).map(a => `${a.code} ${gentype(a.type)}`)}) ${gentype(x.at(-1).type)} { ${genreturn(x.at(-1))} }` :
@@ -152,7 +163,7 @@ const generate = root => {
     x[0].code === "struct" ? `struct { ${x.type.name.split("__").slice(1).map((field, i) => `${field} ${gentype(x.type.args[i])}`).join("\n")} }{${range((x.length-1)/2).map(i => gen(x[i*2+2]))}}` :
     x[0].code === "!" ? `${x[0].code} ${gen(x[1])}` :
     x[0].code === "." && x[1]?.type?.name === "tuple" ? `${gen(x[1])}.v${x[2].code}` :
-    /[^A-Za-z0-9_]/.test(x[0].code) ? `${gen(x[1])} ${x[0].code} ${gen(x[2])}` :
+    /[+\-*/%^<>!=|&.]/.test(x[0].code) ? genop(x[0].code, x.slice(1)) :
     gen(x[0]) + "(" + x.slice(1).map(gen).join(", ") + ")"
   return root.map(gen).join(";\n")
 }
@@ -180,7 +191,21 @@ const testMain = runGoExp => {
 
   // Operator
   test("false", "(! true)")
+  test("-1", "(- 1)")
+  test("-2", "(^ 1)")
   test("3", "(+ 1 2)")
+  test("1", "(- 3 2)")
+  test("6", "(* 2 3)")
+  test("2", "(/ 4 2)")
+  test("1", "(% 3 2)")
+  test("3", "(^ 1 2)")
+  test("true", "(== 1 1)")
+  test("false", "(!= 1 1)")
+  test("false", "(< 1 1)")
+  test("false", "(> 1 1)")
+  test("true", "(<= 1 1)")
+  test("true", "(>= 1 1)")
+  test("6", "(+ 1 2 3)")
 
   // Method
   test("1", "(. (tuple 1) 0)")
