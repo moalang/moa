@@ -21,6 +21,8 @@
 // - [ ] for
 // - [ ] each
 // - [ ] while
+// - [ ] log
+// - [ ] io
 
 const log = x => { console.dir(x, {depth: null}); return x }
 const show = x => Array.isArray(x) ? `(${x.map(show).join(" ")})` : x.code
