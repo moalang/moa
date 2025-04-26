@@ -61,33 +61,22 @@ const infer = root => {
   const tfloat = newtype("float64")
   const tstring = newtype("string")
   const terror = newtype("error")
-  const method = (t, field) => {
-    if (typeof t.name === "number") {
-      return property(t, field)
-    } else if (t.name === "tuple" && field < t.args.length) {
-      return t.args[field]
-    } else if (t.name === "new" && t.fields.find(f => f.code === field)) {
-      return t.fields.find(f => f.code === field).type
-    } else if (t.fields) {
-      return t.args[t.fields.indexOf(field)]
-    } else if (t.name === "error" && field === "message") {
-      return tstring
-    } else {
-      throw new Error(`No ${field} in ${t.name}${t.args.length ? `[${t.args}]` : ''}`)
-    }
-  }
+  const method = (t, field) =>
+    typeof t.name === "number" ? property(t, field) :
+    t.name === "tuple" && field < t.args.length ? t.args[field] :
+    t.name === "error" && field === "message" ? tstring :
+    t.fields?.find(f => f.code === field).type ||
+    (() => { throw new Error(`No ${field} in ${t.name}${t.args.length ? `[${t.args}]` : ''}`) })()
   const unify = (a, b) => {
     a = prune(a)
     b = prune(b)
     if (typeof a.name === "number") {
       a.instance = b
       if (a.props) {
-        if (b.name === "number") {
+        if (typeof b.name === "number") {
           b.props = {...(b.props||={}), ...a.props}
         } else {
-          for (const name in a.props) {
-            unify(a.props[name], method(b, name))
-          }
+          Object.keys(a.props).map(name => unify(a.props[name], method(b, name)))
         }
       }
     } else if (typeof b.name === "number") {
@@ -162,9 +151,8 @@ const infer = root => {
             if (target.name === "tuple") {
               return target.args[tail[0].code]
             } else {
-              const field = tail[1].code
-              const args = tail.slice(2).map(inf)
-              return method(target, field)
+              tail.slice(2).map(inf)
+              return method(target, tail[1].code)
             }
           } else {
             return apply(inf(head), tail.map(inf))
@@ -172,15 +160,11 @@ const infer = root => {
         }
       } else {
         const s = node.code
-        const t = /^[0-9]+\./.test(s)   ? tfloat :
+        return /^[0-9]+\./.test(s)      ? tfloat :
           /^[0-9]+/.test(s)             ? tint :
           s === "true" || s === "false" ? tbool :
           s.startsWith('"')             ? tstring :
-          local[s] || env[s]
-        if (!t) {
-          throw new Error(`Type literal '${s}'`)
-        }
-        return t
+          local[s] || env[s] || (() => { throw new Error(`Type literal '${s}'`) })()
       }
     }
     const inf = node => node.type ||= _inf(node)
@@ -343,7 +327,7 @@ const main = () => {
   const cache = safe(() => require("/tmp/moa_test_cache.json"), () => ({}))
   try {
     const runGo = x => {
-      const body = x.fails ? `ret, err := ${x.exp}\nif err != nil { fmt.Print("error: " + err.Error()) } else { fmt.Print(ret) }` : `fmt.Print(${x.exp})`
+      const body = !x.fails ? `fmt.Print(${x.exp})` : `ret, err := ${x.exp}\nif err != nil { fmt.Print("error: " + err.Error()) } else { fmt.Print(ret) }`
       const go = `${runtime}\n${x.def}\nfunc main() { ${x.stmt}\n ${body} }\n`
       if (go in cache) {
         return cache[go]
