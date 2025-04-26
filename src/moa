@@ -17,7 +17,7 @@
 // - [x] def
 // - [x] struct
 // - [x] throw
-// - [-] catch
+// - [x] catch
 // - [ ] iif
 // - [ ] if
 // - [ ] for
@@ -49,7 +49,10 @@ const infer = root => {
   const newvec = t => newtype("vec", [t])
   const newset = t => newtype("set", [t])
   const newmap = (k, v) => newtype("map", [k, v])
+
   const fails = t => ({...t, fails: true})
+  const property = (t, name) => (t.props ||= {}, t.props[name] = newvar())
+
   const prune = x => x.instance ? x.instance = prune(x.instance) : x
   const tv1 = newvar()
   const tvoid = newtype("struct{}")
@@ -59,10 +62,18 @@ const infer = root => {
   const tstring = newtype("string")
   const terror = newtype("error")
   const method = (t, field) => {
-    if (t.fields) {
+    if (typeof t.name === "number") {
+      return property(t, field)
+    } else if (t.name === "tuple" && field < t.args.length) {
+      return t.args[field]
+    } else if (t.name === "new" && t.fields.find(f => f.code === field)) {
+      return t.fields.find(f => f.code === field).type
+    } else if (t.fields) {
       return t.args[t.fields.indexOf(field)]
+    } else if (t.name === "error" && field === "message") {
+      return tstring
     } else {
-      throw new Error(`No ${field} in ${t.name}`)
+      throw new Error(`No ${field} in ${t.name}${t.args.length ? `[${t.args}]` : ''}`)
     }
   }
   const unify = (a, b) => {
@@ -70,6 +81,15 @@ const infer = root => {
     b = prune(b)
     if (typeof a.name === "number") {
       a.instance = b
+      if (a.props) {
+        if (b.name === "number") {
+          b.props = {...(b.props||={}), ...a.props}
+        } else {
+          for (const name in a.props) {
+            unify(a.props[name], method(b, name))
+          }
+        }
+      }
     } else if (typeof b.name === "number") {
       unify(b, a)
     } else {
@@ -200,7 +220,10 @@ const generate = root => {
   const genreturn = x => x[0]?.code === "do" ? gen(x) : `return ${gen(x)}`
   const genop = (op, xs) => xs.length === 1 ? `${op} ${gen(xs[0])}` : genop2(op, xs)
   const genop2 = (op, xs) => xs.length === 1 ? gen(xs[0]) : `${gen(xs[0])} ${op} ${genop2(op, xs.slice(1))}`
-  const gentype = t => t.args.length ? `${t.name}[${t.args.map(gentype)}` : t.name
+  const gentype = t => t.args.length === 0 ? t.name :
+    t.name === "tuple" ? `__${t.name}${t.args.length}[${t.args.map(gentype)}]` :
+    t.name === "new" ? genstruct(t) :
+    `${t.name}[${t.args.map(gentype)}]`
   const genstruct = t => `struct { ${t.fields.map(f => `${f.code} ${gentype(f.type)}`).join("\n")} }`
   const genfunc = (t, name="") => `func ${name}(${t.names.map(a => `${a.code} ${gentype(a.type)}`)}) (__ret ${gentype(t.ret.type)}${t.ret.type.fails ? ', __err error' : ''})`
   const gen = x => !Array.isArray(x) ? x.code :
@@ -220,6 +243,7 @@ const generate = root => {
     x[0].code === "!"      ? `${x[0].code} ${gen(x[1])}` :
     x[0].type?.struct      ?  gen(x[0]) + "{" + x.slice(1).map(gen).join(", ") + "}" :
     x[0].code === "." && x[1]?.type?.name === "tuple" ? `${gen(x[1])}.v${x[2].code}` :
+    x[0].code === "." && x[1]?.type?.name === "error" && x[2].code === "message" ? `${gen(x[1])}.Error()` :
     /[+\-*/%^<>!=|&.]/.test(x[0].code) ? genop(x[0].code, x.slice(1)) :
     gen(x[0]) + "(" + x.slice(1).map(gen).join(", ") + ")"
   const exp = root.map(gen).join("")
@@ -282,6 +306,8 @@ const testMain = runGo => {
   test("2", "(. (tuple 1 2) 1)")
   test("1", "(. (new a 1) a)")
   test("2", "(. (new a 1 b 2) b)")
+  test("1", '((fn a (. a 0)) (tuple 1))')
+  test("1", '((fn a (. a b)) (new b 1))')
 
   // Lambda
   test("true", "((fn true))")
@@ -301,11 +327,12 @@ const testMain = runGo => {
   test("{1 true}", "(struct s a int b bool)(s 1 true)")
   test("1", "(struct s a int)(. (s 1) a)")
   test("false", "(struct s a int b bool)(. (s 1 false) b)")
+  test("1", "(struct s a int)((fn b (. b a)) (s 1))")
 
   // Throw / Catch
   test("error: a", '(def f (do (throw "a")))(f)')
   test("c", '(def f (do (throw "a") (return "b")))(catch (f) (fn x "c"))')
-  //test("a", '(def f (do (throw "a") (return "b")))(catch (f) (fn x (. x message)))')
+  test("a", '(def f (do (throw "a") (return "b")))(catch (f) (fn x (. x message)))')
 }
 
 const main = () => {
