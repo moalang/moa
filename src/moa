@@ -17,7 +17,7 @@
 // - [x] def
 // - [x] struct
 // - [x] throw
-// - [ ] catch
+// - [-] catch
 // - [ ] iif
 // - [ ] if
 // - [ ] for
@@ -57,6 +57,7 @@ const infer = root => {
   const tint = newtype("int")
   const tfloat = newtype("float64")
   const tstring = newtype("string")
+  const terror = newtype("error")
   const method = (t, field) => {
     if (t.fields) {
       return t.args[t.fields.indexOf(field)]
@@ -65,6 +66,8 @@ const infer = root => {
     }
   }
   const unify = (a, b) => {
+    a = prune(a)
+    b = prune(b)
     if (typeof a.name === "number") {
       a.instance = b
     } else if (typeof b.name === "number") {
@@ -76,7 +79,7 @@ const infer = root => {
       if (a.args.length !== b.args.length) {
         throw new Error(`Type args ${a.args} != ${b.args}`)
       }
-      a.args.map((x, i) => unify(x, b[i]))
+      a.args.map((x, i) => unify(x, b.args[i]))
     }
   }
   const apply = (f, args) => {
@@ -178,6 +181,7 @@ const infer = root => {
     "!": newfn([tbool, tbool]),
     "return": newfn([tv1, tv1]),
     "throw": fails(newfn([tv1, fails(newvar())])),
+    "catch": newfn([tv1, newfn([terror, tv1]), tv1]),
     "bool": tbool,
     "int": tint,
     "float": tfloat,
@@ -189,7 +193,10 @@ const infer = root => {
 }
 
 const generate = root => {
+  let id = 0
+  const newId = () => `__${id++}`
   const defs = []
+  const lines = []
   const genreturn = x => x[0]?.code === "do" ? gen(x) : `return ${gen(x)}`
   const genop = (op, xs) => xs.length === 1 ? `${op} ${gen(xs[0])}` : genop2(op, xs)
   const genop2 = (op, xs) => xs.length === 1 ? gen(xs[0]) : `${gen(xs[0])} ${op} ${genop2(op, xs.slice(1))}`
@@ -199,8 +206,9 @@ const generate = root => {
   const gen = x => !Array.isArray(x) ? x.code :
     x[0].code === "do"     ? x.slice(1).map(gen).join("\n") :
     x[0].code === "let"    ? `${x[1].code} := ${gen(x[2])}` :
-    x[0].code === "throw"  ? `__err = errors.New(${gen(x[1])}); return` :
     x[0].code === "return" ? `__ret = ${gen(x[1])}; return` :
+    x[0].code === "throw"  ? `__err = errors.New(${gen(x[1])}); return` :
+    x[0].code === "catch"  ? ((id1, id2) => (lines.push(`${id1}, ${id2} := ${gen(x[1])}; if ${id2} != nil { ${id1} = ${gen(x[2])}(${id2}) }`), id1))(newId(), newId()) :
     x[0].code === "def"    ? (defs.push(`${genfunc(x.type, x[1].code)} { ${genreturn(x.at(-1))} }`), "") :
     x[0].code === "struct" ? (defs.push(`type ${x[1].code} ${genstruct(x.type.args.at(-1))}`), "") :
     x[0].code === "fn"     ? `${genfunc(x.type)} { ${genreturn(x.at(-1))} }` :
@@ -214,11 +222,11 @@ const generate = root => {
     x[0].code === "." && x[1]?.type?.name === "tuple" ? `${gen(x[1])}.v${x[2].code}` :
     /[+\-*/%^<>!=|&.]/.test(x[0].code) ? genop(x[0].code, x.slice(1)) :
     gen(x[0]) + "(" + x.slice(1).map(gen).join(", ") + ")"
-  const codes = root.map(gen).filter(s => s)
+  const exp = root.map(gen).join("")
   return {
     def: defs.join("\n"),
-    stmt: codes.slice(0, -1).join("\n"),
-    exp: codes.at(-1),
+    stmt: lines.join("\n"),
+    exp: exp,
     fails: root.at(-1).type?.fails
   }
 }
@@ -233,7 +241,6 @@ const testMain = runGo => {
       throw new Error(`${expected} != ${actual}\n# exp\n${exp}\n# go\n${go.exp}\n${go.stmt}\n${go.def}`)
     }
   }
-  test("error: a", '(def f (do (throw "a")))(f)')
 
   // Value
   test("true", "true")
@@ -297,6 +304,8 @@ const testMain = runGo => {
 
   // Throw / Catch
   test("error: a", '(def f (do (throw "a")))(f)')
+  test("c", '(def f (do (throw "a") (return "b")))(catch (f) (fn x "c"))')
+  //test("a", '(def f (do (throw "a") (return "b")))(catch (f) (fn x (. x message)))')
 }
 
 const main = () => {
