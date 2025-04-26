@@ -16,6 +16,8 @@
 // - [x] let
 // - [x] def
 // - [x] struct
+// - [ ] throw
+// - [ ] catch
 // - [ ] iif
 // - [ ] if
 // - [ ] for
