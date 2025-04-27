@@ -18,8 +18,8 @@
 // - [x] struct
 // - [x] throw
 // - [x] catch
-// - [x] iif
-// - [x] if
+// - [-] iif
+// - [-] if
 // - [ ] else
 // - [ ] for
 // - [ ] each
@@ -218,7 +218,7 @@ const generate = root => {
     x[0].code === "let"    ? `${x[1].code} := ${gen(x[2])}` :
     x[0].code === "return" ? `__ret = ${gen(x[1])}; return` :
     x[0].code === "throw"  ? `__err = errors.New(${gen(x[1])}); return` :
-    x[0].code === "catch"  ? ((id1, id2) => (lines.push(`${id1}, ${id2} := ${gen(x[1])}; if ${id2} != nil { ${id1} = ${gen(x[2])}(${id2}) }`), id1))(newId(), newId()) :
+    x[0].code === "catch"  ? !x[1].type.fails ? gen(x[1]) : ((id1, id2) => (lines.push(`${id1}, ${id2} := ${gen(x[1])}; if ${id2} != nil { ${id1} = ${gen(x[2])}(${id2}) }`), id1))(newId(), newId()) :
     x[0].code === "if"     ? `if ${gen(x[1])} { ${gen(x[2])} } ` :
     x[0].code === "iif"    ? (id => (lines.push(`var ${id} ${gentype(x[2].type)}; if ${gen(x[1])} { ${id} = ${gen(x[2])} } else { ${id} = ${gen(x[3])} }`), id))(newId()) :
     x[0].code === "def"    ? (defs.push(`${genfunc(x.type, x[1].code)} { ${genreturn(x.at(-1))} }`), "") :
@@ -320,6 +320,7 @@ const testMain = runGo => {
 
   // Throw / Catch
   test("error: a", '(def f (do (throw "a")))(f)')
+  test("a", '(def f "a")(catch (f) (fn x "b"))')
   test("c", '(def f (do (throw "a") (return "b")))(catch (f) (fn x "c"))')
   test("a", '(def f (do (throw "a") (return "b")))(catch (f) (fn x (. x message)))')
 
