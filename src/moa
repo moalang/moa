@@ -285,8 +285,8 @@ const generate = root => {
 const compile = code => generate(infer(parse(tokenize(code))))
 
 const testMain = runGo => {
-  const test = (expected, exp) => {
-    const go = compile(exp)
+  const test = (expected, exp, define="") => {
+    const go = compile(define + exp)
     const actual = runGo(go)
     if (expected !== actual) {
       throw new Error(`${expected} != ${actual}\n# exp\n${exp}\n# go\n${go.exp}\n${go.stmt}\n${go.def}`)
@@ -345,22 +345,22 @@ const testMain = runGo => {
   test("3", '((fn a b (+ a b)) 1 2)')
 
   // Definition
-  test("1", "(def f 1)(f)")
-  test("1", "(def f (do (let a 1) (return a)))(f)")
-  test("1", "(def f (do (let a 1) (return a) (return 0)))(f)")
-  test("1", "(def f a a)(f 1)")
-  test("3", "(def f a b (+ a b))(f 1 2)")
-  test("{1}", "(struct s a int)(s 1)")
-  test("{1 true}", "(struct s a int b bool)(s 1 true)")
-  test("1", "(struct s a int)(. (s 1) a)")
-  test("false", "(struct s a int b bool)(. (s 1 false) b)")
-  test("1", "(struct s a int)((fn b (. b a)) (s 1))")
+  test("1", "(f)", "(def f 1)")
+  test("1", "(f)", "(def f (do (let a 1) (return a)))")
+  test("1", "(f)", "(def f (do (let a 1) (return a) (return 0)))")
+  test("1", "(f 1)", "(def f a a)")
+  test("3", "(f 1 2)", "(def f a b (+ a b))")
+  test("{1}", "(s 1)", "(struct s a int)")
+  test("{1 true}", "(s 1 true)", "(struct s a int b bool)")
+  test("1", "(. (s 1) a)", "(struct s a int)")
+  test("false", "(. (s 1 false) b)", "(struct s a int b bool)")
+  test("1", "((fn b (. b a)) (s 1))", "(struct s a int)")
 
   // Throw / Catch
-  test("error: a", '(def f (do (throw "a")))(f)')
-  test("a", '(def f "a")(catch (f) (fn x "b"))')
-  test("c", '(def f (do (throw "a") (return "b")))(catch (f) (fn x "c"))')
-  test("a", '(def f (do (throw "a") (return "b")))(catch (f) (fn x (. x message)))')
+  test("error: a", "(f)", '(def f (do (throw "a")))')
+  test("a", '(catch (f) (fn x "b"))', '(def f "a")')
+  test("c", '(catch (f) (fn x "c"))', '(def f (do (throw "a") (return "b")))')
+  test("a", '(catch (f) (fn x (. x message)))', '(def f (do (throw "a") (return "b")))')
 
   // Statement
   test("1", "(iif true 1 2)")
