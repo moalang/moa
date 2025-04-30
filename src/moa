@@ -383,10 +383,9 @@ const testMain = runGo => {
 
 const main = () => {
   const fs = require("fs")
-  const child_process = require("child_process")
+  const {execSync} = require("child_process")
   const runtime = fs.readFileSync("runtime.go")
-  const safe = (f, g) => { try { return f() } catch(e) { return g(e) } }
-  const cache = safe(() => require("/tmp/moa_test_cache.json"), () => ({}))
+  const cache = fs.existsSync("/tmp/moa_test_cache.json") ? require("/tmp/moa_test_cache.json") : {}
   try {
     const runGo = x => {
       const body = !x.fails ? `fmt.Print(${x.exp})` : `ret, err := ${x.exp}\nif err != nil { fmt.Print("error: " + err.Error()) } else { fmt.Print(ret) }`
@@ -395,7 +394,11 @@ const main = () => {
         return cache[go]
       }
       fs.writeFileSync("/tmp/moa_test_exp.go", go)
-      return cache[go] = safe(() => child_process.execSync("go run /tmp/moa_test_exp.go").toString(), e => `error: ${e}`)
+      try {
+        return cache[go] = execSync("go run /tmp/moa_test_exp.go").toString()
+      } catch (e) {
+        return `error: ${e}`
+      }
     }
     testMain(runGo)
   } catch (e) {
