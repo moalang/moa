@@ -5,6 +5,14 @@ import (
 	"fmt"
 )
 
+type __io struct {
+	put func(a ...any) int
+}
+
+var io = __io{
+	put: func(a ...any) int { n, _ := fmt.Print(a...); return n },
+}
+
 type __tuple1[A any] struct {
 	v0 A
 }

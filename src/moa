@@ -65,10 +65,12 @@ const infer = root => {
   const tfloat = newtype("float64")
   const tstring = newtype("string")
   const terror = newtype("error")
+  const tio = newtype("io")
   const method = (t, field) =>
     typeof t.name === "number" ? property(t, field) :
     t.name === "tuple" && field < t.args.length ? t.args[field] :
     t.name === "error" && field === "message" ? tstring :
+    t.name === "io" && field === "put" ? newfn([tv1, tv1]) :
     t.fields?.find(f => f.code === field).type ||
     (() => { throw new TypeError(`No ${field} in ${t.name}${t.args.length ? `[${t.args}]` : ''}`) })()
   const unify = (a, b) => {
@@ -226,6 +228,7 @@ const infer = root => {
     "int": tint,
     "float": tfloat,
     "string": tstring,
+    "io": tio,
   }
   root.map(node => inferWith(node, env, []))
   root.map(fix)
@@ -371,6 +374,9 @@ const testMain = runGo => {
   test("2", "((fn (do (if false (return 1)) (return 2))))")
   test("2", "((fn (do (if false (return 1) (return 2)))))")
   test("2", "((fn (do (if false (return 1) true (return 2)) (return 3))))")
+
+  // IO
+  test("hi2", '((. io put) "hi")')
 }
 
 const main = () => {
