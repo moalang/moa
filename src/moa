@@ -108,34 +108,26 @@ const infer = root => {
     return true
   }
   const apply = (f, args) => {
-    const vindex = f.args.findIndex(t => t.vargs)
-    if (vindex === -1) {
-      if ((f.args.length - 1) !== args.length) {
-        throw new Error(`Calling ${f.args.length - 1} != ${args.length}`)
-      }
-      args.map((x, i) => unify(x, f.args[i]))
-    } else {
-      let i = 0
-      for (const fa of f.args.slice(0, -1)) {
-        if (fa.name === "__varg") {
-          while (args[i]) {
-            let k = i
-            if (!fa.vargs.every(t => safeUnify(t, args[i++]))) {
-              i = k
-              break
-            }
+    let i = 0
+    for (const fa of f.args.slice(0, -1)) {
+      if (fa.name === "__varg") {
+        while (args[i]) {
+          let k = i
+          if (!fa.vargs.every(t => safeUnify(t, args[i++]))) {
+            i = k
+            break
           }
-        } else if (fa.optional) {
-          if (args[i] && !safeUnify(fa, args[i++])) {
-            i--
-          }
-        } else {
-          unify(fa, args[i++])
         }
+      } else if (fa.optional) {
+        if (args[i] && !safeUnify(fa, args[i++])) {
+          i--
+        }
+      } else {
+        unify(fa, args[i++])
       }
-      if (i !== args.length) {
-        throw new Error(`Calling vargs ${JSON.stringify(f.args)} != ${JSON.stringify(args)}`)
-      }
+    }
+    if (i !== args.length) {
+      throw new Error(`Calling vargs ${JSON.stringify(f.args)} != ${JSON.stringify(args)}`)
     }
     return f.args.at(-1)
   }
