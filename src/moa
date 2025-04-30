@@ -117,21 +117,21 @@ const infer = root => {
       args.map((x, i) => unify(x, f.args[i]))
     } else {
       let i = 0
-      for (let j=0; j<f.args.length-1; j++) {
-        if (f.args[j].name === "__varg") {
+      for (const fa of f.args.slice(0, -1)) {
+        if (fa.name === "__varg") {
           while (args[i]) {
             let k = i
-            if (!f.args[j].vargs.every(t => safeUnify(t, args[i++]))) {
+            if (!fa.vargs.every(t => safeUnify(t, args[i++]))) {
               i = k
               break
             }
           }
-        } else if (f.args[j].optional) {
-          if (args[i] && !safeUnify(f.args[j], args[i++])) {
+        } else if (fa.optional) {
+          if (args[i] && !safeUnify(fa, args[i++])) {
             i--
           }
         } else {
-          unify(f.args[j], args[i++])
+          unify(fa, args[i++])
         }
       }
       if (i !== args.length) {
