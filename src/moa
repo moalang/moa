@@ -18,9 +18,8 @@
 // - [x] struct
 // - [x] throw
 // - [x] catch
-// - [-] iif
-// - [-] if
-// - [ ] else
+// - [x] iif
+// - [x] if
 // - [ ] for
 // - [ ] each
 // - [ ] while
