@@ -41,8 +41,8 @@ const parse = ([t, ...ts], acc=[]) =>
 
 const infer = root => {
   let varId = 0
-  const newvar = () => newtype(varId++)
   const newtype = (name, args=[]) => ({name, args})
+  const newvar = () => newtype(varId++)
   const newfn = (args, names, ret) => ({...newtype("fn", args), names, ret})
   const newstruct = args => ({...newfn(args), struct: true})
   const newtuple = args => newtype("tuple", args)
@@ -50,6 +50,7 @@ const infer = root => {
   const newvec = t => newtype("vec", [t])
   const newset = t => newtype("set", [t])
   const newmap = (k, v) => newtype("map", [k, v])
+  const newarg = vargs => ({...newtype("__varg"), vargs})
 
   const fails = t => ({...t, fails: true})
   const property = (t, name) => (t.props ||= {}, t.props[name] = newvar())
@@ -93,10 +94,27 @@ const infer = root => {
     }
   }
   const apply = (f, args) => {
-    if ((f.args.length - 1) !== args.length) {
-      throw new Error(`Calling ${f.args.length - 1} != ${args.length}`)
+    const vindex = f.args.findIndex(t => t.vargs)
+    if (vindex === -1) {
+      if ((f.args.length - 1) !== args.length) {
+        throw new Error(`Calling ${f.args.length - 1} != ${args.length}`)
+      }
+      args.map((x, i) => unify(x, f.args[i]))
+    } else {
+      let i = 0
+      for (let j=0; j<f.args.length-1; j++) {
+        if (f.args[j].name === "__varg") {
+          while (f.args.length - j <= args.length - i) {
+            f.args[j].vargs.map(t => unify(t, args[i++]))
+          }
+        } else {
+          unify(f.args[j], args[i++])
+        }
+      }
+      if (i !== args.length) {
+        throw new Error(`Calling vargs ${JSON.stringify(f.args)} != ${JSON.stringify(args)}`)
+      }
     }
-    args.map((x, i) => unify(x, f.args[i]))
     return f.args.at(-1)
   }
   const iscmp = s => "== != < > >= <=".split(" ").includes(s)
@@ -127,6 +145,7 @@ const infer = root => {
             const [t, ...ts] = tail
             const args = range(ts.length / 2).map(i => (ts[i*2].type = inf(ts[i*2+1]), ts[i*2]))
             return local[t.code] = newstruct(args.map(a => a.type).concat(newnew(args)))
+            return t
           } else if (s === "fn") {
             const args = tail.slice(0, -1).map(t => [t.code, t.type = newvar()])
             const body = inferWith(tail.at(-1), {...local, ...Object.fromEntries(args)}, ngs)
@@ -185,8 +204,8 @@ const infer = root => {
   const env = {
     "!": newfn([tbool, tbool]),
     "return": newfn([tv1, tv1]),
-    "iif": newfn([tbool, tv1, tv1, tv1]),
     "if": newfn([tbool, tv1, tvoid]),
+    "iif": newfn([newarg([tbool, tv1]), tv1, tv1]),
     "throw": fails(newfn([tv1, fails(newvar())])),
     "catch": newfn([tv1, newfn([terror, tv1]), tv1]),
     "bool": tbool,
@@ -213,6 +232,7 @@ const generate = root => {
     `${t.name}[${t.args.map(gentype)}]`
   const genstruct = t => `struct { ${t.fields.map(f => `${f.code} ${gentype(f.type)}`).join("\n")} }`
   const genfunc = (t, name="") => `func ${name}(${t.names.map(a => `${a.code} ${gentype(a.type)}`)}) (__ret ${gentype(t.ret.type)}${t.ret.type.fails ? ', __err error' : ''})`
+  const geniif = (id , a) => a.length === 1 ? `{ ${id} = ${gen(a[0])} }` : `if ${gen(a[0])} { ${id} = ${gen(a[1])} } else ${geniif(id, a.slice(2))}`
   const gen = x => !Array.isArray(x) ? x.code :
     x[0].code === "do"     ? x.slice(1).map(gen).join("\n") :
     x[0].code === "let"    ? `${x[1].code} := ${gen(x[2])}` :
@@ -220,7 +240,7 @@ const generate = root => {
     x[0].code === "throw"  ? `__err = errors.New(${gen(x[1])}); return` :
     x[0].code === "catch"  ? !x[1].type.fails ? gen(x[1]) : ((id1, id2) => (lines.push(`${id1}, ${id2} := ${gen(x[1])}; if ${id2} != nil { ${id1} = ${gen(x[2])}(${id2}) }`), id1))(newId(), newId()) :
     x[0].code === "if"     ? `if ${gen(x[1])} { ${gen(x[2])} } ` :
-    x[0].code === "iif"    ? (id => (lines.push(`var ${id} ${gentype(x[2].type)}; if ${gen(x[1])} { ${id} = ${gen(x[2])} } else { ${id} = ${gen(x[3])} }`), id))(newId()) :
+    x[0].code === "iif"    ? (id => (lines.push(`var ${id} ${gentype(x[2].type)}; ${geniif(id, x.slice(1))}`), id))(newId()) :
     x[0].code === "def"    ? (defs.push(`${genfunc(x.type, x[1].code)} { ${genreturn(x.at(-1))} }`), "") :
     x[0].code === "struct" ? (defs.push(`type ${x[1].code} ${genstruct(x.type.args.at(-1))}`), "") :
     x[0].code === "fn"     ? `${genfunc(x.type)} { ${genreturn(x.at(-1))} }` :
@@ -327,6 +347,8 @@ const testMain = runGo => {
   // Statement
   test("1", "(iif true 1 2)")
   test("2", "(iif false 1 2)")
+  test("2", "(iif false 1 true 2 3)")
+  test("3", "(iif false 1 false 2 3)")
   test("1", "((fn (do (if true (return 1)) (return 2))))")
   test("2", "((fn (do (if false (return 1)) (return 2))))")
 }
