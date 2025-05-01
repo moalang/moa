@@ -274,7 +274,7 @@ const infer = root => {
 
 const generate = root => {
   let id = 0
-  const newId = () => `__${id++}`
+  const newid = () => `__${id++}`
   const defs = []
   const lines = []
   const genreturn = x => {
@@ -289,7 +289,9 @@ const generate = root => {
     `${t.name}[${t.types.map(gentype)}]`
   const genstruct = (a, t) => (a.length ? `[${a.map(u => gentype(u.type) + " any")}] ` : "") + `struct { ${t.fields.map(f => `${f.code} ${gentype(f.type)}`).join("\n")} }`
   const genfunc = (t, name="") => `func ${name}(${t.names.map(a => `${a.code} ${gentype(a.type)}`)}) (__ret ${gentype(t.ret.type)}${t.ret.type.fails ? ", __err error" : ""})`
-  const geniif = (id , a) => a.length === 1 ? `{ ${id} = ${gen(a[0])} }` : `if ${gen(a[0])} { ${id} = ${gen(a[1])} } else ${geniif(id, a.slice(2))}`
+  const genassign = (id, x) => x.type.fails ? `${id}, __err = ${gen(x)}; if __err != nil { return }` : `${id} = ${gen(x)}`
+  const geniif = (id , a) => a.length === 1 ? `{ ${genassign(id, a[0])} }` :
+    `if ${gen(a[0])} { ${genassign(id, a[1])} } else ${geniif(id, a.slice(2))}`
   const genif = a =>
     a.length === 0 ? "" :
     a.length === 1 ? ` else { ${gen(a[0])} }` :
@@ -324,9 +326,9 @@ const generate = root => {
     x[0].code === "let"    ? genlet(x[1].code, x[2]) :
     x[0].code === "return" ? `__ret = ${gen(x[1])}; return` :
     x[0].code === "throw"  ? `__err = errors.New(${gen(x[1])}); return` :
-    x[0].code === "catch"  ? !x[1].type.fails ? gen(x[1]) : ((id1, id2) => (lines.push(`${id1}, ${id2} := ${gen(x[1])}; if ${id2} != nil { ${id1} = ${gen(x[2])}(${id2}) }`), id1))(newId(), newId()) :
+    x[0].code === "catch"  ? !x[1].type.fails ? gen(x[1]) : ((id1, id2) => (lines.push(`${id1}, ${id2} := ${gen(x[1])}; if ${id2} != nil { ${id1} = ${gen(x[2])}(${id2}) }`), id1))(newid(), newid()) :
     x[0].code === "if"     ? `if ${gen(x[1])} { ${gen(x[2])} }${genif(x.slice(3))}` :
-    x[0].code === "iif"    ? (id => (lines.push(`var ${id} ${gentype(x[2].type)}; ${geniif(id, x.slice(1))}`), id))(newId()) :
+    x[0].code === "iif"    ? (id => (lines.push(`var ${id} ${gentype(x[2].type)}; ${geniif(id, x.slice(1))}`), id))(newid()) :
     x[0].code === "struct" ? (defs.push(`type ${x[1].code} ${genstruct(x[2], x.type.types.at(-1))}`), "") :
     x[0].code === "fn"     ? `${genfunc(x.type)} { ${genreturn(x.at(-1))} }` :
     x[0].code === "tuple"  ? `__tuple${x.length - 1}[${x.slice(1).map(node => gentype(node.type))}]{ ${x.slice(1).map(gen)} }` :
@@ -357,7 +359,15 @@ const execGo = (cmd) => {
   const files = process.argv.length === 3 ? fs.globSync("**/*.moa") : process.argv.slice(3)
   const runtime = fs.readFileSync(__dirname + "/runtime.go", "utf-8")
   const x = compile(files.map(path => fs.readFileSync(path, "utf-8")).join("\n"))
-  const go = `${runtime}\n${x.def}\nfunc main() { ${x.stmt}\n${x.exp} }\n`
+  const go = `${runtime}\n${x.def}\nfunc main() {
+  var __err error
+  defer func() {
+    if __err != nil {
+      panic(__err)
+    }
+  }()
+  ${x.stmt}\n${x.exp}
+}\n`
   fs.writeFileSync("/tmp/a.go", go)
   execSync(`go ${cmd} /tmp/a.go`, {stdio: "inherit"})
 }

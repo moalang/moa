@@ -25,3 +25,6 @@ type __tuple2[A any, B any] struct {
 func __dummy() {
 	fmt.Print(errors.New("never print"))
 }
+
+func __use_error(_ error) {
+}

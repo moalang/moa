@@ -176,7 +176,9 @@ const testGenerate = param => {
   test("error: a", "(f)", '(let f (fn (do (throw "a"))))')
   test("a", '(catch (f) (fn x "b"))', '(let f (fn "a"))')
   test("c", '(catch (f) (fn x "c"))', '(let f (fn (do (throw "a") (return "b"))))')
-  test("a", '(catch (f) (fn x (. x message)))', '(let f (fn (do (throw "a") (return "b"))))')
+  test("a", "(catch (f) (fn x (. x message)))", '(let f (fn (do (throw "a") (return "b"))))')
+  test("a", '(iif false "" (catch (f) (fn x (. x message))))', '(let f (fn (do (throw "a") (return "b"))))')
+  test("error: a", '(catch (iif false (f) (f)) (fn x (. x message)))', '(let f (fn (do (throw "a") (return "b"))))')
 
   // Statement
   test("1", "(iif true 1 2)")
@@ -214,7 +216,16 @@ module.exports.test = param => {
   try {
     param.runGo = x => {
       const body = !x.fails ? `fmt.Print(${x.exp})` : `ret, err := ${x.exp}\nif err != nil { fmt.Print("error: " + err.Error()) } else { fmt.Print(ret) }`
-      const go = `${runtime}\n${x.def}\nfunc main() { ${x.stmt}\n ${body} }\n`
+      const go = `${runtime}\n${x.def}\nfunc main() {
+        var __err error
+        defer func() {
+          if __err != nil {
+            fmt.Print("error: " + __err.Error())
+          }
+        }()
+        ${x.stmt}
+        ${body}
+      }\n`
       if (go in cache) {
         return cache[go]
       }
