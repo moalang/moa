@@ -1,6 +1,7 @@
 #!node
 "use strict"
 
+// Expression
 // - [x] bool literal
 // - [x] int literal
 // - [x] float literal
@@ -12,18 +13,21 @@
 // - [x] set
 // - [x] map
 // - [x] operators
-// - [x] do
-// - [x] let
-// - [x] struct
 // - [x] throw
 // - [x] catch
 // - [x] iif
+// Declare
+// - [x] let
+// - [x] struct
+// Statement
+// - [x] do
 // - [x] if
 // - [ ] for
 // - [ ] each
 // - [ ] while
-// - [ ] log
+// IO
 // - [-] io
+// - [ ] log
 
 const log = x => { console.dir(x, {depth: null}); return x }
 const show = x => Array.isArray(x) ? `(${x.map(show).join(" ")})` : x.code
