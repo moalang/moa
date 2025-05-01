@@ -340,7 +340,7 @@ const generate = root => {
 
 const compile = code => generate(infer(parse(tokenize(code))))
 
-const runGo = (cmd) => {
+const execGo = (cmd) => {
   const fs = require("fs")
   const {execSync} = require("child_process")
   const files = process.argv.length === 3 ? fs.globSync("**/*.moa") : process.argv.slice(3)
@@ -356,9 +356,9 @@ if (process.argv[2] === "selftest") {
 } else if (process.argv[2] === "version") {
   console.log("moa version 0.0.1")
 } else if (process.argv[2] === "build") {
-  runGo("build")
+  execGo("build")
 } else if (process.argv[2] === "run") {
-  runGo("run")
+  execGo("run")
 } else {
   console.log(`Moa is a programming language
 
