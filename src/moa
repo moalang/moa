@@ -162,8 +162,9 @@ const infer = root => {
       const u = prune(t)
       return u.var ?
         (nonGeneric.includes(u.name) ? u : d[u.name] ||= newvar()) :
-        ({...u, args: u.args.map(rec)})
+        (v => (type.generics.push(v.args), v))({...u, args: u.args.map(rec)})
     }
+    type.generics ||= []
     return rec(type)
   }
   const iscmp = s => "== != < > >= <=".split(" ").includes(s)
@@ -192,8 +193,7 @@ const infer = root => {
             return t
           } else if (s === "fn") {
             const args = tail.slice(0, -1).map(t => [t.code, t.type = newvar()])
-            //const body = inferWith(tail.at(-1), {...local, ...Object.fromEntries(args)}, nonGeneric.concat(args.map(a => a[1].name)))
-            const body = inferWith(tail.at(-1), {...local, ...Object.fromEntries(args)}, nonGeneric)
+            const body = inferWith(tail.at(-1), {...local, ...Object.fromEntries(args)}, nonGeneric.concat(args.map(a => a[1].name)))
             return newfn([...args.map(a => a[1]), body], tail.slice(0, -1), tail.at(-1))
           } else if (s === "for") {
             tail[0].type = tint
@@ -240,7 +240,7 @@ const infer = root => {
           /^[0-9]+/.test(s)             ? tint :
           s === "true" || s === "false" ? tbool :
           s.startsWith('"')             ? tstring :
-          s in local ? local[s] :
+          s in local ? fresh(local[s], nonGeneric) :
           s in env ? fresh(env[s], nonGeneric) :
           (() => { throw new Error(`Type literal '${s}'`) })()
       }
@@ -256,6 +256,14 @@ const infer = root => {
     if (node.type) {
       node.type = prune(node.type)
       node.type.args = node.type.args.map(prune)
+      if (node.type.generics) {
+        const d = {}
+        for (const a of node.type.generics) {
+          const t = a.map(prune)
+          d[JSON.stringify(t)] ||= t
+        }
+        node.type.generics = Object.values(d)
+      }
     }
   }
 
@@ -292,12 +300,29 @@ const generate = root => {
     d ? `for ${a} := ${b}; ${a} < ${c}; ${a}++ { ${d} }` :
     c ? `for ${a} := 0; ${a} < ${b}; ${a}++ { ${c} }` :
     (() => {throw new Error(`genfor ${a}, ${b}, ${c}, ${d}, ${e}`)})()
+  const genlet = (name, body) => {
+    if (body[0]?.code === "fn" && body.type.args.find(x => x.var) && body.type.generics.length) {
+      for (const a of body.type.generics) {
+        const x = structuredClone(body)
+        x.type = {...x.type, args: a}
+        x.slice(1, -1).map((arg, i) => arg.type = a[i])
+        x.type.names.map((arg, i) => arg.type = a[i])
+        x.type.ret.type = a.at(-1)
+        lines.push(`${name}__${a.map(gentype).join("__")} := ${gen(x)}`)
+      }
+    } else {
+      lines.push(`${name} := ${gen(body)}`)
+    }
+    return ""
+  }
+  const genhead = x => x.type.name === "fn" && x.type.names?.find(y => y.type.var) && x.type.generics?.length ?
+    `${gen(x)}__${x.type.args.map(gentype).join("__")}` : gen(x)
   const gen = x => !Array.isArray(x) ? x.code :
     x[0].code === "do"     ? x.slice(1).map(gen).join("\n") :
     x[0].code === "for"    ? (lines.push(genfor(x.slice(1).map(gen))), "") :
     x[0].code === "each"   ? (lines.push(`for _, ${x[1].code} := range ${gen(x[2])} { ${gen(x[3])} }`), "") :
     x[0].code === "while"  ? (lines.push(`for ${gen(x[1])} { ${gen(x[2])} }`), "") :
-    x[0].code === "let"    ? (lines.push(`${x[1].code} := ${gen(x[2])}`), "") :
+    x[0].code === "let"    ? genlet(x[1].code, x[2]) :
     x[0].code === "return" ? `__ret = ${gen(x[1])}; return` :
     x[0].code === "throw"  ? `__err = errors.New(${gen(x[1])}); return` :
     x[0].code === "catch"  ? !x[1].type.fails ? gen(x[1]) : ((id1, id2) => (lines.push(`${id1}, ${id2} := ${gen(x[1])}; if ${id2} != nil { ${id1} = ${gen(x[2])}(${id2}) }`), id1))(newId(), newId()) :
@@ -315,7 +340,7 @@ const generate = root => {
     x[0].code === "." && x[1]?.type?.name === "tuple" ? `${gen(x[1])}.v${x[2].code}` :
     x[0].code === "." && x[1]?.type?.name === "error" && x[2].code === "message" ? `${gen(x[1])}.Error()` :
     /[+\-*/%^<>!=|&.]/.test(x[0].code) ? genop(x[0].code, x.slice(1)) :
-    gen(x[0]) + "(" + x.slice(1).map(gen).join(", ") + ")"
+    genhead(x[0]) + "(" + x.slice(1).map(gen).join(", ") + ")"
   const exp = root.map(gen).at(-1)
   return {
     def: defs.join("\n"),
@@ -363,6 +388,7 @@ const testType = () => {
       throw e
     }
   }
+  inf('(1 1)', '(fn a a)')
 
   // primitives
   inf('int', '1')
@@ -389,7 +415,7 @@ const testType = () => {
   inf('(1 2 1)', '(fn a b a)')
   inf('(1 2 2)', '(fn a b b)')
   inf('int', '((fn a a) 1)')
-//  inf('bool', '(let f (fn a a))(f 1)(f true)')
+  inf('bool', '(let f (fn a a))(f 1)(f true)')
 
   // combinations
 //  inf('int',                           'def f x (+ x 1); def g x (+ x 2); + (f 1) (g 1)')
@@ -445,7 +471,7 @@ const testMain = runGo => {
     const go = compile(src)
     const actual = runGo(go)
     if (expected !== actual) {
-      throw new Error(`${expected} != ${actual}\n# src\n${src}\n# go\n${go.exp}\n${go.stmt}\n${go.def}`)
+      throw new Error(`${expected} != ${actual}\n# src\n${src}\n# go\n${go.def}\n${go.stmt}\n${go.exp}`)
     }
   }
 
@@ -534,6 +560,9 @@ const testMain = runGo => {
   test("6", "a", "(let a 0)(while (< a 6) (+= a 1))")
   test("1", "a", "(let a 0)(for b 3 (do (+= a 1) break))")
   test("0", "a", "(let a 0)(for b 3 (do continue (+= a 1)))")
+
+  // Generics
+  test('1', '(iif (f true) (f 1) (f 2))', '(let f (fn a a))')
 
   // IO
   test("hi2", '((. io put) "hi")')
