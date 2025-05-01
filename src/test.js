@@ -4,9 +4,9 @@ const testInfer = param => {
   const run = src => param.infer(param.parse(param.tokenize(src)))
   const showType = type => {
     const show = t => t.instance ? show(t.instance) :
-      t.name === "fn" ? '(' + t.args.map(show).join(' ') + ')' :
-      t.name && t.args.length ? t.name + '[' + t.args.map(show).join(' ') + ']' :
-      t.args.length ? '(' + t.args.map(show).join(' ') + ')' :
+      t.name === "fn" ? '(' + t.types.map(show).join(' ') + ')' :
+      t.name && t.types.length ? t.name + '[' + t.types.map(show).join(' ') + ']' :
+      t.types.length ? '(' + t.types.map(show).join(' ') + ')' :
       t.name
     const s = show(type)
     const o = {}

@@ -20,11 +20,11 @@ class TypeError extends Error { }
 
 const infer = root => {
   let varId = 0
-  const newtype = (name, args=[]) => ({name, args})
+  const newtype = (name, types=[]) => ({name, types})
   const newvar = () => ({...newtype(varId++), var: true})
-  const newfn = (args, names, ret) => ({...newtype("fn", args), names, ret})
-  const newstruct = args => ({...newfn(args), struct: true})
-  const newtuple = args => newtype("tuple", args)
+  const newfn = (types, names, ret) => ({...newtype("fn", types), names, ret})
+  const newstruct = types => ({...newfn(types), struct: true})
+  const newtuple = types => newtype("tuple", types)
   const newnew = fields => ({...newtype("new", fields.map(a => a.type)), fields})
   const newvec = t => newtype("vec", [t])
   const newset = t => newtype("set", [t])
@@ -63,11 +63,11 @@ const infer = root => {
 
   const method = (t, field) =>
     t.var ? property(t, field) :
-    t.name === "tuple" && field < t.args.length ? t.args[field] :
+    t.name === "tuple" && field < t.types.length ? t.types[field] :
     t.name === "error" && field === "message" ? tstring :
     t.name === "io" && field === "put" ? newfn([tv1, tint]) :
     t.fields?.find(f => f.code === field).type ||
-    (() => { throw new TypeError(`No ${field} in ${t.name}${t.args.length ? `[${t.args}]` : ""}`) })()
+    (() => { throw new TypeError(`No ${field} in ${t.name}${t.types.length ? `[${t.types}]` : ""}`) })()
   const unify = (a, b) => {
     a = prune(a)
     b = prune(b)
@@ -88,10 +88,10 @@ const infer = root => {
       if (a.name !== b.name) {
         throw new TypeError(`Type name ${a.name} != ${b.name}`)
       }
-      if (a.args.length !== b.args.length) {
-        throw new TypeError(`Type args ${a.args} != ${b.args}`)
+      if (a.types.length !== b.types.length) {
+        throw new TypeError(`Type args ${a.types} != ${b.types}`)
       }
-      a.args.map((x, i) => unify(x, b.args[i]))
+      a.types.map((x, i) => unify(x, b.types[i]))
     }
   }
   const safeUnify = (a, b) => {
@@ -108,10 +108,10 @@ const infer = root => {
   }
   const apply = (f, args) => {
     if (f.var) {
-      return (f.instance = newfn([...args, newvar()])).args.at(-1)
+      return (f.instance = newfn([...args, newvar()])).types.at(-1)
     }
     let i = 0
-    for (const fa of f.args.slice(0, -1)) {
+    for (const fa of f.types.slice(0, -1)) {
       if (fa.name === "__varg") {
         while (args[i]) {
           let k = i
@@ -129,7 +129,7 @@ const infer = root => {
     if (i !== args.length) {
       throw new TypeError(`Calling vargs ${JSON.stringify(f.args)} != ${JSON.stringify(args)}`)
     }
-    return f.args.at(-1)
+    return f.types.at(-1)
   }
   const fresh = (type, nonGeneric) => {
     const d = {}
@@ -137,7 +137,7 @@ const infer = root => {
       const u = prune(t)
       return u.var ?
         (nonGeneric.includes(u.name) ? u : d[u.name] ||= newvar()) :
-        (v => (type.generics.push(v.args), v))({...u, args: u.args.map(rec)})
+        (v => (type.generics.push(v.types), v))({...u, types: u.types.map(rec)})
     }
     type.generics ||= []
     return rec(type)
@@ -187,7 +187,7 @@ const infer = root => {
           } else if (s === ".") {
             const target = inf(tail[0])
             if (target.name === "tuple") {
-              return target.args[tail[0].code]
+              return target.types[tail[0].code]
             } else {
               tail.slice(2).map(inf)
               return method(target, tail[1].code)
@@ -244,7 +244,7 @@ const infer = root => {
     }
     if (node.type) {
       node.type = prune(node.type)
-      node.type.args = node.type.args.map(prune)
+      node.type.types = node.type.types.map(prune)
       if (node.type.generics) {
         const d = {}
         for (const a of node.type.generics) {
@@ -272,10 +272,10 @@ const generate = root => {
   }
   const genop = (op, xs) => xs.length === 1 ? `${op} ${gen(xs[0])}` : genop2(op, xs)
   const genop2 = (op, xs) => xs.length === 1 ? gen(xs[0]) : `${gen(xs[0])} ${op} ${genop2(op, xs.slice(1))}`
-  const gentype = t => t.args.length === 0 ? t.name :
-    t.name === "tuple" ? `__${t.name}${t.args.length}[${t.args.map(gentype)}]` :
+  const gentype = t => t.types.length === 0 ? t.name :
+    t.name === "tuple" ? `__${t.name}${t.types.length}[${t.types.map(gentype)}]` :
     t.name === "new" ? genstruct(t) :
-    `${t.name}[${t.args.map(gentype)}]`
+    `${t.name}[${t.types.map(gentype)}]`
   const genstruct = t => `struct { ${t.fields.map(f => `${f.code} ${gentype(f.type)}`).join("\n")} }`
   const genfunc = (t, name="") => `func ${name}(${t.names.map(a => `${a.code} ${gentype(a.type)}`)}) (__ret ${gentype(t.ret.type)}${t.ret.type.fails ? ", __err error" : ""})`
   const geniif = (id , a) => a.length === 1 ? `{ ${id} = ${gen(a[0])} }` : `if ${gen(a[0])} { ${id} = ${gen(a[1])} } else ${geniif(id, a.slice(2))}`
@@ -289,10 +289,10 @@ const generate = root => {
     c ? `for ${a} := 0; ${a} < ${b}; ${a}++ { ${c} }` :
     (() => {throw new Error(`genfor ${a}, ${b}, ${c}, ${d}, ${e}`)})()
   const genlet = (name, body) => {
-    if (body[0]?.code === "fn" && body.type.args.find(x => x.var) && body.type.generics.length) {
+    if (body[0]?.code === "fn" && body.type.types.find(x => x.var) && body.type.generics.length) {
       for (const a of body.type.generics) {
         const x = structuredClone(body)
-        x.type = {...x.type, args: a}
+        x.type = {...x.type, types: a}
         x.slice(1, -1).map((arg, i) => arg.type = a[i])
         x.type.names.map((arg, i) => arg.type = a[i])
         x.type.ret.type = a.at(-1)
@@ -304,7 +304,7 @@ const generate = root => {
     return ""
   }
   const genhead = x => x.type.name === "fn" && x.type.names?.find(y => y.type.var) && x.type.generics?.length ?
-    `${gen(x)}__${x.type.args.map(gentype).join("__")}` : gen(x)
+    `${gen(x)}__${x.type.types.map(gentype).join("__")}` : gen(x)
   const gen = x => !Array.isArray(x) ? x.code :
     x[0].code === "do"     ? x.slice(1).map(gen).join("\n") :
     x[0].code === "for"    ? (lines.push(genfor(x.slice(1).map(gen))), "") :
@@ -316,7 +316,7 @@ const generate = root => {
     x[0].code === "catch"  ? !x[1].type.fails ? gen(x[1]) : ((id1, id2) => (lines.push(`${id1}, ${id2} := ${gen(x[1])}; if ${id2} != nil { ${id1} = ${gen(x[2])}(${id2}) }`), id1))(newId(), newId()) :
     x[0].code === "if"     ? `if ${gen(x[1])} { ${gen(x[2])} }${genif(x.slice(3))}` :
     x[0].code === "iif"    ? (id => (lines.push(`var ${id} ${gentype(x[2].type)}; ${geniif(id, x.slice(1))}`), id))(newId()) :
-    x[0].code === "struct" ? (defs.push(`type ${x[1].code} ${genstruct(x.type.args.at(-1))}`), "") :
+    x[0].code === "struct" ? (defs.push(`type ${x[1].code} ${genstruct(x.type.types.at(-1))}`), "") :
     x[0].code === "fn"     ? `${genfunc(x.type)} { ${genreturn(x.at(-1))} }` :
     x[0].code === "tuple"  ? `__tuple${x.length - 1}[${x.slice(1).map(node => gentype(node.type))}]{ ${x.slice(1).map(gen)} }` :
     x[0].code === "new"    ? `${genstruct(x.type)}{${range((x.length-1)/2).map(i => gen(x[i*2+2]))}}` :
