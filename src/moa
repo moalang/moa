@@ -14,7 +14,6 @@
 // - [x] operators
 // - [x] do
 // - [x] let
-// - [x] def
 // - [x] struct
 // - [x] throw
 // - [x] catch
@@ -152,11 +151,6 @@ const infer = root => {
             return isFail(tail) ? fails(ret) : ret
           } else if (s === "let") {
             return local[tail[0].code] = inf(tail[1])
-          } else if (s === "def") {
-            const [t, ...ts] = tail
-            const args = ts.slice(0, -1).map(t => [t.code, t.type = newvar()])
-            const body = inferWith(ts.at(-1), {...local, ...Object.fromEntries(args)}, ngs)
-            return local[t.code] = newfn([...args.map(a => a[1]), body], ts.slice(0, -1), ts.at(-1))
           } else if (s === "struct") {
             const [t, ...ts] = tail
             const args = range(ts.length / 2).map(i => (ts[i*2].type = inf(ts[i*2+1]), ts[i*2]))
@@ -265,7 +259,6 @@ const generate = root => {
     x[0].code === "catch"  ? !x[1].type.fails ? gen(x[1]) : ((id1, id2) => (lines.push(`${id1}, ${id2} := ${gen(x[1])}; if ${id2} != nil { ${id1} = ${gen(x[2])}(${id2}) }`), id1))(newId(), newId()) :
     x[0].code === "if"     ? `if ${gen(x[1])} { ${gen(x[2])} }${genif(x.slice(3))}` :
     x[0].code === "iif"    ? (id => (lines.push(`var ${id} ${gentype(x[2].type)}; ${geniif(id, x.slice(1))}`), id))(newId()) :
-    x[0].code === "def"    ? (defs.push(`${genfunc(x.type, x[1].code)} { ${genreturn(x.at(-1))} }`), "") :
     x[0].code === "struct" ? (defs.push(`type ${x[1].code} ${genstruct(x.type.args.at(-1))}`), "") :
     x[0].code === "fn"     ? `${genfunc(x.type)} { ${genreturn(x.at(-1))} }` :
     x[0].code === "tuple"  ? `__tuple${x.length - 1}[${x.slice(1).map(node => gentype(node.type))}]{ ${x.slice(1).map(gen)} }` :
@@ -353,10 +346,10 @@ const testMain = runGo => {
 
   // Definition
   test("1", "a", "(let a 1)")
-  test("1", "(f)", "(def f 1)")
-  test("1", "(f)", "(def f (do (return 1)))")
-  test("1", "(f 1)", "(def f a a)")
-  test("3", "(f 1 2)", "(def f a b (+ a b))")
+  test("1", "(f)", "(let f (fn 1))")
+  test("1", "(f)", "(let f (fn (do (return 1))))")
+  test("1", "(f 1)", "(let f (fn a a))")
+  test("3", "(f 1 2)", "(let f (fn a b (+ a b)))")
   test("{1}", "(s 1)", "(struct s a int)")
   test("{1 true}", "(s 1 true)", "(struct s a int b bool)")
   test("1", "(. (s 1) a)", "(struct s a int)")
@@ -364,10 +357,10 @@ const testMain = runGo => {
   test("1", "((fn b (. b a)) (s 1))", "(struct s a int)")
 
   // Throw / Catch
-  test("error: a", "(f)", '(def f (do (throw "a")))')
-  test("a", '(catch (f) (fn x "b"))', '(def f "a")')
-  test("c", '(catch (f) (fn x "c"))', '(def f (do (throw "a") (return "b")))')
-  test("a", '(catch (f) (fn x (. x message)))', '(def f (do (throw "a") (return "b")))')
+  test("error: a", "(f)", '(let f (fn (do (throw "a"))))')
+  test("a", '(catch (f) (fn x "b"))', '(let f (fn "a"))')
+  test("c", '(catch (f) (fn x "c"))', '(let f (fn (do (throw "a") (return "b"))))')
+  test("a", '(catch (f) (fn x (. x message)))', '(let f (fn (do (throw "a") (return "b"))))')
 
   // Statement
   test("1", "(iif true 1 2)")
