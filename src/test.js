@@ -5,11 +5,12 @@ const log = x => { console.dir(x, {depth: null}); return x }
 const testInfer = param => {
   const run = src => param.infer(param.parse(param.tokenize(src)))
   const showType = type => {
-    const show = t => t.instance ? show(t.instance) :
-      t.name === "fn" ? '(' + t.types.map(show).join(' ') + ')' :
+    const show = (t, mark) => t.instance ? show(t.instance, mark) :
+      mark && t.mark ? (t.mark.includes("*") ? show(t.types[0]) + "*" : t.name + t.mark) :
+      t.name === "fn" ? '(' + t.types.map((u, i) => show(u, i < t.types.length - 1)).join(' ') + ')' :
       t.name && t.types.length ? t.name + '[' + t.types.map(show).join(' ') + ']' :
       t.types.length ? '(' + t.types.map(show).join(' ') + ')' :
-      t.name + (t.optional ? "?" : "")
+      t.name
     const s = show(type)
     const o = {}
     const r = s.replace(/\d+/g, t => o[t] ||= Object.keys(o).length + 1)
@@ -62,6 +63,9 @@ const testInfer = param => {
   inf("int", "((fn a a) 1)")
   inf("bool", "(let f (fn a a))(f 1)(f true)")
 
+  // container
+  inf("vec[int]", "(vec 1)")
+
   // combinations
   inf("int",                           "(let f (fn x (+ x 1))) (let g (fn x (+ x 2))) (+ (f 1) (g 1))")
   inf("((1 2) (2 3) 1 3)",             "(fn f g x (g (f x)))")
@@ -80,8 +84,14 @@ const testInfer = param => {
   inf("(bool (1 1))",                  "(let f (fn x x)) (let g (fn y y)) (let h (fn b (iif b (f g) (g f))))")
 
   // variadic arguments
+  inf("(int? int)", "(fn a? (+ a 0))")
+  inf("int", "((fn a? (+ a 0)) 1)")
   inf("(int int? int)", "(fn a b? (+ a b 0))")
   inf("int", "((fn a b? (+ a b 0)) 1)")
+  inf("int", "((fn a b? (+ a b 0)) 1 2)")
+  inf("(1* vec[1])", "(fn a* a)")
+  inf("vec[int]", "((fn a* a) 1)")
+  inf("vec[int]", "((fn a* a) 1 2)")
 
   // type errors
   reject("(+ 1 true)")

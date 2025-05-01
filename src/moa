@@ -1,7 +1,7 @@
 #!node --no-warnings
 "use strict"
 
-// - [ ] user definition variadic arguments
+// - [x] user definition variadic arguments
 // - [ ] user definition generic struct
 // - [ ] complex code generation
 // - [ ] syntax sugar
@@ -9,7 +9,7 @@
 const log = x => { console.dir(x, {depth: null}); return x }
 const range = n => [...new Array(n)].map((_, i) => i)
 
-const newtoken = s => (m => m ? ({code: m[1], mark: m[2]}) : ({code: s}))(s.match(/^([A-Za-z_].*)([?])$/))
+const newtoken = s => (m => m ? ({code: m[1], mark: m[2]}) : ({code: s}))(s.match(/^([A-Za-z_].*)([?*])$/))
 const tokenize = code => code.split(/([()]|[^\n ()]+)/).filter(s => s.trim()).map(newtoken)
 
 const parse = ([t, ...ts], acc=[]) =>
@@ -34,7 +34,7 @@ const infer = root => {
   const newvargs = vargs => ({...newtype("__varg"), vargs})
 
   const fails = t => ({...t, fails: true})
-  const optional = t => ({...t, optional: true})
+  const marks = (t, mark) => mark.includes("*") ? ({...newvec(t), mark}) : ({...t, mark})
   const property = (t, name) => (t.props ||= {}, t.props[name] = newvar())
 
   const prune = x => x.instance ? x.instance = prune(x.instance) : x
@@ -49,7 +49,7 @@ const infer = root => {
   const env = {
     "!": newfn([tbool, tbool]),
     "return": newfn([tv1, tv1]),
-    "if": newfn([newvargs([tbool, tv1]), optional(tv1), tvoid]),
+    "if": newfn([newvargs([tbool, tv1]), marks(tv1, "?"), tvoid]),
     "iif": newfn([newvargs([tbool, tv1]), tv1, tv1]),
     "throw": fails(newfn([tv1, fails(newvar())])),
     "catch": newfn([tv1, newfn([terror, tv1]), tv1]),
@@ -122,7 +122,14 @@ const infer = root => {
             break
           }
         }
-      } else if (fa.optional) {
+      } else if (fa.mark?.includes("*")) {
+        while (args[i]) {
+          if (!safeUnify(fa.types[0], args[i++])) {
+            i--
+            break
+          }
+        }
+      } else if (fa.mark?.includes("?")) {
         args[i] && !safeUnify(fa, args[i++]) && i--
       } else {
         unify(fa, args[i++])
@@ -166,8 +173,9 @@ const infer = root => {
             return env[t.code] = newstruct(args.map(a => a.type).concat(newnew(args)))
             return t
           } else if (s === "fn") {
-            const args = tail.slice(0, -1).map(t => [t.code, t.type = t.mark?.includes("?") ? optional(newvar()) : newvar()])
-            const body = inferWith(tail.at(-1), {...env, ...Object.fromEntries(args)}, nonGeneric.concat(args.map(a => a[1].name)))
+            const targs = tail.slice(0, -1).map(_ => newvar())
+            const args = tail.slice(0, -1).map((t, i) => [t.code, t.type = marks(targs[i], t.mark || "")])
+            const body = inferWith(tail.at(-1), {...env, ...Object.fromEntries(args)}, nonGeneric.concat(targs.map(t => t.name)))
             return newfn([...args.map(a => a[1]), body], tail.slice(0, -1), tail.at(-1))
           } else if (s === "for") {
             tail[0].type = tint
@@ -240,7 +248,7 @@ const infer = root => {
       value)
   }
 
-  const copy = t => t.optional ? ({...prune(t), optional: t.optional}) : prune(t)
+  const copy = t => ({...prune(t), mark: t.mark})
   const fix = node => {
     if (Array.isArray(node)) {
       node.map(fix)
