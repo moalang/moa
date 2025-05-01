@@ -2,8 +2,20 @@
 
 const log = x => { console.dir(x, {depth: null}); return x }
 
+const testSugar = param => {
+  const test = (expect, src) => {
+    const actual = param.sugar(src)
+    if (actual !== expect) {
+      console.error(`${expect} != ${actual}\n${src}`)
+      throw new Error(src)
+    }
+  }
+  test("a", "a")
+  //test("(a b)", "a b")
+}
+
 const testInfer = param => {
-  const run = src => param.infer(param.parse(param.tokenize(src)))
+  const run = src => param.infer(param.parse(src))
   const showType = type => {
     const show = (t, mark) => t.instance ? show(t.instance, mark) :
       mark && t.mark ? (t.mark.includes("*") ? show(t.types[0]) + "*" : t.name + t.mark) :
@@ -26,7 +38,7 @@ const testInfer = param => {
       }
     }
   }
-  const inf = (expect, src) => {
+  const test = (expect, src) => {
     const actual = showType(run(src).at(-1).type)
     if (actual !== expect) {
       console.error(`${expect} != ${actual}\n${src}`)
@@ -35,63 +47,64 @@ const testInfer = param => {
   }
 
   // primitives
-  inf("int", "1")
-  inf("bool", "true")
-  inf("bool", "false")
+  test("int", "1")
+  test("bool", "true")
+  test("bool", "false")
 
   // unary operator
-  inf("bool", "(! true)")
-  inf("int", "(- 1)")
+  test("bool", "(! true)")
+  test("int", "(- 1)")
 
   // binary operator
-  inf("int", "(+ 1 1)")
-  inf("bool", "(< 1 1)")
+  test("int", "(+ 1 1)")
+  test("bool", "(< 1 1)")
 
   // branch
-  inf("int", "(iif true 1 2)")
-  inf("bool", "(iif true true true)")
+  test("int", "(iif true 1 2)")
+  test("bool", "(iif true true true)")
 
   // function
-  inf("(int int)", "(fn a (- a 1))")
-  inf("(int int int)", "(fn a b (- a b 0))")
-  inf("int", "((fn 1))")
+  test("(int int)", "(fn a (- a 1))")
+  test("(int int int)", "(fn a b (- a b 0))")
+  test("int", "((fn 1))")
 
   // generics
-  inf("(1 1)", "(fn a a)")
-  inf("(1 2 1)", "(fn a b a)")
-  inf("(1 2 2)", "(fn a b b)")
-  inf("int", "((fn a a) 1)")
-  inf("bool", "(let f (fn a a))(f 1)(f true)")
+  test("(1 1)", "(fn a a)")
+  test("(1 2 1)", "(fn a b a)")
+  test("(1 2 2)", "(fn a b b)")
+  test("int", "((fn a a) 1)")
+  test("bool", "(let f (fn a a))(f 1)(f true)")
 
   // container
-  inf("vec[int]", "(vec 1)")
+  test("vec[int]", "(vec 1)")
+  test("map[int bool]", "(map 1 true)")
 
   // combinations
-  inf("int",                           "(let f (fn x (+ x 1))) (let g (fn x (+ x 2))) (+ (f 1) (g 1))")
-  inf("((1 2) (2 3) 1 3)",             "(fn f g x (g (f x)))")
-  inf("((1 2 3) (1 2) 1 3)",           "(fn x y z (x z (y z)))")
-  inf("(1 (1 bool) (1 1))",            "(fn b x (iif (x b) x (fn x b)))")
-  inf("(bool bool)",                   "(fn x (iif true x (iif x true false)))")
-  inf("(bool bool bool)",              "(fn x y (iif x x y))")
-  inf("(1 1)",                         "(fn n ((fn x (x (fn y y))) (fn f (f n))))")
-  inf("((1 2) 1 2)",                   "(fn x y (x y))")
-  inf("((1 2) ((1 2) 1) 2)",           "(fn x y (x (y x)))")
-  inf("(1 ((1 2 3) 4 2) (1 2 3) 4 3)", "(fn h t f x (f h (t f x)))")
-  inf("((1 1 2) ((1 1 2) 1) 2)",       "(fn x y (x (y x) (y x)))")
-  inf("(((1 1) 2) 2)",                 "(let id (fn x x)) (let f (fn y (id (y id))))")
-  inf("(int)",                         "(let id (fn x x)) (let f (fn (iif (id true) (id 1) (id 2))))")
-  inf("(int)",                         "(let f (fn x 1)) (let g (fn (+ (f true) (f 4))))")
-  inf("(bool (1 1))",                  "(let f (fn x x)) (let g (fn y y)) (let h (fn b (iif b (f g) (g f))))")
+  test("int",                           "(let f (fn x (+ x 1))) (let g (fn x (+ x 2))) (+ (f 1) (g 1))")
+  test("((1 2) (2 3) 1 3)",             "(fn f g x (g (f x)))")
+  test("((1 2 3) (1 2) 1 3)",           "(fn x y z (x z (y z)))")
+  test("(1 (1 bool) (1 1))",            "(fn b x (iif (x b) x (fn x b)))")
+  test("(bool bool)",                   "(fn x (iif true x (iif x true false)))")
+  test("(bool bool bool)",              "(fn x y (iif x x y))")
+  test("(1 1)",                         "(fn n ((fn x (x (fn y y))) (fn f (f n))))")
+  test("((1 2) 1 2)",                   "(fn x y (x y))")
+  test("((1 2) ((1 2) 1) 2)",           "(fn x y (x (y x)))")
+  test("(1 ((1 2 3) 4 2) (1 2 3) 4 3)", "(fn h t f x (f h (t f x)))")
+  test("((1 1 2) ((1 1 2) 1) 2)",       "(fn x y (x (y x) (y x)))")
+  test("(((1 1) 2) 2)",                 "(let id (fn x x)) (let f (fn y (id (y id))))")
+  test("(int)",                         "(let id (fn x x)) (let f (fn (iif (id true) (id 1) (id 2))))")
+  test("(int)",                         "(let f (fn x 1)) (let g (fn (+ (f true) (f 4))))")
+  test("(bool (1 1))",                  "(let f (fn x x)) (let g (fn y y)) (let h (fn b (iif b (f g) (g f))))")
 
   // variadic arguments
-  inf("(int? int)", "(fn a? (+ a 0))")
-  inf("int", "((fn a? (+ a 0)) 1)")
-  inf("(int int? int)", "(fn a b? (+ a b 0))")
-  inf("int", "((fn a b? (+ a b 0)) 1)")
-  inf("int", "((fn a b? (+ a b 0)) 1 2)")
-  inf("(1* vec[1])", "(fn a* a)")
-  inf("vec[int]", "((fn a* a) 1)")
-  inf("vec[int]", "((fn a* a) 1 2)")
+  test("(int? int)", "(fn a? (+ a 0))")
+  test("int", "((fn a? (+ a 0)) 1)")
+  test("(int int? int)", "(fn a b? (+ a b 0))")
+  test("int", "((fn a b? (+ a b 0)) 1)")
+  test("int", "((fn a b? (+ a b 0)) 1 2)")
+  test("(1* vec[1])", "(fn a* a)")
+  test("vec[int]", "((fn a* a) 1)")
+  test("vec[int]", "((fn a* a) 1 2)")
 
   // type errors
   reject("(+ 1 true)")
@@ -205,6 +218,7 @@ const testGenerate = param => {
 
 module.exports.test = param => {
   console.clear()
+  testSugar(param)
   testInfer(param)
   const fs = require("fs")
   const {execSync} = require("child_process")
