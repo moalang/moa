@@ -205,7 +205,7 @@ module.exports.test = param => {
   const runtime = fs.readFileSync("runtime.go")
   const cache = fs.existsSync("/tmp/moa_test_cache.json") ? require("/tmp/moa_test_cache.json") : {}
   try {
-    const runGo = x => {
+    param.runGo = x => {
       const body = !x.fails ? `fmt.Print(${x.exp})` : `ret, err := ${x.exp}\nif err != nil { fmt.Print("error: " + err.Error()) } else { fmt.Print(ret) }`
       const go = `${runtime}\n${x.def}\nfunc main() { ${x.stmt}\n ${body} }\n`
       if (go in cache) {
@@ -218,7 +218,6 @@ module.exports.test = param => {
         return `error: ${e}`
       }
     }
-    param.runGo = runGo
     testGenerate(param)
   } catch (e) {
     console.error(e.stack)
