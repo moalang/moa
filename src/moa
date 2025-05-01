@@ -2,7 +2,7 @@
 "use strict"
 
 // - [x] user definition variadic arguments
-// - [ ] user definition generic struct
+// - [x] user definition generic struct
 // - [ ] complex code generation
 // - [ ] syntax sugar
 
@@ -153,7 +153,7 @@ const infer = root => {
   }
   const isFail = a => Array.isArray(a) ? a[0].code === "throw" || a.some(isFail) : false
   const returnType = a => Array.isArray(a) ? (a.find(x => x[0]?.code === "return")?.[1]?.type || a.reduce((acc, x) => acc || returnType(x), null)) : tvoid
-  const inferWith = (top, env, nonGeneric) => {
+  const infWith = (top, env, nonGeneric) => {
     const inf = node => node.type ||= _inf(node)
     const _inf = node => {
       if (Array.isArray(node)) {
@@ -168,24 +168,24 @@ const infer = root => {
             const ret = returnType(tail)
             return isFail(tail) ? fails(ret) : ret
           } else if (s === "struct") {
-            const [t, ...ts] = tail
-            const args = range(ts.length / 2).map(i => (ts[i*2].type = inf(ts[i*2+1]), ts[i*2]))
+            const [t, generics, ...ts] = tail
+            const gargs = generics.map((t, i) => [t.code, t.type = newvar()])
+            const args = range(ts.length / 2).map(i => (ts[i*2].type = infWith(ts[i*2+1], {...env, ...Object.fromEntries(gargs)}, nonGeneric.concat(gargs.map(a => a[1].name))), ts[i*2]))
             return env[t.code] = newstruct(args.map(a => a.type).concat(newnew(args)))
-            return t
           } else if (s === "fn") {
             const targs = tail.slice(0, -1).map(_ => newvar())
             const args = tail.slice(0, -1).map((t, i) => [t.code, t.type = marks(targs[i], t.mark || "")])
-            const body = inferWith(tail.at(-1), {...env, ...Object.fromEntries(args)}, nonGeneric.concat(targs.map(t => t.name)))
+            const body = infWith(tail.at(-1), {...env, ...Object.fromEntries(args)}, nonGeneric.concat(targs.map(t => t.name)))
             return newfn([...args.map(a => a[1]), body], tail.slice(0, -1), tail.at(-1))
           } else if (s === "for") {
             tail[0].type = tint
             tail.slice(1, 1).map(node => unify(tint, inf(node)))
-            inferWith(tail.at(-1), {...env, ...{[tail[0].code]: tint}}, nonGeneric)
+            infWith(tail.at(-1), {...env, ...{[tail[0].code]: tint}}, nonGeneric)
             return tvoid
           } else if (s === "each") {
             tail[0].type = newvar()
             tail.slice(1, -1).map(inf)
-            inferWith(tail.at(-1), {...env, ...{[tail[0].code]: tail[0].type}}, nonGeneric)
+            infWith(tail.at(-1), {...env, ...{[tail[0].code]: tail[0].type}}, nonGeneric)
             return tvoid
           } else if (s === "map") {
             const keys = range(tail.length / 2).map(i => inf(tail[i*2]))
@@ -267,7 +267,7 @@ const infer = root => {
     }
   }
 
-  root.map(node => inferWith(node, env, [tv1.name]))
+  root.map(node => infWith(node, env, [tv1.name]))
   root.map(fix)
   return root
 }
@@ -283,11 +283,11 @@ const generate = root => {
   }
   const genop = (op, xs) => xs.length === 1 ? `${op} ${gen(xs[0])}` : genop2(op, xs)
   const genop2 = (op, xs) => xs.length === 1 ? gen(xs[0]) : `${gen(xs[0])} ${op} ${genop2(op, xs.slice(1))}`
-  const gentype = t => t.types.length === 0 ? t.name :
+  const gentype = t => t.types.length === 0 ? (t.var ? "__" : "") + t.name :
     t.name === "tuple" ? `__${t.name}${t.types.length}[${t.types.map(gentype)}]` :
-    t.name === "new" ? genstruct(t) :
+    t.name === "new" ? genstruct([], t) :
     `${t.name}[${t.types.map(gentype)}]`
-  const genstruct = t => `struct { ${t.fields.map(f => `${f.code} ${gentype(f.type)}`).join("\n")} }`
+  const genstruct = (a, t) => (a.length ? `[${a.map(u => gentype(u.type) + " any")}] ` : "") + `struct { ${t.fields.map(f => `${f.code} ${gentype(f.type)}`).join("\n")} }`
   const genfunc = (t, name="") => `func ${name}(${t.names.map(a => `${a.code} ${gentype(a.type)}`)}) (__ret ${gentype(t.ret.type)}${t.ret.type.fails ? ", __err error" : ""})`
   const geniif = (id , a) => a.length === 1 ? `{ ${id} = ${gen(a[0])} }` : `if ${gen(a[0])} { ${id} = ${gen(a[1])} } else ${geniif(id, a.slice(2))}`
   const genif = a =>
@@ -327,15 +327,15 @@ const generate = root => {
     x[0].code === "catch"  ? !x[1].type.fails ? gen(x[1]) : ((id1, id2) => (lines.push(`${id1}, ${id2} := ${gen(x[1])}; if ${id2} != nil { ${id1} = ${gen(x[2])}(${id2}) }`), id1))(newId(), newId()) :
     x[0].code === "if"     ? `if ${gen(x[1])} { ${gen(x[2])} }${genif(x.slice(3))}` :
     x[0].code === "iif"    ? (id => (lines.push(`var ${id} ${gentype(x[2].type)}; ${geniif(id, x.slice(1))}`), id))(newId()) :
-    x[0].code === "struct" ? (defs.push(`type ${x[1].code} ${genstruct(x.type.types.at(-1))}`), "") :
+    x[0].code === "struct" ? (defs.push(`type ${x[1].code} ${genstruct(x[2], x.type.types.at(-1))}`), "") :
     x[0].code === "fn"     ? `${genfunc(x.type)} { ${genreturn(x.at(-1))} }` :
     x[0].code === "tuple"  ? `__tuple${x.length - 1}[${x.slice(1).map(node => gentype(node.type))}]{ ${x.slice(1).map(gen)} }` :
-    x[0].code === "new"    ? `${genstruct(x.type)}{${range((x.length-1)/2).map(i => gen(x[i*2+2]))}}` :
+    x[0].code === "new"    ? `${genstruct([], x.type)}{${range((x.length-1)/2).map(i => gen(x[i*2+2]))}}` :
     x[0].code === "vec"    ? `[]${gentype(x[1].type)}{ ${x.slice(1).map(gen)} }` :
     x[0].code === "map"    ? `map[${gentype(x[1].type)}]${gentype(x[2].type)}{ ${range((x.length-1)/2).map(i => `${gen(x[i*2+1])}: ${gen(x[i*2+2])}`)} }` :
     x[0].code === "set"    ? `map[${gentype(x[1].type)}]struct{}{ ${x.slice(1).map(n => `${gen(n)}: struct{}{}`)} }` :
     x[0].code === "!"      ? `${x[0].code}${gen(x[1])}` :
-    x[0].type?.struct      ?  gen(x[0]) + "{" + x.slice(1).map(gen).join(", ") + "}" :
+    x[0].type?.struct      ? gen(x[0]) + (x[0].type.types.at(-1).types.find(t => t.var) ? `[${x[0].type.types.slice(0, -1).map(gentype)}]` : "")+ "{" + x.slice(1).map(gen).join(", ") + "}" :
     x[0].code === "." && x[1]?.type?.name === "tuple" ? `${gen(x[1])}.v${x[2].code}` :
     x[0].code === "." && x[1]?.type?.name === "error" && x[2].code === "message" ? `${gen(x[1])}.Error()` :
     /[+\-*/%^<>!=|&.]/.test(x[0].code) ? genop(x[0].code, x.slice(1)) :

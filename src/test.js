@@ -166,11 +166,11 @@ const testGenerate = param => {
   test("1", "(f)", "(let f (fn (do (return 1))))")
   test("1", "(f 1)", "(let f (fn a a))")
   test("3", "(f 1 2)", "(let f (fn a b (+ a b)))")
-  test("{1}", "(s 1)", "(struct s a int)")
-  test("{1 true}", "(s 1 true)", "(struct s a int b bool)")
-  test("1", "(. (s 1) a)", "(struct s a int)")
-  test("false", "(. (s 1 false) b)", "(struct s a int b bool)")
-  test("1", "((fn b (. b a)) (s 1))", "(struct s a int)")
+  test("{1}", "(a 1)", "(struct a () b int)")
+  test("{1 true}", "(a 1 true)", "(struct a () b int c bool)")
+  test("1", "(. (a 1) b)", "(struct a () b int)")
+  test("false", "(. (a 1 false) c)", "(struct a () b int c bool)")
+  test("1", "((fn c (. c b)) (a 1))", "(struct a () b int)")
 
   // Throw / Catch
   test("error: a", "(f)", '(let f (fn (do (throw "a"))))')
@@ -197,6 +197,8 @@ const testGenerate = param => {
 
   // Generics
   test('1', '(iif (f true) (f 1) (f 2))', '(let f (fn a a))')
+  test("{1}", "(a 1)", "(struct a (t) b t)")
+  test("{1 true}", "(a 1 true)", "(struct a (t u) b t c u)")
 
   // IO
   test("hi2", '((. io put) "hi")')
