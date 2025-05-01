@@ -172,7 +172,6 @@ const infer = root => {
     type.generics ||= []
     return rec(type)
   }
-  const islogical = s => s === "||" || s === "&&"
   const isFail = a => Array.isArray(a) ? a[0].code === "throw" || a.some(isFail) : false
   const returnType = a => Array.isArray(a) ? (a.find(x => x[0]?.code === "return")?.[1]?.type || a.reduce((acc, x) => acc || returnType(x), null)) : tvoid
   const inferWith = (top, env, nonGeneric) => {
@@ -222,11 +221,11 @@ const infer = root => {
             const keys = range(tail.length / 2).map(i => inf(tail[i*2]))
             const values = range(tail.length / 2).map(i => inf(tail[i*2+1]))
             return newmap(keys[0], values[0])
-          } else if (islogical(s)) {
-            return same(tail)
+          } else if (s === "||" || s === "&&") {
+            return unify(tbool, same(tail))
           } else if ("+-*/%^=<>!".includes(s[0])) {
             same(tail)
-            return "== != < > >= <=".split(" ").includes(s) ? tbool : tail.map(inf).at(-1)
+            return "== != < > >= <=".split(" ").includes(s) ? tbool : tail[0].type
           } else if (s === ".") {
             const target = inf(tail[0])
             if (target.name === "tuple") {
@@ -252,17 +251,12 @@ const infer = root => {
     const same = a => (([x, ...ts]) => (ts.map(t => unify(t, x)), x))(a.map(inf))
     return inf(top)
   }
-  const circularReplacer = () => {
+  const safeJson = o => {
     const seen = new Set()
-    return (key, value) => {
-      if (typeof value === "object" && value !== null) {
-        if (seen.has(value)) {
-          return seen.size
-        }
-        seen.add(value)
-      }
-      return value
-    }
+    return JSON.stringify(o, (key, value) =>
+      typeof value === "object" && value !== null ?
+      (seen.has(value) ? seen.size : (seen.add(value), value)) :
+      value)
   }
 
   const fix = node => {
@@ -276,7 +270,7 @@ const infer = root => {
         const d = {}
         for (const a of node.type.generics) {
           const t = a.map(prune)
-          d[JSON.stringify(t, circularReplacer())] ||= t
+          d[safeJson(t)] ||= t
         }
         node.type.generics = Object.values(d)
       }
