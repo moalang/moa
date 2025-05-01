@@ -90,7 +90,7 @@ const infer = root => {
   }
 
   const method = (t, field) =>
-    typeof t.name === "number" ? property(t, field) :
+    t.var ? property(t, field) :
     t.name === "tuple" && field < t.args.length ? t.args[field] :
     t.name === "error" && field === "message" ? tstring :
     t.name === "io" && field === "put" ? newfn([tv1, tv1]) :
@@ -99,16 +99,16 @@ const infer = root => {
   const unify = (a, b) => {
     a = prune(a)
     b = prune(b)
-    if (typeof a.name === "number") {
+    if (a.var) {
       a.instance = b
       if (a.props) {
-        if (typeof b.name === "number") {
+        if (b.var) {
           b.props = {...(b.props||={}), ...a.props}
         } else {
           Object.keys(a.props).map(name => unify(a.props[name], method(b, name)))
         }
       }
-    } else if (typeof b.name === "number") {
+    } else if (b.var) {
       unify(b, a)
     } else {
       if (a.name !== b.name) {
@@ -167,11 +167,10 @@ const infer = root => {
     type.generics ||= []
     return rec(type)
   }
-  const iscmp = s => "== != < > >= <=".split(" ").includes(s)
   const islogical = s => s === "||" || s === "&&"
   const isFail = a => Array.isArray(a) ? a[0].code === "throw" || a.some(isFail) : false
   const returnType = a => Array.isArray(a) ? (a.find(x => x[0]?.code === "return")?.[1]?.type || a.reduce((acc, x) => acc || returnType(x), null)) : tvoid
-  const inferWith = (top, local, nonGeneric) => {
+  const inferWith = (top, env, nonGeneric) => {
     const _inf = node => {
       if (Array.isArray(node)) {
         const head = node[0]
@@ -185,25 +184,25 @@ const infer = root => {
             const ret = returnType(tail)
             return isFail(tail) ? fails(ret) : ret
           } else if (s === "let") {
-            return local[tail[0].code] = inf(tail[1])
+            return env[tail[0].code] = inf(tail[1])
           } else if (s === "struct") {
             const [t, ...ts] = tail
             const args = range(ts.length / 2).map(i => (ts[i*2].type = inf(ts[i*2+1]), ts[i*2]))
-            return local[t.code] = newstruct(args.map(a => a.type).concat(newnew(args)))
+            return env[t.code] = newstruct(args.map(a => a.type).concat(newnew(args)))
             return t
           } else if (s === "fn") {
             const args = tail.slice(0, -1).map(t => [t.code, t.type = newvar()])
-            const body = inferWith(tail.at(-1), {...local, ...Object.fromEntries(args)}, nonGeneric.concat(args.map(a => a[1].name)))
+            const body = inferWith(tail.at(-1), {...env, ...Object.fromEntries(args)}, nonGeneric.concat(args.map(a => a[1].name)))
             return newfn([...args.map(a => a[1]), body], tail.slice(0, -1), tail.at(-1))
           } else if (s === "for") {
             tail[0].type = tint
             tail.slice(1, 1).map(node => unify(tint, inf(node)))
-            inferWith(tail.at(-1), {...local, ...{[tail[0].code]: tint}}, nonGeneric)
+            inferWith(tail.at(-1), {...env, ...{[tail[0].code]: tint}}, nonGeneric)
             return tvoid
           } else if (s === "each") {
             tail[0].type = newvar()
             tail.slice(1, -1).map(inf)
-            inferWith(tail.at(-1), {...local, ...{[tail[0].code]: tail[0].type}}, nonGeneric)
+            inferWith(tail.at(-1), {...env, ...{[tail[0].code]: tail[0].type}}, nonGeneric)
             return tvoid
           } else if (s === "tuple") {
             return newtuple(tail.map(inf))
@@ -221,7 +220,7 @@ const infer = root => {
             return same(tail)
           } else if ("+-*/%^=<>!".includes(s[0])) {
             same(tail)
-            return iscmp(s) ? tbool : tail.map(inf).at(-1)
+            return "== != < > >= <=".split(" ").includes(s) ? tbool : tail.map(inf).at(-1)
           } else if (s === ".") {
             const target = inf(tail[0])
             if (target.name === "tuple") {
@@ -240,7 +239,6 @@ const infer = root => {
           /^[0-9]+/.test(s)             ? tint :
           s === "true" || s === "false" ? tbool :
           s.startsWith('"')             ? tstring :
-          s in local ? fresh(local[s], nonGeneric) :
           s in env ? fresh(env[s], nonGeneric) :
           (() => { throw new Error(`Type literal '${s}'`) })()
       }
@@ -267,8 +265,7 @@ const infer = root => {
     }
   }
 
-  const local = {}
-  root.map(node => inferWith(node, local, [tv1.name]))
+  root.map(node => inferWith(node, env, [tv1.name]))
   root.map(fix)
   return root
 }
