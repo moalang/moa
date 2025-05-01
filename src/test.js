@@ -100,12 +100,12 @@ const testInfer = param => {
 }
 
 const testGenerate = param => {
-  const test = (expected, exp, define="") => {
-    const src = define.length ? define + "\n" + exp : exp
+  const test = (expected, exp, define=null) => {
+    const src = (define ? define + "\n" : "") + `((. io put) ${exp})`
     const go = param.compile(src)
     const actual = param.runGo(go)
     if (expected !== actual) {
-      throw new Error(`${expected} != ${actual}\n# src\n${src}\n# go\n${go.def}\n${go.stmt}\n${go.exp}`)
+      throw new Error(`${expected} != ${actual}\n# src\n${src}\n# go\n${go.def}\n${go.body}`)
     }
   }
 
@@ -173,7 +173,7 @@ const testGenerate = param => {
   test("1", "((fn c (. c b)) (a 1))", "(struct a () b int)")
 
   // Throw / Catch
-  test("error: a", "(f)", '(let f (fn (do (throw "a"))))')
+  test("error: a", "(f)", '(let f (fn (do (throw "a") (return "b"))))')
   test("a", '(catch (f) (fn x "b"))', '(let f (fn "a"))')
   test("c", '(catch (f) (fn x "c"))', '(let f (fn (do (throw "a") (return "b"))))')
   test("a", "(catch (f) (fn x (. x message)))", '(let f (fn (do (throw "a") (return "b"))))')
@@ -201,9 +201,6 @@ const testGenerate = param => {
   test("1", "(iif (f true) (f 1) (f 2))", "(let f (fn a a))")
   test("{1}", "(a 1)", "(struct a (t) b t)")
   test("{1 true}", "(a 1 true)", "(struct a (t u) b t c u)")
-
-  // IO
-  test("hi2", '((. io put) "hi")')
 }
 
 module.exports.test = param => {
@@ -215,7 +212,6 @@ module.exports.test = param => {
   const cache = fs.existsSync("/tmp/moa_test_cache.json") ? require("/tmp/moa_test_cache.json") : {}
   try {
     param.runGo = x => {
-      const body = !x.fails ? `fmt.Print(${x.exp})` : `ret, err := ${x.exp}\nif err != nil { fmt.Print("error: " + err.Error()) } else { fmt.Print(ret) }`
       const go = `${runtime}\n${x.def}\nfunc main() {
         var __err error
         defer func() {
@@ -223,8 +219,7 @@ module.exports.test = param => {
             fmt.Print("error: " + __err.Error())
           }
         }()
-        ${x.stmt}
-        ${body}
+        ${x.body}
       }\n`
       if (go in cache) {
         return cache[go]

@@ -22,9 +22,14 @@ type __tuple2[A any, B any] struct {
 	v1 B
 }
 
-func __dummy() {
-	fmt.Print(errors.New("never print"))
+func __catch[T any](v T, err error, f func(error) T) T {
+	if err != nil {
+		return f(err)
+	} else {
+		return v
+	}
 }
 
-func __use_error(_ error) {
+func __dummy() {
+	fmt.Print(errors.New("never print"))
 }

@@ -197,7 +197,7 @@ const infer = root => {
           } else if (s === ".") {
             const target = inf(tail[0])
             if (target.name === "tuple") {
-              return target.types[tail[0].code]
+              return target.types[tail[1].code]
             } else {
               tail.slice(2).map(inf)
               return method(target, tail[1].code)
@@ -279,7 +279,8 @@ const generate = root => {
   const lines = []
   const genreturn = x => {
     const ret = generate([x])
-    return x[0]?.code === "do" ? ret.stmt + "\n" + ret.exp : `${ret.stmt}\nreturn ${ret.exp}`
+    const items = ret.body.split("\n")
+    return x[0]?.code === "do" ? ret.body : `${items.slice(0, -1).join("\n")}\nreturn ${items.at(-1)}`
   }
   const genop = (op, xs) => xs.length === 1 ? `${op} ${gen(xs[0])}` : genop2(op, xs)
   const genop2 = (op, xs) => xs.length === 1 ? gen(xs[0]) : `${gen(xs[0])} ${op} ${genop2(op, xs.slice(1))}`
@@ -289,7 +290,7 @@ const generate = root => {
     `${t.name}[${t.types.map(gentype)}]`
   const genstruct = (a, t) => (a.length ? `[${a.map(u => gentype(u.type) + " any")}] ` : "") + `struct { ${t.fields.map(f => `${f.code} ${gentype(f.type)}`).join("\n")} }`
   const genfunc = (t, name="") => `func ${name}(${t.names.map(a => `${a.code} ${gentype(a.type)}`)}) (__ret ${gentype(t.ret.type)}${t.ret.type.fails ? ", __err error" : ""})`
-  const genassign = (id, x) => x.type.fails ? `${id}, __err = ${gen(x)}; if __err != nil { return }` : `${id} = ${gen(x)}`
+  const genassign = (id, x) => x.type.fails ? `${id}, __err = ${genexp(x)}; if __err != nil { return }` : `${id} = ${genexp(x)}`
   const geniif = (id , a) => a.length === 1 ? `{ ${genassign(id, a[0])} }` :
     `if ${gen(a[0])} { ${genassign(id, a[1])} } else ${geniif(id, a.slice(2))}`
   const genif = a =>
@@ -318,7 +319,13 @@ const generate = root => {
   }
   const genhead = x => x.type.name === "fn" && x.type.names?.find(y => y.type.var) && x.type.generics?.length ?
     `${gen(x)}__${x.type.types.map(gentype).join("__")}` : gen(x)
-  const gen = x => !Array.isArray(x) ? x.code :
+  const gen = x => Array.isArray(x) && x[0].type?.types.at(-1).fails ? ((ret, a) => (
+      a.map(([id, y]) => lines.push(`${id} = ${c}`)),
+      lines.push(`${ret}, __err := ${genhead(x[0])}(${a.map(z => z[0])})`),
+      ret
+    ))(newid(), x.slice(1).map(y => [newid(), y])) :
+    genexp(x)
+  const genexp = x => !Array.isArray(x) ? x.code :
     x[0].code === "do"     ? x.slice(1).map(gen).join("\n") :
     x[0].code === "for"    ? (lines.push(genfor(x.slice(1).map(gen))), "") :
     x[0].code === "each"   ? (lines.push(`for _, ${x[1].code} := range ${gen(x[2])} { ${gen(x[3])} }`), "") :
@@ -326,7 +333,7 @@ const generate = root => {
     x[0].code === "let"    ? genlet(x[1].code, x[2]) :
     x[0].code === "return" ? `__ret = ${gen(x[1])}; return` :
     x[0].code === "throw"  ? `__err = errors.New(${gen(x[1])}); return` :
-    x[0].code === "catch"  ? !x[1].type.fails ? gen(x[1]) : ((id1, id2) => (lines.push(`${id1}, ${id2} := ${gen(x[1])}; if ${id2} != nil { ${id1} = ${gen(x[2])}(${id2}) }`), id1))(newid(), newid()) :
+    x[0].code === "catch"  ? !x[1].type.fails ? gen(x[1]) : (exp => (lines.push("__catch_err := __err; __err = nil"), `__catch[${gentype(x[1].type)}](${exp}, __catch_err, ${gen(x[2])})`))(gen(x[1])) :
     x[0].code === "if"     ? `if ${gen(x[1])} { ${gen(x[2])} }${genif(x.slice(3))}` :
     x[0].code === "iif"    ? (id => (lines.push(`var ${id} ${gentype(x[2].type)}; ${geniif(id, x.slice(1))}`), id))(newid()) :
     x[0].code === "struct" ? (defs.push(`type ${x[1].code} ${genstruct(x[2], x.type.types.at(-1))}`), "") :
@@ -345,9 +352,7 @@ const generate = root => {
   const exp = root.map(gen).at(-1)
   return {
     def: defs.join("\n"),
-    stmt: lines.join("\n"),
-    exp: exp,
-    fails: root.at(-1).type?.fails
+    body: lines.join("\n") + "\n" + exp,
   }
 }
 
@@ -366,7 +371,7 @@ const execGo = (cmd) => {
       panic(__err)
     }
   }()
-  ${x.stmt}\n${x.exp}
+  ${x.body}
 }\n`
   fs.writeFileSync("/tmp/a.go", go)
   execSync(`go ${cmd} /tmp/a.go`, {stdio: "inherit"})
