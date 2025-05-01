@@ -22,9 +22,10 @@
 // Statement
 // - [x] do
 // - [x] if
-// - [ ] for
-// - [ ] each
-// - [ ] while
+// - [x] for
+// - [x] each
+// - [x] while
+// - [x] continue, break
 // IO
 // - [-] io
 // - [ ] log
@@ -46,7 +47,7 @@ class TypeError extends Error { }
 const infer = root => {
   let varId = 0
   const newtype = (name, args=[]) => ({name, args})
-  const newvar = () => newtype(varId++)
+  const newvar = () => ({...newtype(varId++), var: true})
   const newfn = (args, names, ret) => ({...newtype("fn", args), names, ret})
   const newstruct = args => ({...newfn(args), struct: true})
   const newtuple = args => newtype("tuple", args)
@@ -61,7 +62,6 @@ const infer = root => {
   const property = (t, name) => (t.props ||= {}, t.props[name] = newvar())
 
   const prune = x => x.instance ? x.instance = prune(x.instance) : x
-  const tv1 = newvar()
   const tvoid = newtype("struct{}")
   const tbool = newtype("bool")
   const tint = newtype("int")
@@ -69,6 +69,26 @@ const infer = root => {
   const tstring = newtype("string")
   const terror = newtype("error")
   const tio = newtype("io")
+  const tv1 = newvar()
+  const env = {
+    "!": newfn([tbool, tbool]),
+    "+=": newfn([tv1, tv1, tv1]),
+    "<": newfn([tv1, tv1, tbool]),
+    "return": newfn([tv1, tv1]),
+    "if": newfn([newvargs([tbool, tv1]), optional(tv1), tvoid]),
+    "iif": newfn([newvargs([tbool, tv1]), tv1, tv1]),
+    "throw": fails(newfn([tv1, fails(newvar())])),
+    "catch": newfn([tv1, newfn([terror, tv1]), tv1]),
+    "while": newfn([tbool, tv1, tvoid]),
+    "bool": tbool,
+    "int": tint,
+    "float": tfloat,
+    "string": tstring,
+    "continue": tvoid,
+    "break": tvoid,
+    "io": tio,
+  }
+
   const method = (t, field) =>
     typeof t.name === "number" ? property(t, field) :
     t.name === "tuple" && field < t.args.length ? t.args[field] :
@@ -136,11 +156,21 @@ const infer = root => {
     }
     return f.args.at(-1)
   }
+  const fresh = (type, nonGeneric) => {
+    const d = {}
+    const rec = t => {
+      const u = prune(t)
+      return u.var ?
+        (nonGeneric.includes(u.name) ? u : d[u.name] ||= newvar()) :
+        ({...u, args: u.args.map(rec)})
+    }
+    return rec(type)
+  }
   const iscmp = s => "== != < > >= <=".split(" ").includes(s)
   const islogical = s => s === "||" || s === "&&"
   const isFail = a => Array.isArray(a) ? a[0].code === "throw" || a.some(isFail) : false
   const returnType = a => Array.isArray(a) ? (a.find(x => x[0]?.code === "return")?.[1]?.type || a.reduce((acc, x) => acc || returnType(x), null)) : tvoid
-  const inferWith = (top, local, ngs) => {
+  const inferWith = (top, local, nonGeneric) => {
     const _inf = node => {
       if (Array.isArray(node)) {
         const head = node[0]
@@ -162,8 +192,18 @@ const infer = root => {
             return t
           } else if (s === "fn") {
             const args = tail.slice(0, -1).map(t => [t.code, t.type = newvar()])
-            const body = inferWith(tail.at(-1), {...local, ...Object.fromEntries(args)}, ngs)
+            const body = inferWith(tail.at(-1), {...local, ...Object.fromEntries(args)}, nonGeneric.concat(args.map(a => a[1].name)))
             return newfn([...args.map(a => a[1]), body], tail.slice(0, -1), tail.at(-1))
+          } else if (s === "for") {
+            tail[0].type = tint
+            tail.slice(1, 1).map(node => unify(tint, inf(node)))
+            inferWith(tail.at(-1), {...local, ...{[tail[0].code]: tint}}, nonGeneric)
+            return tvoid
+          } else if (s === "each") {
+            tail[0].type = newvar()
+            tail.slice(1, -1).map(inf)
+            inferWith(tail.at(-1), {...local, ...{[tail[0].code]: tail[0].type}}, nonGeneric)
+            return tvoid
           } else if (s === "tuple") {
             return newtuple(tail.map(inf))
           } else if (s === "new") {
@@ -198,7 +238,9 @@ const infer = root => {
           /^[0-9]+/.test(s)             ? tint :
           s === "true" || s === "false" ? tbool :
           s.startsWith('"')             ? tstring :
-          local[s] || env[s] || (() => { throw new Error(`Type literal '${s}'`) })()
+          s in local ? local[s] :
+          s in env ? fresh(env[s], nonGeneric) :
+          (() => { throw new Error(`Type literal '${s}'`) })()
       }
     }
     const inf = node => node.type ||= _inf(node)
@@ -215,20 +257,8 @@ const infer = root => {
     }
   }
 
-  const env = {
-    "!": newfn([tbool, tbool]),
-    "return": newfn([tv1, tv1]),
-    "if": newfn([newvargs([tbool, tv1]), optional(tv1), tvoid]),
-    "iif": newfn([newvargs([tbool, tv1]), tv1, tv1]),
-    "throw": fails(newfn([tv1, fails(newvar())])),
-    "catch": newfn([tv1, newfn([terror, tv1]), tv1]),
-    "bool": tbool,
-    "int": tint,
-    "float": tfloat,
-    "string": tstring,
-    "io": tio,
-  }
-  root.map(node => inferWith(node, env, []))
+  const local = {}
+  root.map(node => inferWith(node, local, [tv1.name]))
   root.map(fix)
   return root
 }
@@ -255,8 +285,16 @@ const generate = root => {
     a.length === 0 ? "" :
     a.length === 1 ? ` else { ${gen(a[0])} }` :
     ` else if ${gen(a[0])} { ${gen(a[1])} } ${genif(a.slice(2))}`
+  const genfor = ([a, b, c, d, e]) =>
+    e ? `for ${a} := ${b}; ${a} < ${c}; ${a} += ${d} { ${e} }` :
+    d ? `for ${a} := ${b}; ${a} < ${c}; ${a}++ { ${d} }` :
+    c ? `for ${a} := 0; ${a} < ${b}; ${a}++ { ${c} }` :
+    (() => {throw new Error(`genfor ${a}, ${b}, ${c}, ${d}, ${e}`)})()
   const gen = x => !Array.isArray(x) ? x.code :
     x[0].code === "do"     ? x.slice(1).map(gen).join("\n") :
+    x[0].code === "for"    ? (lines.push(genfor(x.slice(1).map(gen))), "") :
+    x[0].code === "each"   ? (lines.push(`for _, ${x[1].code} := range ${gen(x[2])} { ${gen(x[3])} }`), "") :
+    x[0].code === "while"  ? (lines.push(`for ${gen(x[1])} { ${gen(x[2])} }`), "") :
     x[0].code === "let"    ? (lines.push(`${x[1].code} := ${gen(x[2])}`), "") :
     x[0].code === "return" ? `__ret = ${gen(x[1])}; return` :
     x[0].code === "throw"  ? `__err = errors.New(${gen(x[1])}); return` :
@@ -375,6 +413,13 @@ const testMain = runGo => {
   test("2", "((fn (do (if false (return 1)) (return 2))))")
   test("2", "((fn (do (if false (return 1) (return 2)))))")
   test("2", "((fn (do (if false (return 1) true (return 2)) (return 3))))")
+  test("6", "a", "(let a 0)(for b 4 (+= a b))")
+  test("5", "a", "(let a 0)(for b 2 4 (+= a b))")
+  test("9", "a", "(let a 0)(for b 1 6 2 (+= a b))")
+  test("6", "a", "(let a 0)(each b (vec 1 2 3) (+= a b))")
+  test("6", "a", "(let a 0)(while (< a 6) (+= a 1))")
+  test("1", "a", "(let a 0)(for b 3 (do (+= a 1) break))")
+  test("0", "a", "(let a 0)(for b 3 (do continue (+= a 1)))")
 
   // IO
   test("hi2", '((. io put) "hi")')
