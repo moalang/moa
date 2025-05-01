@@ -8,7 +8,46 @@ const range = n => [...new Array(n)].map((_, i) => i)
 
 const newtoken = s => (m => m ? ({code: m[1], mark: m[2]}) : ({code: s}))(s.match(/^([A-Za-z_].*)([?*])$/))
 
-const sugar = code => code
+const sugar = program => {
+  function* tokenize() {
+    let pos = 0
+    let lineno = 1
+    for (const code of program.split(/([A-Za-z_][A-Za-z0-9_]*\??|-?0x[A-Fa-f0-9]+|-?[0-9]+(?:(?:\.[0-9]+)|(?:e[0-9]+))?|""".*?"""|"[^"]*?"|```.*?```|`[^`]*?`|[ \r\n\t]+|[()\[\]{};]|#[^\n]*)/)) {
+      if (/^[ \r\n\t#;]/.test(code) || code === "") {
+        lineno += code.split(/\n|;/).length - 1
+      } else {
+        const op = /^[+\-*/%|&<>=!]+$/.test(code)
+        const lc = pos > 0 ? program[pos - 1] : ''
+        const rc = program[pos + code.length]
+        const op2 = op && lc === " " && rc === " "
+        const op1 = (op || code === "...") && !op2
+        const dot = code === "."
+        const call = code === "(" && /[A-Za-z0-9_)\]?]/.test(lc)
+        const index = code === "[" && /[A-Za-z0-9_)\]?]/.test(lc)
+        yield {code, lineno, op, op1, op2, dot, call, index}
+      }
+      pos += code.length
+    }
+  }
+  const compose = tokens => {
+    let pos = 0
+    const until = f => {
+      const a = []
+      while (pos < tokens.length && f(tokens[pos])) {
+        a.push(tokens[pos++])
+      }
+      return a
+    }
+    const statement = () => {
+      const lineno = tokens[pos].lineno
+      const a = until(t => t.lineno === lineno)
+      return a.length === 1 ? a[0] : a
+    }
+    return statement()
+  }
+  const gen = o => Array.isArray(o) ? `(${o.map(gen).join(" ")})` : o.code
+  return gen(compose([...tokenize()]))
+}
 
 const parse = input => {
   const rec = ([t, ...ts], acc=[]) =>
@@ -16,7 +55,7 @@ const parse = input => {
     t.code === ")" ? [acc, rec([ts])] :
     t.code === "(" ? (([x, rest]) => rec(rest, acc.concat([x])))(rec(ts)) :
     rec(ts, acc.concat(t))
-  return rec(sugar(input).split(/([()]|[^\n ()]+)/).filter(s => s.trim()).map(newtoken))
+  return rec(input.split(/([()]|[^\n ()]+)/).filter(s => s.trim()).map(newtoken))
 }
 
 class TypeError extends Error { }
@@ -280,8 +319,7 @@ const generate = root => {
   const lines = []
   const genreturn = x => {
     const ret = generate([x])
-    const items = ret.body.split("\n")
-    return x[0]?.code === "do" ? ret.body : `${items.slice(0, -1).join("\n")}\nreturn ${items.at(-1)}`
+    return x[0]?.code === "do" ? ret.body + "\n" + ret.exp : `${ret.body}\nreturn ${ret.exp}`
   }
   const genop = (op, xs) => xs.length === 1 ? `${op} ${gen(xs[0])}` : genop2(op, xs)
   const genop2 = (op, xs) => xs.length === 1 ? gen(xs[0]) : `${gen(xs[0])} ${op} ${genop2(op, xs.slice(1))}`
@@ -353,7 +391,8 @@ const generate = root => {
   const exp = root.map(gen).at(-1)
   return {
     def: defs.join("\n"),
-    body: lines.join("\n") + "\n" + exp,
+    body: lines.join("\n"),
+    exp
   }
 }
 
@@ -373,7 +412,8 @@ const execGo = (cmd) => {
     }
   }()
   ${x.body}
-}\n`
+  ${x.exp}
+}`
   fs.writeFileSync("/tmp/a.go", go)
   execSync(`go ${cmd} /tmp/a.go`, {stdio: "inherit"})
 }

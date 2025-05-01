@@ -11,7 +11,22 @@ const testSugar = param => {
     }
   }
   test("a", "a")
-  //test("(a b)", "a b")
+  test("(a b)", "a b")
+  // f(...)      # (f ...)
+  // a op2 b     # (op2 a b)
+  // op1 a       # (op1 a)
+  // a => a      # (fn a a)
+  // a,b => a    # (fn a b a)
+  // a -> b      # (a (do b))
+  // a -> b c    # (a (do (b c)))
+  // a ->
+  //    b
+  //    c d      # (a (do b (c d)))
+  // a: c        # (a c)
+  // a b: c d    # (a b (c d))
+  // a b:
+  //   c
+  //   d e       # (a b c (d e))
 }
 
 const testInfer = param => {
@@ -113,12 +128,12 @@ const testInfer = param => {
 }
 
 const testGenerate = param => {
-  const test = (expected, exp, define=null) => {
-    const src = (define ? define + "\n" : "") + `((. io put) ${exp})`
+  const test = (expected, exp, define="") => {
+    const src = define + "\n" + exp
     const go = param.compile(src)
     const actual = param.runGo(go)
     if (expected !== actual) {
-      throw new Error(`${expected} != ${actual}\n# src\n${src}\n# go\n${go.def}\n${go.body}`)
+      throw new Error(`${expected} != ${actual}\n# src\n${src}\n# go\n${go.def}\n${go.body}\n${go.exp}`)
     }
   }
 
@@ -234,6 +249,7 @@ module.exports.test = param => {
           }
         }()
         ${x.body}
+        fmt.Print(${x.exp})
       }\n`
       if (go in cache) {
         return cache[go]
