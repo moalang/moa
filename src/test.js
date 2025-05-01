@@ -1,8 +1,5 @@
 "use strict"
 
-// - [ ] type inference
-// - [ ] generate complex code
-
 const testInfer = param => {
   const run = src => param.infer(param.parse(param.tokenize(src)))
   const showType = type => {

@@ -1,6 +1,10 @@
 #!node
 "use strict"
 
+// - [ ] user definition variadic arguments
+// - [ ] user definition generic struct
+// - [ ] complex code generation
+
 const log = x => { console.dir(x, {depth: null}); return x }
 const range = n => [...new Array(n)].map((_, i) => i)
 
@@ -61,7 +65,7 @@ const infer = root => {
     t.var ? property(t, field) :
     t.name === "tuple" && field < t.args.length ? t.args[field] :
     t.name === "error" && field === "message" ? tstring :
-    t.name === "io" && field === "put" ? newfn([tv1, tv1]) :
+    t.name === "io" && field === "put" ? newfn([tv1, tint]) :
     t.fields?.find(f => f.code === field).type ||
     (() => { throw new TypeError(`No ${field} in ${t.name}${t.args.length ? `[${t.args}]` : ''}`) })()
   const unify = (a, b) => {
@@ -93,6 +97,7 @@ const infer = root => {
   const safeUnify = (a, b) => {
     try {
       unify(a, b)
+      return true
     } catch (e) {
       if (e instanceof TypeError) {
         return false
@@ -100,7 +105,6 @@ const infer = root => {
         throw e
       }
     }
-    return true
   }
   const apply = (f, args) => {
     if (f.var) {
@@ -117,9 +121,7 @@ const infer = root => {
           }
         }
       } else if (fa.optional) {
-        if (args[i] && !safeUnify(fa, args[i++])) {
-          i--
-        }
+        args[i] && !safeUnify(fa, args[i++]) && i--
       } else {
         unify(fa, args[i++])
       }
@@ -156,8 +158,6 @@ const infer = root => {
             tail.map(inf)
             const ret = returnType(tail)
             return isFail(tail) ? fails(ret) : ret
-          } else if (s === "let") {
-            return env[tail[0].code] = inf(tail[1])
           } else if (s === "struct") {
             const [t, ...ts] = tail
             const args = range(ts.length / 2).map(i => (ts[i*2].type = inf(ts[i*2+1]), ts[i*2]))
@@ -177,20 +177,10 @@ const infer = root => {
             tail.slice(1, -1).map(inf)
             inferWith(tail.at(-1), {...env, ...{[tail[0].code]: tail[0].type}}, nonGeneric)
             return tvoid
-          } else if (s === "tuple") {
-            return newtuple(tail.map(inf))
-          } else if (s === "new") {
-            return newnew(range(tail.length / 2).map(i => (tail[i*2].type = inf(tail[i*2+1]), tail[i*2])))
-          } else if (s === "vec") {
-            return newvec(same(tail))
-          } else if (s === "set") {
-            return newset(same(tail))
           } else if (s === "map") {
             const keys = range(tail.length / 2).map(i => inf(tail[i*2]))
             const values = range(tail.length / 2).map(i => inf(tail[i*2+1]))
             return newmap(keys[0], values[0])
-          } else if (s === "||" || s === "&&") {
-            return unify(tbool, same(tail))
           } else if ("+-*/%^=<>!".includes(s[0])) {
             same(tail)
             return "== != < > >= <=".split(" ").includes(s) ? tbool : tail[0].type
@@ -202,6 +192,18 @@ const infer = root => {
               tail.slice(2).map(inf)
               return method(target, tail[1].code)
             }
+          } else if (s === "let") {
+            return env[tail[0].code] = inf(tail[1])
+          } else if (s === "tuple") {
+            return newtuple(tail.map(inf))
+          } else if (s === "new") {
+            return newnew(range(tail.length / 2).map(i => (tail[i*2].type = inf(tail[i*2+1]), tail[i*2])))
+          } else if (s === "vec") {
+            return newvec(same(tail))
+          } else if (s === "set") {
+            return newset(same(tail))
+          } else if (s === "||" || s === "&&") {
+            return unify(tbool, same(tail))
           } else {
             const argv = tail.map(inf)
             const key = safeJson({code: head.code, argv})
@@ -321,7 +323,7 @@ const generate = root => {
     x[0].code === "vec"    ? `[]${gentype(x[1].type)}{ ${x.slice(1).map(gen)} }` :
     x[0].code === "map"    ? `map[${gentype(x[1].type)}]${gentype(x[2].type)}{ ${range((x.length-1)/2).map(i => `${gen(x[i*2+1])}: ${gen(x[i*2+2])}`)} }` :
     x[0].code === "set"    ? `map[${gentype(x[1].type)}]struct{}{ ${x.slice(1).map(n => `${gen(n)}: struct{}{}`)} }` :
-    x[0].code === "!"      ? `${x[0].code} ${gen(x[1])}` :
+    x[0].code === "!"      ? `${x[0].code}${gen(x[1])}` :
     x[0].type?.struct      ?  gen(x[0]) + "{" + x.slice(1).map(gen).join(", ") + "}" :
     x[0].code === "." && x[1]?.type?.name === "tuple" ? `${gen(x[1])}.v${x[2].code}` :
     x[0].code === "." && x[1]?.type?.name === "error" && x[2].code === "message" ? `${gen(x[1])}.Error()` :
