@@ -444,7 +444,7 @@ const testType = () => {
   inf("((1 2) 1 2)",                   "(fn x y (x y))")
   inf("((1 2) ((1 2) 1) 2)",           "(fn x y (x (y x)))")
   inf("(1 ((1 2 3) 4 2) (1 2 3) 4 3)", "(fn h t f x (f h (t f x)))")
-//  inf("((1 1 2) ((1 1 2) 1) 2)",       "(fn x y (x (y x) (y x)))")
+//  inf("((1 1 2) ((1 1 2) 1) 2)",       "(fn x y (x (y x) (y x)))") // TODO: fix about fresh() change return type
   inf("(((1 1) 2) 2)",                 "(let id (fn x x)) (let f (fn y (id (y id))))")
   inf("(int)",                         "(let id (fn x x)) (let f (fn (iif (id true) (id 1) (id 2))))")
   inf("(int)",                         "(let f (fn x 1)) (let g (fn (+ (f true) (f 4))))")
