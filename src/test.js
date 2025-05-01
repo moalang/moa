@@ -229,6 +229,9 @@ const testGenerate = param => {
   test("1", "(iif (f true) (f 1) (f 2))", "(let f (fn a a))")
   test("{1}", "(a 1)", "(struct a (t) b t)")
   test("{1 true}", "(a 1 true)", "(struct a (t u) b t c u)")
+
+  // IO
+  test("hi", '""', '((. io put) "hi")')
 }
 
 module.exports.test = param => {

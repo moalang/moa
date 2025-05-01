@@ -388,11 +388,11 @@ const generate = root => {
     x[0].code === "." && x[1]?.type?.name === "error" && x[2].code === "message" ? `${gen(x[1])}.Error()` :
     /[+\-*/%^<>!=|&.]/.test(x[0].code) ? genop(x[0].code, x.slice(1)) :
     genhead(x[0]) + "(" + x.slice(1).map(gen).join(", ") + ")"
-  const exp = root.map(gen).at(-1)
+  const exps = root.map(gen)
   return {
     def: defs.join("\n"),
-    body: lines.join("\n"),
-    exp
+    body: lines.concat(exps.slice(0, -1)).join("\n"),
+    exp: exps.at(-1)
   }
 }
 
