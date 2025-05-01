@@ -342,23 +342,23 @@ const compile = code => generate(infer(parse(tokenize(code))))
 
 const fs = require("fs")
 const {execSync} = require("child_process")
-const reads = () => (process.argv.length === 3 ? fs.globSync("**/*.moa") : process.argv.slice(3)).map(path => fs.readFileSync(path, "utf-8")).join("\n")
-const gocode = () => (x => `${fs.readFileSync(__dirname + "/runtime.go", "utf-8")}\n${x.def}\nfunc main() { ${x.stmt}\n${x.exp} }\n`)(compile(reads()))
+const runGo = (cmd) => {
+  const files = process.argv.length === 3 ? fs.globSync("**/*.moa") : process.argv.slice(3)
+  const x = compile(files.map(path => fs.readFileSync(path, "utf-8")).join("\n"))
+  const runtime = fs.readFileSync(__dirname + "/runtime.go", "utf-8")
+  const go = `${runtime}\n${x.def}\nfunc main() { ${x.stmt}\n${x.exp} }\n`
+  fs.writeFileSync("/tmp/a.go", go)
+  execSync(`go ${cmd} /tmp/a.go`, {stdio: 'inherit'})
+}
 
 if (process.argv[2] === "selftest") {
   process.exit(require("./test.js").test({tokenize, parse, infer, compile, TypeError}))
-
 } else if (process.argv[2] === "version") {
   console.log("moa version 0.0.1")
-
 } else if (process.argv[2] === "build") {
-  fs.writeFileSync("/tmp/a.go", gocode())
-  execSync("go build /tmp/a.go", {stdio: 'inherit'})
-
+  runGo("build")
 } else if (process.argv[2] === "run") {
-  fs.writeFileSync("/tmp/a.go", gocode())
-  execSync("go run /tmp/a.go", {stdio: 'inherit'})
-
+  runGo("run")
 } else {
   console.log(`Moa is a programming language
 
