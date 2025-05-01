@@ -127,7 +127,7 @@ const infer = root => {
       }
     }
     if (i !== args.length) {
-      throw new Error(`Calling vargs ${JSON.stringify(f.args)} != ${JSON.stringify(args)}`)
+      throw new TypeError(`Calling vargs ${JSON.stringify(f.args)} != ${JSON.stringify(args)}`)
     }
     return f.args.at(-1)
   }

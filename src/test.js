@@ -77,21 +77,10 @@ const testInfer = param => {
   inf("(int)",                         "(let f (fn x 1)) (let g (fn (+ (f true) (f 4))))")
   inf("(bool (1 1))",                  "(let f (fn x x)) (let g (fn y y)) (let h (fn b (iif b (f g) (g f))))")
 
-//  // variadic arguments
-//  inf('(... int)', 'def f ... 1')
-//  inf('int', 'def f ... 1; f 1')
-//  inf('int', 'def f ... 1; f 1 true')
-//  inf('(... 1)', 'def f ...a a')
-//  inf('tuple[int]', 'def f ...a a; f 1')
-//  inf('tuple[int bool]', 'def f ...a a; f 1 bool')
-//  inf('bool', 'def f[t] ...[t] true; f 1 2')
-//  inf('int', 'def f[t] ...[t] t; f 1 2')
-//  inf('tuple[int bool int bool]', 'def f[t u] ...a[t u] a; f 1 true 2 false')
-//
   // type errors
   reject("(+ 1 true)")
-//  reject('def f[t] ...[t] true; f 1 true')
-//  reject('def f[t u] ...[t u] true; f 1 true true')
+  reject("(iif 1 2 3)")
+  reject("(iif true 2 false)")
 }
 
 const testGenerate = param => {
