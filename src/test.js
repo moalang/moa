@@ -149,8 +149,8 @@ const testGenerate = param => {
   test("2", "(. (tuple 1 2) 1)")
   test("1", "(. (new a 1) a)")
   test("2", "(. (new a 1 b 2) b)")
-  test("1", '((fn a (. a 0)) (tuple 1))')
-  test("1", '((fn a (. a b)) (new b 1))')
+  test("1", "((fn a (. a 0)) (tuple 1))")
+  test("1", "((fn a (. a b)) (new b 1))")
 
   // Lambda
   test("true", "((fn true))")
@@ -196,7 +196,7 @@ const testGenerate = param => {
   test("0", "a", "(let a 0)(for b 3 (do continue (+= a 1)))")
 
   // Generics
-  test('1', '(iif (f true) (f 1) (f 2))', '(let f (fn a a))')
+  test("1", "(iif (f true) (f 1) (f 2))", "(let f (fn a a))")
   test("{1}", "(a 1)", "(struct a (t) b t)")
   test("{1 true}", "(a 1 true)", "(struct a (t u) b t c u)")
 
