@@ -30,11 +30,11 @@ const log = x => { console.dir(x, {depth: null}); return x }
 const show = x => Array.isArray(x) ? `(${x.map(show).join(" ")})` : x.code
 const range = n => [...new Array(n)].map((_, i) => i)
 
-const tokenize = code => code.split(/([()]|[^ ()]+)/).filter(s => s.trim()).map(s => ({code: s}))
+const tokenize = code => code.split(/([()]|[^\n ()]+)/).filter(s => s.trim()).map(s => ({code: s}))
 
 const parse = ([t, ...ts], acc=[]) =>
   !t ? acc :
-  t.code === ")" ? [acc, ts] :
+  t.code === ")" ? [acc, parse([ts])] :
   t.code === "(" ? (([x, rest]) => parse(rest, acc.concat([x])))(parse(ts)) :
   parse(ts, acc.concat(t))
 
@@ -240,7 +240,10 @@ const generate = root => {
   const newId = () => `__${id++}`
   const defs = []
   const lines = []
-  const genreturn = x => x[0]?.code === "do" ? gen(x) : `return ${gen(x)}`
+  const genreturn = x => {
+    const ret = generate([x])
+    return x[0]?.code === "do" ? ret.stmt + "\n" + ret.exp : `${ret.stmt}\nreturn ${ret.exp}`
+  }
   const genop = (op, xs) => xs.length === 1 ? `${op} ${gen(xs[0])}` : genop2(op, xs)
   const genop2 = (op, xs) => xs.length === 1 ? gen(xs[0]) : `${gen(xs[0])} ${op} ${genop2(op, xs.slice(1))}`
   const gentype = t => t.args.length === 0 ? t.name :
@@ -256,7 +259,7 @@ const generate = root => {
     ` else if ${gen(a[0])} { ${gen(a[1])} } ${genif(a.slice(2))}`
   const gen = x => !Array.isArray(x) ? x.code :
     x[0].code === "do"     ? x.slice(1).map(gen).join("\n") :
-    x[0].code === "let"    ? `${x[1].code} := ${gen(x[2])}` :
+    x[0].code === "let"    ? (lines.push(`${x[1].code} := ${gen(x[2])}`), "") :
     x[0].code === "return" ? `__ret = ${gen(x[1])}; return` :
     x[0].code === "throw"  ? `__err = errors.New(${gen(x[1])}); return` :
     x[0].code === "catch"  ? !x[1].type.fails ? gen(x[1]) : ((id1, id2) => (lines.push(`${id1}, ${id2} := ${gen(x[1])}; if ${id2} != nil { ${id1} = ${gen(x[2])}(${id2}) }`), id1))(newId(), newId()) :
@@ -276,7 +279,7 @@ const generate = root => {
     x[0].code === "." && x[1]?.type?.name === "error" && x[2].code === "message" ? `${gen(x[1])}.Error()` :
     /[+\-*/%^<>!=|&.]/.test(x[0].code) ? genop(x[0].code, x.slice(1)) :
     gen(x[0]) + "(" + x.slice(1).map(gen).join(", ") + ")"
-  const exp = root.map(gen).join("")
+  const exp = root.map(gen).at(-1)
   return {
     def: defs.join("\n"),
     stmt: lines.join("\n"),
@@ -289,10 +292,11 @@ const compile = code => generate(infer(parse(tokenize(code))))
 
 const testMain = runGo => {
   const test = (expected, exp, define="") => {
-    const go = compile(define + exp)
+    const src = define.length ? define + "\n" + exp : exp
+    const go = compile(src)
     const actual = runGo(go)
     if (expected !== actual) {
-      throw new Error(`${expected} != ${actual}\n# exp\n${exp}\n# go\n${go.exp}\n${go.stmt}\n${go.def}`)
+      throw new Error(`${expected} != ${actual}\n# src\n${src}\n# go\n${go.exp}\n${go.stmt}\n${go.def}`)
     }
   }
 
@@ -348,9 +352,9 @@ const testMain = runGo => {
   test("3", '((fn a b (+ a b)) 1 2)')
 
   // Definition
+  test("1", "a", "(let a 1)")
   test("1", "(f)", "(def f 1)")
-  test("1", "(f)", "(def f (do (let a 1) (return a)))")
-  test("1", "(f)", "(def f (do (let a 1) (return a) (return 0)))")
+  test("1", "(f)", "(def f (do (return 1)))")
   test("1", "(f 1)", "(def f a a)")
   test("3", "(f 1 2)", "(def f a b (+ a b))")
   test("{1}", "(s 1)", "(struct s a int)")
