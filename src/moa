@@ -366,8 +366,8 @@ Usage: moa <command> [...arguments]
 
 Commands:
   moa build [...files]     compile to an executable file
-  moa run  [...files]      compile and run
-  moa repl [...files]      start a shell
-  moa test [...files]      run tests
+  moa run   [...files]     compile and run
+  moa repl  [...files]     start a shell
+  moa test  [...files]     run tests
   moa version              display Moa version`)
 }
