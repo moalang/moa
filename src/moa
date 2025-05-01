@@ -1,4 +1,4 @@
-#!node
+#!node --no-warnings
 "use strict"
 
 // - [ ] user definition variadic arguments
@@ -340,17 +340,32 @@ const generate = root => {
 
 const compile = code => generate(infer(parse(tokenize(code))))
 
+const fs = require("fs")
+const {execSync} = require("child_process")
+const reads = () => (process.argv.length === 3 ? fs.globSync("**/*.moa") : process.argv.slice(3)).map(path => fs.readFileSync(path, "utf-8")).join("\n")
+const gocode = () => (x => `${fs.readFileSync(__dirname + "/runtime.go", "utf-8")}\n${x.def}\nfunc main() { ${x.stmt}\n${x.exp} }\n`)(compile(reads()))
+
 if (process.argv[2] === "selftest") {
   process.exit(require("./test.js").test({tokenize, parse, infer, compile, TypeError}))
+
 } else if (process.argv[2] === "version") {
   console.log("moa version 0.0.1")
+
+} else if (process.argv[2] === "build") {
+  fs.writeFileSync("/tmp/a.go", gocode())
+  execSync("go build /tmp/a.go", {stdio: 'inherit'})
+
+} else if (process.argv[2] === "run") {
+  fs.writeFileSync("/tmp/a.go", gocode())
+  execSync("go run /tmp/a.go", {stdio: 'inherit'})
+
 } else {
   console.log(`Moa is a programming language
 
 Usage: moa <command> [...arguments]
 
 Commands:
-  moa build [os] [arch]    compile to an executable file
+  moa build [...files]     compile to an executable file
   moa run  [...files]      compile and run
   moa repl [...files]      start a shell
   moa test [...files]      run tests
