@@ -4,11 +4,13 @@
 // - [ ] user definition variadic arguments
 // - [ ] user definition generic struct
 // - [ ] complex code generation
+// - [ ] syntax sugar
 
 const log = x => { console.dir(x, {depth: null}); return x }
 const range = n => [...new Array(n)].map((_, i) => i)
 
-const tokenize = code => code.split(/([()]|[^\n ()]+)/).filter(s => s.trim()).map(s => ({code: s}))
+const newtoken = s => (m => m ? ({code: m[1], mark: m[2]}) : ({code: s}))(s.match(/^([A-Za-z_].*)([?])$/))
+const tokenize = code => code.split(/([()]|[^\n ()]+)/).filter(s => s.trim()).map(newtoken)
 
 const parse = ([t, ...ts], acc=[]) =>
   !t ? acc :
@@ -112,7 +114,7 @@ const infer = root => {
     }
     let i = 0
     for (const fa of f.types.slice(0, -1)) {
-      if (fa.name === "__varg") {
+      if (fa.vargs) {
         while (args[i]) {
           let k = i
           if (!fa.vargs.every(t => args[i] && safeUnify(t, args[i++]))) {
@@ -164,7 +166,7 @@ const infer = root => {
             return env[t.code] = newstruct(args.map(a => a.type).concat(newnew(args)))
             return t
           } else if (s === "fn") {
-            const args = tail.slice(0, -1).map(t => [t.code, t.type = newvar()])
+            const args = tail.slice(0, -1).map(t => [t.code, t.type = t.mark?.includes("?") ? optional(newvar()) : newvar()])
             const body = inferWith(tail.at(-1), {...env, ...Object.fromEntries(args)}, nonGeneric.concat(args.map(a => a[1].name)))
             return newfn([...args.map(a => a[1]), body], tail.slice(0, -1), tail.at(-1))
           } else if (s === "for") {
@@ -238,13 +240,14 @@ const infer = root => {
       value)
   }
 
+  const copy = t => t.optional ? ({...prune(t), optional: t.optional}) : prune(t)
   const fix = node => {
     if (Array.isArray(node)) {
       node.map(fix)
     }
     if (node.type) {
-      node.type = prune(node.type)
-      node.type.types = node.type.types.map(prune)
+      node.type = copy(node.type)
+      node.type.types = node.type.types.map(copy)
       if (node.type.generics) {
         const d = {}
         for (const a of node.type.generics) {

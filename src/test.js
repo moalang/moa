@@ -1,5 +1,7 @@
 "use strict"
 
+const log = x => { console.dir(x, {depth: null}); return x }
+
 const testInfer = param => {
   const run = src => param.infer(param.parse(param.tokenize(src)))
   const showType = type => {
@@ -7,7 +9,7 @@ const testInfer = param => {
       t.name === "fn" ? '(' + t.types.map(show).join(' ') + ')' :
       t.name && t.types.length ? t.name + '[' + t.types.map(show).join(' ') + ']' :
       t.types.length ? '(' + t.types.map(show).join(' ') + ')' :
-      t.name
+      t.name + (t.optional ? "?" : "")
     const s = show(type)
     const o = {}
     const r = s.replace(/\d+/g, t => o[t] ||= Object.keys(o).length + 1)
@@ -76,6 +78,10 @@ const testInfer = param => {
   inf("(int)",                         "(let id (fn x x)) (let f (fn (iif (id true) (id 1) (id 2))))")
   inf("(int)",                         "(let f (fn x 1)) (let g (fn (+ (f true) (f 4))))")
   inf("(bool (1 1))",                  "(let f (fn x x)) (let g (fn y y)) (let h (fn b (iif b (f g) (g f))))")
+
+  // variadic arguments
+  inf("(int int? int)", "(fn a b? (+ a b 0))")
+  inf("int", "((fn a b? (+ a b 0)) 1)")
 
   // type errors
   reject("(+ 1 true)")
