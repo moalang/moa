@@ -28,6 +28,9 @@
 // - [x] continue, break
 // IO
 // - [x] io
+// Test
+// - [ ] type inference
+// - [ ] generate complex code
 
 const log = x => { console.dir(x, {depth: null}); return x }
 const show = x => Array.isArray(x) ? `(${x.map(show).join(" ")})` : x.code
@@ -71,8 +74,6 @@ const infer = root => {
   const tv1 = newvar()
   const env = {
     "!": newfn([tbool, tbool]),
-    "+=": newfn([tv1, tv1, tv1]),
-    "<": newfn([tv1, tv1, tbool]),
     "return": newfn([tv1, tv1]),
     "if": newfn([newvargs([tbool, tv1]), optional(tv1), tvoid]),
     "iif": newfn([newvargs([tbool, tv1]), tv1, tv1]),
@@ -137,7 +138,7 @@ const infer = root => {
       if (fa.name === "__varg") {
         while (args[i]) {
           let k = i
-          if (!fa.vargs.every(t => safeUnify(t, args[i++]))) {
+          if (!fa.vargs.every(t => args[i] && safeUnify(t, args[i++]))) {
             i = k
             break
           }
@@ -191,7 +192,8 @@ const infer = root => {
             return t
           } else if (s === "fn") {
             const args = tail.slice(0, -1).map(t => [t.code, t.type = newvar()])
-            const body = inferWith(tail.at(-1), {...local, ...Object.fromEntries(args)}, nonGeneric.concat(args.map(a => a[1].name)))
+            //const body = inferWith(tail.at(-1), {...local, ...Object.fromEntries(args)}, nonGeneric.concat(args.map(a => a[1].name)))
+            const body = inferWith(tail.at(-1), {...local, ...Object.fromEntries(args)}, nonGeneric)
             return newfn([...args.map(a => a[1]), body], tail.slice(0, -1), tail.at(-1))
           } else if (s === "for") {
             tail[0].type = tint
@@ -217,8 +219,9 @@ const infer = root => {
             return newmap(keys[0], values[0])
           } else if (islogical(s)) {
             return same(tail)
-          } else if ("+-*/%^=".includes(s) || iscmp(s)) {
-            return iscmp(s) ? tbool : same(tail)
+          } else if ("+-*/%^=<>!".includes(s[0])) {
+            same(tail)
+            return iscmp(s) ? tbool : tail.map(inf).at(-1)
           } else if (s === ".") {
             const target = inf(tail[0])
             if (target.name === "tuple") {
@@ -324,6 +327,118 @@ const generate = root => {
 
 const compile = code => generate(infer(parse(tokenize(code))))
 
+const testType = () => {
+  const showType = type => {
+    const show = t => t.instance ? show(t.instance) :
+      t.name === "fn" ? '(' + t.args.map(show).join(' ') + ')' :
+      t.name && t.args.length ? t.name + '[' + t.args.map(show).join(' ') + ']' :
+      t.args.length ? '(' + t.args.map(show).join(' ') + ')' :
+      t.name
+    const s = show(type)
+    const o = {}
+    const r = s.replace(/\d+/g, t => o[t] ||= Object.keys(o).length + 1)
+    return r
+  }
+  const reject = src => {
+    try {
+      infer(parse(tokenize(src)))
+    } catch (e) {
+      if (e instanceof TypeError) {
+        return
+      }
+    }
+    console.error('src:', src)
+    process.exit(1)
+  }
+  const inf = (expect, src) => {
+    try {
+      const actual = showType(infer(parse(tokenize(src))).at(-1).type)
+      if (actual !== expect) {
+        console.error(`${expect} != ${actual}\n${src}`)
+        process.exit(1)
+      }
+    } catch (e) {
+      console.log(src)
+      console.error(e)
+      throw e
+    }
+  }
+
+  // primitives
+  inf('int', '1')
+  inf('bool', 'true')
+  inf('bool', 'false')
+
+  // exp
+  inf('int', '(+ 1 1)')
+  inf('bool', '(< 1 1)')
+
+  // branch
+  inf('int', '(iif true 1 2)')
+  inf('bool', '(iif true true true)')
+
+  // value
+  inf('int', '((fn 1))')
+
+  // simple function
+  inf('(int int)', '(fn a (- a 1))')
+  inf('(int int int)', '(fn a b (- a b 0))')
+
+  // generics
+  inf('(1 1)', '(fn a a)')
+  inf('(1 2 1)', '(fn a b a)')
+  inf('(1 2 2)', '(fn a b b)')
+  inf('int', '((fn a a) 1)')
+//  inf('bool', '(let f (fn a a))(f 1)(f true)')
+
+  // combinations
+//  inf('int',                           'def f x (+ x 1); def g x (+ x 2); + (f 1) (g 1)')
+//  inf('((1 2) (2 3) 1 3)',             'def _ f g x (g (f x))')
+//  inf('((1 2 3) (1 2) 1 3)',           'def _ x y z (x z (y z))')
+//  inf('(1 (1 bool) (1 1))',            'def _ b x (if (x b) x (def _ x b))')
+//  inf('(bool bool)',                   'def _ x (if true x (if x true false))')
+//  inf('(bool bool bool)',              'def _ x y (if x x y)')
+//  inf('(1 1)',                         'def _ n ((def _ x (x (def _ y y))) (def _ f (f n)))')
+//  inf('((1 2) 1 2)',                   'def _ x y (x y)')
+//  inf('((1 2) ((1 2) 1) 2)',           'def _ x y (x (y x))')
+//  inf('(1 ((1 2 3) 4 2) (1 2 3) 4 3)', 'def _ h t f x (f h (t f x))')
+//  inf('((1 1 2) ((1 1 2) 1) 2)',       'def _ x y (x (y x) (y x))')
+//  inf('(((1 1) 2) 2)',                 'def id x x; def f y (id (y id))')
+//  inf('int',                           'def id x x; def f (if (id true) (id 1) (id 2))')
+//  inf('int',                           'def f x (3); def g (+ (f true) (f 4))')
+//  inf('(bool (1 1))',                  'def f x x; def g y y; def h b (if b (f g) (g f))')
+
+  // declare function
+//  inf('bool', 'dec f bool; f')
+//  inf('int', 'dec _ int')
+//  inf('(int bool)', 'dec _ int bool')
+//  inf('(... int)', 'dec _ ... int')
+//  inf('(1 1)', 'dec _[a] a a')
+//  inf('(1 1 2)', 'dec _[a b] a a b')
+//
+//  // declare object
+//  inf('(x.int)', 'dec _: x int')
+//  inf('(x.1)', 'dec _[a]: x a')
+//  inf('(f.(int int))', 'dec _: f int int')
+//  inf('(x.1 f.(1 2 int))', 'dec _[a b]: x a; f a b int')
+//
+//  // variadic arguments
+//  inf('(... int)', 'def f ... 1')
+//  inf('int', 'def f ... 1; f 1')
+//  inf('int', 'def f ... 1; f 1 true')
+//  inf('(... 1)', 'def f ...a a')
+//  inf('tuple[int]', 'def f ...a a; f 1')
+//  inf('tuple[int bool]', 'def f ...a a; f 1 bool')
+//  inf('bool', 'def f[t] ...[t] true; f 1 2')
+//  inf('int', 'def f[t] ...[t] t; f 1 2')
+//  inf('tuple[int bool int bool]', 'def f[t u] ...a[t u] a; f 1 true 2 false')
+//
+  // type errors
+  reject("(+ 1 true)")
+//  reject('def f[t] ...[t] true; f 1 true')
+//  reject('def f[t u] ...[t u] true; f 1 true true')
+}
+
 const testMain = runGo => {
   const test = (expected, exp, define="") => {
     const src = define.length ? define + "\n" + exp : exp
@@ -425,6 +540,7 @@ const testMain = runGo => {
 }
 
 const main = () => {
+  testType()
   const fs = require("fs")
   const {execSync} = require("child_process")
   const runtime = fs.readFileSync("runtime.go")
