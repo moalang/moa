@@ -67,7 +67,7 @@ const infer = root => {
     t.name === "error" && field === "message" ? tstring :
     t.name === "io" && field === "put" ? newfn([tv1, tint]) :
     t.fields?.find(f => f.code === field).type ||
-    (() => { throw new TypeError(`No ${field} in ${t.name}${t.args.length ? `[${t.args}]` : ''}`) })()
+    (() => { throw new TypeError(`No ${field} in ${t.name}${t.args.length ? `[${t.args}]` : ""}`) })()
   const unify = (a, b) => {
     a = prune(a)
     b = prune(b)
@@ -277,7 +277,7 @@ const generate = root => {
     t.name === "new" ? genstruct(t) :
     `${t.name}[${t.args.map(gentype)}]`
   const genstruct = t => `struct { ${t.fields.map(f => `${f.code} ${gentype(f.type)}`).join("\n")} }`
-  const genfunc = (t, name="") => `func ${name}(${t.names.map(a => `${a.code} ${gentype(a.type)}`)}) (__ret ${gentype(t.ret.type)}${t.ret.type.fails ? ', __err error' : ''})`
+  const genfunc = (t, name="") => `func ${name}(${t.names.map(a => `${a.code} ${gentype(a.type)}`)}) (__ret ${gentype(t.ret.type)}${t.ret.type.fails ? ", __err error" : ""})`
   const geniif = (id , a) => a.length === 1 ? `{ ${id} = ${gen(a[0])} }` : `if ${gen(a[0])} { ${id} = ${gen(a[1])} } else ${geniif(id, a.slice(2))}`
   const genif = a =>
     a.length === 0 ? "" :
@@ -340,15 +340,15 @@ const generate = root => {
 
 const compile = code => generate(infer(parse(tokenize(code))))
 
-const fs = require("fs")
-const {execSync} = require("child_process")
 const runGo = (cmd) => {
+  const fs = require("fs")
+  const {execSync} = require("child_process")
   const files = process.argv.length === 3 ? fs.globSync("**/*.moa") : process.argv.slice(3)
-  const x = compile(files.map(path => fs.readFileSync(path, "utf-8")).join("\n"))
   const runtime = fs.readFileSync(__dirname + "/runtime.go", "utf-8")
+  const x = compile(files.map(path => fs.readFileSync(path, "utf-8")).join("\n"))
   const go = `${runtime}\n${x.def}\nfunc main() { ${x.stmt}\n${x.exp} }\n`
   fs.writeFileSync("/tmp/a.go", go)
-  execSync(`go ${cmd} /tmp/a.go`, {stdio: 'inherit'})
+  execSync(`go ${cmd} /tmp/a.go`, {stdio: "inherit"})
 }
 
 if (process.argv[2] === "selftest") {
