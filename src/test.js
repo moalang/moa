@@ -17,15 +17,19 @@ const testSugar = param => {
   test("(a b)", "a(b)")
   test("(! true)", "!true")
   test("(+ 1 2)", "1 + 2")
-  // a => a      # (fn a a)
-  // a,b => a    # (fn a b a)
-  // a -> b      # (a (do b))
-  // a -> b c    # (a (do (b c)))
+  test("(+ 1 (+ 2 3))", "1 + 2 + 3")
+  test("(fn a a)", "a => a")
+  test("(fn a b (+ a b))", "a,b => a + b")
+  test("(fn a b c (+ a (+ b c)))", "a,b,c => a + b + c")
+  test("(do a)", "-> a")
+  test("(a (do b))", "a -> b")
+  test("(a (do (b c)))", "a -> b c")
   // a ->
   //    b
   //    c d      # (a (do b (c d)))
-  // a: c        # (a c)
-  // a b: c d    # (a b (c d))
+  test("(a b)", "a : b")
+  test("(a (b c))", "a : b c")
+  test("(a b c)", "a b : c")
   // a b:
   //   c
   //   d e       # (a b c (d e))

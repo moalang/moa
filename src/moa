@@ -16,7 +16,7 @@ const sugar = program => {
       if (/^[ \r\n\t#;]/.test(code) || code === "") {
         lineno += code.split(/\n|;/).length - 1
       } else {
-        const op = /^[+\-*/%|&<>=!]+$/.test(code)
+        const op = /^[+\-*/%|&<>=!]+$/.test(code) && code !== "->" && code !== "=>"
         const lc = pos > 0 ? program[pos - 1] : ''
         const rc = program[pos + code.length]
         const op2 = op && lc === " " && rc === " "
@@ -38,21 +38,28 @@ const sugar = program => {
       return a
     }
     const untilby = by => (t => (pos++, t))(until(t => t.code !== by))
-    const bottom = token => {
+    const bottom = t => {
+      t ||= tokens[pos++]
+      const comma = a => pos >= tokens.length ? a :
+        tokens[pos].code === "," ? (pos++, comma(a.concat([tokens[pos++]]))) : a
       const link = t =>
         pos >= tokens.length ? t :
-        t.op1            ? link([t, bottom(tokens[pos++])]) :
-        tokens[pos].call ? (pos++, link([t].concat(untilby(")")))) :
-        tokens[pos].op2  ? link([tokens[pos++], t, bottom(tokens[pos++])]) :
+        tokens[pos].code === ","  ? link(comma([t])) :
+        tokens[pos].code === "=>" ? (pos++, link([newtoken("fn"), ...(Array.isArray(t) ? t : [t]), bottom()])) :
+        tokens[pos].call          ? (pos++, link([t].concat(untilby(")")))) :
+        tokens[pos].op2           ? link([tokens[pos++], t, bottom()]) :
         t
-      return link(token)
+      return t.code === "->" ? link([newtoken("do"), line()]) :
+             t.code === ":"  ? link(line()) :
+             t.op1           ? link([t, bottom()]) :
+             link(t)
     }
-    const statement = () => {
+    const line = () => {
       const lineno = tokens[pos].lineno
       const a = until(t => t.lineno === lineno)
       return a.length === 1 ? a[0] : a
     }
-    return statement()
+    return line()
   }
   const rec = o => Array.isArray(o) ? o.map(rec) : newtoken(o.code)
   return compose([...tokenize()])
