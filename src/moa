@@ -34,7 +34,7 @@ const sugar = (program, filename="") => {
         const op1 = op && !op2
         const call = code === "(" && /[A-Za-z0-9_\]]/.test(lc)
         const index = code === "[" && /[A-Za-z0-9_\]]/.test(lc)
-        yield {code, lineno, op, op1, op2, dot, call, index, indent, lineno, column}
+        yield {code, lineno, op, op1, op2, dot, call, index, indent, filename, lineno, column}
       }
       pos += code.length
       column = code.includes("\n") ? code.split(/\n/).at(-1).length : column + code.length
@@ -89,7 +89,8 @@ const sugar = (program, filename="") => {
     }
     return top()
   }
-  return compose([...tokenize()])
+  const normalize = o => Array.isArray(o) ? o.map(normalize) : newtoken(o.code, o.filename, o.lineno, o.column)
+  return normalize(compose([...tokenize()]))
 }
 
 const parse = (program, filename="") => {

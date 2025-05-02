@@ -5,7 +5,7 @@ const log = x => { console.dir(x, {depth: null}); return x }
 const testSugar = param => {
   const show = o => Array.isArray(o) ? `(${o.map(show).join(" ")})` : o.code
   const test = (expect, src) => {
-    const actual = show(param.sugar(src))
+    const actual = show(param.sugar(src, "test.moa"))
     if (actual !== expect) {
       console.error(`${expect} != ${actual}\n${src}`)
       throw new Error(src)
