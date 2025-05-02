@@ -5,6 +5,17 @@ import (
 	"fmt"
 )
 
+type MoaError struct {
+	Message  string
+	Filename string
+	Lineno   int
+	Column   int
+}
+
+func (e MoaError) Error() string {
+	return fmt.Sprintf("%s at %s:%d:%d", e.Message, e.Filename, e.Lineno, e.Column)
+}
+
 type __io struct {
 	put func(a ...any) int
 }
@@ -20,6 +31,10 @@ type __tuple1[A any] struct {
 type __tuple2[A any, B any] struct {
 	v0 A
 	v1 B
+}
+
+func __new_error(message string, filename string, lineno int, column int) error {
+	return MoaError{message, filename, lineno, column}
 }
 
 func __catch[T any](v T, err error, f func(error) T) T {

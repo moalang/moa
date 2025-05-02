@@ -147,10 +147,10 @@ const testInfer = param => {
 const testGenerate = param => {
   const test = (expected, exp, define="") => {
     const src = define + "\n" + exp
-    const go = param.compile(src)
+    const go = param.compile(src, "test.moa")
     const actual = param.runGo(go)
     if (expected !== actual) {
-      throw new Error(`${expected} != ${actual}\n# src\n${src}\n# go\n${go.def}\n${go.body}\n${go.exp}`)
+      throw new Error(`'${expected}' != '${actual}'\n# src\n${src}\n# go\n${go.def}\n${go.body}\n${go.exp}`)
     }
   }
 
@@ -218,12 +218,12 @@ const testGenerate = param => {
   test("1", "((fn c (. c b)) (a 1))", "(struct a () b int)")
 
   // Throw / Catch
-  test("error: a", "(f)", '(let f (fn (do (throw "a") (return "b"))))')
+  test("a at test.moa:1:17", "(f)", '(let f (fn (do (throw "a") (return "b"))))')
   test("a", '(catch (f) (fn x "b"))', '(let f (fn "a"))')
   test("c", '(catch (f) (fn x "c"))', '(let f (fn (do (throw "a") (return "b"))))')
-  test("a", "(catch (f) (fn x (. x message)))", '(let f (fn (do (throw "a") (return "b"))))')
-  test("a", '(iif false "" (catch (f) (fn x (. x message))))', '(let f (fn (do (throw "a") (return "b"))))')
-  test("error: a", '(catch (iif false (f) (f)) (fn x (. x message)))', '(let f (fn (do (throw "a") (return "b"))))')
+  test("a at test.moa:1:17", "(catch (f) (fn x (. x message)))", '(let f (fn (do (throw "a") (return "b"))))')
+  test("a at test.moa:1:17", '(iif false "" (catch (f) (fn x (. x message))))', '(let f (fn (do (throw "a") (return "b"))))')
+  test("a at test.moa:1:17", '(catch (iif false (f) (f)) (fn x (. x message)))', '(let f (fn (do (throw "a") (return "b"))))')
 
   // Statement
   test("1", "(iif true 1 2)")
@@ -265,7 +265,7 @@ module.exports.test = param => {
         var __err error
         defer func() {
           if __err != nil {
-            fmt.Print("error: " + __err.Error())
+            fmt.Print(__err.Error())
           }
         }()
         ${x.body}
@@ -275,11 +275,7 @@ module.exports.test = param => {
         return cache[go]
       }
       fs.writeFileSync("/tmp/moa_test_exp.go", go)
-      try {
-        return cache[go] = execSync("go run /tmp/moa_test_exp.go").toString()
-      } catch (e) {
-        return `error: ${e}`
-      }
+      return cache[go] = execSync("go run /tmp/moa_test_exp.go").toString()
     }
     testGenerate(param)
   } catch (e) {

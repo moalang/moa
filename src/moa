@@ -1,7 +1,7 @@
 #!node --no-warnings
 "use strict"
 
-// - [ ] display filename, lineno and column with uncatched error message
+// - [x] display filename, lineno and column with uncatched error message
 // - [ ] io.serve
 // - [ ] io.fetch
 // - [ ] io.db
@@ -11,18 +11,20 @@
 const log = x => { console.dir(x, {depth: null}); return x }
 const range = n => [...new Array(n)].map((_, i) => i)
 
-const newtoken = (s, pos=0) => (m => m ? ({code: m[1], mark: m[2], pos}) : ({code: s, pos}))(s.match(/^([A-Za-z_].*)([?*])$/))
+const newtoken = (s, filename, lineno=0, column=0) => (m => m ? ({code: m[1], mark: m[2], filename, lineno, column}) : ({code: s, filename, lineno, column}))(s.match(/^([A-Za-z_].*)([?*])$/))
 
-const sugar = program => {
+const sugar = (program, filename="") => {
   function* tokenize() {
     let pos = 0
     let lineno = 1
+    let column = 0
     let indent = 0
     for (const code of program.split(/([A-Za-z_][A-Za-z0-9_]*[?*]?|-?0x[A-Fa-f0-9]+|-?[0-9]+(?:(?:\.[0-9]+)|(?:e[0-9]+))?|""".*?"""|"[^"]*?"|```.*?```|`[^`]*?`|[ \r\n\t]+|[()\[\]{};]|#[^\n]*)/)) {
       if (/^[ \r\n\t#;]/.test(code) || code === "") {
         lineno += code.split(/\n|;/).length - 1
         if (code.includes("\n")) {
           indent = code.split(/\n/).at(-1).length
+          column = indent
         }
       } else {
         const op = /^[+\-*/%|&<>=!]+$/.test(code) && code !== "=>"
@@ -33,9 +35,10 @@ const sugar = program => {
         const op1 = op && !op2
         const call = code === "(" && /[A-Za-z0-9_\]]/.test(lc)
         const index = code === "[" && /[A-Za-z0-9_\]]/.test(lc)
-        yield {code, lineno, op, op1, op2, dot, call, index, indent}
+        yield {code, lineno, op, op1, op2, dot, call, index, indent, lineno, column}
       }
       pos += code.length
+      column += code.length
     }
   }
   const compose = tokens => {
@@ -47,24 +50,26 @@ const sugar = program => {
       }
       return a
     }
+    const faketoken = (s, t) => newtoken(s, filename, t.lineno, t.column)
     const isexp = x => !Array.isArray(x) || x[0].code !== "do"
     const untilby = by => (t => (pos++, t))(until(t => t.code !== by))
     const bottom = () => {
+      const totoken = o => Array.isArray(o) ? totoken(o[0]) : o
       const comma = a => pos >= tokens.length ? a :
         tokens[pos].code === "," ? (pos++, comma(a.concat([tokens[pos++]]))) : a
-      const addreturn = x => isexp(x) ? x : [...x.slice(0, -1), [newtoken("return"), x.at(-1)]]
+      const addreturn = x => isexp(x) ? x : [...x.slice(0, -1), [faketoken("return", totoken(x)), x.at(-1)]]
       const block = t => {
         if (t.lineno === tokens[pos].lineno) {
           return line()
         } else {
           const a = until(u => u.indent > t.indent, line)
-          return a.length === 1 ? a[0] : [newtoken("do"), ...a]
+          return a.length === 1 ? a[0] : [faketoken("do", t), ...a]
         }
       }
       const link = t =>
         pos >= tokens.length ? t :
         tokens[pos].code === ","  ? link(comma([t])) :
-        tokens[pos].code === "=>" ? (pos++, link([newtoken("fn"), ...(Array.isArray(t) ? t : [t]), addreturn(block(tokens[pos-1]))])) :
+        tokens[pos].code === "=>" ? (pos++, link([faketoken("fn", tokens[pos-1]), ...(Array.isArray(t) ? t : [t]), addreturn(block(tokens[pos-1]))])) :
         tokens[pos].call          ? (pos++, link([t].concat(untilby(")")))) :
         tokens[pos].dot           ? link([tokens[pos++], t, tokens[pos++]]) :
         tokens[pos].op2           ? link([tokens[pos++], t, bottom()]) :
@@ -88,14 +93,20 @@ const sugar = program => {
   return compose([...tokenize()])
 }
 
-const parse = input => {
+const parse = (program, filename="") => {
   function* tokenize() {
-    let pos = 0
-    for (const code of input.split(/([()]|[^\n ()]+)/)) {
+    let lineno = 1
+    let column = 0
+    for (const code of program.split(/([()]|[^\n ()]+)/)) {
       if (code.trim()) {
-        yield newtoken(code, pos)
+        yield newtoken(code, filename, lineno, column)
+        column += code.length
+      } else if (/^[ \r\n\t#;]/.test(code) || code === "") {
+        lineno += code.split(/\n|;/).length - 1
+        if (code.includes("\n")) {
+          column = code.split(/\n/).at(-1).length
+        }
       }
-      pos += code.length
     }
   }
   const compose = ([t, ...ts], acc=[]) =>
@@ -412,6 +423,7 @@ const generate = root => {
       ret
     ))(newid(), x.slice(1).map(y => [newid(), y])) :
     genexp(x)
+  const errinfo = x => Array.isArray(x) ? errinfo(x[0]) : [JSON.stringify(x.filename), x.lineno, x.column]
   const genexp = x => !Array.isArray(x) ? x.code :
     x[0].code === "do"     ? x.slice(1).map(gen).join("\n") :
     x[0].code === "for"    ? (lines.push(genfor(x.slice(1).map(gen))), "") :
@@ -419,7 +431,7 @@ const generate = root => {
     x[0].code === "while"  ? (lines.push(`for ${gen(x[1])} { ${gen(x[2])} }`), "") :
     x[0].code === "let"    ? genlet(x[1].code, x[2]) :
     x[0].code === "return" ? `__ret = ${gen(x[1])}; return` :
-    x[0].code === "throw"  ? `__err = errors.New(${gen(x[1])}); return` :
+    x[0].code === "throw"  ? `__err = MoaError{${gen(x[1])}, ${errinfo(x[1])}}; return` :
     x[0].code === "catch"  ? !x[1].type.fails ? gen(x[1]) : (exp => (lines.push("__catch_err := __err; __err = nil"), `__catch[${gentype(x[1].type)}](${exp}, __catch_err, ${gen(x[2])})`))(gen(x[1])) :
     x[0].code === "if"     ? `if ${gen(x[1])} { ${gen(x[2])} }${genif(x.slice(3))}` :
     x[0].code === "iif"    ? (id => (lines.push(`var ${id} ${gentype(x[2].type)}; ${geniif(id, x.slice(1))}`), id))(newid()) :
@@ -444,7 +456,7 @@ const generate = root => {
   }
 }
 
-const compile = code => generate(infer(parse(code)))
+const compile = (code, filename) => generate(infer(parse(code, filename)))
 
 const execGo = (cmd) => {
   const fs = require("fs")
