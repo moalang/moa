@@ -20,19 +20,11 @@ const testSugar = param => {
   test("(+ 1 (+ 2 3))", "1 + 2 + 3")
   test("(fn a a)", "a => a")
   test("(fn a b (+ a b))", "a,b => a + b")
-  test("(fn a b c (+ a (+ b c)))", "a,b,c => a + b + c")
-  test("(do a)", "-> a")
-  test("(a (do b))", "a -> b")
-  test("(a (do (b c)))", "a -> b c")
-  // a ->
-  //    b
-  //    c d      # (a (do b (c d)))
-  test("(a b)", "a : b")
-  test("(a (b c))", "a : b c")
-  test("(a b c)", "a b : c")
-  // a b:
-  //   c
-  //   d e       # (a b c (d e))
+  test("(fn a (do a (return (b c))))", "a =>\n  a\n  b c")
+  test("(a b)", "a: b")
+  test("(a (b c))", "a: b c")
+  test("(a b c)", "a b: c")
+  test("(a (do b (c d)))", "a :\n  b\n  c d")
 }
 
 const testInfer = param => {
@@ -94,7 +86,7 @@ const testInfer = param => {
   test("(1 2 1)", "(fn a b a)")
   test("(1 2 2)", "(fn a b b)")
   test("int", "((fn a a) 1)")
-  test("bool", "(let f (fn a a))(f 1)(f true)")
+  test("bool", "(let f (fn a a)) (f 1) (f true)")
 
   // container
   test("vec[int]", "(vec 1)")
@@ -223,13 +215,13 @@ const testGenerate = param => {
   test("2", "((fn (do (if false (return 1)) (return 2))))")
   test("2", "((fn (do (if false (return 1) (return 2)))))")
   test("2", "((fn (do (if false (return 1) true (return 2)) (return 3))))")
-  test("6", "a", "(let a 0)(for b 4 (+= a b))")
-  test("5", "a", "(let a 0)(for b 2 4 (+= a b))")
-  test("9", "a", "(let a 0)(for b 1 6 2 (+= a b))")
-  test("6", "a", "(let a 0)(each b (vec 1 2 3) (+= a b))")
-  test("6", "a", "(let a 0)(while (< a 6) (+= a 1))")
-  test("1", "a", "(let a 0)(for b 3 (do (+= a 1) break))")
-  test("0", "a", "(let a 0)(for b 3 (do continue (+= a 1)))")
+  test("6", "a", "(let a 0) (for b 4 (+= a b))")
+  test("5", "a", "(let a 0) (for b 2 4 (+= a b))")
+  test("9", "a", "(let a 0) (for b 1 6 2 (+= a b))")
+  test("6", "a", "(let a 0) (each b (vec 1 2 3) (+= a b))")
+  test("6", "a", "(let a 0) (while (< a 6) (+= a 1))")
+  test("1", "a", "(let a 0) (for b 3 (do (+= a 1) break))")
+  test("0", "a", "(let a 0) (for b 3 (do continue (+= a 1)))")
 
   // Generics
   test("1", "(iif (f true) (f 1) (f 2))", "(let f (fn a a))")
