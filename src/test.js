@@ -88,6 +88,9 @@ const testInfer = param => {
   test("int", "((fn a a) 1)")
   test("bool", "(let f (fn a a)) (f 1) (f true)")
 
+  // property
+  test("string", '(catch (throw "a") (fn e (. e message)))')
+
   // container
   test("vec[int]", "(vec 1)")
   test("map[int bool]", "(map 1 true)")
@@ -124,6 +127,7 @@ const testInfer = param => {
   reject("(+ 1 true)")
   reject("(iif 1 2 3)")
   reject("(iif true 2 false)")
+  reject("((fn e (. e message)) 1)")
 }
 
 const testGenerate = param => {

@@ -147,7 +147,7 @@ const infer = root => {
     t.name === "error" && field === "message" ? tstring :
     t.name === "io" && field === "put" ? newfn([tv1, tint]) :
     t.fields?.find(f => f.code === field).type ||
-    (() => { throw new TypeError(`No ${field} in ${t.name}${t.types.length ? `[${t.types}]` : ""}`) })()
+    (() => { throw new TypeError(`No '${field}' in '${t.name}${t.types.length ? `[${t.types}]` : ""}' type`) })()
   const unify = (a, b) => {
     a = prune(a)
     b = prune(b)
