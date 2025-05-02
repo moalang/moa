@@ -3,8 +3,9 @@
 const log = x => { console.dir(x, {depth: null}); return x }
 
 const testSugar = param => {
+  const show = o => Array.isArray(o) ? `(${o.map(show).join(" ")})` : o.code
   const test = (expect, src) => {
-    const actual = param.sugar(src)
+    const actual = show(param.sugar(src))
     if (actual !== expect) {
       console.error(`${expect} != ${actual}\n${src}`)
       throw new Error(src)
@@ -12,9 +13,10 @@ const testSugar = param => {
   }
   test("a", "a")
   test("(a b)", "a b")
-  // f(...)      # (f ...)
-  // a op2 b     # (op2 a b)
-  // op1 a       # (op1 a)
+  test("(a)", "a()")
+  test("(a b)", "a(b)")
+  test("(! true)", "!true")
+  test("(+ 1 2)", "1 + 2")
   // a => a      # (fn a a)
   // a,b => a    # (fn a b a)
   // a -> b      # (a (do b))

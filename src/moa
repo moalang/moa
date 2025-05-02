@@ -12,7 +12,7 @@ const sugar = program => {
   function* tokenize() {
     let pos = 0
     let lineno = 1
-    for (const code of program.split(/([A-Za-z_][A-Za-z0-9_]*\??|-?0x[A-Fa-f0-9]+|-?[0-9]+(?:(?:\.[0-9]+)|(?:e[0-9]+))?|""".*?"""|"[^"]*?"|```.*?```|`[^`]*?`|[ \r\n\t]+|[()\[\]{};]|#[^\n]*)/)) {
+    for (const code of program.split(/([A-Za-z_][A-Za-z0-9_]*[?*]?|-?0x[A-Fa-f0-9]+|-?[0-9]+(?:(?:\.[0-9]+)|(?:e[0-9]+))?|""".*?"""|"[^"]*?"|```.*?```|`[^`]*?`|[ \r\n\t]+|[()\[\]{};]|#[^\n]*)/)) {
       if (/^[ \r\n\t#;]/.test(code) || code === "") {
         lineno += code.split(/\n|;/).length - 1
       } else {
@@ -20,23 +20,32 @@ const sugar = program => {
         const lc = pos > 0 ? program[pos - 1] : ''
         const rc = program[pos + code.length]
         const op2 = op && lc === " " && rc === " "
-        const op1 = (op || code === "...") && !op2
-        const dot = code === "."
-        const call = code === "(" && /[A-Za-z0-9_)\]?]/.test(lc)
-        const index = code === "[" && /[A-Za-z0-9_)\]?]/.test(lc)
-        yield {code, lineno, op, op1, op2, dot, call, index}
+        const op1 = op && !op2
+        const call = code === "(" && /[A-Za-z0-9_\]]/.test(lc)
+        const index = code === "[" && /[A-Za-z0-9_\]]/.test(lc)
+        yield {code, lineno, op, op1, op2, call, index}
       }
       pos += code.length
     }
   }
   const compose = tokens => {
     let pos = 0
-    const until = f => {
+    const until = (f, g=bottom) => {
       const a = []
       while (pos < tokens.length && f(tokens[pos])) {
-        a.push(tokens[pos++])
+        a.push(g(tokens[pos++]))
       }
       return a
+    }
+    const untilby = by => (t => (pos++, t))(until(t => t.code !== by))
+    const bottom = token => {
+      const link = t =>
+        pos >= tokens.length ? t :
+        t.op1            ? link([t, bottom(tokens[pos++])]) :
+        tokens[pos].call ? (pos++, link([t].concat(untilby(")")))) :
+        tokens[pos].op2  ? link([tokens[pos++], t, bottom(tokens[pos++])]) :
+        t
+      return link(token)
     }
     const statement = () => {
       const lineno = tokens[pos].lineno
@@ -45,8 +54,8 @@ const sugar = program => {
     }
     return statement()
   }
-  const gen = o => Array.isArray(o) ? `(${o.map(gen).join(" ")})` : o.code
-  return gen(compose([...tokenize()]))
+  const rec = o => Array.isArray(o) ? o.map(rec) : newtoken(o.code)
+  return compose([...tokenize()])
 }
 
 const parse = input => {
