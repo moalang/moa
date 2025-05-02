@@ -6,7 +6,10 @@
 // - [ ] io.fetch
 // - [ ] io.db
 // - [ ] moa test
+// - [ ] moa env
 // - [ ] moa repl through process inter-process communication
+// - [ ] integrate Go packages with type definition of Moa
+// - [ ] package manager for Moa
 
 const log = x => { console.dir(x, {depth: null}); return x }
 const range = n => [...new Array(n)].map((_, i) => i)
