@@ -117,7 +117,8 @@ const testInfer = param => {
   test("int", "((fn a b? (+ a b 0)) 1 2)")
   test("(1* vec[1])", "(fn a* a)")
   test("vec[int]", "((fn a* a) 1)")
-  test("vec[int]", "((fn a* a) 1 2)")
+  test("int", "((fn a b* a) 1 2)")
+  test("vec[int]", "((fn a b* b) 1 2)")
 
   // type errors
   reject("(+ 1 true)")

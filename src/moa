@@ -1,7 +1,12 @@
 #!node --no-warnings
 "use strict"
 
-// - [ ] syntax sugar
+// - [ ] display filename, lineno and column with uncatched error message
+// - [ ] io.serve
+// - [ ] io.fetch
+// - [ ] io.db
+// - [ ] moa test
+// - [ ] moa repl through process inter-process communication
 
 const log = x => { console.dir(x, {depth: null}); return x }
 const range = n => [...new Array(n)].map((_, i) => i)
@@ -51,8 +56,8 @@ const sugar = program => {
         if (t.lineno === tokens[pos].lineno) {
           return line()
         } else {
-          const lines = until(u => u.indent > t.indent, line)
-          return lines.length === 1 ? lines[0] : [newtoken("do"), ...lines]
+          const a = until(u => u.indent > t.indent, line)
+          return a.length === 1 ? a[0] : [newtoken("do"), ...a]
         }
       }
       const link = t =>
