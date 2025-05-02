@@ -11,6 +11,7 @@ const testSugar = param => {
       throw new Error(src)
     }
   }
+  // basic
   test("a", "a")
   test("(a b)", "a b")
   test("(a)", "a()")
@@ -18,6 +19,8 @@ const testSugar = param => {
   test("(! true)", "!true")
   test("(+ 1 2)", "1 + 2")
   test("(+ 1 (+ 2 3))", "1 + 2 + 3")
+  test("(. a b)", "a.b")
+  test("((. a b) c)", "a.b c")
   test("(fn a a)", "a => a")
   test("(fn a b (+ a b))", "a,b => a + b")
   test("(fn a (do a (return (b c))))", "a =>\n  a\n  b c")
@@ -25,6 +28,17 @@ const testSugar = param => {
   test("(a (b c))", "a: b c")
   test("(a b c)", "a b: c")
   test("(a (do b (c d)))", "a :\n  b\n  c d")
+
+  // combination
+  test("((. a b) (fn c d))", "a.b c => d")
+  test("(+ (. a b) c)", "a.b + c")
+  test("(+ a (. b c))", "a + b.c")
+  test("(a (b c))", "a:\n  b:\n    c")
+  test("(a (do b (c d)))", "a:\n  b\n  c:\n    d")
+  test("(a (do b (c (do d e))))", "a:\n  b\n  c:\n    d\n    e")
+  test("(fn a (fn b c))", "a =>\n  b =>\n    c")
+  test("(fn a (do b (return (fn c d))))", "a =>\n  b\n  c =>\n    d")
+  test("(fn a (do b (return (fn c (do d (return e))))))", "a =>\n  b\n  c =>\n    d\n    e")
 }
 
 const testInfer = param => {

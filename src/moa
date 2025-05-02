@@ -11,7 +11,7 @@
 const log = x => { console.dir(x, {depth: null}); return x }
 const range = n => [...new Array(n)].map((_, i) => i)
 
-const newtoken = s => (m => m ? ({code: m[1], mark: m[2]}) : ({code: s}))(s.match(/^([A-Za-z_].*)([?*])$/))
+const newtoken = (s, pos=0) => (m => m ? ({code: m[1], mark: m[2], pos}) : ({code: s, pos}))(s.match(/^([A-Za-z_].*)([?*])$/))
 
 const sugar = program => {
   function* tokenize() {
@@ -25,14 +25,15 @@ const sugar = program => {
           indent = code.split(/\n/).at(-1).length
         }
       } else {
-        const op = /^[+\-*/%|&<>=!]+$/.test(code) && code !== "->" && code !== "=>"
+        const op = /^[+\-*/%|&<>=!]+$/.test(code) && code !== "=>"
         const lc = pos > 0 ? program[pos - 1] : ''
         const rc = program[pos + code.length]
+        const dot = code === "." && lc !== " " && rc !== " "
         const op2 = op && lc === " " && rc === " "
         const op1 = op && !op2
         const call = code === "(" && /[A-Za-z0-9_\]]/.test(lc)
         const index = code === "[" && /[A-Za-z0-9_\]]/.test(lc)
-        yield {code, lineno, op, op1, op2, call, index, indent}
+        yield {code, lineno, op, op1, op2, dot, call, index, indent}
       }
       pos += code.length
     }
@@ -65,6 +66,7 @@ const sugar = program => {
         tokens[pos].code === ","  ? link(comma([t])) :
         tokens[pos].code === "=>" ? (pos++, link([newtoken("fn"), ...(Array.isArray(t) ? t : [t]), addreturn(block(tokens[pos-1]))])) :
         tokens[pos].call          ? (pos++, link([t].concat(untilby(")")))) :
+        tokens[pos].dot           ? link([tokens[pos++], t, tokens[pos++]]) :
         tokens[pos].op2           ? link([tokens[pos++], t, bottom()]) :
         t
       const t = tokens[pos++]
@@ -83,17 +85,25 @@ const sugar = program => {
     }
     return top()
   }
-  const rec = o => Array.isArray(o) ? o.map(rec) : newtoken(o.code)
   return compose([...tokenize()])
 }
 
 const parse = input => {
-  const rec = ([t, ...ts], acc=[]) =>
+  function* tokenize() {
+    let pos = 0
+    for (const code of input.split(/([()]|[^\n ()]+)/)) {
+      if (code.trim()) {
+        yield newtoken(code, pos)
+      }
+      pos += code.length
+    }
+  }
+  const compose = ([t, ...ts], acc=[]) =>
     !t ? acc :
-    t.code === ")" ? [acc, rec([ts])] :
-    t.code === "(" ? (([x, rest]) => rec(rest, acc.concat([x])))(rec(ts)) :
-    rec(ts, acc.concat(t))
-  return rec(input.split(/([()]|[^\n ()]+)/).filter(s => s.trim()).map(newtoken))
+    t.code === ")" ? [acc, compose([ts])] :
+    t.code === "(" ? (([x, rest]) => compose(rest, acc.concat([x])))(compose(ts)) :
+    compose(ts, acc.concat(t))
+  return compose([...tokenize()])
 }
 
 class TypeError extends Error { }
