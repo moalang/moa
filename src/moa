@@ -24,7 +24,6 @@ const sugar = (program, filename="") => {
         lineno += code.split(/\n|;/).length - 1
         if (code.includes("\n")) {
           indent = code.split(/\n/).at(-1).length
-          column = indent
         }
       } else {
         const op = /^[+\-*/%|&<>=!]+$/.test(code) && code !== "=>"
@@ -38,7 +37,7 @@ const sugar = (program, filename="") => {
         yield {code, lineno, op, op1, op2, dot, call, index, indent, lineno, column}
       }
       pos += code.length
-      column += code.length
+      column = code.includes("\n") ? code.split(/\n/).at(-1).length : column + code.length
     }
   }
   const compose = tokens => {
