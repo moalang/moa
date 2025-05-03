@@ -2,8 +2,9 @@
 "use strict"
 
 // - [x] display filename, lineno and column with uncatched error message
-// - [ ] io.serve
-// - [ ] io.fetch
+// - [x] io.sleep
+// - [-] io.serve
+// - [-] io.fetch
 // - [ ] io.db
 // - [ ] moa test
 // - [ ] moa env
@@ -146,6 +147,8 @@ const infer = root => {
   const tfloat = newtype("float64")
   const tstring = newtype("string")
   const terror = newtype("error")
+  const trequest = newtype("__request")
+  const tresponse = newtype("__response")
   const tio = newtype("io")
   const tv1 = newvar()
   const env = {
@@ -160,16 +163,22 @@ const infer = root => {
     "int": tint,
     "float": tfloat,
     "string": tstring,
+    "io": tio,
+    "async": newfn([tv1, tvoid]),
     "continue": tvoid,
     "break": tvoid,
-    "io": tio,
   }
 
   const method = (t, field) =>
     t.var ? property(t, field) :
     t.name === "tuple" && field < t.types.length ? t.types[field] :
     t.name === "error" && field === "message" ? tstring :
+    t.name === "io" && field === "sleep" ? newfn([tfloat, tvoid]) :
     t.name === "io" && field === "put" ? newfn([tv1, tint]) :
+    t.name === "io" && field === "serve" ? newfn([tstring, newfn([trequest, tresponse]), tvoid]) :
+    t.name === "io" && field === "fetch" ? newfn([tstring, tresponse]) :
+    t.name === "__request" && field === "respond" ? newfn([tint, newmap(tstring, newvec(tstring)), tstring, tresponse]) :
+    t.name === "__response" && field === "text" ? newfn([fails({...tstring})]) :
     t.fields?.find(f => f.code === field).type ||
     (() => { throw new TypeError(`No '${field}' in '${t.name}${t.types.length ? `[${t.types}]` : ""}' type`) })()
   const unify = (a, b) => {
@@ -193,7 +202,7 @@ const infer = root => {
         throw new TypeError(`Type name ${a.name} != ${b.name}`)
       }
       if (a.types.length !== b.types.length) {
-        throw new TypeError(`Type args ${a.types} != ${b.types}`)
+        throw new TypeError(`Type args ${JSON.stringify(a.types)} != ${JSON.stringify(b.types)}`)
       }
       a.types.map((x, i) => unify(x, b.types[i]))
     }
@@ -238,7 +247,7 @@ const infer = root => {
       }
     }
     if (i !== args.length) {
-      throw new TypeError(`Calling vargs ${JSON.stringify(f.args)} != ${JSON.stringify(args)}`)
+      throw new TypeError(`Calling ${JSON.stringify(f.types)} != ${JSON.stringify(args)}`)
     }
     return f.types.at(-1)
   }
@@ -339,7 +348,7 @@ const infer = root => {
           (() => { throw new Error(`Type literal '${s}'`) })()
       }
     }
-    const same = a => (([x, ...ts]) => (ts.map(t => unify(t, x)), x))(a.map(inf))
+    const same = a => a.length == 0 ? tv1 : (([x, ...ts]) => (ts.map(t => unify(t, x)), x))(a.map(inf))
     return inf(top)
   }
   const safeJson = o => {
@@ -388,6 +397,8 @@ const generate = root => {
   const gentype = t => t.types.length === 0 ? (t.var ? "__" : "") + t.name :
     t.name === "tuple" ? `__${t.name}${t.types.length}[${t.types.map(gentype)}]` :
     t.name === "new" ? genstruct([], t) :
+    t.name === "vec" ? "[]" + gentype(t.types[0]) :
+    t.name === "map" ? "map[" + gentype(t.types[0]) + "]" + gentype(t.types[1]) :
     `${t.name}[${t.types.map(gentype)}]`
   const genstruct = (a, t) => (a.length ? `[${a.map(u => gentype(u.type) + " any")}] ` : "") + `struct { ${t.fields.map(f => `${f.code} ${gentype(f.type)}`).join("\n")} }`
   const genfunc = (t, name="") => `func ${name}(${t.names.map(a => `${a.code} ${gentype(a.type)}`)}) (__ret ${gentype(t.ret.type)}${t.ret.type.fails ? ", __err error" : ""})`
@@ -420,7 +431,7 @@ const generate = root => {
   }
   const genhead = x => x.type.name === "fn" && x.type.names?.find(y => y.type.var) && x.type.generics?.length ?
     `${gen(x)}__${x.type.types.map(gentype).join("__")}` : gen(x)
-  const gen = x => Array.isArray(x) && x[0].type?.types.at(-1).fails ? ((ret, a) => (
+  const gen = x => Array.isArray(x) && x[0].type?.types?.at(-1)?.fails ? ((ret, a) => (
       a.map(([id, y]) => lines.push(`${id} = ${c}`)),
       lines.push(`${ret}, __err := ${genhead(x[0])}(${a.map(z => z[0])})`),
       ret
@@ -436,17 +447,19 @@ const generate = root => {
     x[0].code === "return" ? `__ret = ${gen(x[1])}; return` :
     x[0].code === "throw"  ? `__err = MoaError{${gen(x[1])}, ${errinfo(x[1])}}; return` :
     x[0].code === "catch"  ? !x[1].type.fails ? gen(x[1]) : (exp => (lines.push("__catch_err := __err; __err = nil"), `__catch[${gentype(x[1].type)}](${exp}, __catch_err, ${gen(x[2])})`))(gen(x[1])) :
+    x[0].code === "async"  ? `go func() { ${gen(x[1])} }()` :
     x[0].code === "if"     ? `if ${gen(x[1])} { ${gen(x[2])} }${genif(x.slice(3))}` :
     x[0].code === "iif"    ? (id => (lines.push(`var ${id} ${gentype(x[2].type)}; ${geniif(id, x.slice(1))}`), id))(newid()) :
     x[0].code === "struct" ? (defs.push(`type ${x[1].code} ${genstruct(x[2], x.type.types.at(-1))}`), "") :
     x[0].code === "fn"     ? `${genfunc(x.type)} { ${genreturn(x.at(-1))} }` :
     x[0].code === "tuple"  ? `__tuple${x.length - 1}[${x.slice(1).map(node => gentype(node.type))}]{ ${x.slice(1).map(gen)} }` :
     x[0].code === "new"    ? `${genstruct([], x.type)}{${range((x.length-1)/2).map(i => gen(x[i*2+2]))}}` :
-    x[0].code === "vec"    ? `[]${gentype(x[1].type)}{ ${x.slice(1).map(gen)} }` :
+    x[0].code === "vec"    ? `[]${gentype(x.type.types[0])}{ ${x.slice(1).map(gen)} }` :
     x[0].code === "map"    ? `map[${gentype(x[1].type)}]${gentype(x[2].type)}{ ${range((x.length-1)/2).map(i => `${gen(x[i*2+1])}: ${gen(x[i*2+2])}`)} }` :
     x[0].code === "set"    ? `map[${gentype(x[1].type)}]struct{}{ ${x.slice(1).map(n => `${gen(n)}: struct{}{}`)} }` :
     x[0].code === "!"      ? `${x[0].code}${gen(x[1])}` :
     x[0].type?.struct      ? gen(x[0]) + (x[0].type.types.at(-1).types.find(t => t.var) ? `[${x[0].type.types.slice(0, -1).map(gentype)}]` : "")+ "{" + x.slice(1).map(gen).join(", ") + "}" :
+    x[0].code === "." && x[1].code === "io" ? `__io_${x[2].code}` :
     x[0].code === "." && x[1]?.type?.name === "tuple" ? `${gen(x[1])}.v${x[2].code}` :
     x[0].code === "." && x[1]?.type?.name === "error" && x[2].code === "message" ? `${gen(x[1])}.Error()` :
     /[+\-*/%^<>!=|&.]/.test(x[0].code) ? genop(x[0].code, x.slice(1)) :

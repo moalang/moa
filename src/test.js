@@ -106,7 +106,9 @@ const testInfer = param => {
   test("string", '(catch (throw "a") (fn e (. e message)))')
 
   // container
+  test("vec[1]", "(vec)")
   test("vec[int]", "(vec 1)")
+  test("vec[tuple[int bool]]", "(vec (tuple 1 true))")
   test("map[int bool]", "(map 1 true)")
 
   // combinations
@@ -249,6 +251,7 @@ const testGenerate = param => {
 
   // IO
   test("hi", '""', '((. io put) "hi")')
+  //test("hi", '((. ((. io fetch) "http://localhost:8888") text))', '(async ((. io serve) ":8888" (fn req ((. req respond) 200 (map "content-type" (vec "text/plain")) "hi")))) ((. io sleep) 1.0)')
 }
 
 module.exports.test = param => {
