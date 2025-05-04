@@ -78,7 +78,8 @@ func __io_puts(a ...any) int {
 	return n
 }
 func __io_log[T any](x T, a ...any) T {
-	fmt.Fprintln(os.Stderr, x, a...)
+	fmt.Fprint(os.Stderr, x)
+	fmt.Fprintln(os.Stderr, "", a...)
 	return x
 }
 func __io_serve(listen string, f func(__request) __response) {

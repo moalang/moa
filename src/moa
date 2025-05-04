@@ -35,8 +35,8 @@ const sugar = (program, filename="") => {
         const lc = pos > 0 ? program[pos - 1] : ''
         const rc = program[pos + code.length]
         const dot = code === "." && lc !== " " && rc !== " "
-        const op2 = op && lc === " " && rc === " "
-        const op1 = op && !op2
+        const op1 = op && /[A-Za-z0-9_\]]/.test(rc)
+        const op2 = op && !op1
         const call = code === "(" && /[A-Za-z0-9_\]]/.test(lc)
         const index = code === "[" && /[A-Za-z0-9_\]]/.test(lc)
         yield {code, lineno, op, op1, op2, dot, call, index, indent, filename, lineno, column}
@@ -79,18 +79,33 @@ const sugar = (program, filename="") => {
         tokens[pos].op2           ? link([tokens[pos++], t, bottom()]) :
         t
       const t = tokens[pos++]
-      return t.code === ":"  ? block(t) :
-             t.op1           ? link([t, bottom()]) :
+      return t.code === ":" ? block(t) :
+             t.code === "(" ? variadic(untilby(")")) :
+             t.op1          ? link([t, bottom()]) :
              link(t)
     }
     const line = () => {
-      const lineno = tokens[pos].lineno
-      const a = until(t => t.lineno === lineno)
-      return a.length === 1 ? a[0] : a
+      const t = tokens[pos]
+      return squash(variadic(until(u => t.lineno === u.lineno)))
     }
-    const top = () => {
-      const a = until(_ => true, line)
-      return a.length === 1 ? a[0] : a
+    const top = () => squash(until(_ => true, line))
+    const squash = a => a.length === 1 ? a[0] : a
+    const variadic = ([head, ...a]) => {
+      const expandop = (op, a) =>
+        a.length === 2 ? [op, a[0], a[1]] :
+        a.length >= 3 ?  [op, a[0], expandop(op, a.slice(1))] :
+        (() => { throw new Error(`never reach using '${op}'`) })()
+      const expandiif = (head, a) => a.length === 3 ? [head, ...a] :
+        a.length >= 5 ? [head, a[0], a[1], expandiif(head, a.slice(2))] :
+        (() => { throw new Error(`never reach using '${JSON.stringify(head)}'`) })()
+      const expandif = (head, a) => a.length <= 3 ? [head, ...a] :
+        a.length >= 5 ? [head, a[0], a[1], expandif(head, a.slice(2))] :
+        a.length >= 4 ? [head, a[0], [head, ...a.slice(1)]] :
+        (() => { throw new Error(`never reach using '${JSON.stringify(head)}'`) })()
+      return head.op && a.length >= 3 ? expandop(head, a) :
+        head.code === "iif" ? expandiif(head, a) :
+        head.code === "if" ? expandif(head, a) :
+        [head, ...a]
     }
     return top()
   }
@@ -135,9 +150,8 @@ const infer = root => {
   const newvec = t => newtype("vec", [t])
   const newset = t => newtype("set", [t])
   const newmap = (k, v) => newtype("map", [k, v])
-  const newvargs = vargs => ({...newtype("__varg"), vargs})
 
-  const marks = (t, mark) => mark.includes("*") ? ({...newvec(t), mark}) : ({...t, mark})
+  const marks = (t, mark) => !mark ? t : mark.includes("*") ? ({...newvec(t), mark}) : ({...t, mark})
   const property = (t, name) => (t.props ||= {}, t.props[name] = newvar())
 
   const prune = x => x.instance ? x.instance = prune(x.instance) : x
@@ -151,11 +165,12 @@ const infer = root => {
   const tresponse = newtype("__response")
   const tio = newtype("io")
   const tv1 = newvar()
+  const tv2 = newvar()
   const env = {
     "!": newfn([tbool, tbool]),
     "return": newfn([tv1, tv1]),
-    "if": newfn([newvargs([tbool, tv1]), marks(tv1, "?"), tvoid]),
-    "iif": newfn([newvargs([tbool, tv1]), tv1, tv1]),
+    "if": newfn([tbool, tv1, marks(tv2, "?"), tvoid]),
+    "iif": newfn([tbool, tv1, tv1, tv1]),
     "throw": newfn([tv1, tv1]),
     "catch": newfn([tv1, newfn([terror, tv1]), tv1]),
     "while": newfn([tbool, tv1, tvoid]),
@@ -225,15 +240,7 @@ const infer = root => {
     }
     let i = 0
     for (const fa of f.types.slice(0, -1)) {
-      if (fa.vargs) {
-        while (args[i]) {
-          let k = i
-          if (!fa.vargs.every(t => args[i] && safeUnify(t, args[i++]))) {
-            i = k
-            break
-          }
-        }
-      } else if (fa.mark?.includes("*")) {
+      if (fa.mark?.includes("*")) {
         while (args[i]) {
           if (!safeUnify(fa.types[0], args[i++])) {
             i--
@@ -241,13 +248,17 @@ const infer = root => {
           }
         }
       } else if (fa.mark?.includes("?")) {
-        args[i] && !safeUnify(fa, args[i++]) && i--
-      } else {
+        if (args[i]) {
+          safeUnify(fa, args[i++])
+        }
+      } else if (args[i]) {
         unify(fa, args[i++])
+      } else {
+        throw new TypeError(`No argument ${JSON.stringify(fa)} at ${i} of ${JSON.stringify(f.types)}`)
       }
     }
     if (i !== args.length) {
-      throw new TypeError(`Calling ${JSON.stringify(f.types)} != ${JSON.stringify(args)}`)
+      throw new TypeError(`Remain ${JSON.stringify(args.slice(i))}} of ${JSON.stringify(f.types)}`)
     }
     return f.types.at(-1)
   }
@@ -256,7 +267,7 @@ const infer = root => {
     const rec = t => {
       const u = prune(t)
       return u.var ?
-        (nonGeneric.includes(u.name) ? u : d[u.name] ||= newvar()) :
+        (nonGeneric.includes(u.name) ? u : d[u.name] ||= marks(newvar(), u.mark)) :
         (v => (v.types.length && type.generics.push(v.types), v))({...u, types: u.types.map(rec)})
     }
     type.generics ||= []
@@ -283,7 +294,7 @@ const infer = root => {
             return env[t.code] = newstruct(args.map(a => a.type).concat(newnew(args)))
           } else if (s === "fn") {
             const targs = tail.slice(0, -1).map(_ => newvar())
-            const args = tail.slice(0, -1).map((t, i) => [t.code, t.type = marks(targs[i], t.mark || "")])
+            const args = tail.slice(0, -1).map((t, i) => [t.code, t.type = marks(targs[i], t.mark)])
             const body = infWith(tail.at(-1), {...env, ...Object.fromEntries(args)}, nonGeneric.concat(targs.map(t => t.name)))
             return newfn([...args.map(a => a[1]), body], tail.slice(0, -1), tail.at(-1))
           } else if (s === "for") {

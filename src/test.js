@@ -39,6 +39,17 @@ const testSugar = param => {
   test("(fn a (fn b c))", "a =>\n  b =>\n    c")
   test("(fn a (do b (return (fn c d))))", "a =>\n  b\n  c =>\n    d")
   test("(fn a (do b (return (fn c (do d (return e))))))", "a =>\n  b\n  c =>\n    d\n    e")
+
+  // variable arguments
+  test("(+ 1 (+ 2 3))", "+ 1 2 3")
+  test("(+ 1 (+ 2 3))", "(+ 1 2 3)")
+  test("(a (+ 1 (+ 2 3)))", "(a (+ 1 2 3))")
+  test("(iif a b c)", "iif a b c")
+  test("(iif a b (iif c d e))", "iif a b c d e")
+  test("(if a (if b c d))", "if a b c d")
+  test("(if a b (if c d e))", "if a b c d e")
+  test("(if a b (if c (if d e f)))", "if a b c d e f")
+  test("(if a b (if c d (if e f g)))", "if a b c d e f g")
 }
 
 const testInfer = param => {
@@ -229,12 +240,9 @@ const testGenerate = param => {
   // Statement
   test("1", "(iif true 1 2)")
   test("2", "(iif false 1 2)")
-  test("2", "(iif false 1 true 2 3)")
-  test("3", "(iif false 1 false 2 3)")
   test("1", "((fn (do (if true (return 1)) (return 2))))")
   test("2", "((fn (do (if false (return 1)) (return 2))))")
   test("2", "((fn (do (if false (return 1) (return 2)))))")
-  test("2", "((fn (do (if false (return 1) true (return 2)) (return 3))))")
   test("6", "a", "(let a 0) (for b 4 (+= a b))")
   test("5", "a", "(let a 0) (for b 2 4 (+= a b))")
   test("9", "a", "(let a 0) (for b 1 6 2 (+= a b))")
