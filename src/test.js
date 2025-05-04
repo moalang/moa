@@ -50,6 +50,12 @@ const testSugar = param => {
   test("(if a b (if c d e))", "if a b c d e")
   test("(if a b (if c (if d e f)))", "if a b c d e f")
   test("(if a b (if c d (if e f g)))", "if a b c d e f g")
+  test("(for _ 0 3 1 a)", "for 3 a")
+  test("(for i 0 3 1 a)", "for i 3 a")
+  test("(for i 1 3 1 a)", "for i 1 3 a")
+  test("(for i 1 3 2 a)", "for i 1 3 2 a")
+  test("(each _ a b)", "each a b")
+  test("(each a b c)", "each a b c")
 }
 
 const testInfer = param => {
@@ -243,13 +249,11 @@ const testGenerate = param => {
   test("1", "((fn (do (if true (return 1)) (return 2))))")
   test("2", "((fn (do (if false (return 1)) (return 2))))")
   test("2", "((fn (do (if false (return 1) (return 2)))))")
-  test("6", "a", "(let a 0) (for b 4 (+= a b))")
-  test("5", "a", "(let a 0) (for b 2 4 (+= a b))")
   test("9", "a", "(let a 0) (for b 1 6 2 (+= a b))")
   test("6", "a", "(let a 0) (each b (vec 1 2 3) (+= a b))")
   test("6", "a", "(let a 0) (while (< a 6) (+= a 1))")
-  test("1", "a", "(let a 0) (for b 3 (do (+= a 1) break))")
-  test("0", "a", "(let a 0) (for b 3 (do continue (+= a 1)))")
+  test("1", "a", "(let a 0) (for b 0 3 1 (do (+= a 1) break))")
+  test("0", "a", "(let a 0) (for b 0 3 1 (do continue (+= a 1)))")
 
   // Generics
   test("1", "(iif (f true) (f 1) (f 2))", "(let f (fn a a))")

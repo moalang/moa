@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 )
@@ -76,11 +75,6 @@ func __io_puts(a ...any) int {
 		panic(err)
 	}
 	return n
-}
-func __io_log[T any](x T, a ...any) T {
-	fmt.Fprint(os.Stderr, x)
-	fmt.Fprintln(os.Stderr, "", a...)
-	return x
 }
 func __io_serve(listen string, f func(__request) __response) {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
