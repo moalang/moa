@@ -1,8 +1,6 @@
 #!node --no-warnings
 "use strict"
 
-// - [x] display filename, lineno and column with uncatched error message
-// - [x] io.sleep
 // - [-] io.serve
 // - [-] io.fetch
 // - [ ] io.db
@@ -393,8 +391,7 @@ const generate = root => {
   const genreturn = x => {
     const ret = generate([x])
     defs.push(ret.def)
-    const lines = ret.body.split("\n") // todo
-    return x[0]?.code === "do" ? ret.body : `${lines.slice(0, -1).join("\n")}\nreturn ${lines.at(-1)}`
+    return x[0]?.code === "do" ? ret.body : `return ${ret.body}`
   }
   const gentype = t => t.types.length === 0 ? (t.var ? "__" : "") + t.name :
     t.name === "tuple" ? `__${t.name}${t.types.length}[${t.types.map(gentype)}]` :
@@ -404,19 +401,15 @@ const generate = root => {
     `${t.name}[${t.types.map(gentype)}]`
   const genstruct = (a, t) => (a.length ? `[${a.map(u => gentype(u.type) + " any")}] ` : "") + `struct { ${t.fields.map(f => `${f.code} ${gentype(f.type)}`).join("\n")} }`
   const genfunc = (x, t, name="") => `func ${name}(${x.slice(1, -1).map(y => `${y.code} ${gentype(y.type)}`)}) ${gentype(x.type.types.at(-1))}`
-  const genfor = ([a, b, c, d, e]) => `for ${a} := ${b}; ${a} < ${c}; ${a} += ${d} { ${e} }` 
-  const genlet = (body, id) => {
-    if (body[0]?.code === "fn") {
-      return body.type.generics.map(a => {
-        const x = structuredClone(body)
-        x.type = {...x.type, types: a}
-        x.slice(1, -1).map((arg, i) => arg.type = a[i])
-        return `${id}__${a.map(gentype).join("__")} := ${gen(x)}`
-      }).join("\n")
-    } else {
-      return `${id} := ${gen(body)}`
-    }
-  }
+  const genfor = ([a, b, c, d, e]) => `for ${a} := ${b}; ${a} < ${c}; ${a} += ${d} { ${e} }`
+  const genlet = (body, id) => body[0]?.code === "fn" ?
+    body.type.generics.map(a => {
+      const x = structuredClone(body)
+      x.type = {...x.type, types: a}
+      x.slice(1, -1).map((arg, i) => arg.type = a[i])
+      return `${id}__${a.map(gentype).join("__")} := ${gen(x)}`
+    }).join("\n") :
+    `${id} := ${gen(body)}`
   const errinfo = x => Array.isArray(x) ? errinfo(x[0]) : [JSON.stringify(x.filename), x.lineno, x.column]
   const genhead = x => x.type.name === "fn" && x.type.generics?.length ?
     `${gen(x)}__${x.type.types.map(gentype).join("__")}` :
@@ -453,7 +446,6 @@ const generate = root => {
     x[0].code === "vec"    ? `[]${gentype(x.type.types[0])}{ ${x.slice(1).map(gen)} }` :
     x[0].code === "map"    ? `map[${gentype(x[1].type)}]${gentype(x[2].type)}{ ${range((x.length-1)/2).map(i => `${gen(x[i*2+1])}: ${gen(x[i*2+2])}`)} }` :
     x[0].code === "set"    ? `map[${gentype(x[1].type)}]struct{}{ ${x.slice(1).map(n => `${gen(n)}: struct{}{}`)} }` :
-    x[0].code === "!"      ? `${x[0].code}${gen(x[1])}` :
     x[0].type?.struct      ? gen(x[0]) + (x[0].type.types.at(-1).types.find(t => t.var) ? `[${x[0].type.types.slice(0, -1).map(gentype)}]` : "")+ "{" + x.slice(1).map(gen).join(", ") + "}" :
     x[0].code === "." && x[1].code === "io" ? `__io_${x[2].code}` :
     x[0].code === "." && x[1]?.type?.name === "tuple" ? `${gen(x[1])}.v${x[2].code}` :
