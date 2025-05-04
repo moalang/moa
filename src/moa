@@ -8,7 +8,8 @@
 // - [ ] io.db
 // - [ ] moa test
 // - [ ] moa env
-// - [ ] moa repl through process inter-process communication
+// - [ ] moa repl
+// - [ ] io.go.println
 // - [ ] integrate Go packages with type definition of Moa
 // - [ ] package manager for Moa
 
@@ -300,8 +301,8 @@ const infer = root => {
             const values = range(tail.length / 2).map(i => inf(tail[i*2+1]))
             return newmap(keys[0], values[0])
           } else if ("+-*/%^=<>!".includes(s[0])) {
-            same(tail)
-            return "== != < > >= <=".split(" ").includes(s) ? tbool : tail[0].type
+            const t = same(tail.map(inf))
+            return "== != < > >= <=".split(" ").includes(s) ? tbool : t
           } else if (s === ".") {
             const target = inf(tail[0])
             if (target.name === "tuple") {
@@ -317,11 +318,11 @@ const infer = root => {
           } else if (s === "new") {
             return newnew(range(tail.length / 2).map(i => (tail[i*2].type = inf(tail[i*2+1]), tail[i*2])))
           } else if (s === "vec") {
-            return newvec(same(tail))
+            return newvec(same(tail.map(inf)))
           } else if (s === "set") {
-            return newset(same(tail))
+            return newset(same(tail.map(inf)))
           } else if (s === "||" || s === "&&") {
-            return unify(tbool, same(tail))
+            return unify(tbool, same(tail.map(inf)))
           } else {
             const argv = tail.map(inf)
             const key = safeJson({code: head.code, argv})
@@ -345,7 +346,7 @@ const infer = root => {
           (() => { throw new Error(`Type literal '${s}'`) })()
       }
     }
-    const same = a => a.length == 0 ? newvar() : (([x, ...ts]) => (ts.map(t => unify(t, x)), x))(a.map(inf))
+    const same = ([t, ...xs]) => t ? (xs.map(x => unify(t, x)), t) : newvar()
     return inf(top)
   }
   const safeJson = o => {
