@@ -57,8 +57,8 @@ const testSugar = param => {
   test("(for i 0 3 1 a)", "for i 3 a")
   test("(for i 1 3 1 a)", "for i 1 3 a")
   test("(for i 1 3 2 a)", "for i 1 3 2 a")
-  test("(each _ a b)", "each a b")
-  test("(each a b c)", "each a b c")
+  test("(each _ a b c)", "each a b c")
+  test("(each a b c d)", "each a b c d")
 }
 
 const testInfer = param => {
@@ -252,7 +252,9 @@ const testGenerate = param => {
   test("2", "((fn (do (if false (return 1)) (return 2))))")
   test("2", "((fn (do (if false (return 1) (return 2)))))")
   test("9", "a", "(let a 0) (for b 1 6 2 (+= a b))")
-  test("6", "a", "(let a 0) (each b (vec 1 2 3) (+= a b))")
+  test("3", "a", "(let a 0) (each b _ (vec 1 2 3) (+= a b))")
+  test("6", "a", "(let a 0) (each _ b (vec 1 2 3) (+= a b))")
+  test("9", "a", "(let a 0) (each b c (map 1 3 2 3) (+= a (+ b c)))")
   test("6", "a", "(let a 0) (while (< a 6) (+= a 1))")
   test("1", "a", "(let a 0) (for b 0 3 1 (do (+= a 1) break))")
   test("0", "a", "(let a 0) (for b 0 3 1 (do continue (+= a 1)))")

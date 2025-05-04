@@ -77,8 +77,9 @@ func __io_puts(a ...any) int {
 	}
 	return n
 }
-func __io_log(a ...any) {
-	fmt.Fprintln(os.Stderr, a...)
+func __io_log[T any](x T) T {
+	fmt.Fprintln(os.Stderr, x)
+	return x
 }
 func __io_serve(listen string, f func(__request) __response) {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -93,11 +94,11 @@ func __io_serve(listen string, f func(__request) __response) {
 		_, err := io.Copy(w, o.body)
 		if err != nil {
 			o.body.Close()
-			__io_log(err)
+			fmt.Fprintln(os.Stderr, err)
 		}
 		err = o.body.Close()
 		if err != nil {
-			__io_log(err)
+			fmt.Fprintln(os.Stderr, err)
 		}
 	})
 	err := http.ListenAndServe(listen, nil)
