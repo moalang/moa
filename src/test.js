@@ -148,9 +148,9 @@ const testInfer = param => {
 
 const testGenerate = param => {
   const test = (expected, exp, define="") => {
-    const src = define + "\n" + exp
+    const src = define + "\n((. io put) " + exp + ")"
     const go = param.compile(src, "test.moa")
-    const actual = param.runGo(go)
+    const actual = param.runGo(go, src)
     if (expected !== actual) {
       throw new Error(`'${expected}' != '${actual}'\n# src\n${src}\n# go\n${go.def}\n${go.body}\n${go.exp}`)
     }
@@ -263,17 +263,19 @@ module.exports.test = param => {
   const runtime = fs.readFileSync("runtime.go")
   const cache = fs.existsSync("/tmp/moa_test_cache.json") ? require("/tmp/moa_test_cache.json") : {}
   try {
-    param.runGo = x => {
+    param.runGo = (x, src) => {
       const go = `${runtime}\n${x.def}\nfunc main() {
-        var __err error
-        defer func() {
-          if __err != nil {
-            fmt.Print(__err.Error())
-          }
-        }()
-        ${x.body}
-        fmt.Print(${x.exp})
-      }\n`
+/*
+${src.trim()}
+*/
+  var __err error
+  defer func() {
+    if __err != nil {
+      fmt.Print(__err.Error())
+    }
+  }()
+  ${x.body}
+}\n`
       if (go in cache) {
         return cache[go]
       }

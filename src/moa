@@ -385,12 +385,12 @@ const infer = root => {
 
 const generate = root => {
   let id = 0
+  const declared = new Set()
   const newid = () => `__${id++}`
   const defs = []
-  const lines = []
   const genreturn = x => {
     const ret = generate([x])
-    return x[0]?.code === "do" ? ret.body + "\n" + ret.exp : `${ret.body}\nreturn ${ret.exp}`
+    return x[0]?.code === "do" ? ret.body : `return ${ret.body}`
   }
   const genop = (op, xs) => xs.length === 1 ? `${op} ${gen(xs[0])}` : genop2(op, xs)
   const genop2 = (op, xs) => xs.length === 1 ? gen(xs[0]) : `${gen(xs[0])} ${op} ${genop2(op, xs.slice(1))}`
@@ -403,8 +403,8 @@ const generate = root => {
   const genstruct = (a, t) => (a.length ? `[${a.map(u => gentype(u.type) + " any")}] ` : "") + `struct { ${t.fields.map(f => `${f.code} ${gentype(f.type)}`).join("\n")} }`
   const genfunc = (t, name="") => `func ${name}(${t.names.map(a => `${a.code} ${gentype(a.type)}`)}) (__ret ${gentype(t.ret.type)}${t.ret.type.fails ? ", __err error" : ""})`
   const genassign = (id, x) => x.type.fails ? `${id}, __err = ${genexp(x)}; if __err != nil { return }` : `${id} = ${genexp(x)}`
-  const geniif = (id , a) => a.length === 1 ? `{ ${genassign(id, a[0])} }` :
-    `if ${gen(a[0])} { ${genassign(id, a[1])} } else ${geniif(id, a.slice(2))}`
+  const geniif = (id , a) => a.length === 1 ? `{ ${gen(a[0], {id, update: true})} }` :
+    `if ${gen(a[0])} { ${gen(a[1], {id, update: true})} } else ${geniif(id, a.slice(2))}`
   const genif = a =>
     a.length === 0 ? "" :
     a.length === 1 ? ` else { ${gen(a[0])} }` :
@@ -414,42 +414,61 @@ const generate = root => {
     d ? `for ${a} := ${b}; ${a} < ${c}; ${a}++ { ${d} }` :
     c ? `for ${a} := 0; ${a} < ${b}; ${a}++ { ${c} }` :
     (() => {throw new Error(`genfor ${a}, ${b}, ${c}, ${d}, ${e}`)})()
-  const genlet = (name, body) => {
+  const genlet = (body, id) => {
     if (body[0]?.code === "fn" && body.type.types.find(x => x.var) && body.type.generics.length) {
-      for (const a of body.type.generics) {
+      return body.type.generics.map(a => {
         const x = structuredClone(body)
         x.type = {...x.type, types: a}
         x.slice(1, -1).map((arg, i) => arg.type = a[i])
         x.type.names.map((arg, i) => arg.type = a[i])
         x.type.ret.type = a.at(-1)
-        lines.push(`${name}__${a.map(gentype).join("__")} := ${gen(x)}`)
-      }
+        return `${id}__${a.map(gentype).join("__")} := ${gen(x)}`
+      })
     } else {
-      lines.push(`${name} := ${gen(body)}`)
+      return gen(body, {id})
     }
-    return ""
   }
+  const errinfo = x => Array.isArray(x) ? errinfo(x[0]) : [JSON.stringify(x.filename), x.lineno, x.column]
   const genhead = x => x.type.name === "fn" && x.type.names?.find(y => y.type.var) && x.type.generics?.length ?
     `${gen(x)}__${x.type.types.map(gentype).join("__")}` : gen(x)
-  const gen = x => Array.isArray(x) && x[0].type?.types?.at(-1)?.fails ? ((ret, a) => (
-      a.map(([id, y]) => lines.push(`${id} = ${c}`)),
-      lines.push(`${ret}, __err := ${genhead(x[0])}(${a.map(z => z[0])})`),
-      ret
-    ))(newid(), x.slice(1).map(y => [newid(), y])) :
-    genexp(x)
-  const errinfo = x => Array.isArray(x) ? errinfo(x[0]) : [JSON.stringify(x.filename), x.lineno, x.column]
-  const genexp = x => !Array.isArray(x) ? x.code :
-    x[0].code === "do"     ? x.slice(1).map(gen).join("\n") :
-    x[0].code === "for"    ? (lines.push(genfor(x.slice(1).map(gen))), "") :
-    x[0].code === "each"   ? (lines.push(`for _, ${x[1].code} := range ${gen(x[2])} { ${gen(x[3])} }`), "") :
-    x[0].code === "while"  ? (lines.push(`for ${gen(x[1])} { ${gen(x[2])} }`), "") :
-    x[0].code === "let"    ? genlet(x[1].code, x[2]) :
-    x[0].code === "return" ? `__ret = ${gen(x[1])}; return` :
+  const gen = (target, {id, _update, nocheck}={}) => {
+    const a = [_gen(target, id)].flatMap(x => x)
+    const last = a.at(-1)
+    const isdeclare = id && last && id !== last
+    const update = id === "__ret" || id !== last && declared.has(id)
+    if (id) {
+      declared.add(id)
+    }
+    return a.slice(0, -1).concat(
+      !last ? [] :
+      id === last ? [] :
+      [Array.isArray(target) && target[0].type?.types?.at(-1)?.fails ?
+        ((id ? `${id}, __err ${update ? "=" : ":="} ${last}` : `__err ${update ? "=" : ":="} ${last}`) + (nocheck ? "" : "\nif __err != nil { return }")) :
+        (id ? `${id} ${update ? "=" : ":="} ${last}` : last)]
+    ).join("\n")
+  }
+  const isfailable = x => x.fails || x?.[0]?.fails || x?.[0]?.type?.types.find(y => isfailable(y))
+  const _gen = (x, xid) => !Array.isArray(x) ? x.code :
+    x[0].code === "do"     ? x.slice(1).map(gen) :
+    x[0].code === "for"    ? genfor(x.slice(1).map(gen)) :
+    x[0].code === "each"   ? `for _, ${x[1].code} := range ${gen(x[2])} { ${gen(x[3])} }` :
+    x[0].code === "while"  ? `for ${gen(x[1])} { ${gen(x[2])} }` :
+    x[0].code === "let"    ? genlet(x[2], x[1].code) :
+    x[0].code === "return" ? [gen(x[1], {id: "__ret", update: true}) + "; return", false] :
     x[0].code === "throw"  ? `__err = MoaError{${gen(x[1])}, ${errinfo(x[1])}}; return` :
-    x[0].code === "catch"  ? !x[1].type.fails ? gen(x[1]) : (exp => (lines.push("__catch_err := __err; __err = nil"), `__catch[${gentype(x[1].type)}](${exp}, __catch_err, ${gen(x[2])})`))(gen(x[1])) :
+    x[0].code === "catch"  ? !isfailable(x[1]) ? _gen(x[1], xid) : (id => [
+      gen(x[1], {id, nocheck:true}),
+      `${id}_err := __err`,
+      `__err = nil`,
+      `__catch[${gentype(x[1].type)}](${id}, ${id}_err, ${gen(x[2])})`
+    ])(xid || newid()) :
     x[0].code === "async"  ? `go func() { ${gen(x[1])} }()` :
     x[0].code === "if"     ? `if ${gen(x[1])} { ${gen(x[2])} }${genif(x.slice(3))}` :
-    x[0].code === "iif"    ? (id => (lines.push(`var ${id} ${gentype(x[2].type)}; ${geniif(id, x.slice(1))}`), id))(newid()) :
+    x[0].code === "iif"    ? (id => [
+      `var ${declared.add(id), id} ${gentype(x[2].type)}`,
+      geniif(id, x.slice(1)),
+      id
+    ])(xid || newid()) :
     x[0].code === "struct" ? (defs.push(`type ${x[1].code} ${genstruct(x[2], x.type.types.at(-1))}`), "") :
     x[0].code === "fn"     ? `${genfunc(x.type)} { ${genreturn(x.at(-1))} }` :
     x[0].code === "tuple"  ? `__tuple${x.length - 1}[${x.slice(1).map(node => gentype(node.type))}]{ ${x.slice(1).map(gen)} }` :
@@ -463,12 +482,11 @@ const generate = root => {
     x[0].code === "." && x[1]?.type?.name === "tuple" ? `${gen(x[1])}.v${x[2].code}` :
     x[0].code === "." && x[1]?.type?.name === "error" && x[2].code === "message" ? `${gen(x[1])}.Error()` :
     /[+\-*/%^<>!=|&.]/.test(x[0].code) ? genop(x[0].code, x.slice(1)) :
-    genhead(x[0]) + "(" + x.slice(1).map(gen).join(", ") + ")"
-  const exps = root.map(gen)
+    (ids => x.slice(1).map((y, i) => gen(y, {id: ids[i]})).concat(genhead(x[0]) + "(" + ids + ")"))(range(x.length - 1).map(newid))
+  const body = root.map(gen).join("\n")
   return {
     def: defs.join("\n"),
-    body: lines.concat(exps.slice(0, -1)).join("\n"),
-    exp: exps.at(-1)
+    body,
   }
 }
 
@@ -488,7 +506,6 @@ const execGo = (cmd) => {
     }
   }()
   ${x.body}
-  ${x.exp}
 }`
   fs.writeFileSync("/tmp/a.go", go)
   execSync(`go ${cmd} /tmp/a.go`, {stdio: "inherit"})
