@@ -148,6 +148,7 @@ const infer = root => {
   const marks = (t, mark) => !mark ? t : mark.includes("*") ? ({...newvec(t), mark}) : ({...t, mark})
   const property = (t, name) => (t.props ||= {}, t.props[name] = newvar())
 
+  const faketoken = (s, type) => ({...newtoken(s, "buildin"), type})
   const prune = x => x.instance ? x.instance = prune(x.instance) : x
   const tvoid = newtype("struct{}")
   const tbool = newtype("bool")
@@ -155,8 +156,17 @@ const infer = root => {
   const tfloat = newtype("float64")
   const tstring = newtype("string")
   const terror = newtype("error")
+  const tbytes = newtype("bytes")
   const trequest = newtype("__request")
   const tresponse = newtype("__response")
+  const tresponseinit = {...newnew([
+    faketoken("status", tint),
+    faketoken("headers", newmap(tstring, newvec(tstring))),
+    faketoken("blob", tbytes),
+    faketoken("json", tbytes),
+    faketoken("html", tstring),
+    faketoken("text", tstring),
+  ]), struct: "__responseinit"}
   const tio = newtype("io")
   const tv1 = newvar()
   const tv2 = newvar()
@@ -184,9 +194,8 @@ const infer = root => {
     t.name === "error" && field === "message" ? tstring :
     t.name === "io" && field === "sleep" ? newfn([tfloat, tvoid]) :
     t.name === "io" && field === "put" ? newfn([newvar(), tint]) :
-    t.name === "io" && field === "serve" ? newfn([tstring, newfn([trequest, tresponse]), tvoid]) :
+    t.name === "io" && field === "serve" ? newfn([tstring, newfn([trequest, tresponseinit]), tvoid]) :
     t.name === "io" && field === "fetch" ? newfn([tstring, tresponse]) :
-    t.name === "__request" && field === "respond" ? newfn([tint, newmap(tstring, newvec(tstring)), tstring, tresponse]) :
     t.name === "__response" && field === "text" ? newfn([tstring]) :
     t.fields?.find(f => f.code === field).type ||
     (() => { throw new TypeError(`No '${field}' in '${t.name}${t.types.length ? `[${t.types}]` : ""}' type`) })()
@@ -207,6 +216,17 @@ const infer = root => {
     } else if (b.var) {
       unify(b, a)
     } else {
+      if (b.struct && !a.struct) {
+        [a, b] = [b, a]
+      }
+      if (a.struct && !b.struct && b.fields) {
+        a.fields || log(a)
+        if (!b.fields.every(bf => a.fields.find(af => bf.code === af.code && (unify(bf.type, af.type), true)))) {
+          throw new TypeError(`Struct ${a.struct}(${JSON.stringify(a.fields)}) != ${JSON.stringify(b.fields)}`)
+        }
+        b.instance = a
+        return
+      }
       if (a.name !== b.name) {
         throw new TypeError(`Type name ${a.name} != ${b.name}`)
       }
@@ -214,15 +234,6 @@ const infer = root => {
         throw new TypeError(`Type args ${JSON.stringify(a.types)} != ${JSON.stringify(b.types)}`)
       }
       a.types.map((x, i) => unify(x, b.types[i]))
-      if (a.struct && b.struct) {
-        if (a.name !== b.name) {
-          throw new TypeError(`Struct ${a.name} != ${b.name}`)
-        }
-      } else if (a.struct) {
-        b.instance = a
-      } else if (b.struct) {
-        a.instance = b
-      }
     }
   }
   const safeUnify = (a, b) => {
@@ -403,14 +414,19 @@ const generate = root => {
     defs.push(ret.def)
     return x[0]?.code === "do" ? ret.body : `return ${ret.body}`
   }
-  const gengeneric = t => t.types.length === 0 ? (t.var ? "__" : "") + t.name : gentype(t)
-  const gentype = t => t.types.length === 0 ? (t.var ? "any" : t.name) :
+  const gengeneric = t => t.types.length === 0 && t.var ? "__" + t.name : gentype(t)
+  const gentype = t =>
+    t.name === "bytes" ? "[]byte" :
+    t.types.length === 0 ? (t.var ? "any" : t.name) :
     t.name === "tuple" ? `__${t.name}${t.types.length}[${t.types.map(gentype)}]` :
-    t.name.startsWith("new__") ? genstruct([], t) :
+    t.name.startsWith("new__") ? gennew([], t) :
     t.name === "vec" ? "[]" + gentype(t.types[0]) :
     t.name === "map" ? "map[" + gentype(t.types[0]) + "]" + gentype(t.types[1]) :
     `${t.name}[${t.types.map(gentype)}]`
   const genstruct = (a, t) => (a.length ? `[${a.map(u => gengeneric(u.type) + " any")}] ` : "") + `struct { ${t.fields.map(f => `${f.code} ${gengeneric(f.type)}`).join("\n")} }`
+  const gennew = (a, t) =>
+    t.struct ? t.struct + (a.length ? `[${a.map(u => gengeneric(u.type) + " any")}] ` : "") :
+    genstruct(a, t)
   const genfunc = (x, t, name="") => `func ${name}(${x.slice(1, -1).map(y => `${y.code} ${gentype(y.type)}`)}) ${gentype(x.type.types.at(-1))}`
   const genfor = ([a, b, c, d, e]) => `for ${a} := ${b}; ${a} < ${c}; ${a} += ${d} { ${e} }`
   const genlet = (body, id) => body[0]?.code === "fn" ?
@@ -453,7 +469,7 @@ const generate = root => {
     x[0].code === "struct" ? (defs.push(`type ${x[1].code} ${genstruct(x[2], x.type.types.at(-1))}`), "") :
     x[0].code === "fn"     ? `${genfunc(x)} { ${genreturn(x.at(-1))} }` :
     x[0].code === "tuple"  ? `__tuple${x.length - 1}[${x.slice(1).map(node => gentype(node.type))}]{ ${x.slice(1).map(gen)} }` :
-    x[0].code === "new"    ? `${genstruct([], x.type)}{${range((x.length-1)/2).map(i => gen(x[i*2+2]))}}` :
+    x[0].code === "new"    ? `${gennew([], x.type)}{${range((x.length-1)/2).map(i => x[i*2+1].code + ":" + gen(x[i*2+2]))}}` :
     x[0].code === "vec"    ? `[]${gentype(x.type.types[0])}{ ${x.slice(1).map(gen)} }` :
     x[0].code === "map"    ? `map[${gentype(x.type.types[0])}]${gentype(x.type.types[1])}{ ${range((x.length-1)/2).map(i => `${gen(x[i*2+1])}: ${gen(x[i*2+2])}`)} }` :
     x[0].code === "set"    ? `map[${gentype(x.type.types[0])}]struct{}{ ${x.slice(1).map(n => `${gen(n)}: struct{}{}`)} }` :

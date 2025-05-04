@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 )
 
@@ -40,10 +39,6 @@ type __response struct {
 	body    io.ReadCloser
 }
 
-func (_ __request) respond(status int, headers map[string][]string, text string) __response {
-	return __response{status, headers, io.NopCloser(strings.NewReader(text))}
-}
-
 func (r __response) text() string {
 	b, err := io.ReadAll(r.body)
 	if err != nil {
@@ -54,6 +49,15 @@ func (r __response) text() string {
 		panic(err)
 	}
 	return string(b)
+}
+
+type __responseinit struct {
+	status  int
+	headers map[string][]string
+	blob    []byte
+	json    []byte
+	html    string
+	text    string
 }
 
 func (e MoaError) Error() string {
@@ -81,24 +85,35 @@ func __io_log[T any](x T) T {
 	fmt.Fprintln(os.Stderr, x)
 	return x
 }
-func __io_serve(listen string, f func(__request) __response) {
+func __io_serve(listen string, f func(__request) __responseinit) {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		o := f(__request{})
+		if o.status == 0 {
+			o.status = 200
+		}
 		w.WriteHeader(o.status)
 		h := w.Header()
+		var err error
+		if o.blob != nil {
+			h.Set("content-type", "application/octet-stream")
+			_, err = w.Write(o.blob)
+		} else if o.json != nil {
+			h.Set("content-type", "application/json; charset=utf-8")
+			_, err = w.Write(o.json)
+		} else if len(o.html) > 0 {
+			h.Set("content-type", "text/html; charset=utf-8")
+			_, err = w.Write([]byte(o.html))
+		} else {
+			h.Set("content-type", "text/plain; charset=utf-8")
+			_, err = w.Write([]byte(o.text))
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+		}
 		for k, v := range o.headers {
 			for _, s := range v {
 				h.Add(k, s)
 			}
-		}
-		_, err := io.Copy(w, o.body)
-		if err != nil {
-			o.body.Close()
-			fmt.Fprintln(os.Stderr, err)
-		}
-		err = o.body.Close()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
 		}
 	})
 	err := http.ListenAndServe(listen, nil)

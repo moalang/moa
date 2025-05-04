@@ -131,6 +131,7 @@ const testInfer = param => {
   test("vec[a]", "(struct a () b int) (vec (a 1))")
   test("vec[a]", "(struct a () b int) (vec (a 1) (new b 2))")
   test("vec[a]", "(struct a () b int) (vec (new b 1) (a 2))")
+  test("vec[a]", "(struct a () b int c int) (vec (new b 1) (a 2 3))")
 
   // container
   test("vec[1]", "(vec)")
@@ -278,7 +279,7 @@ const testGenerate = param => {
 
   // IO
   test("hi", '""', '((. io put) "hi")')
-  test("hi", '((. ((. io fetch) "http://localhost:8888") text))', '(async ((. io serve) ":8888" (fn req ((. req respond) 200 (map "content-type" (vec "text/plain")) "hi")))) ((. io sleep) 1.0)')
+  test("hi", '((. ((. io fetch) "http://localhost:8888") text))', '(async ((. io serve) ":8888" (fn req (new text "hi")))) ((. io sleep) 1.0)')
 }
 
 module.exports.test = param => {
