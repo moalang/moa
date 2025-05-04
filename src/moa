@@ -155,7 +155,7 @@ const infer = root => {
     "return": newfn([tv1, tv1]),
     "if": newfn([newvargs([tbool, tv1]), marks(tv1, "?"), tvoid]),
     "iif": newfn([newvargs([tbool, tv1]), tv1, tv1]),
-    "throw": newfn([tv1, newvar()]),
+    "throw": newfn([tv1, tv1]),
     "catch": newfn([tv1, newfn([terror, tv1]), tv1]),
     "while": newfn([tbool, tv1, tvoid]),
     "bool": tbool,
@@ -163,7 +163,7 @@ const infer = root => {
     "float": tfloat,
     "string": tstring,
     "io": tio,
-    "async": newfn([newvar(), tvoid]),
+    "async": newfn([tv1, tvoid]),
     "continue": tvoid,
     "break": tvoid,
   }
@@ -173,7 +173,7 @@ const infer = root => {
     t.name === "tuple" && field < t.types.length ? t.types[field] :
     t.name === "error" && field === "message" ? tstring :
     t.name === "io" && field === "sleep" ? newfn([tfloat, tvoid]) :
-    t.name === "io" && field === "put" ? newfn([tv1, tint]) :
+    t.name === "io" && field === "put" ? newfn([newvar(), tint]) :
     t.name === "io" && field === "serve" ? newfn([tstring, newfn([trequest, tresponse]), tvoid]) :
     t.name === "io" && field === "fetch" ? newfn([tstring, tresponse]) :
     t.name === "__request" && field === "respond" ? newfn([tint, newmap(tstring, newvec(tstring)), tstring, tresponse]) :
@@ -345,7 +345,7 @@ const infer = root => {
           (() => { throw new Error(`Type literal '${s}'`) })()
       }
     }
-    const same = a => a.length == 0 ? tv1 : (([x, ...ts]) => (ts.map(t => unify(t, x)), x))(a.map(inf))
+    const same = a => a.length == 0 ? newvar() : (([x, ...ts]) => (ts.map(t => unify(t, x)), x))(a.map(inf))
     return inf(top)
   }
   const safeJson = o => {
