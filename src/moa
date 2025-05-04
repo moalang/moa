@@ -127,7 +127,7 @@ const infer = root => {
   let varId = 0
   const newtype = (name, types=[]) => ({name, types})
   const newvar = () => ({...newtype(varId++), var: true})
-  const newfn = (types, names, ret) => ({...newtype("fn", types), names, ret})
+  const newfn = (types) => newtype("fn", types)
   const newstruct = types => ({...newfn(types), struct: true})
   const newtuple = types => newtype("tuple", types)
   const newnew = fields => ({...newtype("new", fields.map(a => a.type)), fields})
@@ -256,7 +256,7 @@ const infer = root => {
       const u = prune(t)
       return u.var ?
         (nonGeneric.includes(u.name) ? u : d[u.name] ||= newvar()) :
-        (v => (type.generics.push(v.types), v))({...u, types: u.types.map(rec)})
+        (v => (v.types.length && type.generics.push(v.types), v))({...u, types: u.types.map(rec)})
     }
     type.generics ||= []
     return rec(type)
@@ -395,7 +395,7 @@ const generate = root => {
     t.name === "map" ? "map[" + gentype(t.types[0]) + "]" + gentype(t.types[1]) :
     `${t.name}[${t.types.map(gentype)}]`
   const genstruct = (a, t) => (a.length ? `[${a.map(u => gentype(u.type) + " any")}] ` : "") + `struct { ${t.fields.map(f => `${f.code} ${gentype(f.type)}`).join("\n")} }`
-  const genfunc = (t, name="") => `func ${name}(${t.names.map(a => `${a.code} ${gentype(a.type)}`)}) ${gentype(t.ret.type)}`
+  const genfunc = (x, t, name="") => `func ${name}(${x.slice(1, -1).map(y => `${y.code} ${gentype(y.type)}`)}) ${gentype(x.type.types.at(-1))}`
   const geniif = a => a.length === 1 ? `{ return ${gen(a[0])} }` :
     `if ${gen(a[0])} { return ${gen(a[1])} } else ${geniif(a.slice(2))}`
   const genif = a =>
@@ -408,13 +408,11 @@ const generate = root => {
     c ? `for ${a} := 0; ${a} < ${b}; ${a}++ { ${c} }` :
     (() => {throw new Error(`genfor ${a}, ${b}, ${c}, ${d}, ${e}`)})()
   const genlet = (body, id) => {
-    if (body[0]?.code === "fn" && body.type.types.find(x => x.var) && body.type.generics.length) {
+    if (body[0]?.code === "fn") {
       return body.type.generics.map(a => {
         const x = structuredClone(body)
         x.type = {...x.type, types: a}
         x.slice(1, -1).map((arg, i) => arg.type = a[i])
-        x.type.names.map((arg, i) => arg.type = a[i])
-        x.type.ret.type = a.at(-1)
         return `${id}__${a.map(gentype).join("__")} := ${gen(x)}`
       }).join("\n")
     } else {
@@ -422,8 +420,9 @@ const generate = root => {
     }
   }
   const errinfo = x => Array.isArray(x) ? errinfo(x[0]) : [JSON.stringify(x.filename), x.lineno, x.column]
-  const genhead = x => x.type.name === "fn" && x.type.names?.find(y => y.type.var) && x.type.generics?.length ?
-    `${gen(x)}__${x.type.types.map(gentype).join("__")}` : gen(x)
+  const genhead = x => x.type.name === "fn" && x.type.generics?.length ?
+    `${gen(x)}__${x.type.types.map(gentype).join("__")}` :
+    gen(x)
   const gen = x => !Array.isArray(x) ? x.code :
     x[0].code === "do"     ? x.slice(1).map(gen).join("\n") :
     x[0].code === "for"    ? genfor(x.slice(1).map(gen)) :
@@ -450,7 +449,7 @@ const generate = root => {
     x[0].code === "if"     ? `if ${gen(x[1])} { ${gen(x[2])} }${genif(x.slice(3))}` :
     x[0].code === "iif"    ? `func () ${gentype(x[2].type)} { ${geniif(x.slice(1)) } }()` :
     x[0].code === "struct" ? (defs.push(`type ${x[1].code} ${genstruct(x[2], x.type.types.at(-1))}`), "") :
-    x[0].code === "fn"     ? `${genfunc(x.type)} { ${genreturn(x.at(-1))} }` :
+    x[0].code === "fn"     ? `${genfunc(x)} { ${genreturn(x.at(-1))} }` :
     x[0].code === "tuple"  ? `__tuple${x.length - 1}[${x.slice(1).map(node => gentype(node.type))}]{ ${x.slice(1).map(gen)} }` :
     x[0].code === "new"    ? `${genstruct([], x.type)}{${range((x.length-1)/2).map(i => gen(x[i*2+2]))}}` :
     x[0].code === "vec"    ? `[]${gentype(x.type.types[0])}{ ${x.slice(1).map(gen)} }` :
