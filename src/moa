@@ -138,9 +138,9 @@ const infer = root => {
   const newtype = (name, types=[]) => ({name, types})
   const newvar = () => ({...newtype(varId++), var: true})
   const newfn = (types) => newtype("fn", types)
-  const newstruct = types => ({...newfn(types), struct: true})
+  const newstruct = (name, types) => ({...newfn(types.slice(0, -1).concat([{...types.at(-1), struct: name}])), struct: name})
   const newtuple = types => newtype("tuple", types)
-  const newnew = fields => ({...newtype("new", fields.map(a => a.type)), fields})
+  const newnew = fields => ({...newtype("new" + fields.map(a => "__" + a.code).join(""), fields.map(a => a.type)), fields})
   const newvec = t => newtype("vec", [t])
   const newset = t => newtype("set", [t])
   const newmap = (k, v) => newtype("map", [k, v])
@@ -214,6 +214,15 @@ const infer = root => {
         throw new TypeError(`Type args ${JSON.stringify(a.types)} != ${JSON.stringify(b.types)}`)
       }
       a.types.map((x, i) => unify(x, b.types[i]))
+      if (a.struct && b.struct) {
+        if (a.name !== b.name) {
+          throw new TypeError(`Struct ${a.name} != ${b.name}`)
+        }
+      } else if (a.struct) {
+        b.instance = a
+      } else if (b.struct) {
+        a.instance = b
+      }
     }
   }
   const safeUnify = (a, b) => {
@@ -285,7 +294,7 @@ const infer = root => {
             const [t, generics, ...ts] = tail
             const gargs = generics.map((t, i) => [t.code, t.type = newvar()])
             const args = range(ts.length / 2).map(i => (ts[i*2].type = infWith(ts[i*2+1], {...env, ...Object.fromEntries(gargs)}, nonGeneric.concat(gargs.map(a => a[1].name))), ts[i*2]))
-            return env[t.code] = newstruct(args.map(a => a.type).concat(newnew(args)))
+            return env[t.code] = newstruct(t.code, args.map(a => a.type).concat(newnew(args)))
           } else if (s === "fn") {
             const targs = tail.slice(0, -1).map(_ => newvar())
             const args = tail.slice(0, -1).map((t, i) => [t.code, t.type = marks(targs[i], t.mark)])
@@ -397,7 +406,7 @@ const generate = root => {
   const gengeneric = t => t.types.length === 0 ? (t.var ? "__" : "") + t.name : gentype(t)
   const gentype = t => t.types.length === 0 ? (t.var ? "any" : t.name) :
     t.name === "tuple" ? `__${t.name}${t.types.length}[${t.types.map(gentype)}]` :
-    t.name === "new" ? genstruct([], t) :
+    t.name.startsWith("new__") ? genstruct([], t) :
     t.name === "vec" ? "[]" + gentype(t.types[0]) :
     t.name === "map" ? "map[" + gentype(t.types[0]) + "]" + gentype(t.types[1]) :
     `${t.name}[${t.types.map(gentype)}]`

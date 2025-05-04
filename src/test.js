@@ -66,6 +66,7 @@ const testInfer = param => {
   const showType = type => {
     const show = (t, mark) => t.instance ? show(t.instance, mark) :
       mark && t.mark ? (t.mark.includes("*") ? show(t.types[0]) + "*" : t.name + t.mark) :
+      t.struct ? t.struct :
       t.name === "fn" ? '(' + t.types.map((u, i) => show(u, i < t.types.length - 1)).join(' ') + ')' :
       t.types.length ? t.name + '[' + t.types.map(show).join(' ') + ']' :
       t.name
@@ -123,6 +124,13 @@ const testInfer = param => {
 
   // property
   test("string", '(catch (throw "a") (fn e (. e message)))')
+  test("vec[new__a[int]]", "(vec (new a 2))")
+  test("vec[a]", "(struct a () b int) (vec (a 1))")
+  test("vec[a]", "(struct a () b int) (vec (a 1) (new b 2))")
+  test("vec[new__a[int]]", "(vec (new a 2))")
+  test("vec[a]", "(struct a () b int) (vec (a 1))")
+  test("vec[a]", "(struct a () b int) (vec (a 1) (new b 2))")
+  test("vec[a]", "(struct a () b int) (vec (new b 1) (a 2))")
 
   // container
   test("vec[1]", "(vec)")
@@ -163,6 +171,7 @@ const testInfer = param => {
   reject("(iif 1 2 3)")
   reject("(iif true 2 false)")
   reject("((fn e (. e message)) 1)")
+  reject("(struct a () b int) (vec (a 1) (new c 2))")
 }
 
 const testGenerate = param => {
@@ -238,7 +247,7 @@ const testGenerate = param => {
   test("{1 true}", "(a 1 true)", "(struct a () b int c bool)")
   test("1", "(. (a 1) b)", "(struct a () b int)")
   test("false", "(. (a 1 false) c)", "(struct a () b int c bool)")
-  test("1", "((fn c (. c b)) (a 1))", "(struct a () b int)")
+  test("[{1} {2}]", "(vec (a 1) (new b 2))", "(struct a () b int)")
 
   // Throw / Catch
   test("a at test.moa:1:17", "(f)", '(let f (fn (do (throw "a") (return "b"))))')
