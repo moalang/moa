@@ -46,13 +46,7 @@ const sugar = (program, filename="") => {
   }
   const compose = tokens => {
     let pos = 0
-    const until = (f, g=bottom) => {
-      const a = []
-      while (pos < tokens.length && f(tokens[pos])) {
-        a.push(g())
-      }
-      return a
-    }
+    const until = (f, g=bottom) => [...function*() { while (pos < tokens.length && f(tokens[pos])) { yield g() } }()]
     const faketoken = (s, t) => newtoken(s, filename, t.lineno, t.column)
     const isexp = x => !Array.isArray(x) || x[0].code !== "do"
     const untilby = by => (t => (pos++, t))(until(t => t.code !== by))
@@ -61,14 +55,8 @@ const sugar = (program, filename="") => {
       const comma = a => pos >= tokens.length ? a :
         tokens[pos].code === "," ? (pos++, comma(a.concat([tokens[pos++]]))) : a
       const addreturn = x => isexp(x) ? x : [...x.slice(0, -1), [faketoken("return", totoken(x)), x.at(-1)]]
-      const block = t => {
-        if (t.lineno === tokens[pos].lineno) {
-          return line()
-        } else {
-          const a = until(u => u.indent > t.indent, line)
-          return a.length === 1 ? a[0] : [faketoken("do", t), ...a]
-        }
-      }
+      const block = t => t.lineno === tokens[pos].lineno ? line() :
+        squash(until(u => u.indent > t.indent, line), a => [faketoken("do", t), ...a])
       const link = t =>
         pos >= tokens.length ? t :
         tokens[pos].code === "."  ? link([tokens[pos++], t, tokens[pos++]]) :
@@ -86,7 +74,7 @@ const sugar = (program, filename="") => {
     }
     const line = () => (t => squash(variadic(until(u => t.lineno === u.lineno))))(tokens[pos])
     const top = () => squash(until(_ => true, line))
-    const squash = a => a.length === 1 ? a[0] : a
+    const squash = (a, f=x=>x) => a.length === 1 ? a[0] : f(a)
     const variadic = ([head, ...a]) => {
       const fail = x => { throw new Error(`never reach bug '${JSON.stringify(x)}'`) }
       const vop = (op, a) => [op, a[0], a.length === 2 ? a[1] : vop(op, a.slice(1))]
