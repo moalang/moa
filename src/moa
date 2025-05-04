@@ -305,7 +305,7 @@ const infer = root => {
           } else if (s === "map") {
             const keys = range(tail.length / 2).map(i => inf(tail[i*2]))
             const values = range(tail.length / 2).map(i => inf(tail[i*2+1]))
-            return newmap(keys[0], values[0])
+            return newmap(keys[0] || newvar(), values[0] || newvar())
           } else if ("+-*/%^=<>!".includes(s[0])) {
             const t = same(tail.map(inf))
             return "== != < > >= <=".split(" ").includes(s) ? tbool : t
@@ -394,13 +394,14 @@ const generate = root => {
     defs.push(ret.def)
     return x[0]?.code === "do" ? ret.body : `return ${ret.body}`
   }
-  const gentype = t => t.types.length === 0 ? (t.var ? "__" : "") + t.name :
+  const gengeneric = t => t.types.length === 0 ? (t.var ? "__" : "") + t.name : gentype(t)
+  const gentype = t => t.types.length === 0 ? (t.var ? "any" : t.name) :
     t.name === "tuple" ? `__${t.name}${t.types.length}[${t.types.map(gentype)}]` :
     t.name === "new" ? genstruct([], t) :
     t.name === "vec" ? "[]" + gentype(t.types[0]) :
     t.name === "map" ? "map[" + gentype(t.types[0]) + "]" + gentype(t.types[1]) :
     `${t.name}[${t.types.map(gentype)}]`
-  const genstruct = (a, t) => (a.length ? `[${a.map(u => gentype(u.type) + " any")}] ` : "") + `struct { ${t.fields.map(f => `${f.code} ${gentype(f.type)}`).join("\n")} }`
+  const genstruct = (a, t) => (a.length ? `[${a.map(u => gengeneric(u.type) + " any")}] ` : "") + `struct { ${t.fields.map(f => `${f.code} ${gengeneric(f.type)}`).join("\n")} }`
   const genfunc = (x, t, name="") => `func ${name}(${x.slice(1, -1).map(y => `${y.code} ${gentype(y.type)}`)}) ${gentype(x.type.types.at(-1))}`
   const genfor = ([a, b, c, d, e]) => `for ${a} := ${b}; ${a} < ${c}; ${a} += ${d} { ${e} }`
   const genlet = (body, id) => body[0]?.code === "fn" ?
@@ -445,8 +446,8 @@ const generate = root => {
     x[0].code === "tuple"  ? `__tuple${x.length - 1}[${x.slice(1).map(node => gentype(node.type))}]{ ${x.slice(1).map(gen)} }` :
     x[0].code === "new"    ? `${genstruct([], x.type)}{${range((x.length-1)/2).map(i => gen(x[i*2+2]))}}` :
     x[0].code === "vec"    ? `[]${gentype(x.type.types[0])}{ ${x.slice(1).map(gen)} }` :
-    x[0].code === "map"    ? `map[${gentype(x[1].type)}]${gentype(x[2].type)}{ ${range((x.length-1)/2).map(i => `${gen(x[i*2+1])}: ${gen(x[i*2+2])}`)} }` :
-    x[0].code === "set"    ? `map[${gentype(x[1].type)}]struct{}{ ${x.slice(1).map(n => `${gen(n)}: struct{}{}`)} }` :
+    x[0].code === "map"    ? `map[${gentype(x.type.types[0])}]${gentype(x.type.types[1])}{ ${range((x.length-1)/2).map(i => `${gen(x[i*2+1])}: ${gen(x[i*2+2])}`)} }` :
+    x[0].code === "set"    ? `map[${gentype(x.type.types[0])}]struct{}{ ${x.slice(1).map(n => `${gen(n)}: struct{}{}`)} }` :
     x[0].type?.struct      ? gen(x[0]) + (x[0].type.types.at(-1).types.find(t => t.var) ? `[${x[0].type.types.slice(0, -1).map(gentype)}]` : "")+ "{" + x.slice(1).map(gen).join(", ") + "}" :
     x[0].code === "." && x[1].code === "io" ? `__io_${x[2].code}` :
     x[0].code === "." && x[1]?.type?.name === "tuple" ? `${gen(x[1])}.v${x[2].code}` :
