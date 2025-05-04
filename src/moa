@@ -34,12 +34,11 @@ const sugar = (program, filename="") => {
         const op = /^[+\-*/%|&<>=!]+$/.test(code) && code !== "=>"
         const lc = pos > 0 ? program[pos - 1] : ''
         const rc = program[pos + code.length]
-        const dot = code === "." && lc !== " " && rc !== " "
         const op1 = op && /[A-Za-z0-9_\]]/.test(rc)
         const op2 = op && !op1
         const call = code === "(" && /[A-Za-z0-9_\]]/.test(lc)
         const index = code === "[" && /[A-Za-z0-9_\]]/.test(lc)
-        yield {code, lineno, op, op1, op2, dot, call, index, indent, filename, lineno, column}
+        yield {code, lineno, op, op1, op2, call, index, indent, filename, lineno, column}
       }
       pos += code.length
       column = code.includes("\n") ? code.split(/\n/).at(-1).length : column + code.length
@@ -72,10 +71,11 @@ const sugar = (program, filename="") => {
       }
       const link = t =>
         pos >= tokens.length ? t :
+        tokens[pos].code === "."  ? link([tokens[pos++], t, tokens[pos++]]) :
         tokens[pos].code === ","  ? link(comma([t])) :
         tokens[pos].code === "=>" ? (pos++, link([faketoken("fn", tokens[pos-1]), ...(Array.isArray(t) ? t : [t]), addreturn(block(tokens[pos-1]))])) :
         tokens[pos].call          ? (pos++, link([t].concat(untilby(")")))) :
-        tokens[pos].dot           ? link([tokens[pos++], t, tokens[pos++]]) :
+        tokens[pos].index         ? (pos++, link([[faketoken(".", t), t, faketoken("at", t)]].concat([squash(variadic(untilby("]")))]))) :
         tokens[pos].op2           ? link([tokens[pos++], t, bottom()]) :
         t
       const t = tokens[pos++]
