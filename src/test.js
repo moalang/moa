@@ -277,11 +277,12 @@ ${src.trim()}
   }()
   ${x.body}
 }\n`
-      if (go in cache) {
-        return cache[go]
+      const key = x.def + x.body
+      if (key in cache) {
+        return cache[key]
       }
       fs.writeFileSync("/tmp/moa_test_exp.go", go)
-      return cache[go] = execSync("go run /tmp/moa_test_exp.go").toString()
+      return cache[key] = execSync("go run /tmp/moa_test_exp.go").toString()
     }
     testGenerate(param)
   } catch (e) {
