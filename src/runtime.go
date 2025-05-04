@@ -43,16 +43,16 @@ func (_ __request) respond(status int, headers map[string][]string, text string)
 	return __response{status, headers, io.NopCloser(strings.NewReader(text))}
 }
 
-func (r __response) text() (string, error) {
+func (r __response) text() string {
 	b, err := io.ReadAll(r.body)
 	if err != nil {
-		return "", err
+		panic(err)
 	}
 	err = r.body.Close()
 	if err != nil {
-		return "", err
+		panic(err)
 	}
-	return string(b), nil
+	return string(b)
 }
 
 func (e MoaError) Error() string {
@@ -70,7 +70,6 @@ func __io_put(a ...any) int {
 	return n
 }
 func __io_serve(listen string, f func(__request) __response) {
-	// TODO: error handling
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		o := f(__request{})
 		w.WriteHeader(o.status)
@@ -96,8 +95,6 @@ func __io_serve(listen string, f func(__request) __response) {
 	}
 }
 func __io_fetch(url string) __response {
-	// TODO: process error
-	// TODO: process binary which is not string
 	r, err := http.Get(url)
 	if err != nil {
 		panic(err)
@@ -106,13 +103,5 @@ func __io_fetch(url string) __response {
 		r.StatusCode,
 		r.Header,
 		r.Body,
-	}
-}
-
-func __catch[T any](v T, err error, f func(error) T) T {
-	if err != nil {
-		return f(err)
-	} else {
-		return v
 	}
 }

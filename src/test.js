@@ -189,7 +189,6 @@ const testGenerate = param => {
   test("false", "(> 1 1)")
   test("true", "(<= 1 1)")
   test("true", "(>= 1 1)")
-  test("6", "(+ 1 2 3)")
 
   // Method
   test("1", "(. (tuple 1) 0)")
@@ -251,7 +250,7 @@ const testGenerate = param => {
 
   // IO
   test("hi", '""', '((. io put) "hi")')
-  //test("hi", '((. ((. io fetch) "http://localhost:8888") text))', '(async ((. io serve) ":8888" (fn req ((. req respond) 200 (map "content-type" (vec "text/plain")) "hi")))) ((. io sleep) 1.0)')
+  test("hi", '((. ((. io fetch) "http://localhost:8888") text))', '(async ((. io serve) ":8888" (fn req ((. req respond) 200 (map "content-type" (vec "text/plain")) "hi")))) ((. io sleep) 1.0)')
 }
 
 module.exports.test = param => {
@@ -268,10 +267,12 @@ module.exports.test = param => {
 /*
 ${src.trim()}
 */
-  var __err error
   defer func() {
-    if __err != nil {
-      fmt.Print(__err.Error())
+    r := recover()
+    if r != nil {
+      if e, ok := r.(MoaError); ok {
+        fmt.Print(e.Error())
+      }
     }
   }()
   ${x.body}
