@@ -64,8 +64,7 @@ const testInfer = param => {
     const show = (t, mark) => t.instance ? show(t.instance, mark) :
       mark && t.mark ? (t.mark.includes("*") ? show(t.types[0]) + "*" : t.name + t.mark) :
       t.name === "fn" ? '(' + t.types.map((u, i) => show(u, i < t.types.length - 1)).join(' ') + ')' :
-      t.name && t.types.length ? t.name + '[' + t.types.map(show).join(' ') + ']' :
-      t.types.length ? '(' + t.types.map(show).join(' ') + ')' :
+      t.types.length ? t.name + '[' + t.types.map(show).join(' ') + ']' :
       t.name
     const s = show(type)
     const o = {}
