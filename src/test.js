@@ -5,7 +5,7 @@ const log = x => { console.dir(x, {depth: null}); return x }
 const testSugar = param => {
   const show = o => Array.isArray(o) ? `(${o.map(show).join(" ")})` : o.code
   const test = (expect, src) => {
-    const actual = show(param.sugar(src, "test.moa"))
+    const actual = show(param.sugar(src, "test.moa")[0])
     if (actual !== expect) {
       console.error(`${expect} != ${actual}\n${src}`)
       throw new Error(src)
@@ -33,6 +33,7 @@ const testSugar = param => {
 
   // combination
   test("((. a b) (fn c d))", "a.b c => d")
+  test("((. a b) c (fn d (. e f)))", "a.b c d => e.f")
   test("(+ (. a b) c)", "a.b + c")
   test("(+ a (. b c))", "a + b.c")
   test("(a (b c))", "a:\n  b:\n    c")
@@ -184,7 +185,7 @@ const testInfer = param => {
 const testGenerate = param => {
   const test = (expected, exp, define="") => {
     const src = define + "\n((. io put) " + exp + ")"
-    const go = param.compile(src, "test.moa")
+    const go = param.generate(param.infer(param.parse(src, "test.moa")))
     const actual = param.runGo(go, src)
     if (expected !== actual) {
       throw new Error(`'${expected}' != '${actual}'\n# src\n${src}\n# go\n${go.def}\n${go.body}\n${go.exp}`)

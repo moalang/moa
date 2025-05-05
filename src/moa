@@ -73,7 +73,7 @@ const sugar = (program, filename="") => {
              link(t)
     }
     const line = () => (t => squash(variadic(until(u => t.lineno === u.lineno))))(tokens[pos])
-    const top = () => squash(until(_ => true, line))
+    const top = () => until(_ => true, line)
     const squash = (a, f=x=>x) => a.length === 1 ? a[0] : f(a)
     const variadic = ([head, ...a]) => {
       const fail = x => { throw new Error(`never reach bug '${JSON.stringify(x)}'`) }
@@ -503,21 +503,23 @@ const generate = root => {
   }
 }
 
-const compile = (code, filename) => generate(infer(parse(code, filename)))
 
 const execGo = cmd => {
   const fs = require("fs")
   const {execSync} = require("child_process")
   const files = process.argv.length === 3 ? fs.globSync("**/*.moa") : process.argv.slice(3)
   const runtime = fs.readFileSync(__dirname + "/runtime.go", "utf-8")
-  const x = compile(files.map(path => fs.readFileSync(path, "utf-8")).join("\n"))
-  const go = `${runtime}\n${x.def}\nfunc main() { ${x.body} }`
+  const compile = (code, filename) => generate(infer(sugar(code, filename)))
+  const xs = files.map(path => compile(fs.readFileSync(path, "utf-8"), path))
+  const def = xs.map(x => x.def).join("\n")
+  const body = xs.map(x => x.body).join("\n")
+  const go = `${runtime}\n${def}\nfunc main() { ${body} }`
   fs.writeFileSync("/tmp/a.go", go)
   execSync(`go ${cmd} /tmp/a.go`, {stdio: "inherit"})
 }
 
 if (process.argv[2] === "selftest") {
-  process.exit(require("./test.js").test({sugar, parse, infer, compile, TypeError}))
+  process.exit(require("./test.js").test({sugar, parse, infer, generate, TypeError}))
 } else if (process.argv[2] === "build") {
   execGo("build")
 } else if (process.argv[2] === "run") {
