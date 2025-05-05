@@ -3,13 +3,14 @@
 
 // - [x] io.serve
 // - [x] io.fetch
-// - [ ] moa test
+// - [ ] def
 // - [ ] moa repl
 // - [ ] io.db
-// - [ ] io.go.fmt.Println
-// - [ ] integrate Go packages with type definition of Moa
+// - [ ] moa test
 // - [ ] moa env
 // - [ ] package manager for Moa
+// - [ ] io.go.fmt.Println
+// - [ ] integrate Go packages with type definition of Moa
 // - [ ] io.c
 // - [ ] io.js
 
