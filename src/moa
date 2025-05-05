@@ -213,6 +213,7 @@ const infer = root => {
     t.name === "error" && field === "message" ? tstring :
     t.name === "io" && field === "sleep" ? newfn([tfloat, tvoid]) :
     t.name === "io" && field === "put" ? newfn([newvar(), tint]) :
+    t.name === "io" && field === "puts" ? newfn([newvar(), tint]) :
     t.name === "io" && field === "serve" ? newfn([tstring, newfn([trequest, tresponseinit]), tvoid]) :
     t.name === "io" && field === "fetch" ? newfn([tstring, marks(trequestinit, "?"), tresponse]) :
     t.fields?.find(f => f.code === field).type ||
