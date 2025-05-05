@@ -122,6 +122,7 @@ const testInfer = param => {
   test("(1 2 2)", "(fn a b b)")
   test("int", "((fn a a) 1)")
   test("bool", "(let f (fn a a)) (f 1) (f true)")
+  test("bool", "(def f a a) (f 1) (f true)")
 
   // property
   test("(1.text(2) 2)", "(let a (fn b (. b text)))")
@@ -251,6 +252,9 @@ const testGenerate = param => {
   test("1", "(f)", "(let f (fn (do (return 1))))")
   test("1", "(f 1)", "(let f (fn a a))")
   test("3", "(f 1 2)", "(let f (fn a b (+ a b)))")
+  test("1", "(a)", "(def a 1)")
+  test("2", "(a 2)", "(def a b b)")
+  test("3", "(a 1 2)", "(def a b c (+ b c))")
   test("{1}", "(a 1)", "(struct a () b int)")
   test("{1 true}", "(a 1 true)", "(struct a () b int c bool)")
   test("1", "(. (a 1) b)", "(struct a () b int)")
@@ -281,6 +285,7 @@ const testGenerate = param => {
 
   // Generics
   test("1", "(iif (f true) (f 1) (f 2))", "(let f (fn a a))")
+  test("1", "(iif (f true) (f 1) (f 2))", "(def f a a)")
   test("{1}", "(a 1)", "(struct a (t) b t)")
   test("{1 true}", "(a 1 true)", "(struct a (t u) b t c u)")
 
