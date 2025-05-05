@@ -36,9 +36,10 @@ moa repl
 
 http.moa
 ```
-main io.http.serve(":8000" req => (text="hello"))
+main = io.http.serve ":8000" req => text:"hello"
 
-test("hello" main.get("/").body)
+test t:
+  t.get("/").body.eq("hello")
 ```
 
 ```
@@ -67,39 +68,34 @@ hello
 
 http.moa
 ```
-Schema {
-  todos list[Todo]
-}
+Schema =
+  todos vec[Todo]
 
-Todo {
+Todo =
   id         i64
   title      string
-  done       bool = false
-  created_at time = io.now
-}
+  done       bool
+  created_at time
 
-main io.httpd(":8000" req =>
-    catch(
-      io.db[Schema]("db.jsonl" db => dispatch(db req))
-      e => (status=500 text="internal server error")))
+main =
+  db <- io.db[Schema] "db.jsonl"
+  req <- io.serve ":8000"
+  dispatch db req
+  | e => (status=500 text="internal server error")
 
-dispatch db,req => match(req
-  (path="/")                    (file="index.html")
-  (path="/todos" method="get")  (json=db)
-  (path="/todos" method="post") {
-    db.todos.push(req{title})
-    (status=204)
-  }
-  (path=`/todos/([0-9]+)` method="post") id => { 
-    db.todos.merge(id req{title done})
-    (status=204)
-  }
-  (path=`/todos/([0-9]+)` method="delete") id => {
-    db.todos.delete(id)
-    (status=204)
-  }
-  _ (status=400 text="not found")
-)
+dispatch db req = req.route
+| "get /"       file:"index.html"
+| "get /todos"  json:db
+| "post /todos"
+   db.todos.push req{title} created_at:io.now()
+   status:204
+| "get /todos/:id`
+   db.todos.merge req{id title done}
+   status:204
+| "delete `/todos/:id`
+   db.todos.delete req{id}
+   status:204
+| _ status:400 text:"not found"
 ```
 
 ```
