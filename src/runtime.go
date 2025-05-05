@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -66,10 +67,11 @@ func __io_log[T any](x T) T {
 // ---( io.serve )------------------------------------
 
 type __io_request_struct struct {
-	version  string
 	scheme   string
-	host     string
+	method   string
 	path     string
+	version  string
+	host     string
 	ip       string
 	_raw     *http.Request
 	_queries map[string][]string
@@ -95,12 +97,14 @@ func __new_request(r *http.Request) __io_request {
 			panic(err)
 		}
 	}
+	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
 	return &__io_request_struct{
-		r.Proto,
 		r.URL.Scheme,
-		r.Host,
+		r.Method,
 		r.URL.Path,
-		r.RemoteAddr,
+		r.Proto,
+		r.Host,
+		ip,
 		r,
 		r.URL.Query(),
 		cookies,

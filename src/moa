@@ -160,10 +160,11 @@ const infer = root => {
   const terror = newtype("error")
   const tbytes = newtype("bytes")
   const trequest = {...newnew([
-    faketoken("version", tstring),
     faketoken("scheme", tstring),
-    faketoken("host", tstring),
+    faketoken("method", tstring),
     faketoken("path", tstring),
+    faketoken("version", tstring),
+    faketoken("host", tstring),
     faketoken("ip", tstring),
   ]), struct: "__io_request"}
   const tresponse = {...newnew([
