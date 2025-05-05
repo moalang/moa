@@ -1,15 +1,17 @@
 #!node --no-warnings
 "use strict"
 
-// - [-] io.serve
-// - [-] io.fetch
-// - [ ] io.db
+// - [x] io.serve
+// - [x] io.fetch
 // - [ ] moa test
-// - [ ] moa env
 // - [ ] moa repl
-// - [ ] io.go.println
+// - [ ] io.db
+// - [ ] io.go.fmt.Println
 // - [ ] integrate Go packages with type definition of Moa
+// - [ ] moa env
 // - [ ] package manager for Moa
+// - [ ] io.c
+// - [ ] io.js
 
 const log = x => { console.dir(x, {depth: null}); return x }
 const range = n => [...new Array(n)].map((_, i) => i)
@@ -157,8 +159,23 @@ const infer = root => {
   const tstring = newtype("string")
   const terror = newtype("error")
   const tbytes = newtype("bytes")
-  const trequest = newtype("__request")
-  const tresponse = newtype("__response")
+  const trequest = {...newnew([
+    faketoken("version", tstring),
+    faketoken("scheme", tstring),
+    faketoken("host", tstring),
+    faketoken("path", tstring),
+    faketoken("ip", tstring),
+  ]), struct: "__io_request"}
+  const tresponse = {...newnew([
+    faketoken("text", newfn([tstring])),
+    faketoken("header", newfn([tstring, tstring])),
+    faketoken("cookie", newfn([tstring, tstring])),
+  ]), struct: "__io_response"}
+  const trequestinit = {...newnew([
+    faketoken("method", tstring),
+    faketoken("headers", newmap(tstring, newvec(tstring))),
+    faketoken("body", tbytes),
+  ]), struct: "__io_request_init"}
   const tresponseinit = {...newnew([
     faketoken("status", tint),
     faketoken("headers", newmap(tstring, newvec(tstring))),
@@ -166,7 +183,7 @@ const infer = root => {
     faketoken("json", tbytes),
     faketoken("html", tstring),
     faketoken("text", tstring),
-  ]), struct: "__responseinit"}
+  ]), struct: "__io_response_init"}
   const tio = newtype("io")
   const tv1 = newvar()
   const tv2 = newvar()
@@ -183,6 +200,7 @@ const infer = root => {
     "float": tfloat,
     "string": tstring,
     "io": tio,
+    "bytes": tbytes,
     "async": newfn([tv1, tvoid]),
     "continue": tvoid,
     "break": tvoid,
@@ -195,8 +213,7 @@ const infer = root => {
     t.name === "io" && field === "sleep" ? newfn([tfloat, tvoid]) :
     t.name === "io" && field === "put" ? newfn([newvar(), tint]) :
     t.name === "io" && field === "serve" ? newfn([tstring, newfn([trequest, tresponseinit]), tvoid]) :
-    t.name === "io" && field === "fetch" ? newfn([tstring, tresponse]) :
-    t.name === "__response" && field === "text" ? newfn([tstring]) :
+    t.name === "io" && field === "fetch" ? newfn([tstring, marks(trequestinit, "?"), tresponse]) :
     t.fields?.find(f => f.code === field).type ||
     (() => { throw new TypeError(`No '${field}' in '${t.name}${t.types.length ? `[${t.types}]` : ""}' type`) })()
   const unify = (a, b) => {

@@ -69,7 +69,7 @@ const testInfer = param => {
       t.struct ? t.struct :
       t.name === "fn" ? '(' + t.types.map((u, i) => show(u, i < t.types.length - 1)).join(' ') + ')' :
       t.types.length ? t.name + '[' + t.types.map(show).join(' ') + ']' :
-      t.name
+      t.name + (t.props ? Object.keys(t.props).map(p => "." + p + "(" + show(t.props[p]) + ")").join("") : "")
     const s = show(type)
     const o = {}
     const r = s.replace(/\d+/g, t => o[t] ||= Object.keys(o).length + 1)
@@ -123,6 +123,7 @@ const testInfer = param => {
   test("bool", "(let f (fn a a)) (f 1) (f true)")
 
   // property
+  test("(1.text(2) 2)", "(let a (fn b (. b text)))")
   test("string", '(catch (throw "a") (fn e (. e message)))')
   test("vec[new__a[int]]", "(vec (new a 2))")
   test("vec[a]", "(struct a () b int) (vec (a 1))")
@@ -166,6 +167,11 @@ const testInfer = param => {
   test("vec[int]", "((fn a* a) 1)")
   test("int", "((fn a b* a) 1 2)")
   test("vec[int]", "((fn a b* b) 1 2)")
+
+  // io
+  test("string", '((. ((. io fetch) "") text))')
+  test("string", '((. ((. io fetch) "") header) "")')
+  test("string", '((. ((. io fetch) "") cookie) "")')
 
   // type errors
   reject("(+ 1 true)")
@@ -280,6 +286,7 @@ const testGenerate = param => {
   // IO
   test("hi", '""', '((. io put) "hi")')
   test("hi", '((. ((. io fetch) "http://localhost:8888") text))', '(async ((. io serve) ":8888" (fn req (new text "hi")))) ((. io sleep) 1.0)')
+  test("hi", '((. ((. io fetch) "http://localhost:8888" (new method "POST")) text))', '(async ((. io serve) ":8888" (fn req (new text "hi")))) ((. io sleep) 1.0)')
 }
 
 module.exports.test = param => {
