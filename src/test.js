@@ -25,7 +25,7 @@ const testSugar = param => {
   test("((. a at) (+ b c))", "a[+ b c]")
   test("(fn a a)", "a => a")
   test("(fn a b (+ a b))", "a,b => a + b")
-  test("(fn a (do a (return (b c))))", "a =>\n  a\n  b c")
+  test("(fn a (do a (b c)))", "a =>\n  a\n  b c")
   test("(a b)", "a: b")
   test("(a (b c))", "a: b c")
   test("(a b c)", "a b: c")
@@ -40,8 +40,8 @@ const testSugar = param => {
   test("(a (do b (c d)))", "a:\n  b\n  c:\n    d")
   test("(a (do b (c (do d e))))", "a:\n  b\n  c:\n    d\n    e")
   test("(fn a (fn b c))", "a =>\n  b =>\n    c")
-  test("(fn a (do b (return (fn c d))))", "a =>\n  b\n  c =>\n    d")
-  test("(fn a (do b (return (fn c (do d (return e))))))", "a =>\n  b\n  c =>\n    d\n    e")
+  test("(fn a (do b (fn c d)))", "a =>\n  b\n  c =>\n    d")
+  test("(fn a (do b (fn c (do d e))))", "a =>\n  b\n  c =>\n    d\n    e")
 
   // variable arguments
   test("(+ 1 (+ 2 3))", "+ 1 2 3")
@@ -115,6 +115,11 @@ const testInfer = param => {
   test("(int int)", "(fn a (- a 1))")
   test("(int int int)", "(fn a b (- a b 0))")
   test("int", "((fn 1))")
+
+  // do
+  test("int", "(do 1)")
+  test("bool", "(do 1 true)")
+  test("int", "(do (if false (return 1)) ((. io put) 2))")
 
   // generics
   test("(1 1)", "(fn a a)")

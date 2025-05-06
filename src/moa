@@ -1,12 +1,14 @@
 #!node --no-warnings
 "use strict"
 
-// - [x] io.serve
-// - [x] io.fetch
-// - [x] def
+// - [x] design syntax sugar
+// - [ ] match
+// - [ ] bcrypt
+// - [ ] io.random
+// - [ ] bytes.base64
+// - [ ] moa test
 // - [ ] moa repl
 // - [ ] io.db
-// - [ ] moa test
 // - [ ] moa env
 // - [ ] package manager for Moa
 // - [ ] io.go.fmt.Println
@@ -55,14 +57,13 @@ const sugar = (program, filename="") => {
       const totoken = o => Array.isArray(o) ? totoken(o[0]) : o
       const comma = a => pos >= tokens.length ? a :
         tokens[pos].code === "," ? (pos++, comma(a.concat([tokens[pos++]]))) : a
-      const addreturn = x => isexp(x) ? x : [...x.slice(0, -1), [faketoken("return", totoken(x)), x.at(-1)]]
       const block = t => t.lineno === tokens[pos].lineno ? line() :
         squash(until(u => u.indent > t.indent, line), a => [faketoken("do", t), ...a])
       const link = t =>
         pos >= tokens.length ? t :
         tokens[pos].code === "."  ? link([tokens[pos++], t, tokens[pos++]]) :
         tokens[pos].code === ","  ? link(comma([t])) :
-        tokens[pos].code === "=>" ? (pos++, link([faketoken("fn", tokens[pos-1]), ...(Array.isArray(t) ? t : [t]), addreturn(block(tokens[pos-1]))])) :
+        tokens[pos].code === "=>" ? (pos++, link([faketoken("fn", tokens[pos-1]), ...(Array.isArray(t) ? t : [t]), block(tokens[pos-1])])) :
         tokens[pos].call          ? (pos++, link([t].concat(untilby(")")))) :
         tokens[pos].index         ? (pos++, link([[faketoken(".", t), t, faketoken("at", t)]].concat([squash(variadic(untilby("]")))]))) :
         tokens[pos].op2           ? link([tokens[pos++], t, bottom()]) :
@@ -307,7 +308,7 @@ const infer = root => {
     type.generics ||= []
     return rec(type)
   }
-  const returnType = a => Array.isArray(a) ? (a.find(x => x[0]?.code === "return")?.[1]?.type || a.reduce((acc, x) => acc || returnType(x), null)) : tvoid
+  const returnType = a => Array.isArray(a) ? (a.find(x => x[0]?.code === "return")?.[1]?.type || a.reduce((acc, x) => acc || returnType(x), null)) : null
   const infWith = (top, env, nonGeneric) => {
     const inf = node => node.type ||= _inf(node)
     const _inf = node => {
@@ -320,7 +321,7 @@ const infer = root => {
           const s = head.code
           if (s === "do") {
             tail.map(inf)
-            return returnType(tail)
+            return returnType(tail) || tail.at(-1).type
           } else if (s === "struct") {
             const [t, generics, ...ts] = tail
             const gargs = generics.map((t, i) => [t.code, t.type = newvar()])

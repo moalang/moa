@@ -186,6 +186,11 @@ type __io_response_init struct {
 
 func __io_serve(listen string, f func(__io_request) __io_response_init) {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Fprintln(os.Stderr, r)
+			}
+		}()
 		o := f(__new_request(r))
 		if o.status == 0 {
 			o.status = 200
@@ -207,7 +212,7 @@ func __io_serve(listen string, f func(__io_request) __io_response_init) {
 			_, err = w.Write([]byte(o.text))
 		}
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			panic(err)
 		}
 		for k, v := range o.headers {
 			for _, s := range v {
