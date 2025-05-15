@@ -3,18 +3,7 @@
 
 // - [x] design syntax sugar
 // - [ ] match
-// - [ ] bcrypt
-// - [ ] io.random
-// - [ ] bytes.base64
-// - [ ] moa test
-// - [ ] moa repl
-// - [ ] io.db
-// - [ ] moa env
-// - [ ] package manager for Moa
-// - [ ] io.go.fmt.Println
-// - [ ] integrate Go packages with type definition of Moa
-// - [ ] io.c
-// - [ ] io.js
+// - [ ] selfboot
 
 const log = x => { console.dir(x, {depth: null}); return x }
 const range = n => [...new Array(n)].map((_, i) => i)

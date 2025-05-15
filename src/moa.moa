@@ -1,0 +1,20 @@
+#- [ ] moa repl
+#- [ ] moa test
+#- [ ] bool   methods
+#- [ ] int    methods
+#- [ ] float  methods
+#- [ ] string methods
+#- [ ] bytes  methods
+#- [ ] tuple  methods
+#- [ ] vec    methods
+#- [ ] map    methods
+#- [ ] set    methods
+#- [ ] std.bcrypt
+#- [ ] io.random
+#- [ ] moa ide
+#- [ ] io.file
+#- [ ] io.db
+#- [ ] moa env
+#- [ ] package manager for Moa
+#- [ ] io.go.fmt.Println
+#- [ ] integrate Go packages with type definition of Moa
