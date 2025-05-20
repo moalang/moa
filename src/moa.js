@@ -1,4 +1,3 @@
-#!node --no-warnings
 "use strict"
 
 // - [ ] switch backend to JavaScript
@@ -443,105 +442,57 @@ const infer = root => {
 }
 
 const generate = root => {
-  const defs = []
-  const genreturn = x => {
-    const ret = generate([x])
-    defs.push(ret.def)
-    return x[0]?.code === "do" ? ret.body : `return ${ret.body}`
-  }
-  const gengeneric = t => t.types.length === 0 && t.var ? "__" + t.name : gentype(t)
-  const gentype = t =>
-    t.name === "bytes" ? "[]byte" :
-    t.types.length === 0 ? (t.var ? "any" : t.name) :
-    t.name === "tuple" ? `__${t.name}${t.types.length}[${t.types.map(gentype)}]` :
-    t.name.startsWith("new__") ? gennew([], t) :
-    t.name === "vec" ? "[]" + gentype(t.types[0]) :
-    t.name === "map" ? "map[" + gentype(t.types[0]) + "]" + gentype(t.types[1]) :
-    `${t.name}[${t.types.map(gentype)}]`
-  const genstruct = (a, t) => (a.length ? `[${a.map(u => gengeneric(u.type) + " any")}] ` : "") + `struct { ${t.fields.map(f => `${f.code} ${gengeneric(f.type)}`).join("\n")} }`
-  const gennew = (a, t) =>
-    t.struct ? t.struct + (a.length ? `[${a.map(u => gengeneric(u.type) + " any")}] ` : "") :
-    genstruct(a, t)
-  const genfunc = (name, args, ret) => `func ${name}(${args.map(x => `${x.code} ${gentype(x.type)}`)}) ${gentype(ret)}`
-  const genfor = ([a, b, c, d, e]) => `for ${a} := ${b}; ${a} < ${c}; ${a} += ${d} { ${e} }`
-  const genlet = (body, id) => body[0]?.code === "fn" ?
-    body.type.generics.map(a => {
-      const x = structuredClone(body)
-      x.type = {...x.type, types: a}
-      x.slice(1, -1).map((arg, i) => arg.type = a[i])
-      return `${id}__${a.map(gentype).join("__")} := ${gen(x)}`
-    }).join("\n") :
-    `${id} := ${gen(body)}`
-  const gendef = def =>
-    def.type.generics.map(a => {
-      const x = structuredClone(def)
-      x.type = {...x.type, types: a}
-      x.slice(1, -1).map((arg, i) => arg.type = a[i])
-      defs.push(genfunc(x[1].code + "__" + a.map(gentype).join("__"), x.slice(2, -1), x.type.types.at(-1)) + "{" + genreturn(x.at(-1)) + "}")
-    }).join("\n")
-  const errinfo = x => Array.isArray(x) ? errinfo(x[0]) : [JSON.stringify(x.filename), x.lineno, x.column]
-  const genhead = x => x.type.name === "fn" && x.type.generics?.length ?
-    `${gen(x)}__${x.type.types.map(gentype).join("__")}` :
-    gen(x)
-  const gen = x => !Array.isArray(x) ? x.code :
-    x[0].code === "struct" ? (defs.push(`type ${x[1].code} ${genstruct(x[2], x.type.types.at(-1))}`), "") :
-    x[0].code === "def"    ? (gendef(x), "") :
-    x[0].code === "let"    ? genlet(x[2], x[1].code) :
-    x[0].code === "do"     ? x.slice(1).map(gen).join("\n") :
-    x[0].code === "for"    ? genfor(x.slice(1).map(gen)) :
-    x[0].code === "each"   ? `for ${x[1].code}, ${x[2].code} := range ${gen(x[3])} { ${gen(x[4])} }` :
-    x[0].code === "while"  ? `for ${gen(x[1])} { ${gen(x[2])} }` :
-    x[0].code === "return" ? `return ${gen(x[1])}` :
-    x[0].code === "throw"  ? `panic(MoaError{${gen(x[1])}, ${errinfo(x[1])}})` :
-    x[0].code === "catch"  ? `func() (__ret ${gentype(x[1].type)}) {
-		defer func() {
-			r := recover()
-			if r != nil {
-				if v, ok := r.(error); ok {
-					__ret = ${gen(x[2])}(v)
-				} else {
-					panic(r)
-				}
-			}
-		}()
-    __ret = ${gen(x[1])}
-    return
-  }()` :
-    x[0].code === "async"  ? `go func() { ${gen(x[1])} }()` :
-    x[0].code === "if"     ? `if ${gen(x[1])} { ${gen(x[2])} }` + (x[3] ? ` else { ${gen(x[3])} }` : "") :
-    x[0].code === "iif"    ? `func () ${gentype(x[2].type)} { if ${gen(x[1])} { return ${gen(x[2])} } else { return ${gen(x[3])} } }()` :
-    x[0].code === "fn"     ? `${genfunc("", x.slice(1, -1), x.type.types.at(-1))} { ${genreturn(x.at(-1))} }` :
-    x[0].code === "tuple"  ? `__tuple${x.length - 1}[${x.slice(1).map(node => gentype(node.type))}]{ ${x.slice(1).map(gen)} }` :
-    x[0].code === "new"    ? `${gennew([], x.type)}{${range((x.length-1)/2).map(i => x[i*2+1].code + ":" + gen(x[i*2+2]))}}` :
-    x[0].code === "vec"    ? `[]${gentype(x.type.types[0])}{ ${x.slice(1).map(gen)} }` :
-    x[0].code === "map"    ? `map[${gentype(x.type.types[0])}]${gentype(x.type.types[1])}{ ${range((x.length-1)/2).map(i => `${gen(x[i*2+1])}: ${gen(x[i*2+2])}`)} }` :
-    x[0].code === "set"    ? `map[${gentype(x.type.types[0])}]struct{}{ ${x.slice(1).map(n => `${gen(n)}: struct{}{}`)} }` :
-    x[0].type?.struct      ? gen(x[0]) + (x[0].type.types.at(-1).types.find(t => t.var) ? `[${x[0].type.types.slice(0, -1).map(gentype)}]` : "")+ "{" + x.slice(1).map(gen).join(", ") + "}" :
-    x[0].code === "." && x[1].code === "io" ? `__io_${x[2].code}` :
-    x[0].code === "." && x[1]?.type?.name === "tuple" ? `${gen(x[1])}.v${x[2].code}` :
-    x[0].code === "." && x[1]?.type?.name === "error" && x[2].code === "message" ? `${gen(x[1])}.Error()` :
-    /[+\-*/%^<>!=|&.]/.test(x[0].code) ? (x.length === 3 ? gen(x[1]) + x[0].code + gen(x[2]) : x[0].code + gen(x[1])) :
-    genhead(x[0]) + "(" + x.slice(1).map(gen).join(", ") + ")"
-  const body = root.map(gen).join("\n")
-  return {
-    def: defs.join("\n"),
-    body,
-  }
+  const gen = x => x.code
+  return root.map(gen).join("\n")
 }
 
 export {sugar, parse, infer, generate, TypeError}
+import readline from "readline"
+import vm from "vm"
+import {Glob} from "bun";
 
 if (import.meta.main) {
   if (process.argv[2] === "build") {
-    console.log("TBD")
-  } else if (process.argv[2] === "run") {
-    console.log("TBD")
-  } else if (process.argv[2] === "repl") {
     console.log("implementing...")
+  } else if (process.argv[2] === "run") {
+    const files = process.argv[3] ? process.argv.slice(2) : await Array.fromAsync(new Glob("**/*.moa").scan("."))
+    const result = await Promise.all(files.map(async file => generate(parse(await Bun.file(file).text(), file))))
+    const js = result.join("\n")
+    console.log(new vm.Script(js).runInNewContext({}))
+  } else if (process.argv[2] === "repl") {
+    // TODO: improve formatting for syntax tree
+    const context = vm.createContext({ console, Math, Date })
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+      prompt: "> "
+    })
+    let ast, js
+    rl.prompt()
+    rl.on("line", line => {
+      if (line.startsWith(":")) {
+        if (line === ":exit" || line === ":quit" || line === ":e" || line == ":q") {
+          rl.close()
+        }
+        if (line === ":ast") {
+          console.dir(ast, {depth: null})
+        }
+        if (line === ":js") {
+          console.log(js)
+        }
+      } else {
+        ast = infer(sugar(line, "repl.moa"))
+        js = generate(ast)
+        const result = new vm.Script(js, { timeout: 1000 }).runInContext(context)
+        console.log(result)
+      }
+      rl.prompt()
+    })
+    rl.on("close", () => console.log("Bye"))
   } else if (process.argv[2] === "test") {
     console.log("implementing...")
   } else if (process.argv[2] === "version") {
-    console.log("moa version 0.0.1")
+    console.log("moa version 0.0.1 (Bun)")
   } else {
     console.log(`Moa is a programming language
 
