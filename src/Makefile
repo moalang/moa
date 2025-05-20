@@ -1,8 +1,8 @@
 test:
-	@node --watch --watch-path=. moa selftest
+	bun --watch test
 
 install:
-	ln -s `pwd`/moa ~/local/bin/moa
+	bun build moa.js --compile --outfile ~/local/bin/moa
 
 clean:
 	rm /tmp/moa_*
