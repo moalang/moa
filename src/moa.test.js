@@ -14,6 +14,7 @@ describe("desugar", () => {
     expect(run("a()")).toBe("(a)")
     expect(run("a(b)")).toBe("(a b)")
     expect(run("!true")).toBe("(! true)")
+    expect(run("~1")).toBe("(~ 1)")
     expect(run("1 + 2")).toBe("(+ 1 2)")
     expect(run("1 + 2 + 3")).toBe("(+ 1 (+ 2 3))")
     expect(run("a.b")).toBe("(. a b)")
@@ -229,7 +230,7 @@ describe("evaluate", () => {
   it("operator", () => {
     expect(run("(! true)")).toBe("false")
     expect(run("(- 1)")).toBe("-1")
-    expect(run("(^ 1)")).toBe("-2")
+    expect(run("(~ 1)")).toBe("-2")
     expect(run("(+ 1 2)")).toBe("3")
     expect(run("(- 3 2)")).toBe("1")
     expect(run("(* 2 3)")).toBe("6")

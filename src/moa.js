@@ -360,7 +360,7 @@ const infer = root => {
             const keys = range(tail.length / 2).map(i => inf(tail[i*2]))
             const values = range(tail.length / 2).map(i => inf(tail[i*2+1]))
             return newmap(keys[0] || newvar(), values[0] || newvar())
-          } else if ("+-*/%^=<>!".includes(s[0])) {
+          } else if ("+-*/%~^=<>!".includes(s[0])) {
             const t = same(tail.map(inf))
             return "== != < > >= <=".split(" ").includes(s) ? tbool : t
           } else if (s === ".") {
@@ -442,7 +442,7 @@ const infer = root => {
 }
 
 const generate = root => {
-  const isOp = code => /^[+\-*/%|&<>=!]+$/.test(code) && code !== "=>"
+  const isOp = code => /^[+\-*/%|&<>=!\^~]+$/.test(code) && code !== "=>"
   const apply = (x, xs) => Array.isArray(x) ? gen(x) + "(" + xs.map(gen).join(", ") + ")" :
     isOp(x.code) && xs.length === 2 ? gen(xs[0]) + x.code + gen(xs[1]) :
     isOp(x.code) && xs.length === 1 ? x.code + gen(xs[0]) :
@@ -487,10 +487,16 @@ if (import.meta.main) {
           console.log(js)
         }
       } else {
-        ast = infer(sugar(line, "repl.moa"))
-        js = generate(ast)
-        const result = new vm.Script(js, { timeout: 1000 }).runInContext(context)
-        console.log(result)
+        try {
+          ast = infer(sugar(line, "repl.moa"))
+          js = generate(ast)
+          const result = new vm.Script(js, { timeout: 1000 }).runInContext(context)
+          console.log(result)
+        } catch (e) {
+          console.dir(ast, {depth: null})
+          console.log(js)
+          console.log(e)
+        }
       }
       rl.prompt()
     })
