@@ -1,6 +1,6 @@
 "use strict"
 import { describe, it, expect } from "bun:test";
-import { sugar, parse, infer, generate, TypeError } from "./moa.js"
+import { sugar, parse, infer, evaluate, TypeError } from "./moa.js"
 
 const log = x => { console.dir(x, {depth: null}); return x }
 
@@ -196,35 +196,35 @@ describe("infer", () => {
   })
 })
 
-import { Script } from "vm"
 describe("evaluate", () => {
-  const show = x => x === undefined ? "(undefined)" : x.toString()
-  const run = (exp, define="") => {
-    const src = (define + "\n" + exp).trim()
-    const js = generate(infer(parse(src, "test.moa")))
-    const result = new Script(js).runInNewContext({})
-    return show(result)
-  }
+  const show = x =>
+    x === undefined ? "(undefined)" :
+    x instanceof Set ? "set(" + [...x].map(show).join(" ") + ")" :
+    x instanceof Map ? "map(" + [...x].flatMap(a => a).map(show).join(" ") + ")" :
+    Array.isArray(x) ? (x.__tuple ? "tuple(" + x.map(show).join(" ") + ")" : "[" + x.map(show).join(" ") + "]") :
+      typeof x === "object" ? "new(" + Object.entries(x).flatMap(a => [a[0], show(a[1])]).join(" ") + ")" :
+    x.toString()
+  const run = (exp, define="") => show(evaluate((define + "\n" + exp).trim()))
 
   it("value", () => {
     expect(run("true")).toBe("true")
     expect(run("1")).toBe("1")
     expect(run("1.2")).toBe("1.2")
     expect(run('"hi"')).toBe("hi")
-    //expect(run("(tuple 1)")).toBe("{1}")
-    //expect(run("(tuple 1 2)")).toBe("{1 2}")
-    //expect(run("(new a 1)")).toBe("{1}")
-    //expect(run("(new a 1 b 2)")).toBe("{1 2}")
-    //expect(run("(vec)")).toBe("[]")
-    //expect(run("(vec 1)")).toBe("[1]")
-    //expect(run("(vec 1 2)")).toBe("[1 2]")
-    //expect(run("(vec true)")).toBe("[true]")
-    //expect(run("(map)")).toBe("map[]")
-    //expect(run("(map 1 true)")).toBe("map[1:true]")
-    //expect(run("(map 1 true 2 false)")).toBe("map[1:true 2:false]")
-    //expect(run("(set)")).toBe("map[]")
-    //expect(run("(set 1)")).toBe("map[1:{}]")
-    //expect(run("(set 1 2)")).toBe("map[1:{} 2:{}]")
+    expect(run("(tuple 1)")).toBe("tuple(1)")
+    expect(run("(tuple 1 2)")).toBe("tuple(1 2)")
+    expect(run("(new a 1)")).toBe("new(a 1)")
+    expect(run("(new a 1 b 2)")).toBe("new(a 1 b 2)")
+    expect(run("(vec)")).toBe("[]")
+    expect(run("(vec 1)")).toBe("[1]")
+    expect(run("(vec 1 2)")).toBe("[1 2]")
+    expect(run("(vec true)")).toBe("[true]")
+    expect(run("(map)")).toBe("map()")
+    expect(run("(map 1 true)")).toBe("map(1 true)")
+    expect(run("(map 1 true 2 false)")).toBe("map(1 true 2 false)")
+    expect(run("(set)")).toBe("set()")
+    expect(run("(set 1)")).toBe("set(1)")
+    expect(run("(set 1 2)")).toBe("set(1 2)")
   })
 
   it("operator", () => {

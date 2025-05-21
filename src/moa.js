@@ -1,7 +1,12 @@
 "use strict"
+import {Script} from "vm"
+import readline from "readline"
+import vm from "vm"
+import {Glob} from "bun"
+import * as runtime from "./runtime"
 
-// - [ ] switch backend to JavaScript
-// - [x] design syntax sugar
+// - [x] switch backend to JavaScript
+// - [-] design syntax sugar
 // - [ ] match
 // - [ ] selfboot
 // - [ ] moa repl
@@ -250,7 +255,6 @@ const infer = root => {
         [a, b] = [b, a]
       }
       if (a.struct && !b.struct && b.fields) {
-        a.fields || log(a)
         if (!b.fields.every(bf => a.fields.find(af => bf.code === af.code && (unify(bf.type, af.type), true)))) {
           throw new TypeError(`Struct ${a.struct}(${JSON.stringify(a.fields)}) != ${JSON.stringify(b.fields)}`)
         }
@@ -446,16 +450,22 @@ const generate = root => {
   const apply = (x, xs) => Array.isArray(x) ? gen(x) + "(" + xs.map(gen).join(", ") + ")" :
     isOp(x.code) && xs.length === 2 ? gen(xs[0]) + x.code + gen(xs[1]) :
     isOp(x.code) && xs.length === 1 ? x.code + gen(xs[0]) :
+    x.code === "new" ? "({" + range(xs.length/2).map(i => xs[i*2].code + ":" + gen(xs[i*2+1])).join(", ") + "})" :
     x.code + "(" + xs.map(gen).join(", ") + ")"
   const gen = x => Array.isArray(x) ? apply(x[0], x.slice(1)) : x.code
-  const path = x => Array.isArray(x) ? path(x[0]) : x.filename + ":" + x.lineno
   return root.map(gen).join("\n")
 }
 
-export {sugar, parse, infer, generate, TypeError}
-import readline from "readline"
-import vm from "vm"
-import {Glob} from "bun";
+const evaluate = (src, filename="", context={}) => {
+  const js = generate(infer(parse(src, filename)))
+  try {
+    return new Script(js).runInNewContext({...runtime, ...context})
+  } catch (e) {
+    return e
+  }
+}
+
+export {sugar, parse, infer, evaluate, TypeError}
 
 if (import.meta.main) {
   if (process.argv[2] === "build") {
