@@ -442,7 +442,13 @@ const infer = root => {
 }
 
 const generate = root => {
-  const gen = x => x.code
+  const isOp = code => /^[+\-*/%|&<>=!]+$/.test(code) && code !== "=>"
+  const apply = (x, xs) => Array.isArray(x) ? gen(x) + "(" + xs.map(gen).join(", ") + ")" :
+    isOp(x.code) && xs.length === 2 ? gen(xs[0]) + x.code + gen(xs[1]) :
+    isOp(x.code) && xs.length === 1 ? x.code + gen(xs[0]) :
+    x.code + "(" + xs.map(gen).join(", ") + ")"
+  const gen = x => Array.isArray(x) ? apply(x[0], x.slice(1)) : x.code
+  const path = x => Array.isArray(x) ? path(x[0]) : x.filename + ":" + x.lineno
   return root.map(gen).join("\n")
 }
 

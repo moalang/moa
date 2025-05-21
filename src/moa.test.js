@@ -226,7 +226,7 @@ describe("evaluate", () => {
     //expect(run("(set 1 2)")).toBe("map[1:{} 2:{}]")
   })
 
-  it.skip("operator", () => {
+  it("operator", () => {
     expect(run("(! true)")).toBe("false")
     expect(run("(- 1)")).toBe("-1")
     expect(run("(^ 1)")).toBe("-2")
