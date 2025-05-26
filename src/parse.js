@@ -1,10 +1,10 @@
-const newtoken = (s, filename, lineno=0, column=0) => (m => m ? ({code: m[1], mark: m[2], filename, lineno, column}) : ({code: s, filename, lineno, column}))(s.match(/^([A-Za-z_].*)([?*])$/))
+const newtoken = (s, filename, lineno=1, column=1) => (m => m ? ({code: m[1], mark: m[2], filename, lineno, column}) : ({code: s, filename, lineno, column}))(s.match(/^([A-Za-z_].*)([?*])$/))
 
-const parseWithoutSugar = program => {
+const parseWithoutSugar = (program, filename="") => {
   function* tokenize() {
     for (const code of program.split(/([()]|[^\n ()]+)/)) {
       if (code.trim()) {
-        yield newtoken(code)
+        yield newtoken(code, filename)
       }
     }
   }

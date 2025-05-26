@@ -229,7 +229,7 @@ const infer = root => {
               tail.slice(2).map(inf)
               return method(target, tail[1].code)
             }
-          } else if (s === "let") {
+          } else if (s === "let" || s === "var") {
             return env[tail[0].code] = inf(tail[1])
           } else if (s === "tuple") {
             return newtuple(tail.map(inf))

@@ -1,0 +1,22 @@
+- [x] split moa.js to parse.js, infer.js, evaluate.js
+- [ ] selfboot
+- [ ] moa repl
+- [ ] moa test
+- [ ] bool   methods
+- [ ] int    methods
+- [ ] float  methods
+- [ ] string methods
+- [ ] bytes  methods
+- [ ] tuple  methods
+- [ ] vec    methods
+- [ ] map    methods
+- [ ] set    methods
+- [ ] moa ide
+- [ ] io.random
+- [ ] io.file
+- [ ] io.db
+- [ ] io.http
+- [ ] io.bcrypt
+- [ ] moa env
+- [ ] package manager for Moa
+- [ ] io.window

@@ -8,12 +8,14 @@ describe("evaluate", () => {
   const log = x => (console.log("------------------", x), x)
   const show = x =>
     x === undefined ? "(undefined)" :
-    x instanceof Set ? "set(" + [...x].map(show).join(" ") + ")" :
-    x instanceof Map ? "map(" + [...x].flatMap(a => a).map(show).join(" ") + ")" :
-    Array.isArray(x) ? (x.__tuple ? "tuple(" + x.map(show).join(" ") + ")" : "[" + x.map(show).join(" ") + "]") :
-    typeof x === "object" ? "new(" + Object.entries(x).flatMap(a => [a[0], show(a[1])]).join(" ") + ")" :
+    x === null ? "(null)" :
+    x.constructor.name === "MoaError" ? x.message + " at " + x.location :
+    x.constructor.name === "Set"      ? "set(" + [...x].map(show).join(" ") + ")" :
+    x.constructor.name === "Map"      ? "map(" + [...x].flatMap(a => a).map(show).join(" ") + ")" :
+    x.constructor.name === "Array"    ? (x.__tuple ? "tuple(" + x.map(show).join(" ") + ")" : "[" + x.map(show).join(" ") + "]") :
+    x.constructor.name === "Object"   ? "new(" + Object.entries(x).flatMap(a => [a[0], show(a[1])]).join(" ") + ")" :
     x.toString()
-  const run = (exp, define="") => show(evaluate(infer(parseWithoutSugar((define + "\n" + exp).trim()))))
+  const run = (exp, define="") => show(evaluate(infer(parseWithoutSugar((define + "\n" + exp).trim(), "test.moa"))))
 
   it("value", () => {
     expect(run("true")).toBe("true")
@@ -88,35 +90,35 @@ describe("evaluate", () => {
     expect(run("(vec (a 1) (new b 2))", "(struct a () b int)")).toBe("[new(b 1) new(b 2)]")
   })
 
-  it.skip("throw / catch", () => {
-    expect(run("(f)", '(let f (fn (do (throw "a") (return "b"))))')).toBe("a at test.moa:1:17")
-    expect(run('(catch (f) (fn x "b"))', '(let f (fn "a"))')).toBe("a")
-    expect(run('(catch (f) (fn x "c"))', '(let f (fn (do (throw "a") (return "b"))))')).toBe("c")
-    expect(run('(catch (f) (fn x (. x message)))', '(let f (fn (do (throw "a") (return "b"))))')).toBe("a at test.moa:1:17")
-    expect(run('(iif false "" (catch (f) (fn x (. x message))))', '(let f (fn (do (throw "a") (return "b"))))')).toBe("a at test.moa:1:17")
-    expect(run('(catch (iif false (f) (f)) (fn x (. x message)))', '(let f (fn (do (throw "a") (return "b"))))')).toBe("a at test.moa:1:17")
-  })
-
-  it.skip("statement", () => {
+  it("statement", () => {
     expect(run("(iif true 1 2)")).toBe("1")
     expect(run("(iif false 1 2)")).toBe("2")
     expect(run("((fn (do (if true (return 1)) (return 2))))")).toBe("1")
     expect(run("((fn (do (if false (return 1)) (return 2))))")).toBe("2")
     expect(run("((fn (do (if false (return 1) (return 2)))))")).toBe("2")
-    expect(run("a", "(let a 0) (for b 1 6 2 (+= a b))")).toBe("9")
-    expect(run("a", "(let a 0) (each b _ (vec 1 2 3) (+= a b))")).toBe("3")
-    expect(run("a", "(let a 0) (each _ b (vec 1 2 3) (+= a b))")).toBe("6")
-    expect(run("a", "(let a 0) (each b c (map 1 3 2 3) (+= a (+ b c)))")).toBe("9")
-    expect(run("a", "(let a 0) (while (< a 6) (+= a 1))")).toBe("6")
-    expect(run("a", "(let a 0) (for b 0 3 1 (do (+= a 1) break))")).toBe("1")
-    expect(run("a", "(let a 0) (for b 0 3 1 (do continue (+= a 1)))")).toBe("0")
+    expect(run("a", "(var a 0) (for b 1 6 2 (+= a b))")).toBe("9")
+    expect(run("a", "(var a 0) (each b _ (vec 1 2 3) (+= a b))")).toBe("3")
+    expect(run("a", "(var a 0) (each _ b (vec 1 2 3) (+= a b))")).toBe("6")
+    expect(run("a", "(var a 0) (each b c (map 1 3 2 3) (+= a (+ b c)))")).toBe("9")
+    expect(run("a", "(var a 0) (while (< a 6) (+= a 1))")).toBe("6")
+    expect(run("a", "(var a 0) (for b 0 3 1 (do (+= a 1) break))")).toBe("1")
+    expect(run("a", "(var a 0) (for b 0 3 1 (do continue (+= a 1)))")).toBe("0")
   })
 
-  it.skip("generic", () => {
+  it("throw / catch", () => {
+    expect(run("(f)", '(let f (fn (do (throw "a") (return "b"))))')).toBe("a at test.moa:1:1")
+    expect(run('(catch (f) (fn x "b"))', '(let f (fn "a"))')).toBe("a")
+    expect(run('(catch (f) (fn x "c"))', '(let f (fn (do (throw "a") (return "b"))))')).toBe("c")
+    expect(run('(catch (f) (fn x (. x message)))', '(let f (fn (do (throw "a") (return "b"))))')).toBe("a")
+    expect(run('(iif false "" (catch (f) (fn x (. x message))))', '(let f (fn (do (throw "a") (return "b"))))')).toBe("a")
+    expect(run('(catch (iif false (f) (f)) (fn x (. x message)))', '(let f (fn (do (throw "a") (return "b"))))')).toBe("a")
+  })
+
+  it("generic", () => {
     expect(run("(iif (f true) (f 1) (f 2))", "(let f (fn a a))")).toBe("1")
     expect(run("(iif (f true) (f 1) (f 2))", "(def f a a)")).toBe("1")
-    expect(run("(a 1)", "(struct a (t) b t)")).toBe("{1}")
-    expect(run("(a 1 true)", "(struct a (t u) b t c u)")).toBe("{1 true}")
+    expect(run("(a 1)", "(struct a (t) b t)")).toBe("new(b 1)")
+    expect(run("(a 1 true)", "(struct a (t u) b t c u)")).toBe("new(b 1 c true)")
   })
 
   it.skip("io", () => {

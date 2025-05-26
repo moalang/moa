@@ -7,30 +7,6 @@ import {parse} from "./parse.js"
 import {infer} from "./infer.js"
 import {evaluate, generate} from "./evaluate.js"
 
-// - [ ] split moa.js to parse.js, infer.js, evaluate.js
-// - [ ] match
-// - [ ] selfboot
-// - [ ] moa repl
-// - [ ] moa test
-// - [ ] bool   methods
-// - [ ] int    methods
-// - [ ] float  methods
-// - [ ] string methods
-// - [ ] bytes  methods
-// - [ ] tuple  methods
-// - [ ] vec    methods
-// - [ ] map    methods
-// - [ ] set    methods
-// - [ ] std.bcrypt
-// - [ ] io.random
-// - [ ] moa ide
-// - [ ] io.file
-// - [ ] io.db
-// - [ ] moa env
-// - [ ] package manager for Moa
-// - [ ] io.go.fmt.Println
-// - [ ] integrate Go packages with type definition of Moa
-
 if (import.meta.main) {
   const tojs = async () => {
     const files = process.argv[3] ? process.argv.slice(2) : await Array.fromAsync(new Glob("**/*.moa").scan("."))
