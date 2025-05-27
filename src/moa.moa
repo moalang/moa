@@ -1,8 +1,8 @@
 def main {
-  match(io.argv[1]
+  match(io.argv[0]
     "build"   build()
-    "env"     env(io.argv[2])
-    "ide"     ide(io.argv[2] || "9080")
+    "env"     env(io.argv[1])
+    "ide"     ide(io.argv[1] || "9080")
     "repl"    repl()
     "run"     run("-DDEBUG")
     "test"    run("-DTEST")
@@ -56,11 +56,12 @@ def ide port {
 
 def repl {
   let context load()
-  r <- io.readline "> "
-  if ":q :quit :e :exit".split(" ").has r.line {
-    r.exit "Bye"
-  }
-  r.puts eval(r.line context)
+  io.readline "> " fn(r {
+    if ":q :quit :e :exit".split(" ").has r.line {
+      r.exit "Bye"
+    }
+    r.puts eval(r.line context)
+  })
 }
 def parse code path {}
 def infer ast {}

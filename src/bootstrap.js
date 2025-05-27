@@ -3,7 +3,11 @@ const vm = require("vm")
 const fs = require("fs")
 const ps = require("child_process")
 
-const log = x => { console.dir(x, {depth: null}); return x }
+const log = x => {
+  console.dir(x, {depth: null})
+  return x
+}
+
 const parse = program => {
   function* tokenize() {
     let pos = 0
@@ -55,46 +59,61 @@ const parse = program => {
   }
   return compose([...tokenize()])
 }
+
 const generate = root => {
   const gen = x => Array.isArray(x) ? gencall(x[0], x.slice(1)) :
     `"'`.includes(x.code[0]) ? JSON.stringify(x.code.slice(1, -1)) :
     x.code
+  const genmatch = ([cond, body, ...xs]) => cond ?
+    ",\n" + (cond.code === "_" ? "true" : gen(cond)) + ", " + "(() => " + gen(body) + ")" + genmatch(xs) :
+    ""
   const gencall = (head, tail) =>
-    head.op1 ? head.code + gen(tail[0]) :
-    head.op2 ? gen(tail[ 0]) + head.code + gen(tail[1]) :
-    head.code === "."    ? "__prop(" + gen(tail[0]) + ", " + JSON.stringify(gen(tail[1])) + ")" :
-    head.code === "fn"   ? "0 || ((" + tail.slice(0, -1).map(gen) + ") => " + gen(tail.at(-1)) + ")" :
-    head.code === "var"  ? "let "   + tail[0].code + " = " + gen(tail.at(-1)) :
-    head.code === "let"  ? "const " + tail[0].code + " = " + gen(tail.at(-1)) :
-    head.code === "def"  ? "const " + tail[0].code + " = (" + tail.slice(1, -1).map(gen) + ") => " + gen(tail.at(-1)) :
-    head.code === "if"   ? "if (" + gen(tail[0]) + ")" + gen(tail[1]) :
-    head.code === "else" ? generate(tail) :
-    head.code === "("    ? "(" + gen(tail[0])   + ")" :
-    head.code === "["    ? "[" + tail.map(gen)  + "]" :
-    head.code === "{"    ? "{" + generate(tail) + "}" :
+    head.op1              ? head.code + gen(tail[0]) :
+    head.op2              ? gen(tail[ 0]) + head.code + gen(tail[1]) :
+    head.code === "."     ? "__prop(" + gen(tail[0]) + ", " + JSON.stringify(gen(tail[1])) + ")" :
+    head.code === "fn"    ? "0 || ((" + tail.slice(0, -1).map(gen) + ") => " + gen(tail.at(-1)) + ")" :
+    head.code === "var"   ? "let "   + tail[0].code + " = " + gen(tail.at(-1)) :
+    head.code === "let"   ? "const " + tail[0].code + " = " + gen(tail.at(-1)) :
+    head.code === "def"   ? "const " + tail[0].code + " = (" + tail.slice(1, -1).map(gen) + ") => " + gen(tail.at(-1)) :
+    head.code === "if"    ? "if (" + gen(tail[0]) + ")" + gen(tail[1]) :
+    head.code === "match" ? "match (" + gen(tail[0]) + genmatch(tail.slice(1)) + ")" :
+    head.code === "("     ? "(" + gen(tail[0])   + ")" :
+    head.code === "["     ? "[" + tail.map(gen)  + "]" :
+    head.code === "{"     ? "{" + generate(tail) + "}" :
     gen(head) + "(" + tail.map(gen) + ")"
   return root.map(gen).join(";\n")
 }
+
 const runtime = (() => {
-const __prop = (obj, field) => {
-  switch (`${obj?.constructor?.name} ${field}`) {
-    case "String size": return obj.length
-    case "String at"  : return n => obj[n]
-    case "Array size" : return obj.length
-    case "Array at"   : return n => obj[n]
-    default           : return obj[field]
+  const __prop = (obj, field) => {
+    switch (`${obj?.constructor?.name} ${field}`) {
+      case "String size": return obj.length
+      case "String at"  : return n => obj[n]
+      case "Array size" : return obj.length
+      case "Array at"   : return n => obj[n]
+      case "Array fmap" : return f => obj.flatMap(f)
+      default           : return field in obj ? obj[field] : (() => { throw new Error(`No ${field} of ${JSON.stringify(obj)}`) })()
+    }
   }
-}
-const io = {}
+  const match = (x, ...a) => x === a[0] ? a[1]() : match(x, ...a.slice(2))
+  const io = {}
+  const __init = () => {
+    const fs = require("fs")
+    io.argv = ["build"]
+    io.glob = path => fs.globSync(path)
+    io.reads = path => fs.readFileSync(path).toString()
+    io.write = (path, data) => fs.writeFileSync(path, data)
+  }
 }).toString().slice(8, -2) + ";\n"
-const evaluate = js => {
-  try {
-    return new vm.Script(runtime + js).runInNewContext()
-  } catch(e) {
-    return e.message
-  }
-}
+
 const test = () => {
+  const evaluate = js => {
+    try {
+      return new vm.Script(runtime + js).runInNewContext({})
+    } catch(e) {
+      return e.message
+    }
+  }
   const show = x => JSON.stringify(x)
   const eq = (src, expected) => {
     const node = parse(src)
@@ -132,20 +151,23 @@ const test = () => {
   eq("def f ...a a.at(0)\nf(1)", 1)
   eq("def f { return 1 }\nf()", 1)
   eq("def f {\nreturn 1\n}\nf()", 1)
+  eq("match(1 1 1 2 2)", 1)
   eq("1 + (2 * 3)", 7)
   eq("[]", [])
   eq("[1]", [1])
   eq("[1 2]", [1, 2])
 }
+
 const main = async () => {
   const moa = fs.readFileSync(__dirname + "/moa.moa").toString()
   const js = generate(parse(moa))
-  fs.writeFileSync("/tmp/a.js", js + "\n;main()")
+  fs.writeFileSync("/tmp/a.js", runtime + ";\n" + js + ";\n__init()\nmain()")
   try {
     ps.execSync("node /tmp/a.js")
   } catch (e) {
     process.exit(1)
   }
 }
+
 test()
 main()
