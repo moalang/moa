@@ -1,4 +1,4 @@
-def main =
+def main {
   match(io.argv[1]
     "build"   build()
     "env"     env(io.argv[2])
@@ -19,20 +19,24 @@ Commands:
   moa run   [...files]     compile and run
   moa test  [...files]     run tests
   moa version              display Moa version"))
+}
 
-def load =
-  infer io.glob("**/*.moa").fmap(path => parse(io.reads(path) path))
+def load {
+  infer io.glob("**/*.moa").fmap(fn(path parse(io.reads(path) path)))
+}
 
-def build ...args =
+def build ...args {
   let c genc(load())
   io.write "/tmp/a.c" c
   io.shell "cc" "/tmp/a.c" "-O3" "-o" "a" ...args
+}
 
-def run ...args =
+def run ...args {
   build ...args
   io.shell "./a"
+}
 
-def env version =
+def env version {
   if version {
     let mpath "~/.moa/bin/moa"
     let vpath "~/.moa/bin/" + version
@@ -41,23 +45,25 @@ def env version =
     }
     io.rm mpath
     io.ln vpath mpath
-  } else {
-    io.puts io.glob("~/.moa/bin/*")
+    return
   }
+  io.puts io.glob("~/.moa/bin/*")
+}
 
-def ide port =
+def ide port {
   io.http.listen port io.embed("./ide").add("moa.js" genjs(load()))
+}
 
-def repl =
+def repl {
   let context load()
   r <- io.readline "> "
   if ":q :quit :e :exit".split(" ").has r.line {
     r.exit "Bye"
   }
   r.puts eval(r.line context)
-
-def parse code path = "TBD"
-def infer ast = "TBD"
-def genc ast = "TBD"
-def genjs ast = "TBD"
-def eval code ast = "TBD"
+}
+def parse code path {}
+def infer ast {}
+def genc ast {}
+def genjs ast {}
+def eval code ast {}

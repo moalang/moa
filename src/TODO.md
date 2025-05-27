@@ -31,35 +31,19 @@ atom:
 
 # Syntax sugar
 ```
-a b     -> (a b)
-a()     -> (a)
-a(b)    -> (a b)
-!a      -> (! a)
-a + b   -> (+ a b)
-a.b     -> (. a b)
-a[b]    -> ((. a at) b)
-a =
-  b
-  c d   -> (= a (do b (c d)))
-a => b  -> (fn a b)
-a,b =>
+a b     >> (a b)
+a()     >> (a)
+a(b)    >> (a b)
+!a      >> (! a)
+a + b   >> (+ a b)
+a.b     >> (. a b)
+a[b]    >> ((. a at) b)
+a -> b  >> (fn a b)
+a,b ->
    a()
-   b()  -> (fn a b (do (a) (b)))
-
-[TBD]
-a: b c  -> (a (b c))
-a:
-  b
-  c d   -> (a (do b (c d)))
-
-
-
-
-
-let pi = 3.14
-var counter = 0
-def now = io.now()
-def inc n = n + 1
-
-
+   b()  >> (fn a b (do (a) (b)))
+{
+  a
+  b c
+} -> (do a (b c))
 ```
