@@ -1,4 +1,4 @@
-- [x] split moa.js to parse.js, infer.js, evaluate.js
+# TODO
 - [ ] selfboot
 - [ ] moa repl
 - [ ] moa test
@@ -20,3 +20,46 @@
 - [ ] moa env
 - [ ] package manager for Moa
 - [ ] io.window
+
+# Syntax
+```
+atom:
+| '"' ([^"\\]|\\.)* '"'
+| [^ \n]+
+| '(' atom* ')'
+```
+
+# Syntax sugar
+```
+a b     -> (a b)
+a()     -> (a)
+a(b)    -> (a b)
+!a      -> (! a)
+a + b   -> (+ a b)
+a.b     -> (. a b)
+a[b]    -> ((. a at) b)
+a =
+  b
+  c d   -> (= a (do b (c d)))
+a => b  -> (fn a b)
+a,b =>
+   a()
+   b()  -> (fn a b (do (a) (b)))
+
+[TBD]
+a: b c  -> (a (b c))
+a:
+  b
+  c d   -> (a (do b (c d)))
+
+
+
+
+
+let pi = 3.14
+var counter = 0
+def now = io.now()
+def inc n = n + 1
+
+
+```

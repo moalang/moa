@@ -5,7 +5,6 @@ import {parseWithoutSugar} from "./parse.js"
 import {evaluate} from "./evaluate.js"
 
 describe("evaluate", () => {
-  const log = x => (console.log("------------------", x), x)
   const show = x =>
     x === undefined ? "(undefined)" :
     x === null ? "(null)" :
@@ -119,11 +118,5 @@ describe("evaluate", () => {
     expect(run("(iif (f true) (f 1) (f 2))", "(def f a a)")).toBe("1")
     expect(run("(a 1)", "(struct a (t) b t)")).toBe("new(b 1)")
     expect(run("(a 1 true)", "(struct a (t u) b t c u)")).toBe("new(b 1 c true)")
-  })
-
-  it.skip("io", () => {
-    expect(run('""', '((. io put) "hi")')).toBe("hi")
-    expect(run('((. ((. io fetch) "http://localhost:8888") text))', '(async ((. io serve) ":8888" (fn req (new text "hi")))) ((. io sleep) 1.0)')).toBe("hi")
-    expect(run('((. ((. io fetch) "http://localhost:8888" (new method "POST")) text))', '(async ((. io serve) ":8888" (fn req (new text "hi")))) ((. io sleep) 1.0)')).toBe("hi")
   })
 })

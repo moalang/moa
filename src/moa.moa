@@ -1,0 +1,63 @@
+def main =
+  match(io.argv[1]
+    "build"   build()
+    "env"     env(io.argv[2])
+    "ide"     ide(io.argv[2] || "9080")
+    "repl"    repl()
+    "run"     run("-DDEBUG")
+    "test"    run("-DTEST")
+    "version" io.puts("moa0.0.1 (Bun)")
+    _         io.puts("Moa is a programming language
+
+Usage: moa <command> [...arguments]
+
+Commands:
+  moa build [...files]     compile to an executable file
+  moa env   [version]      switch to a selected version
+  moa ide   [port=9080]    launch IDE in the browser
+  moa repl  [...files]     start a shell
+  moa run   [...files]     compile and run
+  moa test  [...files]     run tests
+  moa version              display Moa version"))
+
+def load =
+  infer io.glob("**/*.moa").fmap(path => parse(io.reads(path) path))
+
+def build ...args =
+  let c genc(load())
+  io.write "/tmp/a.c" c
+  io.shell "cc" "/tmp/a.c" "-O3" "-o" "a" ...args
+
+def run ...args =
+  build ...args
+  io.shell "./a"
+
+def env version =
+  if version {
+    let mpath "~/.moa/bin/moa"
+    let vpath "~/.moa/bin/" + version
+    if !io.exists vpath {
+      io.write vpath io.http.get("https://github.com/moalang/moa/archive/refs/tags/" + version + "-" + io.os + "-" + io.arch)
+    }
+    io.rm mpath
+    io.ln vpath mpath
+  } else {
+    io.puts io.glob("~/.moa/bin/*")
+  }
+
+def ide port =
+  io.http.listen port io.embed("./ide").add("moa.js" genjs(load()))
+
+def repl =
+  let context load()
+  r <- io.readline "> "
+  if ":q :quit :e :exit".split(" ").has r.line {
+    r.exit "Bye"
+  }
+  r.puts eval(r.line context)
+
+def parse code path = "TBD"
+def infer ast = "TBD"
+def genc ast = "TBD"
+def genjs ast = "TBD"
+def eval code ast = "TBD"
