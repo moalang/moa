@@ -1,6 +1,8 @@
 def main {
   match(io.argv[0]
     "build"   build()
+    "c"       io.puts(genc(load()))
+    "js"      io.puts(genjs(load()))
     "env"     env(io.argv[1])
     "ide"     ide(io.argv[1] || "9080")
     "repl"    repl()
@@ -13,6 +15,7 @@ Usage: moa <command> [...arguments]
 
 Commands:
   moa build [...files]     compile to an executable file
+  moa c     [...files]     compile to C programming language
   moa env   [version]      switch to a selected version
   moa ide   [port=9080]    launch IDE in the browser
   moa repl  [...files]     start a shell
@@ -22,7 +25,7 @@ Commands:
 }
 
 def load {
-  infer io.glob("**/*.moa").fmap(fn(path parse(io.reads(path) path)))
+  infer io.glob("**/*.moa").fmap(fn(path parse(tokenize(io.reads(path) path))))
 }
 
 def build ...args {
@@ -63,8 +66,114 @@ def repl {
     r.puts eval(r.line context)
   })
 }
-def parse code path {}
+
+#struct Token {
+#  code   string
+#  op1    bool
+#  op2    bool
+#  call   bool
+#  index  bool
+#  indent int
+#  lineno int
+#  column int
+#}
+
+def tokenize program path {
+#  var pos 0
+#  var indent 0
+#  var lineno 1
+#  var column 0
+#  var tokens []
+#  let reg r/([A-Za-z_][A-Za-z0-9_]*|[0-9]+|""".*?"""|"[^"]*?"|```.*?```|`[^`]*?`|[ \r\n\t]+|[()\[\]{};]|#[^\n]*)/
+#  for code program.split(reg) {
+#    pos += code.size
+#    if code == "" || " \r\n\t#;".has(code[0]) {
+#      if code.has("\n") {
+#        indent = code.split("\n").at(-1).size
+#        lineno += code.split("\n").size - 1
+#      }
+#    } else {
+#      let op = code.test(r/^[+\-*\/%|&<>=!]+$/) && code != "=>"
+#      let lc = iif pos > 0 program[pos - 1] ""
+#      let rc = program[pos + code.length]
+#      let op1 = (op || code === "...") && r/[A-Za-z0-9_\]]/.test(rc)
+#      let op2 = op && !op1
+#      let adj = r/[A-Za-z0-9_"\]\)]/.test(lc)
+#      let call = code == "(" && adj
+#      let index = code == "[" && adj
+#      tokens.push Token(code op1 op2 call index indent lineno)
+#    }
+#  }
+#  return tokens
+}
+
+def parse tokens {
+#  var pos 0
+#  def fake code t Token(code false false false false t.indent t.lineno)
+#  def until f g {
+#    var nodes []
+#    while pos < tokens.size && f(tokens[pos]) {
+#      nodes.push(g())
+#    }
+#    return nodes
+#  }
+#  def untilBy code {
+#    drop code until(fn(t t.code != code))
+#  }
+#  def drop code ret {
+#    assert tokens[pos].code == code
+#    pos += 1
+#    return ret
+#  }
+#  def bottom {
+#    def link t {
+#      if tokens[pos].code === "." {
+#        let lhs tokens[pos]
+#        pos += 1
+#        let rhs tokens[pos]
+#        pos += 1
+#        return link([lhs, t, rhs])
+#      } else if tokens[pos].index {
+#        pos += 1
+#        return link([[fake("." t), t, fake("at" t)], ...untilby("]")])
+#      } else if tokens[pos].call {
+#        pos +=
+#        return link([t].concat(untilby(")"))))
+#      } else if tokens[pos].op2 {
+#        return link([tokens[pos++], t, bottom()])
+#      } else {
+#        return t
+#      }
+#    }
+#    t = tokens[pos]
+#    pos += 1
+#    return iif(
+#      t.code === "(" link([t, ...untilby(")")])
+#      t.code === "[" link([t, ...untilby("]")])
+#      t.code === "{" drop("}" [t ...top()])
+#      t.op1          link([t, bottom()])
+#      link(t))
+#
+#  }
+#  def line {
+#    let t tokens[pos]
+#    return squash(until(fn(u t.lineno == u.lineno && u.code != "}")))
+#  }
+#  def top until(fn(t t.code != "}") line)
+#  def squash a iif(a.size == 1 a[0] a)
+#  return top()
+}
+
 def infer ast {}
-def genc ast {}
-def genjs ast {}
+def genc ast {
+  return `#include <stdio.h>
+int main() {
+  puts("moa0.0.1");
+  return 0;
+}
+`
+}
+def genjs ast {
+  return `console.log("moa js")`
+}
 def eval code ast {}

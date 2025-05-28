@@ -1,4 +1,9 @@
 # TODO
+- [ ] genjs
+- [x] if / else
+- [x] regexp literal
+- [x] assert
+- [x] struct
 - [ ] selfboot
 - [ ] moa repl
 - [ ] moa test
@@ -38,10 +43,6 @@ a(b)    >> (a b)
 a + b   >> (+ a b)
 a.b     >> (. a b)
 a[b]    >> ((. a at) b)
-a -> b  >> (fn a b)
-a,b ->
-   a()
-   b()  >> (fn a b (do (a) (b)))
 {
   a
   b c
