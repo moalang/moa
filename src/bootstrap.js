@@ -13,7 +13,8 @@ const parse = program => {
     let pos = 0
     let indent = 0
     let lineno = 1
-    for (const code of program.split(/(r\/(?:[^\/\\]|\\.)*\/|[A-Za-z_][A-Za-z0-9_]*|[0-9]+|"[^"]*?"|`[^`]*?`|[ \r\n\t]+|[()\[\]{};]|#[^\n]*)/)) {
+    const reg = /(r\/(?:[^\/\\]|\\.)*\/|[A-Za-z_][A-Za-z0-9_]*|[0-9]+|"[^"]*?"|`[^`]*?`|[ \r\n\t]+|[()\[\]{};]|#[^\n]*)/
+    for (const code of program.split(reg)) {
       if (/^[ \r\n\t#;]/.test(code) || code === "") {
         if (code.includes("\n")) {
           indent = code.split(/\n/).at(-1).length
@@ -36,7 +37,13 @@ const parse = program => {
     let pos = 0
     const fake = code => ({code})
     const until = (f, g=bottom) => [...function*() { while (pos < tokens.length && f(tokens[pos])) { yield g() } }()]
-    const untilby = code => (t => (pos++, t))(until(t => t.code !== code))
+    const untilby = (code, g=bottom) => drop(code, until(t => t.code !== code, g))
+    const drop = (code, ret) => {
+      if (code !== tokens[pos++].code) {
+        throw new Error(`No close '${code}'`)
+      }
+      return ret
+    }
     const bottom = () => {
       const link = t =>
         pos >= tokens.length ? t :
@@ -48,7 +55,7 @@ const parse = program => {
       const t = tokens[pos++]
       return t.code === "(" ? link([t, ...untilby(")")]) :
              t.code === "[" ? link([t, ...untilby("]")]) :
-             t.code === "{" ? (x => (pos++, [t, ...x]))(top()) :
+             t.code === "{" ? link([t, ...untilby("}", line)]) :
              t.op1          ? link([t, bottom()]) :
              link(t)
     }
@@ -62,47 +69,65 @@ const parse = program => {
 
 const generate = root => {
   const gen = x => Array.isArray(x) ? gencall(x[0], x.slice(1)) :
-    `"'`.includes(x.code[0]) ? JSON.stringify(x.code.slice(1, -1)) :
+    `"'`.includes(x.code[0]) ? genstr(x.code.slice(1, -1)) :
     x.code === "_" ? "true" :
     x.code.startsWith("r/") ? x.code.slice(1) :
     x.code
+  const genstr = s => JSON.stringify(s).replaceAll(/\\\\/g, "\\")
   const genmatch = a => a.length ?
     "__target === " + a[0] + " ? " + a[1] + ":" + genmatch(a.slice(2)) :
     "(() => { throw new Error(`No match ${__target}`)})()"
+  const geniif = a => a.length === 0 ? "(() => { throw new Error(`No default in if`)})()" :
+    a.length === 1 ? a[0] :
+    a[0] + " ? " + a[1] + " : " + geniif(a.slice(2))
   const genstruct = a => "(" + a + ") => ({" + a + "})"
   const gencall = (head, tail) =>
-    head.op1               ? head.code + gen(tail[0]) :
-    head.op2               ? gen(tail[ 0]) + head.code + gen(tail[1]) :
-    head.code === "."      ? "__prop(" + gen(tail[0]) + ", " + JSON.stringify(gen(tail[1])) + ")" :
-    head.code === "fn"     ? "0 || ((" + tail.slice(0, -1).map(gen) + ") => " + gen(tail.at(-1)) + ")" :
-    head.code === "var"    ? "let "   + tail[0].code + " = " + gen(tail.at(-1)) :
-    head.code === "let"    ? "const " + tail[0].code + " = " + gen(tail.at(-1)) :
-    head.code === "def"    ? "const " + tail[0].code + " = (" + tail.slice(1, -1).map(gen) + ") => " + gen(tail.at(-1)) :
-    head.code === "struct" ? "const " + tail[0].code + " = " + genstruct([...new Array(tail.at(-1)[1].length/2)].map((_, i) => tail.at(-1)[1][i*2].code)) :
-    head.code === "if"     ? "if (" + gen(tail[0]) + ")" + gen(tail[1]) :
-    head.code === "else"   ? "else " + gen(tail[0]) :
-    head.code === "match"  ? "0 || (__target => " + genmatch(tail.slice(1).map(gen)) + ")(" + gen(tail[0]) + ")" :
-    head.code === "("      ? "(" + gen(tail[0])   + ")" :
-    head.code === "["      ? "[" + tail.map(gen)  + "]" :
-    head.code === "{"      ? "{" + generate(tail) + "}" :
+    head.op1                                        ? head.code + gen(tail[0]) :
+    head.op2                                        ? gen(tail[ 0]) + head.code + gen(tail[1]) :
+    head.code === "."                               ? "__prop(" + gen(tail[0]) + ", " + JSON.stringify(gen(tail[1])) + ")" :
+    head.code === "fn"                              ? "0 || ((" + tail.slice(0, -1).map(gen) + ") => " + gen(tail.at(-1)) + ")" :
+    head.code === "var"                             ? "let "   + tail[0].code + " = " + gen(tail.at(-1)) :
+    head.code === "let"                             ? "const " + tail[0].code + " = " + gen(tail.at(-1)) :
+    head.code === "def"                             ? "const " + tail[0].code + " = (" + tail.slice(1, -1).map(gen) + ") => " + gen(tail.at(-1)) :
+    head.code === "struct"                          ? "const " + tail[0].code + " = " + genstruct(tail[1].slice(1).map(field => field[0].code)) :
+    head.code === "each"                            ? "for (const " + tail[0].code + " of " + gen(tail[1]) + ") " + gen(tail[2]) :
+    head.code === "while"                           ? "while (" + gen(tail[0]) + ") " + gen(tail[1]) :
+    head.code === "if"                              ? "if (" + gen(tail[0]) + ")" + gen(tail[1]) :
+    head.code === "else" && tail[0].code === "if"   ? "else if (" + gen(tail[1]) + ") " + gen(tail[2]) :
+    head.code === "else"                            ? "else " + gen(tail[0]) :
+    head.code === "iif"                             ? "0 || (" + geniif(tail.map(gen)) + ")" :
+    head.code === "match"                           ? "0 || (__target => " + genmatch(tail.slice(1).map(gen)) + ")(" + gen(tail[0]) + ")" :
+    head.code === "("                               ? "(" + gen(tail[0])   + ")" :
+    head.code === "["                               ? "[" + tail.map(gen)  + "]" :
+    head.code === "{"                               ? "{" + generate(tail) + "}" :
     gen(head) + "(" + tail.map(gen) + ")"
-  return root.map(gen).join(";\n").replace(/;\nelse/g, " else")
+  return root.map(gen).join(";\n").replace(/;\nelse/g, "\n else")
 }
 
 const runtime = (() => {
   const __prop = (obj, field) => {
     switch (`${obj?.constructor?.name} ${field}`) {
-      case "String size": return obj.length
-      case "String at"  : return n => obj[n]
-      case "Array size" : return obj.length
-      case "Array at"   : return n => obj[n]
-      case "Array fmap" : return f => obj.flatMap(f)
-      default           : return field in obj ? obj[field] : (() => { throw new Error(`No ${field} of ${JSON.stringify(obj)}`) })()
+      case "String size" : return obj.length
+      case "String has"  : return s => obj.includes(s)
+      case "Array size"  : return obj.length
+      case "Array fmap"  : return f => obj.flatMap(f)
+      default:
+        if (obj === undefined) {
+          throw new Error(`BUG null.${field}`)
+        }
+        const value = obj[field]
+        if (value === undefined) {
+          throw new Error(`No '${field}' of ${JSON.stringify(obj)}`)
+        }
+        if (typeof value === "function") {
+          return (...a) => obj[field](...a)
+        }
+        return value
     }
   }
   const io = {}
-  const assert = (cond, data) => cond ? null : (() => { throw new Error(`Assertion failed ${data}`) })()
-  const __init = () => {
+  const assert = (cond, data) => cond ? null : (() => { throw new Error(`Assertion failed ${JSON.stringify(data)}`) })()
+  const __initio = () => {
     const fs = require("fs")
     const cp = require("child_process")
     io.argv = process.argv.slice(2)
@@ -138,11 +163,16 @@ const test = () => {
     }
   }
 
-  eq("r/1/", /1/)
   eq("1", 1)
   eq("1 + 2", 3)
   eq('"a b"', "a b")
+  eq('"\\n"', "\n")
   eq("!true", false)
+  eq("1 + (2 * 3)", 7)
+  eq("r/1/", /1/)
+  eq("[]", [])
+  eq("[1]", [1])
+  eq("[1 2]", [1, 2])
   eq("fn(1)()", 1)
   eq("fn(a a)(1)", 1)
   eq("fn(a a) 1", 1)
@@ -150,24 +180,28 @@ const test = () => {
   eq('"a".at(0)', "a")
   eq('[1][0]', 1)
   eq('"a"[0]', "a")
+  eq("iif true 1 2", 1)
+  eq("iif false 1 2", 2)
+  eq("iif false 1 true 2 3", 2)
+  eq("iif false 1 false 2 3", 3)
   eq("let a 1\na", 1)
   eq("var a 0\na += 1", 1)
   eq("var a 0\nif false { a += 1 }\na", 0)
   eq("var a 0\nif true { a += 1 }\na", 1)
   eq("var a 0\nif false { a += 1 } else { a += 2 }\na", 2)
+  eq("var a 0\nif false { a += 1 } else if false { a += 2 }\na", 0)
+  eq("var a 0\neach b [1 2] { a += b }\na", 3)
+  eq("var a 0\nwhile a < 2 { a += 1 }\na", 2)
   eq("def f 1\nf()", 1)
   eq("def f a a\nf(1)", 1)
   eq("def f a b a + b\nf(1\n2)", 3)
   eq("def f ...a a.at(0)\nf(1)", 1)
   eq("def f { return 1 }\nf()", 1)
   eq("def f {\nreturn 1\n}\nf()", 1)
-  eq("struct s { a int b bool }\ns 1 true", {a: 1, b: true})
+  eq("struct s { a int\n b bool }\ns 1 true", {a: 1, b: true})
   eq("match(1 1 1 2 2)", 1)
-  eq("1 + (2 * 3)", 7)
-  eq("[]", [])
-  eq("[1]", [1])
-  eq("[1 2]", [1, 2])
   eq("r/1/", /1/)
+  eq("r/1/.test(1)", true)
   eq("assert true", null)
   eq("assert false 1", "Assertion failed 1")
   eq("1 # comment", 1)
@@ -176,7 +210,7 @@ const test = () => {
 const main = async () => {
   const moa = fs.readFileSync(__dirname + "/moa.moa").toString()
   const js = generate(parse(moa))
-  fs.writeFileSync("/tmp/a.js", runtime + ";\n" + js + ";\n__init()\nmain()")
+  fs.writeFileSync("/tmp/a.js", runtime + ";\n" + js + ";\n__initio()\nmain()")
   const c = cp.execSync("node /tmp/a.js c").toString()
   fs.writeFileSync("/tmp/a.c", c)
   cp.execSync("cc /tmp/a.c -o /tmp/moa")

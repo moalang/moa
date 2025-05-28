@@ -4,6 +4,9 @@
 - [x] regexp literal
 - [x] assert
 - [x] struct
+- [x] each
+- [x] while
+- [x] iif
 - [ ] selfboot
 - [ ] moa repl
 - [ ] moa test

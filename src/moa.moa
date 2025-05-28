@@ -67,105 +67,112 @@ def repl {
   })
 }
 
-#struct Token {
-#  code   string
-#  op1    bool
-#  op2    bool
-#  call   bool
-#  index  bool
-#  indent int
-#  lineno int
-#  column int
-#}
+struct Token {
+  code   string
+  offset int
+  indent int
+  lineno int
+  column int
+  op1    bool
+  op2    bool
+  call   bool
+  index  bool
+}
 
 def tokenize program path {
-#  var pos 0
-#  var indent 0
-#  var lineno 1
-#  var column 0
-#  var tokens []
-#  let reg r/([A-Za-z_][A-Za-z0-9_]*|[0-9]+|""".*?"""|"[^"]*?"|```.*?```|`[^`]*?`|[ \r\n\t]+|[()\[\]{};]|#[^\n]*)/
-#  for code program.split(reg) {
-#    pos += code.size
-#    if code == "" || " \r\n\t#;".has(code[0]) {
-#      if code.has("\n") {
-#        indent = code.split("\n").at(-1).size
-#        lineno += code.split("\n").size - 1
-#      }
-#    } else {
-#      let op = code.test(r/^[+\-*\/%|&<>=!]+$/) && code != "=>"
-#      let lc = iif pos > 0 program[pos - 1] ""
-#      let rc = program[pos + code.length]
-#      let op1 = (op || code === "...") && r/[A-Za-z0-9_\]]/.test(rc)
-#      let op2 = op && !op1
-#      let adj = r/[A-Za-z0-9_"\]\)]/.test(lc)
-#      let call = code == "(" && adj
-#      let index = code == "[" && adj
-#      tokens.push Token(code op1 op2 call index indent lineno)
-#    }
-#  }
-#  return tokens
+  var offset 0
+  var indent 0
+  var lineno 1
+  var column 0
+  var tokens []
+  let reg r/(r\/(?:[^\/\\]|\\.)*\/|[A-Za-z_][A-Za-z0-9_]*|[0-9]+|"[^"]*?"|`[^`]*?`|[ \r\n\t]+|[()\[\]{};]|#[^\n]*)/
+  each code program.split(reg) {
+    if code == "" || " \r\n\t#;".has(code[0]) {
+      if code.has("\n") {
+        let a = code.split("\n")
+        indent = a[-1].size
+        lineno += a.size - 1
+        column = indent
+      } else {
+        column += code.size
+      }
+    } else {
+      let op r/^[+\-*\/%|&<>=!]+$/.test(code) && code != "=>"
+      let lc iif(offset > 0 program[offset - 1] "")
+      let rc program[offset + code.length]
+      let op1 (op || code === "...") && r/[A-Za-z0-9_\]]/.test(rc)
+      let op2 op && !op1
+      let adj r/[A-Za-z0-9_"\])]/.test(lc)
+      let call code == "(" && adj
+      let index code == "[" && adj
+      tokens.push Token(code offset indent lineno column op1 op2 call index)
+      column += code.size
+    }
+    offset += code.size
+  }
+  return tokens
 }
 
 def parse tokens {
-#  var pos 0
-#  def fake code t Token(code false false false false t.indent t.lineno)
-#  def until f g {
-#    var nodes []
-#    while pos < tokens.size && f(tokens[pos]) {
-#      nodes.push(g())
-#    }
-#    return nodes
-#  }
-#  def untilBy code {
-#    drop code until(fn(t t.code != code))
-#  }
-#  def drop code ret {
-#    assert tokens[pos].code == code
-#    pos += 1
-#    return ret
-#  }
-#  def bottom {
-#    def link t {
-#      if tokens[pos].code === "." {
-#        let lhs tokens[pos]
-#        pos += 1
-#        let rhs tokens[pos]
-#        pos += 1
-#        return link([lhs, t, rhs])
-#      } else if tokens[pos].index {
-#        pos += 1
-#        return link([[fake("." t), t, fake("at" t)], ...untilby("]")])
-#      } else if tokens[pos].call {
-#        pos +=
-#        return link([t].concat(untilby(")"))))
-#      } else if tokens[pos].op2 {
-#        return link([tokens[pos++], t, bottom()])
-#      } else {
-#        return t
-#      }
-#    }
-#    t = tokens[pos]
-#    pos += 1
-#    return iif(
-#      t.code === "(" link([t, ...untilby(")")])
-#      t.code === "[" link([t, ...untilby("]")])
-#      t.code === "{" drop("}" [t ...top()])
-#      t.op1          link([t, bottom()])
-#      link(t))
-#
-#  }
-#  def line {
-#    let t tokens[pos]
-#    return squash(until(fn(u t.lineno == u.lineno && u.code != "}")))
-#  }
-#  def top until(fn(t t.code != "}") line)
-#  def squash a iif(a.size == 1 a[0] a)
-#  return top()
+  var pos 0
+  def fake code t Token(code t.offset t.indent t.lineno t.column false false false false)
+  def until f g {
+    var nodes []
+    while pos < tokens.size && f(tokens[pos]) {
+      nodes.push(g())
+    }
+    return nodes
+  }
+  def untilby code g drop(pos code until(fn(t t.code != code) g))
+  def drop start code ret {
+    assert pos < tokens.size `No close '${code}' from ${tokens[start].offset}`
+    assert tokens[pos].code == code
+    pos += 1
+    return ret
+  }
+  def bottom {
+    def link t {
+      if pos < tokens.size {
+        let u tokens[pos]
+        if u.code === "." {
+          pos += 1
+          let field tokens[pos]
+          pos += 1
+          return link([u t field])
+        } else if u.index {
+          pos += 1
+          return link([[fake("." u) t fake("at" u)] ...untilby("]" bottom)])
+        } else if u.call {
+          pos += 1
+          return link([t].concat(untilby(")" bottom)))
+        } else if u.op2 {
+          pos += 1
+          return link([u t bottom()])
+        }
+      }
+      return t
+    }
+    t = tokens[pos]
+    pos += 1
+    return iif(
+      t.code === "(" link([t ...untilby(")" bottom)])
+      t.code === "[" link([t ...untilby("]" bottom)])
+      t.code === "{" link([t ...untilby("}" line)])
+      t.op1          link([t bottom()])
+      link(t))
+  }
+  def line {
+    let lineno tokens[pos].lineno
+    return squash(until(fn(t lineno == t.lineno && t.code != "}") bottom))
+  }
+  def top until(fn(t t.code != "}") line)
+  def squash a iif(a.size == 1 a[0] a)
+  return top()
 }
 
-def infer ast {}
-def genc ast {
+def infer root {
+}
+def genc root {
   return `#include <stdio.h>
 int main() {
   puts("moa0.0.1");
@@ -173,7 +180,7 @@ int main() {
 }
 `
 }
-def genjs ast {
+def genjs root {
   return `console.log("moa js")`
 }
-def eval code ast {}
+def eval code root {}
