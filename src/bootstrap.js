@@ -77,9 +77,9 @@ const generate = (root, level=0) => {
   const genmatch = a => a.length ?
     "__target === " + a[0] + " ? " + a[1] + ":" + genmatch(a.slice(2)) :
     "(() => { throw new Error(`No match ${__target}`)})()"
-  const geniif = a => a.length === 0 ? "(() => { throw new Error(`No default in if`)})()" :
+  const geniif = (lineno, a) => a.length === 0 ? `(() => { throw new Error("No default in iif at ${lineno}")})()` :
     a.length === 1 ? a[0] :
-    a[0] + " ? " + a[1] + " :\n  " + geniif(a.slice(2))
+    a[0] + " ? " + a[1] + " :\n  " + geniif(lineno, a.slice(2))
   const genstruct = a => "(" + a + ") => ({" + a + "})"
   const gencall = (head, tail) =>
     head.op1                                        ? head.code + gen(tail[0]) :
@@ -96,7 +96,7 @@ const generate = (root, level=0) => {
     head.code === "if"                              ? "if (" + gen(tail[0]) + ")" + gen(tail[1]) + (tail[2] ? gen(tail.slice(2)) : "") :
     head.code === "else" && tail[0].code === "if"   ? "else if (" + gen(tail[1]) + ") " + gen(tail[2]) :
     head.code === "else"                            ? "else " + gen(tail[0]) :
-    head.code === "iif"                             ? "0 || (" + geniif(tail.map(gen)) + ")" :
+    head.code === "iif"                             ? "0 || (" + geniif(head.lineno, tail.map(gen)) + ")" :
     head.code === "match"                           ? "0 || (__target => " + genmatch(tail.slice(1).map(gen)) + ")(" + gen(tail[0]) + ")" :
     head.code === "assert"                          ? "assert(" + gen(tail[0]) + ", " + head.lineno + ")" :
     head.code === "("                               ? "(" + gen(tail[0])   + ")" :

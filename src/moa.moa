@@ -184,9 +184,11 @@ def parse tokens {
     let lineno tokens[pos].lineno
     return squash(until(fn(t lineno == t.lineno && t.code != "}") bottom))
   }
-  def squash a iif(a.size == 1 a[0]
-    a[0].token.code == "" nodeapply(a)
-    nodecall(a[0].token a.slice(1)))
+  def squash a {
+    return iif(a.size == 1  a[0]
+      a[0].argv.size == 0   nodecall(a[0].token a.slice(1))
+      nodeapply(a))
+  }
   return until(fn(t t.code != "}") line)
 }
 
@@ -225,34 +227,37 @@ def genjs root {
   def genstruct a {
     return "(" + a + ") => ({" + a + "})"
   }
-  def genapply head tail {
+  def genapply node {
+    let code node.token.code
+    let tail node.argv
     return iif(
-      head.op1                                     head.code + gen(tail[0])
-      head.op2                                     gen(tail[0]) + " " + head.code + " " + gen(tail[1])
-      head.code == "."                             "__prop(" + gen(tail[0]) + ", " + JSON.stringify(gen(tail[1])) + ")"
-      head.code == "fn"                            "0 || ((" + tail.slice(0 -1).map(gen).join(", ") + ") => " + gen(tail.at(-1)) + ")"
-      head.code == "var"                           "let "   + gen(tail[0]) + " = " + gen(tail.at(-1))
-      head.code == "let"                           "const " + gen(tail[0]) + " = " + gen(tail.at(-1))
-      head.code == "def"                           "const " + gen(tail[0]) + " = (" + tail.slice(1 -1).map(gen).join(",") + ") => " + gen(tail.at(-1))
-      head.code == "test"                          "__tests.push(() => " + gen(tail[0]) + ")"
-      head.code == "struct"                        "const " + gen(tail[0]) + " = " + genstruct(tail[1].argv.map(fn(f f.token.code)).join(","))
-      head.code == "each"                          "for (const " + gen(tail[0]) + " of " + gen(tail[1]) + ") " + gen(tail[2])
-      head.code == "while"                         "while (" + gen(tail[0]) + ") " + gen(tail[1])
-      head.code == "if"                            "if (" + gen(tail[0]) + ")" + gen(tail[1])
-      head.code == "else" && gen(tail[0]) === "if" "else if (" + gen(tail[1]) + ") " + gen(tail[2])
-      head.code == "else"                          "else " + gen(tail[0])
-      head.code == "iif"                           "0 || (" + geniif(tail.map(gen).join(",")) + ")"
-      head.code == "match"                         "0 || (__target => " + genmatch(tail.slice(1).map(gen).join(",")) + ")(" + gen(tail[0]) + ")"
-      head.code == "("                             "(" + gen(tail[0])   + ")"
-      head.code == "["                             "[" + tail.map(gen).join(", ")  + "]"
-      head.code == "{"                             "{\n" + genjs(tail) + "\n" + "}"
-      head.code + "(" + tail.map(gen).join(",") + ")")
+      node.token.op1                          code + gen(tail[0])
+      node.token.op2                          gen(tail[0]) + " " + code + " " + gen(tail[1])
+      code == "."                             gen(tail[0]) + "." + gen(tail[1])
+      code == "fn"                            "0 || ((" + tail.slice(0 -1).map(gen).join(", ") + ") => " + gen(tail.at(-1)) + ")"
+      code == "var"                           "let "   + gen(tail[0]) + " = " + gen(tail.at(-1))
+      code == "let"                           "const " + gen(tail[0]) + " = " + gen(tail.at(-1))
+      code == "def"                           "const " + gen(tail[0]) + " = (" + tail.slice(1 -1).map(gen).join(",") + ") => " + gen(tail.at(-1))
+      code == "test"                          "__tests.push(() => " + gen(tail[0]) + ")"
+      code == "struct"                        "const " + gen(tail[0]) + " = " + genstruct(tail[1].argv.map(fn(f f.token.code)).join(","))
+      code == "each"                          "for (const " + gen(tail[0]) + " of " + gen(tail[1]) + ") " + gen(tail[2])
+      code == "while"                         "while (" + gen(tail[0]) + ") " + gen(tail[1])
+      code == "if"                            "if (" + gen(tail[0]) + ")" + gen(tail[1])
+      code == "else" && gen(tail[0]) === "if" "else if (" + gen(tail[1]) + ") " + gen(tail[2])
+      code == "else"                          "else " + gen(tail[0])
+      code == "iif"                           "0 || (" + geniif(tail.map(gen).join(",")) + ")"
+      code == "match"                         "0 || (__target => " + genmatch(tail.slice(1).map(gen).join(",")) + ")(" + gen(tail[0]) + ")"
+      code == "assert"                        "assert(" + gen(tail[0]) + ", " + node.token.lineno + ")"
+      code == "("                             "(" + gen(tail[0])   + ")"
+      code == "["                             "[" + tail.map(gen).join(", ")  + "]"
+      code == "{"                             "{\n" + genjs(tail) + "\n" + "}"
+      code == ""                              gen(tail[0]) + "(" + tail.slice(1).map(gen).join(",") + ")"
+      gencode(code) + "(" + tail.map(gen).join(",") + ")")
   }
   def gen node {
-    return iif(
-      node.argv.size == 0    gencode(node.token.code)
-      node.token.code != ""  genapply(node.token node.argv)
-      gen(node.argv[0]) + "(" + node.argv.slice(1).map(gen).join(",") + ")")
+    return iif(node.argv.size == 0
+      gencode(node.token.code)
+      genapply(node))
   }
   return root.map(gen).join(";\n").gsub("};\nelse"  "} else")
 }
@@ -288,9 +293,22 @@ test {
   # function call
   #assert js("fn(a a) 1") == "(0 || ((a) => a))(1)"
 
-  # assert
-  assert "assert true", "assert(true, 1)"
-  assert "\nassert true", "assert(true, 2)"
+  # embedded
+  assert js("assert true")   == "assert(true, 1)"
+  assert js("\nassert true") == "assert(true, 2)"
+
+  # method
+  assert js(`a[0]`)         == "a.at(0)"
+  assert js(`"a"[0]`)       == `"a".at(0)`
+  assert js("[1][0]")       == "[1].at(0)"
+  assert js(`a.b`)          == `a.b`
+  assert js(`a.b()`)        == `a.b()`
+  assert js(`a.b(c)`)       == `a.b(c)`
+  assert js(`a.b c`)        == `a.b(c)`
+  assert js(`"a".b`)        == `"a".b`
+  assert js(`"a".b(c)`)     == `"a".b(c)`
+  assert js(`"a".b c`)      == `"a".b(c)`
+  assert js("r/1/.test(1)") == "/1/.test(1)"
 
   # edge case
   assert js(`"\\"`).size == 3
