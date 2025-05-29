@@ -219,7 +219,7 @@ const test = () => {
 const main = async () => {
   const moa = fs.readFileSync(__dirname + "/moa.moa").toString()
   const js = generate(parse(moa))
-  fs.writeFileSync("/tmp/a.js", runtime + ";\n" + js + ";\n__initio()\nmain()")
+  fs.writeFileSync("/tmp/a.js", runtime + ";\n" + js + ";\n__test()\n__initio()\nmain()")
   const c = cp.execSync("node /tmp/a.js c").toString()
   fs.writeFileSync("/tmp/a.c", c)
   cp.execSync("cc /tmp/a.c -o /tmp/moa")

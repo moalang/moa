@@ -103,7 +103,7 @@ def tokenize program path {
       let adj r/[A-Za-z0-9_"\])]/.test(lc)
       let call code == "(" && adj
       let index code == "[" && adj
-      tokens.push Token(code offset indent lineno column op1 op2 call index)
+      tokens.push(Token(code offset indent lineno column op1 op2 call index))
       column += code.size
     }
     offset += code.size
@@ -199,6 +199,17 @@ int main() {
 }
 
 def genjs root {
+  def genmatch a {
+    return iif(a.size
+    "__target === " + a[0] + " ? " + a[1] + ":" + genmatch(a.slice(2))
+    fail(`No match ${__target}`))
+  }
+  def geniif = a {
+    return iif(
+    a.length === 0 "(() => { throw new Error(`No default in if`)})()"
+    a.length === 1 a[0]
+    a[0] + " ? " + a[1] + " :\n  " + geniif(a.slice(2)))
+  }
   def genstruct a {
     return "(" + a + ") => ({" + a + "})"
   }
@@ -212,7 +223,7 @@ def genjs root {
       head.code == "let"                           "const " + gen(tail[0]) + " = " + gen(tail.at(-1))
       head.code == "def"                           "const " + gen(tail[0]) + " = (" + tail.slice(1 -1).map(gen).join(",") + ") => " + gen(tail.at(-1))
       head.code == "test"                          "__tests.push(() => " + gen(tail[0]) + ")"
-      head.code == "struct"                        "const " + gen(tail[0]) + " = " + genstruct(tail[1].argv.slice(1).map(fn(field field[0].code)).join(","))
+      head.code == "struct"                        "const " + gen(tail[0]) + " = " + genstruct(tail[1].argv.map(fn(f f.token.code)).join(","))
       head.code == "each"                          "for (const " + gen(tail[0]) + " of " + gen(tail[1]) + ") " + gen(tail[2])
       head.code == "while"                         "while (" + gen(tail[0]) + ") " + gen(tail[1])
       head.code == "if"                            "if (" + gen(tail[0]) + ")" + gen(tail[1])
@@ -229,7 +240,7 @@ def genjs root {
     return iif(
       node.argv.size == 0    node.token.code
       node.token.code != ""  genapply(node.token node.argv)
-      gen(node.argv[0]) + "(  " + node.argv.slice(1).map(gen).join(",") + ")")
+      gen(node.argv[0]) + "(" + node.argv.slice(1).map(gen).join(",") + ")")
   }
   return root.map(gen).join(";\n").gsub("};\nelse"  "} else")
 }
