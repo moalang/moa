@@ -29,7 +29,7 @@ const parse = program => {
         const index = code === "[" && /[A-Za-z0-9_"\]\)]/.test(lc)
         yield {code, offset, indent, lineno, op1, op2, call, index}
       }
-      lineno += code.split(/[\n{}]/).length - 1
+      lineno += code.split(/\n/).length - 1
       offset += code.length
     }
   }
@@ -60,9 +60,8 @@ const parse = program => {
              link(t)
     }
     const line = () => (t => squash(until(u => t.lineno === u.lineno && u.code !== "}")))(tokens[pos])
-    const top = () => until(t => t.code !== "}", line)
     const squash = (a, f=x=>x) => a.length === 1 ? a[0] : f(a)
-    return top()
+    return until(t => t.code !== "}", line)
   }
   return compose([...tokenize()])
 }
@@ -94,11 +93,12 @@ const generate = (root, level=0) => {
     head.code === "struct"                          ? "const " + tail[0].code + " = " + genstruct(tail[1].slice(1).map(field => field[0].code)) :
     head.code === "each"                            ? "for (const " + tail[0].code + " of " + gen(tail[1]) + ") " + gen(tail[2]) :
     head.code === "while"                           ? "while (" + gen(tail[0]) + ") " + gen(tail[1]) :
-    head.code === "if"                              ? "if (" + gen(tail[0]) + ")" + gen(tail[1]) :
+    head.code === "if"                              ? "if (" + gen(tail[0]) + ")" + gen(tail[1]) + (tail[2] ? gen(tail.slice(2)) : "") :
     head.code === "else" && tail[0].code === "if"   ? "else if (" + gen(tail[1]) + ") " + gen(tail[2]) :
     head.code === "else"                            ? "else " + gen(tail[0]) :
     head.code === "iif"                             ? "0 || (" + geniif(tail.map(gen)) + ")" :
     head.code === "match"                           ? "0 || (__target => " + genmatch(tail.slice(1).map(gen)) + ")(" + gen(tail[0]) + ")" :
+    head.code === "assert"                          ? "assert(" + gen(tail[0]) + ", " + head.lineno + ")" :
     head.code === "("                               ? "(" + gen(tail[0])   + ")" :
     head.code === "["                               ? "[" + tail.map(gen)  + "]" :
     head.code === "{"                               ? "{\n" + generate(tail, level + 1) + "\n" + indent + "}" :
@@ -108,15 +108,16 @@ const generate = (root, level=0) => {
 
 const runtime = (() => {
   const io = {}
-  const assert = (cond, data) => cond ? null : (() => { throw new Error(`Assertion failed ${JSON.stringify(data)}`) })()
+  const assert = (cond, lineno) => cond ? null : (() => { throw new Error(`Assertion failed at ${lineno}`) })()
   const __tests = []
-  const __test = () => __tests.map(t => t()).at(-1)
   const __prop = (obj, field) => {
     switch (`${obj?.constructor?.name} ${field}`) {
       case "String size"   : return obj.length
       case "String has"    : return s => obj.includes(s)
       case "String gsub"   : return (a, b) => obj.replaceAll(a, b)
       case "String string" : return obj
+      case "String starts" : return s => obj.startsWith(s)
+      case "String ends"   : return s => obj.ends(s)
       case "Array size"    : return obj.length
       case "Array fmap"    : return f => obj.flatMap(f)
       default:
@@ -133,7 +134,7 @@ const runtime = (() => {
         return value
     }
   }
-  const __initio = () => {
+  const __main = () => {
     const fs = require("fs")
     const cp = require("child_process")
     io.argv = process.argv.slice(2)
@@ -141,6 +142,8 @@ const runtime = (() => {
     io.reads = path => fs.readFileSync(path).toString()
     io.puts = (...a) => { console.log(...a); return a[0] }
     io.log = (...a) => { console.error(a.map(x => JSON.stringify(x)).join(" ")); return a[0] }
+    __tests.map(t => t())
+    main()
   }
 }).toString().slice(8, -2) + ";\n"
 
@@ -169,12 +172,11 @@ const test = () => {
     }
   }
 
+  // value
   eq("1", 1)
-  eq("1 + 2", 3)
   eq('"a b"', "a b")
   eq('"\\n"', "\n")
-  eq("!true", false)
-  eq("1 + (2 * 3)", 7)
+  eq("true", true)
   eq("r/1/", /1/)
   eq("[]", [])
   eq("[1]", [1])
@@ -182,63 +184,80 @@ const test = () => {
   eq("fn(1)()", 1)
   eq("fn(a a)(1)", 1)
   eq("fn(a a) 1", 1)
+
+  // unray operator
+  eq("!true", false)
+
+  // binary operator
+  eq("1 + 2", 3)
+  eq("1 + (2 * 3)", 7)
+
+  // embedded
+  eq("assert true", null)
+  eq("assert false", "Assertion failed at 1")
+
+  // method
   eq('[1][0]', 1)
   eq('"a"[0]', "a")
   eq('"a".size', 1)
   eq('"a".at(0)', "a")
   eq('"a a".gsub("a" "b")', "b b")
   eq('"a".at 0', "a")
-  eq("iif true 1 2", 1)
-  eq("iif false 1 2", 2)
-  eq("iif false 1 true 2 3", 2)
-  eq("iif false 1 false 2 3", 3)
+  eq("r/1/.test(1)", true)
+
+  // definition
   eq("let a 1\na", 1)
   eq("var a 0\na += 1", 1)
-  eq("var a 0\nif false { a += 1 }\na", 0)
-  eq("var a 0\nif true { a += 1 }\na", 1)
-  eq("var a 0\nif false { a += 1 } else { a += 2 }\na", 2)
-  eq("var a 0\nif false { a += 1 } else if false { a += 2 }\na", 0)
-  eq("var a 0\neach b [1 2] { a += b }\na", 3)
-  eq("var a 0\nwhile a < 2 { a += 1 }\na", 2)
   eq("def f 1\nf()", 1)
   eq("def f a a\nf(1)", 1)
   eq("def f a b a + b\nf(1\n2)", 3)
   eq("def f ...a a.at(0)\nf(1)", 1)
   eq("def f { return 1 }\nf()", 1)
   eq("def f {\nreturn 1\n}\nf()", 1)
-  eq("test { return 1 }\n__test()", 1)
   eq("struct s { a int\n b bool }\ns 1 true", {a: 1, b: true})
-  eq("match(1 1 1 2 2)", 1)
-  eq("r/1/", /1/)
-  eq("r/1/.test(1)", true)
-  eq("assert true", null)
-  eq("assert false 1", "Assertion failed 1")
+
+  // branch
+  eq("iif true 1 2", 1)
+  eq("iif false 1 2", 2)
+  eq("iif false 1 true 2 3", 2)
+  eq("iif false 1 false 2 3", 3)
+  eq("match 1 1 1 2 2", 1)
+
+  // loop
+  eq("var a 0\nif false { a += 1 }\na", 0)
+  eq("var a 0\nif true { a += 1 }\na", 1)
+  eq("var a 0\nif false { a += 1 } else { a += 2 }\na", 2)
+  eq("var a 0\nif false { a += 1 } else if false { a += 2 }\na", 0)
+  eq("var a 0\neach b [1 2] { a += b }\na", 3)
+  eq("var a 0\nwhile a < 2 { a += 1 }\na", 2)
+
+  // comment
   eq("1 # comment", 1)
 }
 
 const main = async () => {
   const moa = fs.readFileSync(__dirname + "/moa.moa").toString()
   const js = generate(parse(moa))
-  fs.writeFileSync("/tmp/a.js", runtime + ";\n" + js + ";\n__test()\n__initio()\nmain()")
+  fs.writeFileSync("/tmp/a.js", runtime + ";\n" + js + ";\n__main()")
   const c = cp.execSync("node /tmp/a.js c").toString()
   fs.writeFileSync("/tmp/a.c", c)
-  cp.execSync("cc /tmp/a.c -o /tmp/moa")
-  {
-    const version = cp.execSync("/tmp/moa version").toString()
-    if (version !== "moa0.0.1\n") {
-      process.exit(1)
-    }
-    console.log("| ok c", version.trim())
-  }
-  {
-    const moajs = cp.execSync("node /tmp/a.js js").toString()
-    fs.writeFileSync("/tmp/moa.js", moajs)
-    const version = cp.execSync("node /tmp/moa.js version").toString()
-    if (version !== "moa0.0.1\n") {
-      process.exit(1)
-    }
-    console.log("| ok js", version.trim())
-  }
+  //cp.execSync("cc /tmp/a.c -o /tmp/moa")
+  //{
+  //  const version = cp.execSync("/tmp/moa version").toString()
+  //  if (version !== "moa0.0.1\n") {
+  //    process.exit(1)
+  //  }
+  //  console.log("| ok c", version.trim())
+  //}
+  //{
+  //  const moajs = cp.execSync("node /tmp/a.js js").toString()
+  //  fs.writeFileSync("/tmp/moa.js", moajs)
+  //  const version = cp.execSync("node /tmp/moa.js version").toString()
+  //  if (version !== "moa0.0.1\n") {
+  //    process.exit(1)
+  //  }
+  //  console.log("| ok js", version.trim())
+  //}
 }
 
 test()

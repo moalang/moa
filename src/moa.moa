@@ -28,8 +28,8 @@ def load infer(io.glob("**/*.moa").fmap(fn(path parse(tokenize(io.reads(path) pa
 
 def build ...args {
   let c genc(load())
-  io.write "/tmp/a.c" c
-  io.shell "cc" "/tmp/a.c" "-O3" "-o" "a" ...args
+  io.write("/tmp/a.c" c)
+  io.shell("cc" "/tmp/a.c" "-O3" "-o" "a" ...args)
 }
 
 def run ...args {
@@ -41,8 +41,9 @@ def env version {
   if version {
     let mpath "~/.moa/bin/moa"
     let vpath "~/.moa/bin/" + version
-    if !io.exists vpath {
-      io.write vpath io.http.get("https://github.com/moalang/moa/archive/refs/tags/" + version + "-" + io.os + "-" + io.arch)
+    if !io.exists(vpath) {
+      let url "https://github.com/moalang/moa/archive/refs/tags/" + version + "-" + io.os + "-" + io.arch
+      io.write(vpath io.http.get(url))
     }
     io.rm(mpath)
     io.ln(vpath mpath)
@@ -58,7 +59,7 @@ def ide port {
 def repl {
   let context load()
   io.readline "> " fn(r {
-    if ":q :quit :e :exit".split(" ").has r.line {
+    if ":q :quit :e :exit".split(" ").has(r.line) {
       r.exit "Bye"
     }
     r.puts(eval(r.line context))
@@ -83,7 +84,7 @@ def tokenize program path {
   var lineno 1
   var column 0
   var tokens []
-  let reg r/(r\/(?:[^\/\\]|\\.)*\/|[A-Za-z_][A-Za-z0-9_]*|[0-9]+|"[^"]*?"|`[^`]*?`|[ \r\n\t]+|[()\[\]{};]|#[^\n]*)/
+  let reg r/(r\/(?:[^\/\\]|\\.)*\/|[A-Za-z_][A-Za-z0-9_]*|[0-9]+(?:\.[0-9]+)|"[^"]*?"|`[^`]*?`|[ \r\n\t]+|[()\[\]{};]|#[^\n]*)/
   each code program.split(reg) {
     if code == "" || " \r\n\t#;".has(code[0]) {
       if code.has("\n") {
@@ -158,7 +159,11 @@ def parse tokens {
           return link(nodeapply([nodecall(fake("." t) [node nodetoken(fake("at" t))]) ...untilby("]" bottom)]))
         } else if t.call {
           pos += 1
-          return link(nodeapply([node].concat(untilby(")" bottom))))
+          if node.argv.size == 0 {
+            return link(nodecall(node.token untilby(")" bottom)))
+          } else {
+            return link(nodeapply([node].concat(untilby(")" bottom))))
+          }
         } else if t.op2 {
           pos += 1
           return link(nodecall(t [node bottom()]))
@@ -199,6 +204,13 @@ int main() {
 }
 
 def genjs root {
+  def gencode s {
+    return iif(
+      s == `"` || s == "`"  JSON.stringify(s.slice(1 -1)).replaceAll(r/\\\\/g "\\")
+      s == "["              "[]"
+      s.starts("r/")        s.slice(1)
+      s)
+  }
   def genmatch a {
     return iif(a.size
     "__target === " + a[0] + " ? " + a[1] + ":" + genmatch(a.slice(2))
@@ -216,9 +228,9 @@ def genjs root {
   def genapply head tail {
     return iif(
       head.op1                                     head.code + gen(tail[0])
-      head.op2                                     gen(tail[0]) + head.code + gen(tail[1])
+      head.op2                                     gen(tail[0]) + " " + head.code + " " + gen(tail[1])
       head.code == "."                             "__prop(" + gen(tail[0]) + ", " + JSON.stringify(gen(tail[1])) + ")"
-      head.code == "fn"                            "0 || ((" + tail.slice(0 -1).map(gen).join(",") + ") => " + gen(tail.at(-1)) + ")"
+      head.code == "fn"                            "0 || ((" + tail.slice(0 -1).map(gen).join(", ") + ") => " + gen(tail.at(-1)) + ")"
       head.code == "var"                           "let "   + gen(tail[0]) + " = " + gen(tail.at(-1))
       head.code == "let"                           "const " + gen(tail[0]) + " = " + gen(tail.at(-1))
       head.code == "def"                           "const " + gen(tail[0]) + " = (" + tail.slice(1 -1).map(gen).join(",") + ") => " + gen(tail.at(-1))
@@ -232,13 +244,13 @@ def genjs root {
       head.code == "iif"                           "0 || (" + geniif(tail.map(gen).join(",")) + ")"
       head.code == "match"                         "0 || (__target => " + genmatch(tail.slice(1).map(gen).join(",")) + ")(" + gen(tail[0]) + ")"
       head.code == "("                             "(" + gen(tail[0])   + ")"
-      head.code == "["                             "[" + tail.map(gen).join(",")  + "]"
+      head.code == "["                             "[" + tail.map(gen).join(", ")  + "]"
       head.code == "{"                             "{\n" + genjs(tail) + "\n" + "}"
       head.code + "(" + tail.map(gen).join(",") + ")")
   }
   def gen node {
     return iif(
-      node.argv.size == 0    node.token.code
+      node.argv.size == 0    gencode(node.token.code)
       node.token.code != ""  genapply(node.token node.argv)
       gen(node.argv[0]) + "(" + node.argv.slice(1).map(gen).join(",") + ")")
   }
@@ -247,4 +259,39 @@ def genjs root {
 
 def eval code root {
 
+}
+
+test {
+  def js s {
+    return genjs(infer(parse(tokenize(s ""))))
+  }
+
+  # value
+  assert js("1")     == "1"
+  assert js("1.2")   == "1.2"
+  assert js("true")  == "true"
+  assert js(`"hi"`)  == `"hi"`
+  assert js("r/1/")  == "/1/"
+  assert js("[]")    == "[]"
+  assert js("[1]")   == "[1]"
+  assert js("[1 2]") == "[1, 2]"
+  assert js("fn a a") == "0 || ((a) => a)"
+  assert js("fn(a b a + b)") == "0 || ((a, b) => a + b)"
+
+  # unray operator
+  assert js("-1") == "-1"
+
+  # binary operator
+  assert js("1 + 2") == "1 + 2"
+  assert js("1 + (2 * 3)") == "1 + (2 * 3)"
+
+  # function call
+  #assert js("fn(a a) 1") == "(0 || ((a) => a))(1)"
+
+  # assert
+  assert "assert true", "assert(true, 1)"
+  assert "\nassert true", "assert(true, 2)"
+
+  # edge case
+  assert js(`"\\"`).size == 3
 }
