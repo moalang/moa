@@ -24,9 +24,7 @@ Commands:
   moa version              display Moa version"))
 }
 
-def load {
-  infer io.glob("**/*.moa").fmap(fn(path parse(tokenize(io.reads(path) path))))
-}
+def load infer(io.glob("**/*.moa").fmap(fn(path parse(tokenize(io.reads(path) path)))))
 
 def build ...args {
   let c genc(load())
@@ -36,7 +34,7 @@ def build ...args {
 
 def run ...args {
   build ...args
-  io.shell "./a"
+  io.shell("./a")
 }
 
 def env version {
@@ -46,11 +44,11 @@ def env version {
     if !io.exists vpath {
       io.write vpath io.http.get("https://github.com/moalang/moa/archive/refs/tags/" + version + "-" + io.os + "-" + io.arch)
     }
-    io.rm mpath
-    io.ln vpath mpath
+    io.rm(mpath)
+    io.ln(vpath mpath)
     return
   }
-  io.puts io.glob("~/.moa/bin/*")
+  io.puts(io.glob("~/.moa/bin/*"))
 }
 
 def ide port {
@@ -63,7 +61,7 @@ def repl {
     if ":q :quit :e :exit".split(" ").has r.line {
       r.exit "Bye"
     }
-    r.puts eval(r.line context)
+    r.puts(eval(r.line context))
   })
 }
 
@@ -113,8 +111,24 @@ def tokenize program path {
   return tokens
 }
 
+struct Type {
+  name     string
+  generics vec[Type]
+}
+
+struct Node {
+  token Token
+  argv  vec[Node]
+  type  Type
+}
+
 def parse tokens {
   var pos 0
+  let untype Type("0" [])
+  let untoken Token("" 0 0 0 0 false false false false)
+  def nodetoken t Node(t [] untype)
+  def nodecall  t a Node(t a untype)
+  def nodeapply a Node(untoken a untype)
   def fake code t Token(code t.offset t.indent t.lineno t.column false false false false)
   def until f g {
     var nodes []
@@ -131,47 +145,50 @@ def parse tokens {
     return ret
   }
   def bottom {
-    def link t {
+    def link node {
       if pos < tokens.size {
-        let u tokens[pos]
-        if u.code === "." {
+        let t tokens[pos]
+        if t.code === "." {
           pos += 1
-          let field tokens[pos]
+          let field nodetoken(tokens[pos])
           pos += 1
-          return link([u t field])
-        } else if u.index {
+          return link(nodecall(t [node field]))
+        } else if t.index {
           pos += 1
-          return link([[fake("." u) t fake("at" u)] ...untilby("]" bottom)])
-        } else if u.call {
+          return link(nodeapply([nodecall(fake("." t) [node nodetoken(fake("at" t))]) ...untilby("]" bottom)]))
+        } else if t.call {
           pos += 1
-          return link([t].concat(untilby(")" bottom)))
-        } else if u.op2 {
+          return link(nodeapply([node].concat(untilby(")" bottom))))
+        } else if t.op2 {
           pos += 1
-          return link([u t bottom()])
+          return link(nodecall(t [node bottom()]))
         }
       }
-      return t
+      return node
     }
-    t = tokens[pos]
+    let t tokens[pos]
     pos += 1
     return iif(
-      t.code === "(" link([t ...untilby(")" bottom)])
-      t.code === "[" link([t ...untilby("]" bottom)])
-      t.code === "{" link([t ...untilby("}" line)])
-      t.op1          link([t bottom()])
-      link(t))
+      t.code === "(" link(nodecall(t untilby(")" bottom)))
+      t.code === "[" link(nodecall(t untilby("]" bottom)))
+      t.code === "{" link(nodecall(t untilby("}" line)))
+      t.op1          link(nodecall(t [bottom()]))
+      link(nodetoken(t)))
   }
   def line {
     let lineno tokens[pos].lineno
     return squash(until(fn(t lineno == t.lineno && t.code != "}") bottom))
   }
-  def top until(fn(t t.code != "}") line)
-  def squash a iif(a.size == 1 a[0] a)
-  return top()
+  def squash a iif(a.size == 1 a[0]
+    a[0].token.code == "" nodeapply(a)
+    nodecall(a[0].token a.slice(1)))
+  return until(fn(t t.code != "}") line)
 }
 
 def infer root {
+  return root
 }
+
 def genc root {
   return `#include <stdio.h>
 int main() {
@@ -180,7 +197,43 @@ int main() {
 }
 `
 }
+
 def genjs root {
-  return `console.log("moa js")`
+  def genstruct a {
+    return "(" + a + ") => ({" + a + "})"
+  }
+  def genapply head tail {
+    return iif(
+      head.op1                                     head.code + gen(tail[0])
+      head.op2                                     gen(tail[0]) + head.code + gen(tail[1])
+      head.code == "."                             "__prop(" + gen(tail[0]) + ", " + JSON.stringify(gen(tail[1])) + ")"
+      head.code == "fn"                            "0 || ((" + tail.slice(0 -1).map(gen).join(",") + ") => " + gen(tail.at(-1)) + ")"
+      head.code == "var"                           "let "   + gen(tail[0]) + " = " + gen(tail.at(-1))
+      head.code == "let"                           "const " + gen(tail[0]) + " = " + gen(tail.at(-1))
+      head.code == "def"                           "const " + gen(tail[0]) + " = (" + tail.slice(1 -1).map(gen).join(",") + ") => " + gen(tail.at(-1))
+      head.code == "test"                          "__tests.push(() => " + gen(tail[0]) + ")"
+      head.code == "struct"                        "const " + gen(tail[0]) + " = " + genstruct(tail[1].argv.slice(1).map(fn(field field[0].code)).join(","))
+      head.code == "each"                          "for (const " + gen(tail[0]) + " of " + gen(tail[1]) + ") " + gen(tail[2])
+      head.code == "while"                         "while (" + gen(tail[0]) + ") " + gen(tail[1])
+      head.code == "if"                            "if (" + gen(tail[0]) + ")" + gen(tail[1])
+      head.code == "else" && gen(tail[0]) === "if" "else if (" + gen(tail[1]) + ") " + gen(tail[2])
+      head.code == "else"                          "else " + gen(tail[0])
+      head.code == "iif"                           "0 || (" + geniif(tail.map(gen).join(",")) + ")"
+      head.code == "match"                         "0 || (__target => " + genmatch(tail.slice(1).map(gen).join(",")) + ")(" + gen(tail[0]) + ")"
+      head.code == "("                             "(" + gen(tail[0])   + ")"
+      head.code == "["                             "[" + tail.map(gen).join(",")  + "]"
+      head.code == "{"                             "{\n" + genjs(tail) + "\n" + "}"
+      head.code + "(" + tail.map(gen).join(",") + ")")
+  }
+  def gen node {
+    return iif(
+      node.argv.size == 0    node.token.code
+      node.token.code != ""  genapply(node.token node.argv)
+      gen(node.argv[0]) + "(  " + node.argv.slice(1).map(gen).join(",") + ")")
+  }
+  return root.map(gen).join(";\n").gsub("};\nelse"  "} else")
 }
-def eval code root {}
+
+def eval code root {
+
+}
