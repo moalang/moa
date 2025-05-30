@@ -24,17 +24,19 @@ Commands:
   moa version              display Moa version"))
 }
 
-def load infer(io.glob("**/*.moa").fmap(fn(path parse(tokenize(io.reads(path) path)))))
+def load {
+  return infer(io.glob("**/*.moa").fmap(fn(path parse(tokenize(io.reads(path) path)))))
+}
 
 def build ...args {
   let c genc(load())
-  io.write("/tmp/a.c" c)
-  io.shell("cc" "/tmp/a.c" "-O3" "-o" "a" ...args)
+  io.write "/tmp/a.c" c
+  io.shell "cc" "/tmp/a.c" "-O3" "-o" "a" ...args
 }
 
 def run ...args {
   build ...args
-  io.shell("./a")
+  io.shell "./a"
 }
 
 def env version {
@@ -45,8 +47,8 @@ def env version {
       let url "https://github.com/moalang/moa/archive/refs/tags/" + version + "-" + io.os + "-" + io.arch
       io.write(vpath io.http.get(url))
     }
-    io.rm(mpath)
-    io.ln(vpath mpath)
+    io.rm mpath
+    io.ln vpath mpath
     return
   }
   io.puts(io.glob("~/.moa/bin/*"))
@@ -238,7 +240,7 @@ def genjs root {
       code == "var"                           "let "   + gen(tail[0]) + " = " + gen(tail.at(-1))
       code == "let"                           "const " + gen(tail[0]) + " = " + gen(tail.at(-1))
       code == "def"                           "const " + gen(tail[0]) + " = (" + tail.slice(1 -1).map(gen).join(",") + ") => " + gen(tail.at(-1))
-      code == "test"                          "__tests.push(() => " + gen(tail[0]) + ")"
+      code == "test"                          "__tests.push(() => " + gen(tail.at(-1)) + ")"
       code == "struct"                        "const " + gen(tail[0]) + " = " + genstruct(tail[1].argv.map(fn(f f.token.code)).join(","))
       code == "each"                          "for (const " + gen(tail[0]) + " of " + gen(tail[1]) + ") " + gen(tail[2])
       code == "while"                         "while (" + gen(tail[0]) + ") " + gen(tail[1])

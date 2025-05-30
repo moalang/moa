@@ -89,7 +89,7 @@ const generate = (root, level=0) => {
     head.code === "var"                             ? "let "   + tail[0].code + " = " + gen(tail.at(-1)) :
     head.code === "let"                             ? "const " + tail[0].code + " = " + gen(tail.at(-1)) :
     head.code === "def"                             ? "const " + tail[0].code + " = (" + tail.slice(1, -1).map(gen) + ") => " + gen(tail.at(-1)) :
-    head.code === "test"                            ? "__tests.push(() => " + gen(tail[0]) + ")" :
+    head.code === "test"                            ? "__tests.push(() => " + gen(tail.at(-1)) + ")" :
     head.code === "struct"                          ? "const " + tail[0].code + " = " + genstruct(tail[1].slice(1).map(field => field[0].code)) :
     head.code === "each"                            ? "for (const " + tail[0].code + " of " + gen(tail[1]) + ") " + gen(tail[2]) :
     head.code === "while"                           ? "while (" + gen(tail[0]) + ") " + gen(tail[1]) :
