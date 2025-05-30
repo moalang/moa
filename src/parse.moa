@@ -1,0 +1,193 @@
+struct Token {
+  code   string
+  offset int
+  indent int
+  lineno int
+  column int
+  op1    bool
+  op2    bool
+  call   bool
+  index  bool
+}
+
+struct Type {
+  name     string
+  generics vec[Type]
+}
+
+struct Node {
+  token Token
+  argv  vec[Node]
+  type  Type
+}
+
+def tokenize program path {
+  var offset 0
+  var indent 0
+  var lineno 1
+  var column 1
+  var tokens []
+  let reg r/(r\/(?:[^\/\\]|\\.)*\/|[A-Za-z_][A-Za-z0-9_]*|[0-9]+(?:\.[0-9]+)|"[^"]*?"|`[^`]*?`|[+\-*\/%^~<>!=|&]+|[ \r\n\t]+|[()\[\]{};]|#[^\n]*)/
+  each code program.split(reg) {
+    if code == "" {
+      # do nothing
+    } else if " \r\n\t#".has(code[0]) {
+      if code.has("\n") {
+        let a = code.split("\n")
+        indent = a[-1].size
+        lineno += a.size - 1
+        column = indent
+      } else {
+        column += code.size
+      }
+    } else {
+      let op r/^[+\-*\/%^~<>!=|&]+$/.test(code)
+      let lc iif(offset > 0 program[offset - 1] "")
+      let rc program[offset + code.length]
+      let op1 (op || code == "...") && r/[A-Za-z0-9_"\]]/.test(rc)
+      let op2 op && !op1
+      let adj r/[A-Za-z0-9_"\])]/.test(lc)
+      let call adj && code == "("
+      let index adj && code == "["
+      tokens.push(Token(code offset indent lineno column op1 op2 call index))
+      column += code.size
+    }
+    offset += code.size
+  }
+  return tokens
+}
+
+def parse tokens {
+  var pos 0
+  let untype  Type("0" [])
+  let untoken Token("" 0 0 0 0 false false false false)
+  def nodetoken t Node(t [] untype)
+  def nodecall  t a Node(t a untype)
+  def nodeapply a Node(untoken a untype)
+  def fake code t Token(code t.offset t.indent t.lineno t.column false false false false)
+  def until f g {
+    var nodes []
+    while pos < tokens.size && f(tokens[pos]) {
+      nodes.push(g())
+    }
+    return nodes
+  }
+  def untilby code g drop(pos code until(fn(t t.code != code) g))
+  def drop start code ret {
+    assert pos < tokens.size `No close '${code}' from ${tokens[start].offset}`
+    assert tokens[pos].code == code
+    pos += 1
+    return ret
+  }
+  def link node {
+    if pos < tokens.size {
+      let t tokens[pos]
+      if t.code == "." {
+        pos += 1
+        let field nodetoken(tokens[pos])
+        pos += 1
+        return link(nodecall(t [node field]))
+      } else if t.index {
+        pos += 1
+        return link(nodeapply([nodecall(fake("." t) [node nodetoken(fake("at" t))]) ...untilby("]" bottom)]))
+      } else if t.call {
+        pos += 1
+        let args untilby(")" bottom)
+        if args.size == 0 {
+          return link(nodeapply([node]))
+        } else if node.argv.size == 0 {
+          return link(nodecall(node.token args))
+        } else {
+          return link(nodeapply([node ...args]))
+        }
+      } else if t.op2 {
+        pos += 1
+        return link(nodecall(t [node bottom()]))
+      }
+    }
+    return node
+  }
+  def bottom {
+    let t tokens[pos]
+    pos += 1
+    return iif(
+      t.code == "(" link(nodecall(t untilby(")" bottom)))
+      t.code == "[" link(nodecall(t untilby("]" bottom)))
+      t.code == "{" link(nodecall(t untilby("}" line)))
+      t.op1         link(nodecall(t [bottom()]))
+      link(nodetoken(t)))
+  }
+  def line {
+    let lineno tokens[pos].lineno
+    return squash(until(fn(t (lineno == t.lineno) && t.code != "}") bottom))
+  }
+  def squash a {
+    assert a.size > 0
+    return iif(
+      a.size == 1          a[0]
+      a[0].argv.size == 0  nodecall(a[0].token a.slice(1))
+      nodeapply(a))
+  }
+  return until(fn(t t.code != "}") line)
+}
+
+test "tokenize" {
+  assert tokenize(" ")  == []
+  assert tokenize("\r") == []
+  assert tokenize("\n") == []
+  assert tokenize("\t") == []
+  assert tokenize("a")  == [Token("a" 0 0 1 1 false false false false)]
+  assert tokenize("a b")[1].offset    == 2
+  assert tokenize("a\n  b")[1].indent == 2
+  assert tokenize("a\nb")[1].lineno   == 2
+  assert tokenize(" a")[0].column     == 2
+  assert tokenize("+1")[0].op1
+  assert tokenize("1 + 1")[1].op2
+  assert tokenize("f(")[1].call
+  assert tokenize("f[")[1].index
+
+  def codes s {
+    return tokenize(s "test.moa").map(fn(t t.code))
+  }
+
+  assert codes("r/a/")    == ["r/a/"]
+  assert codes("a")       == ["a"]
+  assert codes("ab")      == ["ab"]
+  assert codes("0")       == ["0"]
+  assert codes("1.0")     == ["1.0"]
+  assert codes(`""`)      == [`""`]
+  assert codes(`"a"`)     == [`"a"`]
+  assert codes("``")      == ["``"]
+  assert codes("`a`")     == ["`a`"]
+  assert codes("()[]{};") == "()[]{};".split("")
+  assert codes("@")       == ["@"]
+  assert codes("a()")     == ["a" "(" ")"]
+}
+
+test "parse" {
+  def show node {
+    return iif(
+      node.argv.size  == 0   node.token.code
+      node.token.code == ""  "(" + node.argv.map(show).join(" ") + ")"
+      "(" + node.token.code + " " + node.argv.map(show).join(" ") + ")")
+  }
+  def roundtrip s {
+    return parse(tokenize(s "test.moa")).map(show).join("; ")
+  }
+
+  assert roundtrip("a")   == "a"
+  assert roundtrip("a b") == "(a b)"
+  assert roundtrip("a.b") == "(. a b)"
+  assert roundtrip("a()") == "(a)"
+  assert roundtrip("a(b)") == "(a b)"
+  assert roundtrip("a.b()") == "((. a b))"
+  assert roundtrip("a.b(c)") == "((. a b) c)"
+  assert roundtrip("[]") == "["
+  assert roundtrip("[1]") == "([ 1)"
+  assert roundtrip("[1 2]") == "([ 1 2)"
+  assert roundtrip("a[b]") == "((. a at) b)"
+  assert roundtrip("a\nb") == "a; b"
+  assert roundtrip("{a\nb c}") == "({ a (b c))"
+  assert roundtrip("!a") == "(! a)"
+  assert roundtrip("a + b") == "(+ a b)"
+}

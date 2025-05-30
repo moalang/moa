@@ -8,7 +8,48 @@ const trace = x => {
   return x
 }
 
-const parse = program => {
+const runtime = (() => {
+  const io = {}
+  const assert = (cond, lineno) => cond ? null : (() => { throw new Error(`Assertion failed at ${lineno}`) })()
+  const __tests = []
+  const __prop = (obj, field) => {
+    switch (`${obj?.constructor?.name} ${field}`) {
+      case "String size"   : return obj.length
+      case "String has"    : return s => obj.includes(s)
+      case "String gsub"   : return (a, b) => obj.replaceAll(a, b)
+      case "String string" : return obj
+      case "String starts" : return s => obj.startsWith(s)
+      case "String ends"   : return s => obj.ends(s)
+      case "Array size"    : return obj.length
+      case "Array fmap"    : return f => obj.flatMap(f)
+      default:
+        if (obj === undefined) {
+          throw new Error(`BUG null.${field}`)
+        }
+        const value = obj[field]
+        if (value === undefined) {
+          throw new Error(`No '${field}' of ${JSON.stringify(obj)}`)
+        }
+        if (typeof value === "function") {
+          return (...a) => obj[field](...a)
+        }
+        return value
+    }
+  }
+  const __main = () => {
+    const fs = require("fs")
+    const cp = require("child_process")
+    io.argv = process.argv.slice(2)
+    io.glob = path => "main.moa parse.moa infer.moa genc.moa genjs.moa".split(" ")
+    io.reads = path => fs.readFileSync(path).toString()
+    io.puts = (...a) => { console.log(...a); return a[0] }
+    io.log = (...a) => { console.error(a.map(x => JSON.stringify(x)).join(" ")); return a[0] }
+    __tests.map(t => t())
+    main()
+  }
+}).toString().slice(8, -2) + ";\n"
+
+const parse = (program, filename) => {
   function* tokenize() {
     let offset = 0
     let indent = 0
@@ -27,7 +68,7 @@ const parse = program => {
         const op2 = op && !op1
         const call = code === "(" && /[A-Za-z0-9_"\]\)]/.test(lc)
         const index = code === "[" && /[A-Za-z0-9_"\]\)]/.test(lc)
-        yield {code, offset, indent, lineno, op1, op2, call, index}
+        yield {code, offset, indent, lineno, op1, op2, call, index, filename}
       }
       lineno += code.split(/\n/).length - 1
       offset += code.length
@@ -69,11 +110,11 @@ const parse = program => {
 const generate = (root, level=0) => {
   const indent = "  ".repeat(level)
   const gen = x => Array.isArray(x) ? gencall(x[0], x.slice(1)) :
-    `"'`.includes(x.code[0]) ? genstr(x.code.slice(1, -1)) :
+    `"'`.includes(x.code[0]) ? genstring(x.code.slice(1, -1)) :
     x.code === "_" ? "true" :
     x.code.startsWith("r/") ? x.code.slice(1) :
     x.code
-  const genstr = s => JSON.stringify(s).replaceAll(/\\\\/g, "\\")
+  const genstring = s => JSON.stringify(s).replaceAll(/\\\\/g, "\\")
   const genmatch = a => a.length ?
     "__target === " + a[0] + " ? " + a[1] + ":" + genmatch(a.slice(2)) :
     "(() => { throw new Error(`No match ${__target}`)})()"
@@ -81,71 +122,37 @@ const generate = (root, level=0) => {
     a.length === 1 ? a[0] :
     a[0] + " ? " + a[1] + " :\n  " + geniif(lineno, a.slice(2))
   const genstruct = a => "(" + a + ") => ({" + a + "})"
-  const gencall = (head, tail) =>
-    head.op1                                        ? head.code + gen(tail[0]) :
-    head.op2                                        ? gen(tail[0]) + head.code + gen(tail[1]) :
-    head.code === "."                               ? "__prop(" + gen(tail[0]) + ", " + JSON.stringify(gen(tail[1])) + ")" :
-    head.code === "fn"                              ? "0 || ((" + tail.slice(0, -1).map(gen) + ") => " + gen(tail.at(-1)) + ")" :
-    head.code === "var"                             ? "let "   + tail[0].code + " = " + gen(tail.at(-1)) :
-    head.code === "let"                             ? "const " + tail[0].code + " = " + gen(tail.at(-1)) :
-    head.code === "def"                             ? "const " + tail[0].code + " = (" + tail.slice(1, -1).map(gen) + ") => " + gen(tail.at(-1)) :
-    head.code === "test"                            ? "__tests.push(() => " + gen(tail.at(-1)) + ")" :
-    head.code === "struct"                          ? "const " + tail[0].code + " = " + genstruct(tail[1].slice(1).map(field => field[0].code)) :
-    head.code === "each"                            ? "for (const " + tail[0].code + " of " + gen(tail[1]) + ") " + gen(tail[2]) :
-    head.code === "while"                           ? "while (" + gen(tail[0]) + ") " + gen(tail[1]) :
-    head.code === "if"                              ? "if (" + gen(tail[0]) + ")" + gen(tail[1]) + (tail[2] ? gen(tail.slice(2)) : "") :
-    head.code === "else" && tail[0].code === "if"   ? "else if (" + gen(tail[1]) + ") " + gen(tail[2]) :
-    head.code === "else"                            ? "else " + gen(tail[0]) :
-    head.code === "iif"                             ? "0 || (" + geniif(head.lineno, tail.map(gen)) + ")" :
-    head.code === "match"                           ? "0 || (__target => " + genmatch(tail.slice(1).map(gen)) + ")(" + gen(tail[0]) + ")" :
-    head.code === "assert"                          ? "assert(" + gen(tail[0]) + ", " + head.lineno + ")" :
-    head.code === "("                               ? "(" + gen(tail[0])   + ")" :
-    head.code === "["                               ? "[" + tail.map(gen)  + "]" :
-    head.code === "{"                               ? "{\n" + generate(tail, level + 1) + "\n" + indent + "}" :
-    gen(head) + "(" + tail.map(gen) + ")"
+  const genobj = o => "JSON.stringify(" + o + ")"
+  const gencall = (head, tail) => {
+    const code = head.code
+    const isassign = head.op2 && code == "=" && tail?.[0]?.[0]?.code == "."
+    return isassign                            ? gen(tail[0][1]) + "." + gen(tail[0][2]) + " = " + gen(tail[1]) :
+      head.op1                                 ? code + gen(tail[0]) :
+      head.op2 && code == "=="                 ? genobj(gen(tail[0])) + "===" + genobj(gen(tail[1])) :
+      head.op2 && code == "!="                 ? genobj(gen(tail[0])) + "!==" + genobj(gen(tail[1])) :
+      head.op2                                 ? gen(tail[0]) + code + gen(tail[1]) :
+      code === "."                             ? "__prop(" + gen(tail[0]) + ", " + JSON.stringify(gen(tail[1])) + ")" :
+      code === "fn"                            ? "0 || ((" + tail.slice(0, -1).map(gen) + ") => " + gen(tail.at(-1)) + ")" :
+      code === "var"                           ? "let "   + tail[0].code + " = " + gen(tail.at(-1)) :
+      code === "let"                           ? "const " + tail[0].code + " = " + gen(tail.at(-1)) :
+      code === "def"                           ? "const " + tail[0].code + " = (" + tail.slice(1, -1).map(gen) + ") => " + gen(tail.at(-1)) :
+      code === "test"                          ? "__tests.push(() => " + gen(tail.at(-1)) + ")" :
+      code === "struct"                        ? "const " + tail[0].code + " = " + genstruct(tail[1].slice(1).map(field => field[0].code)) :
+      code === "each"                          ? "for (const " + tail[0].code + " of " + gen(tail[1]) + ") " + gen(tail[2]) :
+      code === "while"                         ? "while (" + gen(tail[0]) + ") " + gen(tail[1]) :
+      code === "if"                            ? "if (" + gen(tail[0]) + ")" + gen(tail[1]) + (tail[2] ? gen(tail.slice(2)) : "") :
+      code === "else" && tail[0].code === "if" ? "else if (" + gen(tail[1]) + ") " + gen(tail[2]) :
+      code === "else"                          ? "else " + gen(tail[0]) :
+      code === "iif"                           ? "0 || (" + geniif(head.lineno, tail.map(gen)) + ")" :
+      code === "match"                         ? "0 || (__target => " + genmatch(tail.slice(1).map(gen)) + ")(" + gen(tail[0]) + ")" :
+      code === "assert"                        ? "assert(" + gen(tail[0]) + ", " + JSON.stringify(head.filename + ":" + head.lineno) + ")" :
+      code === "("                             ? "(" + gen(tail[0])   + ")" :
+      code === "["                             ? "[" + tail.map(gen)  + "]" :
+      code === "{"                             ? "{\n" + generate(tail, level + 1) + "\n" + indent + "}" :
+      gen(head) + "(" + tail.map(gen) + ")"
+  }
   return indent + root.map(gen).join(";\n" + indent).replace(/};\n *else/g, "} else")
 }
-
-const runtime = (() => {
-  const io = {}
-  const assert = (cond, lineno) => cond ? null : (() => { throw new Error(`Assertion failed at ${lineno}`) })()
-  const __tests = []
-  const __prop = (obj, field) => {
-    switch (`${obj?.constructor?.name} ${field}`) {
-      case "String size"   : return obj.length
-      case "String has"    : return s => obj.includes(s)
-      case "String gsub"   : return (a, b) => obj.replaceAll(a, b)
-      case "String string" : return obj
-      case "String starts" : return s => obj.startsWith(s)
-      case "String ends"   : return s => obj.ends(s)
-      case "Array size"    : return obj.length
-      case "Array fmap"    : return f => obj.flatMap(f)
-      default:
-        if (obj === undefined) {
-          throw new Error(`BUG null.${field}`)
-        }
-        const value = obj[field]
-        if (value === undefined) {
-          throw new Error(`No '${field}' of ${JSON.stringify(obj)}`)
-        }
-        if (typeof value === "function") {
-          return (...a) => obj[field](...a)
-        }
-        return value
-    }
-  }
-  const __main = () => {
-    const fs = require("fs")
-    const cp = require("child_process")
-    io.argv = process.argv.slice(2)
-    io.glob = path => ["./moa.moa"]
-    io.reads = path => fs.readFileSync(path).toString()
-    io.puts = (...a) => { console.log(...a); return a[0] }
-    io.log = (...a) => { console.error(a.map(x => JSON.stringify(x)).join(" ")); return a[0] }
-    __tests.map(t => t())
-    main()
-  }
-}).toString().slice(8, -2) + ";\n"
 
 const test = () => {
   const evaluate = js => {
@@ -157,7 +164,7 @@ const test = () => {
   }
   const show = x => JSON.stringify(x)
   const eq = (src, expected) => {
-    const node = parse(src)
+    const node = parse(src, "test.moa")
     const js = generate(node)
     const actual = evaluate(js)
     if (show(expected) === show(actual)) {
@@ -191,10 +198,12 @@ const test = () => {
   // binary operator
   eq("1 + 2", 3)
   eq("1 + (2 * 3)", 7)
+  eq("[1] == [1]", true)
+  eq("a = 1", 1)
 
   // embedded
   eq("assert true", null)
-  eq("assert false", "Assertion failed at 1")
+  eq("assert false", "Assertion failed at test.moa:1")
 
   // method
   eq('[1][0]', 1)
@@ -236,8 +245,8 @@ const test = () => {
 }
 
 const main = async () => {
-  const moa = fs.readFileSync(__dirname + "/moa.moa").toString()
-  const js = generate(parse(moa))
+  const node = "main.moa parse.moa infer.moa genc.moa genjs.moa".split(" ").flatMap(filename => parse(fs.readFileSync(__dirname + "/" + filename).toString(), filename))
+  const js = generate(node)
   fs.writeFileSync("/tmp/a.js", runtime + ";\n" + js + ";\n__main()")
   const c = cp.execSync("node /tmp/a.js c").toString()
   fs.writeFileSync("/tmp/a.c", c)

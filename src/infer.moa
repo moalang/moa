@@ -1,0 +1,113 @@
+def infer root {
+  def inf node {
+    node.type = Type("int" [])
+  }
+  root.map(inf)
+  return root
+}
+
+test {
+  def show t {
+    return iif(t.generics.size == 0
+      t.name
+      t.name + "[" + t.generics.map(show).join(" ") + "]")
+  }
+  def inf s {
+    return show(infer(parse(tokenize(s "")))[0].type)
+  }
+  assert inf("1") == "int"
+
+  return
+  # primitives
+  assert inf("1") == "int"
+  assert inf("true") == "bool"
+  assert inf("false") == "bool"
+
+  # unary operator
+  assert inf("(! true)") == "bool"
+  assert inf("(- 1)") == "int"
+
+  # binary operator
+  assert inf("(+ 1 1)") == "int"
+  assert inf("(< 1 1)") == "bool"
+
+  # branch
+  assert inf("(iif true 1 2)") == "int"
+  assert inf("(iif true true true)") == "bool"
+
+  # function
+  assert inf("(fn a (- a 1))") == "(int int)"
+  assert inf("(fn a b (- a b 0))") == "(int int int)"
+  assert inf("((fn 1))") == "int"
+
+  # do
+  assert inf("(do 1)") == "int"
+  assert inf("(do 1 true)") == "bool"
+  assert inf("(do (if false (return 1)) ((. io put) 2))") == "int"
+
+  # generics
+  assert inf("(fn a a)") == "(1 1)"
+  assert inf("(fn a b a)") == "(1 2 1)"
+  assert inf("(fn a b b)") == "(1 2 2)"
+  assert inf("((fn a a) 1)") == "int"
+  assert inf("(let f (fn a a)) (f 1) (f true)") == "bool"
+  assert inf("(def f a a) (f 1) (f true)") == "bool"
+
+  # property
+  assert inf("(let a (fn b (. b text)))") == "(1.text(2) 2)"
+  assert inf(`(catch (throw "a") (fn e (. e message)))`) == "string"
+  assert inf("(vec (new a 2))") == "vec[new__a[int]]"
+  assert inf("(struct a () b int) (vec (a 1))") == "vec[a]"
+  assert inf("(struct a () b int) (vec (a 1) (new b 2))") == "vec[a]"
+  assert inf("(vec (new a 2))") == "vec[new__a[int]]"
+  assert inf("(struct a () b int) (vec (a 1))") == "vec[a]"
+  assert inf("(struct a () b int) (vec (a 1) (new b 2))") == "vec[a]"
+  assert inf("(struct a () b int) (vec (new b 1) (a 2))") == "vec[a]"
+  assert inf("(struct a () b int c int) (vec (new b 1) (a 2 3))") == "vec[a]"
+
+  # container
+  assert inf("(vec)") == "vec[1]"
+  assert inf("(vec 1)") == "vec[int]"
+  assert inf("(vec (tuple 1 true))") == "vec[tuple[int bool]]"
+  assert inf("(map 1 true)") == "map[int bool]"
+
+  # combinations
+  assert inf("(let f (fn x (+ x 1))) (let g (fn x (+ x 2))) (+ (f 1) (g 1))") == "int"
+  assert inf("(fn f g x (g (f x)))") == "((1 2) (2 3) 1 3)"
+  assert inf("(fn x y z (x z (y z)))") == "((1 2 3) (1 2) 1 3)"
+  assert inf("(fn b x (iif (x b) x (fn x b)))") == "(1 (1 bool) (1 1))"
+  assert inf("(fn x (iif true x (iif x true false)))") == "(bool bool)"
+  assert inf("(fn x y (iif x x y))") == "(bool bool bool)"
+  assert inf("(fn n ((fn x (x (fn y y))) (fn f (f n))))") == "(1 1)"
+  assert inf("(fn x y (x y))") == "((1 2) 1 2)"
+  assert inf("(fn x y (x (y x)))") == "((1 2) ((1 2) 1) 2)"
+  assert inf("(fn h t f x (f h (t f x)))") == "(1 ((1 2 3) 4 2) (1 2 3) 4 3)"
+  assert inf("(fn x y (x (y x) (y x)))") == "((1 1 2) ((1 1 2) 1) 2)"
+  assert inf("(let id (fn x x)) (let f (fn y (id (y id))))") == "(((1 1) 2) 2)"
+  assert inf("(let id (fn x x)) (let f (fn (iif (id true) (id 1) (id 2))))") == "(int)"
+  assert inf("(let f (fn x 1)) (let g (fn (+ (f true) (f 4))))") == "(int)"
+  assert inf("(let f (fn x x)) (let g (fn y y)) (let h (fn b (iif b (f g) (g f))))") == "(bool (1 1))"
+
+  # variadic arguments
+  assert inf("(fn a? (+ a 0))") == "(int? int)"
+  assert inf("((fn a? (+ a 0)) 1)") == "int"
+  assert inf("(fn a b? (+ a b 0))") == "(int int? int)"
+  assert inf("((fn a b? (+ a b 0)) 1)") == "int"
+  assert inf("((fn a b? (+ a b 0)) 1 2)") == "int"
+  assert inf("(fn a* a)") == "(1* vec[1])"
+  assert inf("((fn a* a) 1)") == "vec[int]"
+  assert inf("((fn a b* a) 1 2)") == "int"
+  assert inf("((fn a b* b) 1 2)") == "vec[int]"
+
+  # io
+  assert inf(`((. ((. io fetch) "") text))`) == "string"
+  assert inf(`((. ((. io fetch) "") header) "")`) == "string"
+  assert inf(`((. ((. io fetch) "") cookie) "")`) == "string"
+
+  # reject invalid types
+  assert inf("(+ 1 true)") == "Type error"
+  assert inf("(iif 1 2 3)") == "Type error"
+  assert inf("(iif true 2 false)") == "Type error"
+  assert inf("((fn e (. e message)) 1)") == "Type error"
+  assert inf("(struct a () b int) (vec (a 1) (new c 2))") == "Type error"
+}
