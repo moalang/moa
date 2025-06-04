@@ -11,6 +11,7 @@ const trace = x => {
 const runtime = (() => {
   const io = {}
   const assert = (cond, lineno) => cond ? null : (() => { throw new Error(`Assertion failed at ${lineno}`) })()
+  const map = (...a) => new Map([...new Array(a.length / 2)].map((_, i) => [a[i*2], a[i*2+1]]))
   const __tests = []
   const __prop = (obj, field) => {
     switch (`${obj?.constructor?.name} ${field}`) {
@@ -164,7 +165,7 @@ const test = () => {
       return e.message
     }
   }
-  const show = x => JSON.stringify(x)
+  const show = x => JSON.stringify(x, (_, v) => v?.constructor?.name === "Map" ? Object.fromEntries(v) : v)
   const eq = (src, expected) => {
     const node = parse(src, "test.moa")
     const js = generate(node)
@@ -190,6 +191,7 @@ const test = () => {
   eq("[]", [])
   eq("[1]", [1])
   eq("[1 2]", [1, 2])
+  eq("map(1 true)", {1: true})
   eq("fn(1)()", 1)
   eq("fn(a a)(1)", 1)
   eq("fn(a a) 1", 1)

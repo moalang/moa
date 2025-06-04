@@ -13,30 +13,36 @@ def infer root {
   let tvec    Type("vec" [tv1])
   let tmap    Type("map" [tv1 tv2])
   let tbug    Type("BUG" [])
-  def inf node {
-    node.type = iif(
-      node.argv.size == 0
-        infcode(node.token.code)
-      node.token.code == ""
-        infcall(inf(node.argv[0]) node.argv.slice(1).map(inf))
-      infcall(infcode(node.token.code) node.argv.map(inf)))
-    return node.type
-  }
-  def infcode s {
-    return iif(
-      ((s == "true") || (s == "false"))
-        tbool
-      r/^[0-9]\./.test(s)
-        tfloat
-      r/^[0-9]/.test(s)
-        tint
-      s.starts("`") || s.starts(`"`)
-        tstring
-      s == "["
-        tvec
-      s == "map"
-        tmap
-      tbug)
+  let tenv    map(
+    map tmap
+  )
+  def infwith node env {
+    def inf node {
+      node.type = iif(
+        node.argv.size == 0
+          infcode(node.token.code)
+        node.token.code == ""
+          infcall(inf(node.argv[0]) node.argv.slice(1).map(inf))
+        infcall(infcode(node.token.code) node.argv.map(inf)))
+      return node.type
+    }
+    def infcode s {
+      return iif(
+        ((s == "true") || (s == "false"))
+          tbool
+        r/^[0-9]\./.test(s)
+          tfloat
+        r/^[0-9]/.test(s)
+          tint
+        s.starts("`") || s.starts(`"`)
+          tstring
+        s == "["
+          tvec
+        env.has(s)
+          env.get(s)
+        tbug)
+    }
+    return inf(node)
   }
   def infcall f xs {
     if f == tvec {
@@ -90,7 +96,7 @@ def infer root {
     node.type.generics = node.type.generics.map(prune)
     node.argv.map recprune
   }
-  root.map inf
+  root.map fn(node infwith(node tenv))
   root.map recprune
   return root
 }
