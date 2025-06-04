@@ -66,6 +66,7 @@ test "js" {
   def js s {
     return genjs(infer(parse(tokenize(s ""))))
   }
+  return
 
   # value
   assert js("1")     == "1"

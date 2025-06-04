@@ -28,13 +28,13 @@ def tokenize program path {
   var column 1
   var tokens []
   let reg r/(r\/(?:[^\/\\]|\\.)*\/|[A-Za-z_][A-Za-z0-9_]*|[0-9]+(?:\.[0-9]+)|"[^"]*?"|`[^`]*?`|[+\-*\/%^~<>!=|&]+|[ \r\n\t]+|[()\[\]{};]|#[^\n]*)/
-  each code program.split(reg) {
+  each _ code program.split(reg) {
     if code == "" {
       # do nothing
     } else if " \r\n\t#".has(code[0]) {
       if code.has("\n") {
         let a = code.split("\n")
-        indent = a[-1].size
+        indent = a.at(-1).size
         lineno += a.size - 1
         column = indent
       } else {

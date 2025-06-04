@@ -89,7 +89,7 @@ const parse = (program, filename) => {
       const link = t =>
         pos >= tokens.length ? t :
         tokens[pos].code === "." ? link([tokens[pos++], t, tokens[pos++]]) :
-        tokens[pos].index        ? (pos++, link([[fake("."), t, fake("at")], ...untilby("]")])) :
+        tokens[pos].index        ? link([tokens[pos++], t, ...untilby("]")]) :
         tokens[pos].call         ? (pos++, link([t].concat(untilby(")")))) :
         tokens[pos].op2          ? link([tokens[pos++], t, bottom()]) :
         t
@@ -111,26 +111,23 @@ const generate = (root, level=0) => {
   const indent = "  ".repeat(level)
   const gen = x => Array.isArray(x) ? gencall(x[0], x.slice(1)) :
     `"'`.includes(x.code[0]) ? genstring(x.code.slice(1, -1)) :
-    x.code === "_" ? "true" :
     x.code.startsWith("r/") ? x.code.slice(1) :
     x.code
   const genstring = s => JSON.stringify(s).replaceAll(/\\\\/g, "\\")
   const genmatch = a => a.length ?
-    "__target === " + a[0] + " ? " + a[1] + ":" + genmatch(a.slice(2)) :
+    (a[0] === "_" ? "true" : "__target === " + a[0]) + " ? " + a[1] + " : \n  " + genmatch(a.slice(2)) :
     "(() => { throw new Error(`No match ${__target}`)})()"
   const geniif = (lineno, a) => a.length === 0 ? `(() => { throw new Error("No default in iif at ${lineno}")})()` :
     a.length === 1 ? a[0] :
     a[0] + " ? " + a[1] + " :\n  " + geniif(lineno, a.slice(2))
   const genstruct = a => "(" + a + ") => ({" + a + "})"
   const genobj = o => "JSON.stringify(" + o + ")"
+  const genlhs = x => x?.[0]?.code === "."  ? genlhs(x[1]) + "." + genlhs(x[2]) : gen(x)
   const gencall = (head, tail) => {
     const code = head.code
-    const isassign = head.op2 && code == "=" && tail?.[0]?.[0]?.code == "."
-    return isassign                            ? gen(tail[0][1]) + "." + gen(tail[0][2]) + " = " + gen(tail[1]) :
-      head.op1                                 ? code + gen(tail[0]) :
-      head.op2 && code == "=="                 ? genobj(gen(tail[0])) + "===" + genobj(gen(tail[1])) :
-      head.op2 && code == "!="                 ? genobj(gen(tail[0])) + "!==" + genobj(gen(tail[1])) :
-      head.op2                                 ? gen(tail[0]) + code + gen(tail[1]) :
+    return code == "="                         ? genlhs(tail[0]) + " = " + gen(tail[1]) :
+      code == "=="                             ? genobj(gen(tail[0])) + "===" + genobj(gen(tail[1])) :
+      code == "!="                             ? genobj(gen(tail[0])) + "!==" + genobj(gen(tail[1])) :
       code === "."                             ? "__prop(" + gen(tail[0]) + ", " + JSON.stringify(gen(tail[1])) + ")" :
       code === "fn"                            ? "0 || ((" + tail.slice(0, -1).map(gen) + ") => " + gen(tail.at(-1)) + ")" :
       code === "var"                           ? "let "   + tail[0].code + " = " + gen(tail.at(-1)) :
@@ -138,7 +135,7 @@ const generate = (root, level=0) => {
       code === "def"                           ? "const " + tail[0].code + " = (" + tail.slice(1, -1).map(gen) + ") => " + gen(tail.at(-1)) :
       code === "test"                          ? "__tests.push(() => " + gen(tail.at(-1)) + ")" :
       code === "struct"                        ? "const " + tail[0].code + " = " + genstruct(tail[1].slice(1).map(field => field[0].code)) :
-      code === "each"                          ? "for (const " + tail[0].code + " of " + gen(tail[1]) + ") " + gen(tail[2]) :
+      code === "each"                          ? "{let " + tail[0].code + " = -1; for (const " + tail[1].code + " of " + gen(tail[2]) + ") {" + tail[0].code + "++;" + gen(tail[3]) + "} }" :
       code === "while"                         ? "while (" + gen(tail[0]) + ") " + gen(tail[1]) :
       code === "if"                            ? "if (" + gen(tail[0]) + ")" + gen(tail[1]) + (tail[2] ? gen(tail.slice(2)) : "") :
       code === "else" && tail[0].code === "if" ? "else if (" + gen(tail[1]) + ") " + gen(tail[2]) :
@@ -147,11 +144,16 @@ const generate = (root, level=0) => {
       code === "match"                         ? "0 || (__target => " + genmatch(tail.slice(1).map(gen)) + ")(" + gen(tail[0]) + ")" :
       code === "assert"                        ? "assert(" + gen(tail[0]) + ", " + JSON.stringify(head.filename + ":" + head.lineno) + ")" :
       code === "("                             ? "(" + gen(tail[0])   + ")" :
+      code === "[" && head.index               ? gen(tail[0]) + "[" + tail.slice(1).map(gen)  + "]" :
       code === "["                             ? "[" + tail.map(gen)  + "]" :
       code === "{"                             ? "{\n" + generate(tail, level + 1) + "\n" + indent + "}" :
+      head.op1                                 ? code + gen(tail[0]) :
+      head.op2                                 ? gen(tail[0]) + code + gen(tail[1]) :
       gen(head) + "(" + tail.map(gen) + ")"
   }
-  return indent + root.map(gen).join(";\n" + indent).replace(/};\n *else/g, "} else")
+  const genat = x => Array.isArray(x) ? genat(x[0]) : x.filename + ":" + x.lineno
+  const gendebug = x => "/* " + genat(x) + " */" + gen(x)
+  return indent + root.map(gendebug).join("\n" + indent)
 }
 
 const test = () => {
@@ -168,7 +170,7 @@ const test = () => {
     const js = generate(node)
     const actual = evaluate(js)
     if (show(expected) === show(actual)) {
-      console.log("| ok", src.replace(/\n/g, "\\n"))
+      //console.log("| ok", src.replace(/\n/g, "\\n"))
     } else {
       console.log(`${show(expected)} is expected, but got ${show(actual)}`)
       console.log(src)
@@ -237,19 +239,24 @@ const test = () => {
   eq("var a 0\nif true { a += 1 }\na", 1)
   eq("var a 0\nif false { a += 1 } else { a += 2 }\na", 2)
   eq("var a 0\nif false { a += 1 } else if false { a += 2 }\na", 0)
-  eq("var a 0\neach b [1 2] { a += b }\na", 3)
+  eq("var a 0\neach _ b [1 2] { a += b }\na", 3)
+  eq("var a 0\neach b _ [1 2] { a += b }\na", 1)
   eq("var a 0\nwhile a < 2 { a += 1 }\na", 2)
 
   // comment
   eq("1 # comment", 1)
+
+  // edge case
+  eq("let a [0]\na[0] = 1", 1)
 }
 
 const main = async () => {
   const node = "main.moa parse.moa infer.moa genc.moa genjs.moa".split(" ").flatMap(filename => parse(fs.readFileSync(__dirname + "/" + filename).toString(), filename))
   const js = generate(node)
   fs.writeFileSync("/tmp/a.js", runtime + ";\n" + js + ";\n__main()")
-  const c = cp.execSync("node /tmp/a.js c").toString()
-  fs.writeFileSync("/tmp/a.c", c)
+  console.log(cp.execSync("node /tmp/a.js help").toString())
+  //const c = cp.execSync("node /tmp/a.js c").toString()
+  //fs.writeFileSync("/tmp/a.c", c)
   //cp.execSync("cc /tmp/a.c -o /tmp/moa")
   //{
   //  const version = cp.execSync("/tmp/moa version").toString()
