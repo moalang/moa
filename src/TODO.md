@@ -1,33 +1,7 @@
 # TODO
-- [ ] genjs
-- [x] if / else
-- [x] regexp literal
-- [x] assert
-- [x] struct
-- [x] each
-- [x] while
-- [x] iif
-- [ ] selfboot
-- [ ] moa repl
-- [ ] moa test
-- [ ] bool   methods
-- [ ] int    methods
-- [ ] float  methods
-- [ ] string methods
-- [ ] bytes  methods
-- [ ] tuple  methods
-- [ ] vec    methods
-- [ ] map    methods
-- [ ] set    methods
-- [ ] moa ide
-- [ ] io.random
-- [ ] io.file
-- [ ] io.db
-- [ ] io.http
-- [ ] io.bcrypt
-- [ ] moa env
-- [ ] package manager for Moa
-- [ ] io.window
+- [ ] bootstrap with debugger
+- [ ] selfboot to generate JavaScript
+- [ ] selfboot to generate C
 
 # Syntax
 ```
@@ -39,13 +13,14 @@ atom:
 
 # Syntax sugar
 ```
-a b     >> (a b)
-a()     >> (a)
-a(b)    >> (a b)
-!a      >> (! a)
-a + b   >> (+ a b)
-a.b     >> (. a b)
-a[b]    >> ((. a at) b)
+a b     -> (a b)
+a()     -> (a)
+a(b)    -> (a b)
+!a      -> (! a)
+a + b   -> (+ a b)
+a.b     -> (. a b)
+a[b]    -> ((. a [) b)
+[a b]   -> ([ a b])
 {
   a
   b c
