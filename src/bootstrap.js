@@ -1,6 +1,21 @@
 "use strict"
 const assert = require("node:assert")
 const fs = require("node:fs")
+const runtime = (() => {
+const __trace = []
+const __log = (label, f) => {
+  const ids = f.toString().match(/\([A-Za-z0-9_, ]*\)/)[0].slice(1, -1).split(",")
+  return (...args) => {
+    const a = structuredClone(args)
+    const o = {
+      args: args.map((a, i) => ids[i] + "=" + JSON.stringify(a)).join(", "),
+      label: label,
+    }
+    __trace.push(o)
+    return o.return = f(...args)
+  }
+}
+}).toString().slice(7, -1)
 
 testTokenize()
 testParse()
@@ -86,7 +101,7 @@ function genjs(nodes) {
   const gencode = code => code
   const gencall = (head, tail) =>
     isOp(head.code) ? (tail.length === 2 ? gen(tail[0]) + head.code + gen(tail[1]) : head.code + gen(tail[0])) :
-    head.code === "def" ? `const ${gen(tail[0])} = (${tail.slice(1, -1).map(gen)}) => ${gen(tail.at(-1))}` :
+    head.code === "def" ? `const ${gen(tail[0])} = __log("${head.lineno}: ${gen(tail[0])}", (${tail.slice(1, -1).map(gen)}) => ${gen(tail.at(-1))})` :
     head.code === "{"   ? `{\n${genjs(tail)}\n}` :
     gen(head) + "(" + tail.map(gen) + ")"
   const gen = node => Array.isArray(node) ? gencall(node[0], node.slice(1)) : gencode(node.code)
@@ -96,13 +111,16 @@ function genjs(nodes) {
 function testGenjs() {
   const eq = (expected, program) => assert.strictEqual(genjs(parse(tokenize(program))), expected)
   eq("a", "a")
-  eq("const a = () => {\n\n}", "def a {}")
+  eq('const a = __log("1: a", () => {\n\n})', "def a {}")
 }
 
 function main() {
   const moa = fs.readFileSync(__dirname + "/moa.moa", "utf-8")
-  const js = genjs(parse(tokenize(moa)))
+  const js = runtime + genjs(parse(tokenize(moa)))
+  fs.writeFileSync("/tmp/moa.js", js)
   console.log(js)
+  console.log("main()")
+  console.log("console.error(...__trace)")
 }
 
 function trace(x) {

@@ -1,5 +1,5 @@
 bootstrap:
-	@node bootstrap.js > /tmp/moa.js
+	@node --watch bootstrap.js
 
 clean:
 	rm /tmp/moa_*
