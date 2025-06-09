@@ -1,9 +1,5 @@
 # TODO
-- [ ] Implement minimal code
-- [ ] Show call tree in IDE
-- [ ] Show variables at a selected line in IDE
-- [ ] Show trace graph in IDE
-- [ ] generate to JavaScript
+- [x] Implement minimal code
 - [ ] generate to C
 - [ ] selfboot
 
