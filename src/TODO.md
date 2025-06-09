@@ -1,7 +1,11 @@
 # TODO
-- [ ] bootstrap with debugger
-- [ ] selfboot to generate JavaScript
-- [ ] selfboot to generate C
+- [ ] Implement minimal code
+- [ ] Show call tree in IDE
+- [ ] Show variables at a selected line in IDE
+- [ ] Show trace graph in IDE
+- [ ] generate to JavaScript
+- [ ] generate to C
+- [ ] selfboot
 
 # Syntax
 ```
@@ -13,14 +17,14 @@ atom:
 
 # Syntax sugar
 ```
-a b     -> (a b)
-a()     -> (a)
-a(b)    -> (a b)
-!a      -> (! a)
-a + b   -> (+ a b)
-a.b     -> (. a b)
-a[b]    -> ((. a [) b)
-[a b]   -> ([ a b])
+a b   -> (a b)
+a()   -> (a)
+a(b)  -> (a b)
+!a    -> (! a)
+a + b -> (+ a b)
+a.b   -> (. a b)
+a[b]  -> ((. a [) b)
+[a b] -> ([ a b])
 {
   a
   b c
