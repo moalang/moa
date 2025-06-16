@@ -1,5 +1,5 @@
 # The Moa Programming Language
-Moa is an open source programming language that enhances your development experience.
+Moa is an open-source programming language designed to improve the developer experience.
 
 
 

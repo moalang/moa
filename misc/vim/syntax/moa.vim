@@ -4,19 +4,19 @@ if exists("b:current_syntax")
 endif
 
 " Constant
-syn region String start=+\z(["'`]\)+ skip=+\\\%(\z1\|$\)+ end=+\z1+
-syn region String start=+\z(```\|"""\|'''\)+ skip=+\\\%(\z1\|$\)+ end=+\z1+
-syn region String start=+r\z([`"'/]\)+ skip=+\\\%(\z1\|$\)+ end=+\z1+
+syn region String start=/"/ skip=/\\"/ end=/"/
+syn region String start=/`/ skip=/\\`/ end=/`/
+"syn region Define start=/^[A-Za-z0-9_]*/ end=/ /
 syn match Number /\%([ \n(\[]\)\@<=[0-9]\+[xob]\?[A-Fa-f0-9_hmsun]*\(\.[A-Fa-f0-9_]\+\)\?/
 syn keyword Boolean true false
 
 " Statement
-syn keyword Define      def dec let var class enum interface extern
+syn keyword Keyword     def dec let var class enum interface extern
 syn keyword Boolean     true false
 syn keyword Type        void bool int i8 i16 i32 i64 u8 u16 u32 u64 float f16 f32 f64 str fn
 syn keyword Type        tuple set vec map opt any
 syn keyword Type        byte bytes stream time
-syn keyword Conditional iif if else match
+syn keyword Conditional when iif if else match
 syn keyword Repeat      for while
 syn keyword keyword     continue break return throw catch
 syn keyword Keyword     use module std log assert math num decimal

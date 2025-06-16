@@ -18,7 +18,7 @@ interface num[a] {
 
 interface integer[a] {
   .num[a]
-  char string
+  char str
 }
 
 interface floating[a] {
@@ -50,25 +50,25 @@ type float { .num }
 type f32   { .num }
 type f64   { .num }
 
-type string {
-  ++      string string string
+type str {
+  ++      str str str
   size    int
-  reverse string
-  slice   int int? string
-  split   string int? vec[string]
-  index   string opt[int]
-  replace string string string
-  trim    string
-  starts  string bool
-  ends    string bool
-  has     string bool
+  reverse str
+  slice   int int? str
+  split   str int? vec[str]
+  index   str opt[int]
+  replace str str str
+  trim    str
+  starts  str bool
+  ends    str bool
+  has     str bool
 }
 
 type regexp {
-  test    string bool
-  capture string vec[string]
-  split   string int? vec[string]
-  replace string int? (vec[string] string) string
+  test    str bool
+  capture str vec[str]
+  split   str int? vec[str]
+  replace str int? (vec[str] str) str
 }
 
 enum opt[a] {
@@ -99,7 +99,7 @@ type vec[a] {
   fold[b] b (a b b) b
   find    (a bool) opt[a]
   index   (a bool) opt[int]
-  join    string string
+  join    str str
   has     a bool
   min     a
   max     a
@@ -143,7 +143,7 @@ type struct[...[id type]] {
   ...(.id .type)
 }
 
-dec time string time
+dec time str time
 type time {
   year   int
   month  int
@@ -157,25 +157,25 @@ type time {
   wday   int
   utc    time
   tick   int time
-  iso    string
-  format string string
+  iso    str
+  format str str
 }
 
 class error {
-  message string
-  stack   string
+  message str
+  stack   str
   thrown  any
 }
 
 dec throw[a b] a b
-dec catch[a]   error a) a
+dec catch[a]   (error a) a
 dec if[a]      ...[bool a] a
 dec case[a b]  a ...[a b] b
 dec default[a] a
 
 extern io {
-  argv vec[string]
-  env  map[string string]
+  argv vec[str]
+  env  map[str str]
   now  time
   put  ... void
   puts ... void
@@ -184,15 +184,14 @@ extern io {
 
 let rune u64
 let byte u8
-let bin  vec[byte] + {
-  dec tr string string
-  dec unicode string @error
+let bin  vec[byte] {
+  dec tr str str
+  dec unicode str @error
 }
-
 # TBD
 #extern bcrypt {
-#  hash string
-#  eq   string string bool
+#  hash str
+#  eq   str str bool
 #}
 #
 #extern mathf[a] {
@@ -208,7 +207,7 @@ let bin  vec[byte] + {
 #let math64 math[f64]
 #
 #extern io {
-#  sh   string ...[string] string @error
+#  sh   str ...[str] str @error
 #  db[t u]  [t u] u
 #  rand {
 #    int        int? int? int
@@ -216,28 +215,28 @@ let bin  vec[byte] + {
 #    bin        int bin
 #  }
 #  fs {
-#    read       string bin @error
-#    write      string ... int @error
-#    append     string ... int @error
-#    remove     string bool @error
+#    read       str bin @error
+#    write      str ... int @error
+#    append     str ... int @error
+#    remove     str bool @error
 #  }
 #  http {
-#    fetch string requestinit? response
+#    fetch str requestinit? response
 #    serve (request responseinit)
 #    requestinit {
-#      method?  string
-#      headers? map[string string]
+#      method?  str
+#      headers? map[str str]
 #      body?    bin
 #    }
 #    responseinit {
 #      status   int
-#      headers? map[string string]
+#      headers? map[str str]
 #      body?    bin
 #    }
 #    request {
-#      method  string
-#      path    string
-#      header  string string
+#      method  str
+#      path    str
+#      header  str string
 #      cookie  string string
 #      body    bin
 #      get     string string

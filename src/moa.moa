@@ -1,32 +1,49 @@
 def main {
   match(io.argv[0]
     "build"   build()
-    "c"       io.puts(genc(load()))
-    "env"     env(io.argv[1])
-    "repl"    repl()
-    "run"     run("-DDEBUG")
-    "test"    run("-DTEST")
+    "repl"    execute("repl")
+    "run"     execute("run")
+    "test"    execute("test")
+    "upgrade" upgrade()
     "version" io.puts("moa0.0.1")
     _         io.puts(`Moa is a programming language
 
 Usage: moa <command> [...arguments]
 
 Commands:
-  moa build [...files]     compile to an executable file
-  moa c     [...files]     compile to C
-  moa js    [...files]     compile to JavaScript
-  moa repl  [...files]     start a shell
-  moa run   [...files]     compile and run
-  moa test  [...files]     run tests
-  moa env   [version]      switch to a selected version
-  moa version              display Moa version`))
+  moa build [...files]    Compile to an executable file
+  moa repl  [...files]    Start a shell
+  moa run   [...files]    Run a file
+  moa test  [...files]    Run tests
+  moa upgrade             Upgrade to latest version of Moa
+  moa version             Display Moa version`))
 }
 
-def load {
-  return infer(io.glob("**/*.moa").fmap(fn(path parse(tokenize(io.reads(path) path)))))
+def upgrade {
+  let bin "~/.moa/bin/moa"
+  let tmp "/tmp/moa"
+  let url "https://github.com/moalang/moa/archive/refs/tags/latest-" ++ io.os ++ "-" ++ io.arch
+  io.mkdir "~/.moa/bin/"
+  io.write tmp io.http.get(url)
+  io.mv tmp bin
+  io.puts bin "was upgraded"
 }
 
-def tokenize program path {
+def build {
+  io.write "a" ("#!node\n" ++ generate())
+  io.shell "chmod 0755 a"
+}
+
+def execute mode {
+  io.write "/tmp/moa_tmp.js" generate()
+  io.shell "MOA_ENV=" ++ mode ++ " node /tmp/moa_tmp.js"
+}
+
+def generate {
+  return genjs(infer(io.glob("**/*.moa").fmap(fn(path parse(tokenize(io.reads(path) path))))))
+}
+
+def tokenize program pathc {
   return []
 }
 
@@ -38,46 +55,6 @@ def infer nodes {
   return nodes
 }
 
-def genc nodes {
-  return `#include <stdio.h>
-int main(void) {
-  puts("hello moa");
-  return 0;
-}`
-}
-
-def build ...args {
-  let c genc(load())
-  io.write "/tmp/a.c" c
-  io.shell "cc" "/tmp/a.c" "-O3" "-o" "a" ...args
-}
-
-def run ...args {
-  build ...args
-  io.shell "./a"
-}
-
-def env version {
-  if version {
-    let mpath "~/.moa/bin/moa"
-    let vpath "~/.moa/bin/" + version
-    if !io.exists(vpath) {
-      let url "https://github.com/moalang/moa/archive/refs/tags/" + version + "-" + io.os + "-" + io.arch
-      io.write(vpath io.http.get(url))
-    }
-    io.rm mpath
-    io.ln vpath mpath
-    return
-  }
-  io.puts(io.glob("~/.moa/bin/*"))
-}
-
-def repl {
-  let context load()
-  io.readline "> " fn(r {
-    if ":q :quit :e :exit".split(" ").has(r.line) {
-      r.exit "Bye"
-    }
-    r.puts(eval(r.line context))
-  })
+def genjs nodes {
+  return `console.log(process.argv)`
 }

@@ -18,18 +18,20 @@ const __log = (label, f) => {
   }
 }
 const __fs = require("node:fs")
+const __ch = require("node:child_process")
 const match = (f, ...a) => __match(f(), a)
 const __match = (v, a) => a.length === 0 ? (() => {throw new Error(`Not match '${v}'`)})() :
   a[0]() === v ? a[1]() :
   __match(v, a.slice(2))
 const _ = true
 const io = {
-  argv: ["c"],
+  argv: ["build"],
   puts: (...a) => console.log(...a),
   log: (...a) => console.error(...a),
   reads: (path) => __fs.readFileSync(path, "utf-8"),
   write: (path, content) => __fs.writeFileSync(path, content),
   glob: (..._) => ["moa.moa"],
+  shell: cmd => __ch.execSync(cmd)
 }
 Array.prototype.fmap = function(f) { return this.flatMap(f) }
 }).toString().slice(7, -1)
@@ -114,9 +116,11 @@ function testParse() {
 
 function genjs(nodes) {
   const isOp = code => /^[+\-*\/%<>!=^|&]/.test(code)
+  const genop1 = op => op
+  const genop2 = op => op === "++" ? "+" : op
   const gencode = code => code
   const gencall = (head, tail) =>
-    isOp(head.code) ? (tail.length === 2 ? gen(tail[0]) + head.code + gen(tail[1]) : head.code + gen(tail[0])) :
+    isOp(head.code) ? (tail.length === 2 ? gen(tail[0]) + genop2(head.code) + gen(tail[1]) : genop1(head.code) + gen(tail[0])) :
     head.code === "let"   ? `const ${gen(tail[0])} = ${gen(tail[1])}` :
     head.code === "var"   ? `let ${gen(tail[0])} = ${gen(tail[1])}` :
     head.code === "def"   ? `const ${gen(tail[0])} = __log("${head.lineno}: ${gen(tail[0])}", (${tail.slice(1, -1).map(gen)}) => ${gen(tail.at(-1))})` :
@@ -152,11 +156,8 @@ function testGenjs() {
 function main() {
   const moa = fs.readFileSync(__dirname + "/moa.moa", "utf-8")
   const js = runtime + genjs(parse(tokenize(moa)))
-  fs.writeFileSync("/tmp/moa.js", js + '\nmain()\nconsole.error(__trace.map(t => t.label + "(" + t.args + ") -> " + JSON.stringify(t.return)).join("\\n"))')
-  const c = ch.execSync("node /tmp/moa.js c").toString()
-  fs.writeFileSync("/tmp/moa.c", c)
-  process.stdout.write(ch.execSync("cc -std=c23 -O2 -s -flto -Wall -Wextra -pedantic /tmp/moa.c -o /tmp/moa").toString())
-  process.stdout.write(ch.execSync("/tmp/moa").toString())
+  fs.writeFileSync("/tmp/moa_bootstrap.js", js + '\nmain()\nconsole.error(__trace.map(t => t.label + "(" + t.args + ") -> " + JSON.stringify(t.return)).join("\\n"))')
+  process.stdout.write(ch.execSync("node /tmp/moa_bootstrap.js").toString())
 }
 
 function trace(x) {
