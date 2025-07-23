@@ -23,43 +23,10 @@ Hello world
 
 ## REPL
 ```
-moa repl
+moa
 ```
 
 ```
 > 1 + 2
 3
-```
-
-
-## Example: HTTP server
-
-http.moa
-```
-def main:
-  io.http.serve ":8000" req => new text "hello"
-
-test t:
-  t.main()
-  t.eq "hello" t.get("/").body
-```
-
-```
-moa test http.moa
-```
-
-```
-1 / 1 100%
-```
-
-```
-moa run http.moa
-```
-
-```
-curl http://localhost:8000
-```
-
-```
-hello
 ```

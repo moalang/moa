@@ -37,18 +37,18 @@ enum bool {
   false
 }
 
-type int   { .integer }
-type i8    { .integer }
-type i16   { .integer }
-type i32   { .integer }
-type i64   { .integer }
-type u8    { .integer }
-type u16   { .integer }
-type u32   { .integer }
-type u64   { .integer }
-type float { .num }
-type f32   { .num }
-type f64   { .num }
+type int   { integer }
+type i8    { integer }
+type i16   { integer }
+type i32   { integer }
+type i64   { integer }
+type u8    { integer }
+type u16   { integer }
+type u32   { integer }
+type u64   { integer }
+type float { floating }
+type f32   { floating }
+type f64   { floating }
 
 type str {
   ++      str str str
@@ -184,7 +184,7 @@ extern io {
 
 let rune u64
 let byte u8
-let bin  vec[byte] {
+let bin vec[byte] {
   dec tr str str
   dec unicode str @error
 }

@@ -1,10 +1,11 @@
 # TODO
-- [x] Implement minimal prototype
-- [ ] Boot using Node backend
-- [ ] Integrate HTTP client library
-- [ ] Integrate HTTP server library
-- [ ] Integrate object database library
-- [ ] Replace Node backend with Go to improve runtime performance
+- [x] Implement minimal bootstrap
+- [ ] Design minimal io{log}
+- [-] Boot using JavaScript backend without any I/O
+- [ ] Boot using C backend without any I/O
+- [ ] Implement web application server mode
+- [ ] Implement HTTP/1.1 server
+- [ ] Implement transactional database
 
 # Usage
 ```
@@ -13,12 +14,12 @@ Moa is an open-source programming language designed to improve the developer exp
 Usage: moa <command> [...arguments]
 
 Commands:
-  moa build [...files]    Compile to an executable file
-  moa repl  [...files]    Start a shell
-  moa run   [...files]    Run a file
-  moa test  [...files]    Run tests
-  moa upgrade             Upgrade to latest version of Moa
-  moa version             Display Moa version
+  moa                     Start a shell
+  moa build               Compile to an executable file
+  moa run                 Run a file
+  moa test                Run tests
+  moa upgrade             Upgrade itself
+  moa version             Display version
 ```
 
 # Internal Syntax
@@ -31,14 +32,15 @@ atom:
 
 # Syntax sugar
 ```
-a b   -> (a b)
-a()   -> (a)
-a(b)  -> (a b)
-!a    -> (! a)
-a + b -> (+ a b)
-a.b   -> (. a b)
-a[b]  -> ((. a [) b)
-[a b] -> ([ a b])
+a b       -> (a b)
+a()       -> (a)
+a(b)      -> (a b)
+!a        -> (! a)
+a + b     -> (+ a b)
+a.b       -> (. a b)
+a[b]      -> (__[ a b)
+a[b] = c  -> (= (__[ a b) c)
+[a b]     -> ([ a b)
 {
   a
   b c
@@ -57,32 +59,31 @@ Operator
 
 Keyword
 ```
-literal   : ... void true false some none
-primitive : void bool int str fn i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64
-container : opt tuple set vec map
+literal   : ... _ true false some none
+primitive : void bool int str fn i8 i16 i32 i64 u8 u16 u32 u64 f16 f32 f64 byte bytes
+container : opt tuple new set vec map
 declare   : let var def class enum dec interface
 branch    : iif if else match when
 flow      : return throw catch
 loop      : for each while continue break
 test      : assert
-std       : byte bytes regexp time duration stream decimal
-reserved  : __.* duration num decimal import export
+std       : regexp time duration stream decimal
+reserved  : __.* num import export
 ```
 
 Symbols
 ```
 ( )  # priority
 [ ]  # vec
+{ }  # block
+:    # block
 .    # field access
 _    # part of id
 ...  # variadic function or there are zero or more
 "    # string
 #    # comment
-:    # block
 =>   # lambda
 ,    # argument separator of lambda
-::   # reserved for `where` of Haskell
-{ }  # reserved for class
 ;    # undefined
 ?    # undefined
 \    # undefined
@@ -103,9 +104,12 @@ fn(1)()
 fn(a a)(1)
 fn(a b: a + b)(1 2)
 tuple(1 "a").0
-[1 2]
+vec(1 2)
 set(1 2)
 map("a" 1 "b" 2)
+
+a => a
+[1 2]
 
 let a 1: a += 1
 var a b c 0
@@ -177,10 +181,12 @@ def f a {b}  : a + b # f(1 b=2) -> 3
 
 idea: Loop
 ```
+for 3: ...                         # 3 times
 for i 3: ...                       # 0 1 2
 for i 1 < 3: ...                   # 1 2
 for i 2 >= 0: ...                  # 2 1 0
 for i 1 <= 5 +=2: ...              # 1 3 5
+for i 1,3 <= 5: ...                # 1 3 5
 each x xs: ...                     # each item
 each i x xs: ...                   # each item with index
 while l < r: ...                   # while
@@ -191,11 +197,11 @@ while.z l < r: while m: continue.z # nested continue with label
 
 idea: Typed argument
 ```
-dec flatten a                 : vec[array[a]] vec[a]
-def flatten[t] a.vec[vec[t]]: a.map(x => x)
-def flatten a: a.map(x => x)
+dec flatten a            : vec[vec[a]] vec[a]
+def flatten a.vec[vec[_]]: a.fmap(x => x)
+def flatten a: a
 
-dec sum t{+[t t t]}   : vec[t] t
+dec sum t{+[t t t]}: vec[t] t
 def sum[t{+[t t t]}] a.vec[t]:
     let n t: each m a: n += m
 def sum[t] a.vec[t]:
@@ -215,6 +221,7 @@ idea: Method
 class vector2:
   x int
   y iny
+  tuple: tuple x y # property
   show1 v: "({}, {})".format v.x v.y
 
 def vector2.show2 v:
@@ -245,7 +252,7 @@ idea: Duration
 
 idea: Regexp
 ```
-re"[0-9]+"
+r/[0-9]+/
 ```
 
 idea: Sugar
@@ -263,6 +270,15 @@ def fib n:
     var sum 1
     let a [:n]
     def f x: sum += x
+```
+
+idea: Return for
+```
+def odds n:
+  return for i n:
+    if i % 2 == 0:
+      continue
+    i
 ```
 
 idea: Pattern matching

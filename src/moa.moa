@@ -1,50 +1,26 @@
-def main {
-  match(io.argv[0]
-    "build"   build()
-    "repl"    execute("repl")
-    "run"     execute("run")
-    "test"    execute("test")
-    "upgrade" upgrade()
-    "version" io.puts("moa0.0.1")
-    _         io.puts(`Moa is a programming language
-
-Usage: moa <command> [...arguments]
-
-Commands:
-  moa build [...files]    Compile to an executable file
-  moa repl  [...files]    Start a shell
-  moa run   [...files]    Run a file
-  moa test  [...files]    Run tests
-  moa upgrade             Upgrade to latest version of Moa
-  moa version             Display Moa version`))
+class Token {
+  code   str
+  file   str
+  lineno int
+  column int
 }
 
-def upgrade {
-  let bin "~/.moa/bin/moa"
-  let tmp "/tmp/moa"
-  let url "https://github.com/moalang/moa/archive/refs/tags/latest-" ++ io.os ++ "-" ++ io.arch
-  io.mkdir "~/.moa/bin/"
-  io.write tmp io.http.get(url)
-  io.mv tmp bin
-  io.puts bin "was upgraded"
+class Node {
+  token Token
 }
 
-def build {
-  io.write "a" ("#!node\n" ++ generate())
-  io.shell "chmod 0755 a"
+def generate nodes {
+  def genjs node {
+  }
+  return nodes.map(genjs).join("\n")
 }
 
-def execute mode {
-  io.write "/tmp/moa_tmp.js" generate()
-  io.shell "MOA_ENV=" ++ mode ++ " node /tmp/moa_tmp.js"
-}
-
-def generate {
-  return genjs(infer(io.glob("**/*.moa").fmap(fn(path parse(tokenize(io.reads(path) path))))))
-}
-
-def tokenize program pathc {
+def tokenize program file {
+  let reg r/(r\/(?:[^\/\\]|\\.)*?\/[A-Za-z]*|[0-9]+|(?:\.\.\.)?[A-Za-z0-9_]+|[\.()[\]{}]|"(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*`|[+\-*\/%<>!=^|&]+|#[^\n]*| +|\n+)/g
   return []
+}
+
+test t {
 }
 
 def parse tokens {
@@ -55,6 +31,5 @@ def infer nodes {
   return nodes
 }
 
-def genjs nodes {
-  return `console.log(process.argv)`
+test t {
 }

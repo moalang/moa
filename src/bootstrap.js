@@ -1,57 +1,27 @@
 "use strict"
 const assert = require("node:assert")
-const fs = require("node:fs")
-const ch = require("node:child_process")
 
-const runtime = (() => {"use strict"
-const __trace = []
-const __log = (label, f) => {
-  const ids = f.toString().match(/\([A-Za-z0-9_,\. ]*\)/)[0].slice(1, -1).split(",")
-  return (...args) => {
-    const a = structuredClone(args)
-    const o = {
-      args: args.map((a, i) => ids[i] + "=" + JSON.stringify(a)).join(", "),
-      label: label,
-    }
-    __trace.push(o)
-    return o.return = f(...args)
-  }
-}
-const __fs = require("node:fs")
-const __ch = require("node:child_process")
-const match = (f, ...a) => __match(f(), a)
-const __match = (v, a) => a.length === 0 ? (() => {throw new Error(`Not match '${v}'`)})() :
-  a[0]() === v ? a[1]() :
-  __match(v, a.slice(2))
-const _ = true
-const io = {
-  argv: ["build"],
-  puts: (...a) => console.log(...a),
-  log: (...a) => console.error(...a),
-  reads: (path) => __fs.readFileSync(path, "utf-8"),
-  write: (path, content) => __fs.writeFileSync(path, content),
-  glob: (..._) => ["moa.moa"],
-  shell: cmd => __ch.execSync(cmd)
-}
-Array.prototype.fmap = function(f) { return this.flatMap(f) }
-}).toString().slice(7, -1)
+const log = x => { console.dir(x, {depth: null}); return x }
 
 function tokenize(program) {
-  const reg = /([0-9]+|(?:\.\.\.)?[A-Za-z0-9_]+|[\.()[\]{}]|"(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*`|[+\-*\/%<>!=^|&]+|#[^\n]*| +|\n+)/g
+  const reg = /(r\/(?:[^\/\\]|\\.)*?\/[A-Za-z]*|[0-9]+|(?:\.\.\.)?[A-Za-z0-9_]+|[\.()[\]{}]|"(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*`|[+\-*\/%<>!=^|&]+|#[^\n]*| +|\n+)/g
   let offset = 0
   let lineno = 1
   return program.match(reg).map(code => ({
     code,
     offset: offset += code.length,
     lineno: code.startsWith("\n") ? lineno += code.split("\n").length - 1 : lineno
-  })).filter(t => t.code.trim())
+  })).filter(t => t.code.trim().replace(/^#.*/, ""))
 }
 
 function testTokenize() {
   const eq = (expected, program) => assert.strictEqual(tokenize(program).map(t => t.code).join(" "), expected)
-  eq("0 a b1 ( ) [ ] { } \"A\" `B` + ** %= #comment", "0 a b1 ()[]{} \"A\" `B` + ** %= #comment")
-  eq('"a\\"\nb"', '"a\\"\nb"')
-  eq('`a\\`\nb`', '`a\\`\nb`')
+  eq("0 a b1 ( ) [ ] { } \"A\" `B` + ** %=", "0 a b1 ()[]{} \"A\" `B` + ** %= #comment")
+  eq('"a\\"\\nb"', String.raw`"a\"\nb"`)
+  eq("r/a/", "r/a/")
+  eq("r/\\\\/", String.raw`r/\\/`)
+  eq("r/a/g", "r/a/g")
+  eq("r/a/ig", "r/a/ig")
 }
 
 function parse(tokens) {
@@ -78,28 +48,28 @@ function parse(tokens) {
     tokens[i]?.code === "(" && isOp(i+1) ? then(untilBy(i+1, ")", [tokens[i]], j => [j+1, tokens[j]]), link) :
     tokens[i]?.code === "(" ? then(until(i+1, ")", [tokens[i]]), link) :
     tokens[i]?.code === "[" ? then(until(i+1, "]", [tokens[i]]), link) :
-    tokens[i]?.code === "{" ? walk(i+1, [tokens[i]]) :
+    tokens[i]?.code === "{" ? then(lines(i+1, [tokens[i]]), (j, a) => tokens[j].code === "}" ? [j+1, a] : fail(`${tokens[i]} is not closed until ${tokens[j]}`)) :
     link(i+1, tokens[i])
   const line = (i, lineno, acc) =>
-    tokens[i]?.lineno === lineno ? then(unit(i), (j, node) => line(j, lineno, acc.concat([node]))) :
-    [i, acc.length === 1         ? acc[0] : acc]
-  const walk = (i, acc) =>
-    tokens[i]?.code === "}" ? [i+1, acc] :
-    tokens[i]               ? then(line(i, tokens[i].lineno, []), (j, a) => walk(j, acc.concat([a]))) :
+    tokens[i]?.lineno === lineno && tokens[i]?.code !== "}" ? then(unit(i), (j, node) => line(j, lineno, acc.concat([node]))) :
+    [i, acc.length === 1                                    ? acc[0] : acc]
+  const lines = (i, acc) =>
+    tokens[i] ? then(line(i, tokens[i].lineno, []), (j, a) => a.length === 0 ? [j, acc] : lines(j, acc.concat([a]))) :
     [i, acc]
-  return walk(0, [])[1]
+  const result = lines(0, [])
+  return result[1]
 }
 
 function testParse() {
   const show = x => Array.isArray(x) ? "(" + (x[0]?.code === "(" ? show(x[1]) : x.map(show).join(" ")) + ")" : x.code
-  const eq = (expected, program) => assert.strictEqual(show(parse(tokenize(program))[0]), expected)
-
+  const eq = (expected, program) => assert.strictEqual(parse(tokenize(program)).map(show).join("\n"), expected)
   eq("a", "a")
   eq("(a)", "(a)")
   eq("(a b)", "a b")
   eq("(a b)", "a(b)")
   eq("([ a)", "[a]")
   eq("(__[ a b)", "a[b]")
+  eq("(= (__[ a b) c)", "a[b] = c")
   eq("(+ a)", "+a")
   eq("(+ a b)", "a + b")
   eq("(+ a (- b))", "a + -b")
@@ -109,6 +79,9 @@ function testParse() {
   eq("((. a b) c)", "a.b(c)")
   eq("((. ((. a b) c) d) e)", "a.b(c).d(e)")
   eq("(__[ (. a b) c)", "a.b[c]")
+  eq("({)", "{}")
+  eq("(a ({))", "a {}")
+  eq("(a ({ b))", "a {b}")
   eq("({ a (b c))", "{\na\nb c\n}")
   eq("(a (__[ b c))", "a b[c]")
   eq('(a `\n`)', 'a `\n`')
@@ -118,14 +91,18 @@ function genjs(nodes) {
   const isOp = code => /^[+\-*\/%<>!=^|&]/.test(code)
   const genop1 = op => op
   const genop2 = op => op === "++" ? "+" : op
-  const gencode = code => code
+  const gencode = code => code.startsWith("r/") ? code.slice(1) : code
+  const genmatch = ([x, y, ...z]) => `__m === ${x} ? ${y} : ${z.length === 0 ? '__fail(`Unmatch ${__m}`)' : z.length === 1 ? z[0] : genmatch(z)}`
+  const genclass = fields => `(${fields}) => (${fields})`
   const gencall = (head, tail) =>
     isOp(head.code) ? (tail.length === 2 ? gen(tail[0]) + genop2(head.code) + gen(tail[1]) : genop1(head.code) + gen(tail[0])) :
+    head.code === "test"  ? `__tests.push(${tail[0].code} => ${gen(tail.at(-1))})` :
+    head.code === "class" ? `const ${gen(tail[0])} = ${genclass(tail[1].slice(1).map(f => f[0].code))}` :
     head.code === "let"   ? `const ${gen(tail[0])} = ${gen(tail[1])}` :
     head.code === "var"   ? `let ${gen(tail[0])} = ${gen(tail[1])}` :
-    head.code === "def"   ? `const ${gen(tail[0])} = __log("${head.lineno}: ${gen(tail[0])}", (${tail.slice(1, -1).map(gen)}) => ${gen(tail.at(-1))})` :
+    head.code === "def"   ? `const ${gen(tail[0])} = (${tail.slice(1, -1).map(gen)}) => ${gen(tail.at(-1))}` :
     head.code === "if"    ? `if (${gen(tail[0])}) ${gen(tail[1])}` :
-    head.code === "match" ? `match(${tail.map(gen).map(s => `() => ${s}\n`)})` :
+    head.code === "match" ? `(__m => ${genmatch(tail.slice(1).map(gen))})(${gen(tail[0])})` :
     head.code === "fn"    ? `(${tail.slice(0, -1).map(gen)}) => ${gen(tail.at(-1))}` :
     head.code === "__["   ? `${gen(tail[0])}[${gen(tail[1])}]` :
     head.code === "("     ? `(${gen(tail[0])})` :
@@ -140,29 +117,66 @@ function genjs(nodes) {
 function testGenjs() {
   const eq = (expected, program) => assert.strictEqual(genjs(parse(tokenize(program))), expected)
   eq("a", "a")
+  eq("/a/", "r/a/")
+  eq('"a\\\\"', '"a\\\\"')
   eq("!a", "!a")
   eq("a+b", "a + b")
   eq('[a]', "[a]")
   eq("a[b]", "a[b]")
+  eq("a[b]=c", "a[b] = c")
   eq("a.b", "a.b")
   eq("a.b[c]", "a.b[c]")
-  eq('const a = __log("1: a", () => {\n\n})', "def a {}")
-  eq("match(() => 1\n,() => 2\n,() => 3\n)", "match(1 2 3)")
+  eq("a()", "a()")
+  eq("a.b()", "a.b()")
+  eq("a(b)", "a(b)")
+  eq("a.b(c)", "a.b(c)")
+  eq("a(b)", "a b")
+  eq("a.b(c)", "a.b c")
+  eq('const a = () => {\n\n}', "def a {}")
+  eq("(__m => __m === 2 ? 3 : __fail(`Unmatch ${__m}`))(1)", "match(1 2 3)")
+  eq("(__m => __m === 2 ? 3 : 4)(1)", "match(1 2 3 4)")
+  eq("(__m => __m === 2 ? 3 : __m === 4 ? 5 : 6)(1)", "match(1 2 3 4 5 6)")
   eq("const a = 1", "let a 1")
+  eq("const a = /a/", "let a r/a/")
   eq("let a = 1", "var a 1")
   eq("(a) => a", "fn(a a)")
+  eq("__tests.push(t => {\n\n})", "test t {}")
+  eq("__tests.push(t => {\nt.log(1)\n})", "test t { t.log 1 }")
 }
+
+const runtime = (() => {"use strict"
+const io = {
+  log: (...a) => console.error(...a),
+}
+Array.prototype.fmap = function(f) { return this.flatMap(f) }
+const __assert = require("node:assert")
+const __fail = (...a) => { throw new Error(`${JSON.stringify(a)}`) }
+const __main = () => {
+  const fs = require("node:fs")
+  const ch = require("node:child_process")
+  const moa = fs.readFileSync("./moa.moa", "utf-8")
+  const nodes = tokenize(moa, "moa.moa")
+  infer(nodes)
+  const js = generate(nodes)
+  fs.writeFileSync("/tmp/a", "#!node\n" + js)
+  ch.execSync("chmod 0755 /tmp/a")
+  ch.execSync("node -c /tmp/a")
+}
+const __tester = {
+  log: (...a) => console.error(...a),
+  eq: (a, b, c) => __assert.strictEqual(a, b, c)
+}
+const __tests = []
+const __test = () => __tests.map(f => f(__tester))
+}).toString().slice(7, -1)
 
 function main() {
+  const fs = require("node:fs")
+  const ch = require("node:child_process")
   const moa = fs.readFileSync(__dirname + "/moa.moa", "utf-8")
-  const js = runtime + genjs(parse(tokenize(moa)))
-  fs.writeFileSync("/tmp/moa_bootstrap.js", js + '\nmain()\nconsole.error(__trace.map(t => t.label + "(" + t.args + ") -> " + JSON.stringify(t.return)).join("\\n"))')
-  process.stdout.write(ch.execSync("node /tmp/moa_bootstrap.js").toString())
-}
-
-function trace(x) {
-  console.dir(x, {depth:null})
-  return x
+  const js = genjs(parse(tokenize(moa)))
+  fs.writeFileSync("/tmp/moa_bootstrap.js", runtime + js + '\n__test()\n__main()')
+  process.stdout.write(ch.execSync("node /tmp/moa_bootstrap.js js").toString())
 }
 
 testTokenize()

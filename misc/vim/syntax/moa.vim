@@ -6,7 +6,6 @@ endif
 " Constant
 syn region String start=/"/ skip=/\\"/ end=/"/
 syn region String start=/`/ skip=/\\`/ end=/`/
-"syn region Define start=/^[A-Za-z0-9_]*/ end=/ /
 syn match Number /\%([ \n(\[]\)\@<=[0-9]\+[xob]\?[A-Fa-f0-9_hmsun]*\(\.[A-Fa-f0-9_]\+\)\?/
 syn keyword Boolean true false
 
