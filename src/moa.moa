@@ -26,8 +26,12 @@ def tokenize program file {
     if code.starts("\n") {
       lineno += code.count("\n")
       column = 1
-    } else if code.starts(" ") && column == 1 {
-      column += code.size
+    } else if code.starts(" ") {
+      if column == 1 {
+        column += code.size
+      }
+    } else if code.starts("#") {
+      # do nothing
     } else {
       tokens.push Token(code file offset lineno column)
     }
@@ -37,6 +41,15 @@ def tokenize program file {
 }
 
 test t {
+  def eq expected program {
+    t.eq tokenize(program).map(t => t.code).join(" ") expected
+  }
+  eq "0 a b1 ( ) [ ] { } \"A\" `B` + ** %=" "0 a b1 ()[]{} \"A\" `B` + ** %= #comment"
+  eq `"a\\"\\nb"` `"a\\"\\nb"`
+  eq "r/a/" "r/a/"
+  eq "r/\\\\/" "r/\\\\/"
+  eq "r/a/g" "r/a/g"
+  eq "r/a/ig" "r/a/ig"
 }
 
 def parse tokens {

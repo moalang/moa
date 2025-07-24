@@ -17,9 +17,9 @@ function tokenize(program) {
 function testTokenize() {
   const eq = (expected, program) => assert.strictEqual(tokenize(program).map(t => t.code).join(" "), expected)
   eq("0 a b1 ( ) [ ] { } \"A\" `B` + ** %=", "0 a b1 ()[]{} \"A\" `B` + ** %= #comment")
-  eq('"a\\"\\nb"', String.raw`"a\"\nb"`)
+  eq('"a\\"\\nb"', `"a\\\"\\nb"`)
   eq("r/a/", "r/a/")
-  eq("r/\\\\/", String.raw`r/\\/`)
+  eq("r/\\\\/", "r/\\\\/")
   eq("r/a/g", "r/a/g")
   eq("r/a/ig", "r/a/ig")
 }
