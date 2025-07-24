@@ -84,7 +84,7 @@ function testParse() {
   eq("(a ({ b))", "a {b}")
   eq("({ a (b c))", "{\na\nb c\n}")
   eq("(a (__[ b c))", "a b[c]")
-  eq('(a `\n`)', 'a `\n`')
+  eq("(a `\n`)", 'a `\n`')
 }
 
 function genjs(nodes) {
@@ -93,7 +93,7 @@ function genjs(nodes) {
   const genop2 = op => op === "++" ? "+" : op
   const gencode = code => code.startsWith("r/") ? code.slice(1) : code
   const genmatch = ([x, y, ...z]) => `__m === ${x} ? ${y} : ${z.length === 0 ? '__fail(`Unmatch ${__m}`)' : z.length === 1 ? z[0] : genmatch(z)}`
-  const genclass = fields => `(${fields}) => (${fields})`
+  const genclass = fields => `(${fields}) => ({${fields}})`
   const gencall = (head, tail) =>
     isOp(head.code) ? (tail.length === 2 ? gen(tail[0]) + genop2(head.code) + gen(tail[1]) : genop1(head.code) + gen(tail[0])) :
     head.code === "test"  ? `__tests.push(${tail[0].code} => ${gen(tail.at(-1))})` :
@@ -101,7 +101,11 @@ function genjs(nodes) {
     head.code === "let"   ? `const ${gen(tail[0])} = ${gen(tail[1])}` :
     head.code === "var"   ? `let ${gen(tail[0])} = ${gen(tail[1])}` :
     head.code === "def"   ? `const ${gen(tail[0])} = (${tail.slice(1, -1).map(gen)}) => ${gen(tail.at(-1))}` :
+    head.code === "for"   ?  `for (let ${tail[0].code}=0; ${tail[0].code}<${gen(tail[1])}; ++${tail[0].code}) ${gen(tail[2])}` :
+    head.code === "each"  ?  `for (const ${tail[0].code} of ${gen(tail[1])}) ${gen(tail[2])}` :
     head.code === "if"    ? `if (${gen(tail[0])}) ${gen(tail[1])}` :
+    head.code === "else" && tail[0].code === "if"  ? `else if (${gen(tail[1])}) ${gen(tail[2])}` :
+    head.code === "else"  ? "else " + gen(tail[0]) :
     head.code === "match" ? `(__m => ${genmatch(tail.slice(1).map(gen))})(${gen(tail[0])})` :
     head.code === "fn"    ? `(${tail.slice(0, -1).map(gen)}) => ${gen(tail.at(-1))}` :
     head.code === "__["   ? `${gen(tail[0])}[${gen(tail[1])}]` :
@@ -142,6 +146,12 @@ function testGenjs() {
   eq("(a) => a", "fn(a a)")
   eq("__tests.push(t => {\n\n})", "test t {}")
   eq("__tests.push(t => {\nt.log(1)\n})", "test t { t.log 1 }")
+  eq("if (a) {\n\n}", "if a {}")
+  eq("if (a) {\n\n}\nelse if (b) {\n\n}\nelse {\n\n}", "if a {}\nelse if b {}\nelse {}")
+  eq("for (let i=0; i<1; ++i) {\n\n}", "for i 1 {}")
+  eq("for (const x of xs) {\n\n}", "each x xs {}")
+  eq("const a = (b) => ({b})", "class a { b c }")
+  eq("const a = (b,e) => ({b,e})", "class a { b c\ne f }")
 }
 
 const runtime = (() => {"use strict"
@@ -149,6 +159,9 @@ const io = {
   log: (...a) => console.error(...a),
 }
 Array.prototype.fmap = function(f) { return this.flatMap(f) }
+String.prototype.starts = function(s) { return this.startsWith(s) }
+String.prototype.count = function(s) { return this.split(s).length }
+Object.defineProperty(String.prototype, 'size', { get() { return this.length } })
 const __assert = require("node:assert")
 const __fail = (...a) => { throw new Error(`${JSON.stringify(a)}`) }
 const __main = () => {
