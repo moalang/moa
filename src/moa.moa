@@ -66,7 +66,7 @@ def parse tokens {
     return i < tokens.size && r/^[+\-*\/%<>!=^|&]/.test(tokens[i].code)
   }
   def isop1 i {
-    return (i+1) < tokens.size && isop(i) && tokens[i].offset == tokens[i+1].offset - tokens[i+1].code.length && (i == 0 || tokens[i-1].offset + tokens[i-1].code.length < tokens[i].offset)
+    return (i+1) < tokens.size && isop(i) && touchesright(i) && (i == 0 || !touchesleft(i))
   }
   def isop2 i {
     return isop(i) && !isop1(i)
@@ -75,8 +75,11 @@ def parse tokens {
     let t tokens[i]
     return Node("__" + t.code t.file t.offset t.lineno t.column t.type t.params)
   }
-  def iscloseleft i {
-    return tokens[i-1].offset == tokens[i].offset - tokens[i].code.size
+  def touchesright i {
+    return (i+1) < tokens.size && tokens[i].offset == tokens[i+1].offset - tokens[i+1].code.size
+  }
+  def touchesleft i {
+    return i >= 1 && tokens[i-1].offset == tokens[i].offset - tokens[i].code.size
   }
   def until i end a {
     return untilby(i end a unit)
@@ -91,14 +94,14 @@ def parse tokens {
   def link i node {
     return iif(
       i < tokens.size && tokens[i].code == "."                   link(i+2 params([tokens[i] node tokens[i+1]]))
-      i < tokens.size && tokens[i].code == "(" && iscloseleft(i) until(i+1 ")" [node]).tmap(link)
-      i < tokens.size && tokens[i].code == "[" && iscloseleft(i) until(i+1 "]" [fake(i) node]).tmap(link)
-      isop2(i)                                                    unit(i+1).tmap(fn(j next link(j params([tokens[i] node next]))))
+      i < tokens.size && tokens[i].code == "(" && touchesleft(i) until(i+1 ")" [node]).tmap(link)
+      i < tokens.size && tokens[i].code == "[" && touchesleft(i) until(i+1 "]" [fake(i) node]).tmap(link)
+      isop2(i)                                                   unit(i+1).tmap(fn(j next link(j params([tokens[i] node next]))))
       [i node])
   }
   def unit i {
     return iif(
-      isop1(i)                                               unit(i+1).tmap(fn(j node [j params([tokens[i] node])]))
+      isop1(i)                                              unit(i+1).tmap(fn(j node [j params([tokens[i] node])]))
       i < tokens.size && tokens[i].code == "(" && isop(i+1) untilby(i+1 ")" [tokens[i]] fn(j [j+1 tokens[j]])).tmap(link)
       i < tokens.size && tokens[i].code == "("              until(i+1 ")" [tokens[i]]).tmap(link)
       i < tokens.size && tokens[i].code == "["              until(i+1 "]" [tokens[i]]).tmap(link)
