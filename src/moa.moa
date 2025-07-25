@@ -1,14 +1,19 @@
-class Token {
+class Type {
+  name str
+  args []Type
+}
+
+class Node {
   code   str
   file   str
   offset int
   lineno int
   column int
+  type   Type
+  params []Node
 }
 
-class Node {
-  token Token
-}
+let tundef Type("undef" [])
 
 def generate nodes {
   def genjs node {
@@ -33,7 +38,7 @@ def tokenize program file {
     } else if code.starts("#") {
       # do nothing
     } else {
-      tokens.push Token(code file offset lineno column)
+      tokens.push Node(code file offset lineno column tundef [])
     }
     offset += code.size
   }
@@ -42,7 +47,7 @@ def tokenize program file {
 
 test t {
   def eq expected program {
-    t.eq tokenize(program).map(t => t.code).join(" ") expected
+    t.eq tokenize(program).map(fn(t t.code)).join(" ") expected
   }
   eq "0 a b1 ( ) [ ] { } \"A\" `B` + ** %=" "0 a b1 ()[]{} \"A\" `B` + ** %= #comment"
   eq `"a\\"\\nb"` `"a\\"\\nb"`
@@ -53,7 +58,101 @@ test t {
 }
 
 def parse tokens {
-  return []
+  def params a {
+    let t tokens[0]
+    return Node("" t.file 0 0 0 tundef a)
+  }
+  def isop i {
+    return i < tokens.size && r/^[+\-*\/%<>!=^|&]/.test(tokens[i].code)
+  }
+  def isop1 i {
+    return (i+1) < tokens.size && isop(i) && tokens[i].offset == tokens[i+1].offset - tokens[i+1].code.length && (i == 0 || tokens[i-1].offset + tokens[i-1].code.length < tokens[i].offset)
+  }
+  def isop2 i {
+    return isop(i) && !isop1(i)
+  }
+  def fake i {
+    let t tokens[i]
+    return Node("__" + t.code t.file t.offset t.lineno t.column t.type t.params)
+  }
+  def iscloseleft i {
+    return tokens[i-1].offset == tokens[i].offset - tokens[i].code.size
+  }
+  def until i end a {
+    return untilby(i end a unit)
+  }
+  def untilby i end a f {
+    return iif(i >= tokens.size
+        fail(`not closed '${end}'`)
+      tokens[i].code == end
+        tuple(i + 1 params(a))
+      f(i).tmap(fn(j node untilby(j end a.concat([node]) f))))
+  }
+  def link i node {
+    return iif(
+      i < tokens.size && tokens[i].code == "."                   link(i+2 params([tokens[i] node tokens[i+1]]))
+      i < tokens.size && tokens[i].code == "(" && iscloseleft(i) until(i+1 ")" [node]).tmap(link)
+      i < tokens.size && tokens[i].code == "[" && iscloseleft(i) until(i+1 "]" [fake(i) node]).tmap(link)
+      isop2(i)                                                    unit(i+1).tmap(fn(j next link(j params([tokens[i] node next]))))
+      [i node])
+  }
+  def unit i {
+    return iif(
+      isop1(i)                                               unit(i+1).tmap(fn(j node [j params([tokens[i] node])]))
+      i < tokens.size && tokens[i].code == "(" && isop(i+1) untilby(i+1 ")" [tokens[i]] fn(j [j+1 tokens[j]])).tmap(link)
+      i < tokens.size && tokens[i].code == "("              until(i+1 ")" [tokens[i]]).tmap(link)
+      i < tokens.size && tokens[i].code == "["              until(i+1 "]" [tokens[i]]).tmap(link)
+      i < tokens.size && tokens[i].code == "{"              lines(i+1 [tokens[i]]).tmap(fn(j a iif(tokens[j].code == "}" [j+1 params(a)] fail(`${tokens[i]} is not closed until ${tokens[j]}`))))
+      link(i+1 tokens[i]))
+  }
+  def line i lineno acc {
+    return iif(
+      i < tokens.size && tokens[i].lineno == lineno && tokens[i].code != "}"
+        unit(i).tmap(fn(j node line(j lineno acc.concat([node]))))
+      [i iif(acc.size == 1 acc[0] params(acc))])
+  }
+  def lines i acc {
+    return iif(
+      i < tokens.size
+        line(i tokens[i].lineno []).tmap(fn(j node iif(node.code == "" && node.params.size == 0 [j acc] lines(j acc.concat([node])))))
+      [i acc])
+  }
+  return lines(0 [])[1]
+}
+
+test t {
+  def show x {
+    return iif(x.params.size == 0
+        x.code
+      x.params[0].code == "("
+        "(" + show(x.params[1]) + ")"
+      "(" + x.params.map(show).join(" ") + ")")
+  }
+  def eq expected program {
+    t.eq parse(tokenize(program "test.moa")).map(show).join("\n") expected
+  }
+  eq "a" "a"
+  eq "(a)" "(a)"
+  eq "(a b)" "a b"
+  eq "(a b)" "a(b)"
+  eq "([ a)" "[a]"
+  eq "(__[ a b)" "a[b]"
+  eq "(= (__[ a b) c)" "a[b] = c"
+  eq "(+ a)" "+a"
+  eq "(+ a b)" "a + b"
+  eq "(+ a (- b))" "a + -b"
+  eq "(+ a (* b c))" "a + b * c"
+  eq "(* ((+ a b)) c)" "(a + b) * c"
+  eq "(. a b)" "a.b"
+  eq "((. a b) c)" "a.b(c)"
+  eq "((. ((. a b) c) d) e)" "a.b(c).d(e)"
+  eq "(__[ (. a b) c)" "a.b[c]"
+  eq "({)" "{}"
+  eq "(a ({))" "a {}"
+  eq "(a ({ b))" "a {b}"
+  eq "({ a (b c))" "{\na\nb c\n}"
+  eq "(a (__[ b c))" "a b[c]"
+  eq "(a `\n`)" "a `\n`"
 }
 
 def infer nodes {
