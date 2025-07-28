@@ -1,0 +1,220 @@
+struct TypeError {
+  t Type
+  u Type
+}
+
+def infer root {
+  let tv1     Type("1" [])
+  let tv2     Type("2" [])
+  let tbool   Type("bool" [])
+  let tint    Type("int" [])
+  let tfloat  Type("float" [])
+  let tstring Type("string" [])
+  let tvec    Type("vec" [tv1])
+  let tmap    Type("map" [tv1 tv2])
+  let tenv    map(
+    "map" tmap
+    "!" Type("" [tbool tbool])
+    "fail" Type("" [tv1 tv2])
+  )
+  def infwith node env {
+    def inf node {
+      node.type = iif(
+        node.argv.size == 0
+          infcode(node.token.code)
+        node.token.code == ""
+          infcall(inf(node.argv[0]) node.argv.slice(1).map(inf))
+        infcall(infcode(node.token.code) node.argv.map(inf)))
+      return node.type
+    }
+    def infcode s {
+      return iif(
+        ((s == "true") || (s == "false"))
+          tbool
+        r/^[0-9]\./.test(s)
+          tfloat
+        r/^[0-9]/.test(s)
+          tint
+        s.starts("`") || s.starts(`"`)
+          tstring
+        s == "["
+          tvec
+        env.has(s)
+          env.get(s)
+        fail(`Can not infer type of '${s}'`))
+    }
+    return inf(node)
+  }
+  def infcall f xs {
+    if f == tvec {
+      each i x xs {
+        unify f.generics[0] x
+      }
+    } else if f == tmap {
+      assert (f.generics.size % 2) == 0
+      each i x xs {
+        unify f.generics[i % 2] x
+      }
+    } else if f.name == "" {
+      assert f.generics.size == xs.size
+      each i x xs {
+        unify f.generics[i] x
+      }
+    } else {
+      assert false
+    }
+    return f
+  }
+  def unify t u {
+    t = prune(t)
+    u = prune(u)
+    if isvar(t) {
+      t.generics[0] = u
+    } else if isvar(u) {
+      unify u t
+    } else {
+      if t.name != u.name {
+        throw TypeError(t u)
+      }
+      if t.generics.size != u.generics.size {
+        throw TypeError(t u)
+      }
+      each i tt t.generics {
+        unify tt u.generics[i]
+      }
+    }
+  }
+  def isvar t {
+    return r/^[0-9]/.test(t.name)
+  }
+  def prune t {
+    if isvar(t) && t.generics.size == 1 {
+      return t.generics[0] = prune(t.generics[0])
+    } else {
+      return t
+    }
+  }
+  def recprune node {
+    node.type = prune(node.type)
+    node.type.generics = node.type.generics.map(prune)
+    node.argv.map recprune
+  }
+  root.map fn(node infwith(node tenv))
+  root.map recprune
+  return root
+}
+
+test {
+  def show t {
+    return iif(t.generics.size == 0
+      t.name
+      t.name + "[" + t.generics.map(show).join(" ") + "]")
+  }
+  def inf s {
+    return show(infer(parse(tokenize(s "")))[0].type)
+  }
+
+  # primitives
+  assert inf("true") == "bool"
+  assert inf("false") == "bool"
+  assert inf("0") == "int"
+  assert inf("1.0") == "float"
+  assert inf("``") == "string"
+  assert inf(`""`) == "string"
+  assert inf(`[]`) == "vec[1]"
+  assert inf(`[1]`) == "vec[int]"
+  assert inf(`[1 2]`) == "vec[int]"
+  assert inf(`map`) == "map[1 2]"
+  assert inf(`map(1 true)`) == "map[int bool]"
+  assert inf(`map(1 true 2 false)`) == "map[int bool]"
+
+  # unary operator
+  io.log "skip parse test"
+  return
+  assert inf("(! true)") == "bool"
+  assert inf("(- 1)") == "int"
+
+  # binary operator
+  assert inf("(+ 1 1)") == "int"
+  assert inf("(< 1 1)") == "bool"
+
+  # branch
+  assert inf("(iif true 1 2)") == "int"
+  assert inf("(iif true true true)") == "bool"
+
+  # function
+  assert inf("(fn a (- a 1))") == "(int int)"
+  assert inf("(fn a b (- a b 0))") == "(int int int)"
+  assert inf("((fn 1))") == "int"
+
+  # do
+  assert inf("(do 1)") == "int"
+  assert inf("(do 1 true)") == "bool"
+  assert inf("(do (if false (return 1)) ((. io put) 2))") == "int"
+
+  # generics
+  assert inf("(fn a a)") == "(1 1)"
+  assert inf("(fn a b a)") == "(1 2 1)"
+  assert inf("(fn a b b)") == "(1 2 2)"
+  assert inf("((fn a a) 1)") == "int"
+  assert inf("(let f (fn a a)) (f 1) (f true)") == "bool"
+  assert inf("(def f a a) (f 1) (f true)") == "bool"
+
+  # property
+  assert inf("(let a (fn b (. b text)))") == "(1.text(2) 2)"
+  assert inf(`(catch (throw "a") (fn e (. e message)))`) == "string"
+  assert inf("(vec (new a 2))") == "vec[new__a[int]]"
+  assert inf("(struct a () b int) (vec (a 1))") == "vec[a]"
+  assert inf("(struct a () b int) (vec (a 1) (new b 2))") == "vec[a]"
+  assert inf("(vec (new a 2))") == "vec[new__a[int]]"
+  assert inf("(struct a () b int) (vec (a 1))") == "vec[a]"
+  assert inf("(struct a () b int) (vec (a 1) (new b 2))") == "vec[a]"
+  assert inf("(struct a () b int) (vec (new b 1) (a 2))") == "vec[a]"
+  assert inf("(struct a () b int c int) (vec (new b 1) (a 2 3))") == "vec[a]"
+
+  # container
+  assert inf("(vec)") == "vec[1]"
+  assert inf("(vec 1)") == "vec[int]"
+  assert inf("(vec (tuple 1 true))") == "vec[tuple[int bool]]"
+  assert inf("(map 1 true)") == "map[int bool]"
+
+  # combinations
+  assert inf("(let f (fn x (+ x 1))) (let g (fn x (+ x 2))) (+ (f 1) (g 1))") == "int"
+  assert inf("(fn f g x (g (f x)))") == "((1 2) (2 3) 1 3)"
+  assert inf("(fn x y z (x z (y z)))") == "((1 2 3) (1 2) 1 3)"
+  assert inf("(fn b x (iif (x b) x (fn x b)))") == "(1 (1 bool) (1 1))"
+  assert inf("(fn x (iif true x (iif x true false)))") == "(bool bool)"
+  assert inf("(fn x y (iif x x y))") == "(bool bool bool)"
+  assert inf("(fn n ((fn x (x (fn y y))) (fn f (f n))))") == "(1 1)"
+  assert inf("(fn x y (x y))") == "((1 2) 1 2)"
+  assert inf("(fn x y (x (y x)))") == "((1 2) ((1 2) 1) 2)"
+  assert inf("(fn h t f x (f h (t f x)))") == "(1 ((1 2 3) 4 2) (1 2 3) 4 3)"
+  assert inf("(fn x y (x (y x) (y x)))") == "((1 1 2) ((1 1 2) 1) 2)"
+  assert inf("(let id (fn x x)) (let f (fn y (id (y id))))") == "(((1 1) 2) 2)"
+  assert inf("(let id (fn x x)) (let f (fn (iif (id true) (id 1) (id 2))))") == "(int)"
+  assert inf("(let f (fn x 1)) (let g (fn (+ (f true) (f 4))))") == "(int)"
+  assert inf("(let f (fn x x)) (let g (fn y y)) (let h (fn b (iif b (f g) (g f))))") == "(bool (1 1))"
+
+  # variadic arguments
+  assert inf("(fn a? (+ a 0))") == "(int? int)"
+  assert inf("((fn a? (+ a 0)) 1)") == "int"
+  assert inf("(fn a b? (+ a b 0))") == "(int int? int)"
+  assert inf("((fn a b? (+ a b 0)) 1)") == "int"
+  assert inf("((fn a b? (+ a b 0)) 1 2)") == "int"
+  assert inf("(fn a* a)") == "(1* vec[1])"
+  assert inf("((fn a* a) 1)") == "vec[int]"
+  assert inf("((fn a b* a) 1 2)") == "int"
+  assert inf("((fn a b* b) 1 2)") == "vec[int]"
+
+  # io
+  assert inf(`((. ((. io fetch) "") text))`) == "string"
+  assert inf(`((. ((. io fetch) "") header) "")`) == "string"
+  assert inf(`((. ((. io fetch) "") cookie) "")`) == "string"
+
+  # reject invalid types
+  assert inf("(+ 1 true)") == "Type error"
+  assert inf("(iif 1 2 3)") == "Type error"
+  assert inf("(iif true 2 false)") == "Type error"
+  assert inf("((fn e (. e message)) 1)") == "Type error"
+  assert inf("(struct a () b int) (vec (a 1) (new c 2))") == "Type error"
+}

@@ -1,86 +1,55 @@
-dec (==)[a] a a bool
-dec (!=)[a] a a bool
-dec (< )[a] a a bool
-dec (<=)[a] a a bool
-dec (> )[a] a a bool
-dec (>=)[a] a a bool
-
-interface num[a] {
-  +   a a a
-  -   a a a
-  *   a a a
-  **  a a a
-  /   a a a
-  %   a a a
-  abs a
-  neg a
-}
-
-interface integer[a] {
-  .num[a]
-  char str
-}
-
-interface floating[a] {
-  .num[a]
-  floor int
-  ceil int
-  round int
-}
-
-interface seq[a] {
-  next opt[a]
-}
-
 enum bool {
   true
   false
 }
 
-type int   { integer }
-type i8    { integer }
-type i16   { integer }
-type i32   { integer }
-type i64   { integer }
-type u8    { integer }
-type u16   { integer }
-type u32   { integer }
-type u64   { integer }
-type float { floating }
-type f32   { floating }
-type f64   { floating }
+interface num a {
+  (+ - * ** / % | & ^) a a a
+  (abs neg) a
+}
 
-type str {
-  ++      str str str
+extern (int i8 i16 i32 i64 u8 u16 u32 u64).num {
+  char string
+}
+
+extern (float f32 f64).num {
+  floor  int
+  ceil   int
+  round  int
+}
+
+extern string {
+  ++      string string string
   size    int
-  reverse str
-  slice   int int? str
-  split   str int? vec[str]
-  index   str opt[int]
-  replace str str str
-  trim    str
-  starts  str bool
-  ends    str bool
-  has     str bool
+  reverse string
+  slice   int int? string
+  split   string int? vec[string]
+  index   string option[int]
+  replace string string string
+  trim    string
+  starts  string bool
+  ends    string bool
+  has     string bool
+  encode  string string? bin @error
 }
 
-type regexp {
-  test    str bool
-  capture str vec[str]
-  split   str int? vec[str]
-  replace str int? (vec[str] str) str
+extern regexp {
+  test    string bool
+  capture string vec[string]
+  split   string int? vec[string]
+  replace string int? (vec[string] string) string
 }
 
-enum opt[a] {
+enum option a {
   some a
   none
-  dec and[b] opt[a] (a b) opt[b]
-  dec or     opt[a] a a
-  dec bool   bool
+  and[b] option[a] (a b) option[b]
+  or     option[a] a a
+  bool   bool
 }
 
-dec vec[a] ...[a] vec[a]
-type vec[a] {
+extern vec a {
+  call    ...[a] vec[a]
   ++      vec[a] vec[a]
   size    int
   at      int a @error
@@ -97,19 +66,18 @@ type vec[a] {
   reverse vec[a]
   zip[b]  vec[b] vec[tuple[a b]]
   fold[b] b (a b b) b
-  find    (a bool) opt[a]
-  index   (a bool) opt[int]
-  join    str str
+  find    (a bool) option[a]
+  index   (a bool) option[int]
+  join    string string
   has     a bool
   min     a
   max     a
 }
 
-dec map[k v] ...[k v] map[k v]
-type map[k v] {
+extern map k v {
+  call    ...[k v] map[k v]
   size   int
-  at     k a @error
-  get    k opt[a]
+  at     k v @error
   set    k v bool
   has    k bool
   keys   vec[k]
@@ -117,8 +85,7 @@ type map[k v] {
   vec    vec[tuple[k v]]
 }
 
-dec set[a] ...[a] set[a]
-type set[a] {
+extern set a {
   size   int
   -      set[a] set[a]
   |      set[a] set[a]
@@ -130,150 +97,123 @@ type set[a] {
   vec    vec[a]
 }
 
-dec fn[... ret] ... ret
-type fn[... ret]
-
-dec tuple[...] ... tuple[...]
-type tuple[...] {
+extern tuple ... {
   ...(.index .type)
 }
 
-dec struct[...[id type]] ... struct[...]
-type struct[...[id type]] {
+extern struct ...[id type] {
   ...(.id .type)
 }
 
-dec time str time
-type time {
-  year   int
-  month  int
-  day    int
-  hour   int
-  min    int
-  sec    int
-  offset int
-  yday   int
-  mday   int
-  wday   int
+extern time {
+  (year month day hour min sec wday yday offset) int
+  format string string
   utc    time
+  string string
   tick   int time
-  iso    str
-  format str str
 }
 
-class error {
-  message str
-  stack   str
-  thrown  any
+extern io {
+  argv     vec[string]
+  env      string string
+  now      time
+  sh       string ...[string] string @error
+  puts     ... void
+  print    ... void
+  stdin    stream
+  stdout   stream
+  stderr   stream
+  db[t u]  [t u] u
+  rand {
+    int        int? int? int
+    float      float? float? float
+    bin        int bin
+  }
+  fs {
+    open t     string string? (stream t) a @error
+    read       string bin @error
+    reads      string string @error
+    write      string ... int @error
+    append     string ... int @error
+    rm         string bool @error
+  }
+  http {
+    call   request response
+    vecen (request response)
+    request {
+      version  string
+      method   string
+      path     string
+      headers  vec[tuple[string string]]
+      body     stream
+      header   string string
+      get      string string
+      gets     string vec[string]
+      post     string string
+      posts    string vec[string]
+    }
+    response {
+      version  string
+      status   int
+      headers  vec[tuple[string string]]
+      body     stream
+      header   string string
+    }
+  }
 }
+
+extern stream {
+  offset          int
+  seek            int stream @error
+  read            int? bin @error
+  write           ... int @error
+  flush           ... int @error
+  close           bool @error
+  closed          bool
+  peek            bin
+  le              stream
+  be              stream
+  unicode         string @error
+  decode          string string @error
+  deserialize[t]  t @error
+  i8              i8  @error
+  i16             i16 @error
+  i32             i32 @error
+  i64             i64 @error
+  u8              u8  @error
+  u16             u16 @error
+  u32             u32 @error
+  u64             u64 @error
+  f32             f32 @error
+  f64             f64 @error
+}
+
+extern bin {
+  size    int
+  slice   int int? bin
+  tr      string string
+  unicode string
+  stream  stream
+}
+
+extern bcrypt {
+  hash string
+  eq   string string bool
+}
+
+extern mathf[a] {
+  (acos acosh asin asinh atan atan2 atanh cbrt cos cosh erf erfc exp gamma log log10 log2 sin sinh sqrt tan tanh) a a
+  (e pi inf nan)  a
+  (hypot logn)    a a a
+  (lgamma frexp)  a tuple[a int]
+  ldexp           a int a
+}
+alias math math[float]
+alias math32 math[f32]
+alias math64 math[f64]
 
 dec throw[a b] a b
 dec catch[a]   (error a) a
 dec if[a]      ...[bool a] a
 dec case[a b]  a ...[a b] b
 dec default[a] a
-
-extern io {
-  argv vec[str]
-  env  map[str str]
-  now  time
-  put  ... void
-  puts ... void
-  log  ... void
-}
-
-let rune u64
-let byte u8
-let bin vec[byte] {
-  dec tr str str
-  dec unicode str @error
-}
-# TBD
-#extern bcrypt {
-#  hash str
-#  eq   str str bool
-#}
-#
-#extern mathf[a] {
-#  (acos acosh asin asinh atan atan2 atanh cbrt cos cosh erf erfc exp gamma log log10 log2 sin sinh sqrt tan tanh) a a
-#  (e pi inf nan)  a
-#  (hypot logn)    a a a
-#  (lgamma frexp)  a tuple[a int]
-#  ldexp           a int a
-#}
-#
-#let math mathf[float]
-#let math32 mathf[f32]
-#let math64 mathf[f64]
-#
-#extern io {
-#  sh   str ...[str] str @error
-#  db[t u]  [t u] u
-#  rand {
-#    int        int? int? int
-#    float      float? float? float
-#    bin        int bin
-#  }
-#  fs {
-#    read       str bin @error
-#    write      str ... int @error
-#    append     str ... int @error
-#    remove     str bool @error
-#  }
-#  http {
-#    fetch str requestinit? response
-#    serve (request responseinit)
-#    requestinit {
-#      method?  str
-#      headers? map[str str]
-#      body?    bin
-#    }
-#    responseinit {
-#      status   int
-#      headers? map[str str]
-#      body?    bin
-#    }
-#    request {
-#      method  str
-#      path    str
-#      header  str string
-#      cookie  string string
-#      body    bin
-#      get     string string
-#      post    string string
-#    }
-#    response {
-#      version  string
-#      status   int
-#      headers  vec[tuple[string string]]
-#      body     bin
-#      header   string string
-#    }
-#  }
-#}
-#
-#interface stream {
-#  offset          int
-#  seek            int stream @error
-#  read            int? bin @error
-#  write           ... int @error
-#  flush           ... int @error
-#  close           bool @error
-#  closed          bool
-#  peek            bin
-#  le              stream
-#  be              stream
-#  unicode         string @error
-#  decode          string string @error
-#  deserialize[t]  t   @error
-#  i8              i8  @error
-#  i16             i16 @error
-#  i32             i32 @error
-#  i64             i64 @error
-#  u8              u8  @error
-#  u16             u16 @error
-#  u32             u32 @error
-#  u64             u64 @error
-#  f32             f32 @error
-#  f64             f64 @error
-#}
