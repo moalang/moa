@@ -1,6 +1,11 @@
+class TypeError {
+  t Type
+  u Type
+}
+
 class Type {
   name str
-  args []Type
+  generics []Type
 }
 
 class Node {
@@ -22,7 +27,7 @@ def generate nodes {
 }
 
 def tokenize program file {
-  let reg r/(r\/(?:[^\/\\]|\\.)*?\/[A-Za-z]*|[0-9]+|(?:\.\.\.)?[A-Za-z0-9_]+|[\.()[\]{}]|"(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*`|[+\-*\/%<>!=^|&]+|#[^\n]*| +|\n+)/g
+  let reg r/(r\/(?:[^\/\\]|\\.)*?\/[A-Za-z]*|[0-9]+(?:\.[0-9]+)|(?:\.\.\.)?[A-Za-z0-9_]+|[\.()[\]{}]|"(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*`|[+\-*\/%<>!=^|&]+|#[^\n]*| +|\n+)/g
   var offset 0
   var lineno 1
   var column 1
@@ -79,7 +84,7 @@ def parse tokens {
     return (i+1) < tokens.size && tokens[i].offset == tokens[i+1].offset - tokens[i+1].code.size
   }
   def touchesleft i {
-    return i >= 1 && tokens[i-1].offset == tokens[i].offset - tokens[i].code.size
+    return i < tokens.size && i >= 1 && tokens[i-1].offset == tokens[i].offset - tokens[i].code.size
   }
   def until i end a {
     return untilby(i end a unit)
@@ -100,12 +105,12 @@ def parse tokens {
       [i node])
   }
   def unit i {
+    assert i < tokens.size "EOT"
     return iif(
-      isop1(i)                                              unit(i+1).tmap(fn(j node [j params([tokens[i] node])]))
-      i < tokens.size && tokens[i].code == "(" && isop(i+1) untilby(i+1 ")" [tokens[i]] fn(j [j+1 tokens[j]])).tmap(link)
-      i < tokens.size && tokens[i].code == "("              until(i+1 ")" [tokens[i]]).tmap(link)
-      i < tokens.size && tokens[i].code == "["              until(i+1 "]" [tokens[i]]).tmap(link)
-      i < tokens.size && tokens[i].code == "{"              lines(i+1 [tokens[i]]).tmap(fn(j a iif(tokens[j].code == "}" [j+1 params(a)] fail(`${tokens[i]} is not closed until ${tokens[j]}`))))
+      isop1(i)              unit(i+1).tmap(fn(j node [j params([tokens[i] node])]))
+      tokens[i].code == "(" until(i+1 ")" [tokens[i]]).tmap(link)
+      tokens[i].code == "[" until(i+1 "]" [tokens[i]]).tmap(link)
+      tokens[i].code == "{" lines(i+1 [tokens[i]]).tmap(fn(j a iif(tokens[j].code == "}" [j+1 params(a)] fail(`${tokens[i]} is not closed until ${tokens[j]}`))))
       link(i+1 tokens[i]))
   }
   def line i lineno acc {
@@ -125,41 +130,247 @@ def parse tokens {
 
 test t {
   def show x {
-    return iif(x.params.size == 0
-        x.code
-      x.params[0].code == "("
-        "(" + show(x.params[1]) + ")"
+    return x.code + iif(
+      x.params.size == 0      ""
+      x.params[0].code == "(" "(" + show(x.params[1]) + ")"
       "(" + x.params.map(show).join(" ") + ")")
   }
-  def eq expected program {
-    t.eq parse(tokenize(program "test.moa")).map(show).join("\n") expected
+  def check expected program {
+    t.eq parse(tokenize(program "test.moa")).map(show).join("\n") expected program
   }
-  eq "a" "a"
-  eq "(a)" "(a)"
-  eq "(a b)" "a b"
-  eq "(a b)" "a(b)"
-  eq "([ a)" "[a]"
-  eq "(__[ a b)" "a[b]"
-  eq "(= (__[ a b) c)" "a[b] = c"
-  eq "(+ a)" "+a"
-  eq "(+ a b)" "a + b"
-  eq "(+ a (- b))" "a + -b"
-  eq "(+ a (* b c))" "a + b * c"
-  eq "(* ((+ a b)) c)" "(a + b) * c"
-  eq "(. a b)" "a.b"
-  eq "((. a b) c)" "a.b(c)"
-  eq "((. ((. a b) c) d) e)" "a.b(c).d(e)"
-  eq "(__[ (. a b) c)" "a.b[c]"
-  eq "({)" "{}"
-  eq "(a ({))" "a {}"
-  eq "(a ({ b))" "a {b}"
-  eq "({ a (b c))" "{\na\nb c\n}"
-  eq "(a (__[ b c))" "a b[c]"
-  eq "(a `\n`)" "a `\n`"
+  check "a" "a"
+  check "(a)" "(a)"
+  check "(a b)" "a b"
+  check "(a b)" "a(b)"
+  check "([ a)" "[a]"
+  check "(__[ a b)" "a[b]"
+  check "(= (__[ a b) c)" "a[b] = c"
+  check "(+ a)" "+a"
+  check "(+ a b)" "a + b"
+  check "(+ a (- b))" "a + -b"
+  check "(+ a (* b c))" "a + b * c"
+  check "(* ((+ a b)) c)" "(a + b) * c"
+  check "(. a b)" "a.b"
+  check "((. a b) c)" "a.b(c)"
+  check "((. ((. a b) c) d) e)" "a.b(c).d(e)"
+  check "(__[ (. a b) c)" "a.b[c]"
+  check "({)" "{}"
+  check "(a ({))" "a {}"
+  check "(a ({ b))" "a {b}"
+  check "({ a (b c))" "{\na\nb c\n}"
+  check "(a (__[ b c))" "a b[c]"
+  check "(a `\n`)" "a `\n`"
 }
 
 def infer nodes {
+  let tv1     Type("1" [])
+  let tv2     Type("2" [])
+  let tbool   Type("bool" [])
+  let tint    Type("int" [])
+  let tfloat  Type("float" [])
+  let tstring Type("string" [])
+  let tvec    Type("vec" [tv1])
+  let tmap    Type("map" [tv1 tv2])
+  let tenv    map("map" tmap)
+  def infwith node env {
+    def inf node {
+      node.type = iif(
+        node.params.size == 0
+          infcode(node.code)
+        node.code == ""
+          infcall(inf(node.params[0]) node.params.slice(1).map(inf))
+        infcall(infcode(node.code) node.params.map(inf)))
+      return node.type
+    }
+    def infcode s {
+      return iif(
+        ((s == "true") || (s == "false"))
+          tbool
+        r/^[0-9]\./.test(s)
+          tfloat
+        r/^[0-9]/.test(s)
+          tint
+        s.starts("`") || s.starts(`"`)
+          tstring
+        s == "["
+          tvec
+        env.has(s)
+          env.get(s)
+        fail(`Can not infer type of '${s}'`))
+    }
+    return inf(node)
+  }
+  def infcall f xs {
+    if f == tvec {
+      for i xs.size {
+        unify f.generics[0] xs[i]
+      }
+    } else if f == tmap {
+      assert (f.generics.size % 2) == 0
+      for i xs.size {
+        unify f.generics[i % 2] xs[i]
+      }
+    } else {
+      assert f.generics.size == xs.size
+      for i xs.size {
+        unify f.generics[i] xs[i]
+      }
+    }
+    return f
+  }
+  def unify t u {
+    t = prune(t)
+    u = prune(u)
+    if isvar(t) {
+      t.generics[0] = u
+    } else if isvar(u) {
+      unify u t
+    } else {
+      if t.name != u.name {
+        throw TypeError(t u)
+      }
+      if t.generics.size != u.generics.size {
+        throw TypeError(t u)
+      }
+      for i t.generics.size {
+        unify t.generics[i] u.generics[i]
+      }
+    }
+  }
+  def isvar t {
+    return r/^[0-9]/.test(t.name)
+  }
+  def prune t {
+    if isvar(t) && t.generics.size == 1 {
+      return t.generics[0] = prune(t.generics[0])
+    } else {
+      return t
+    }
+  }
+  def recprune node {
+    node.type = prune(node.type)
+    node.type.generics = node.type.generics.map(prune)
+    node.params.map recprune
+  }
+  nodes.map fn(node infwith(node tenv))
+  nodes.map recprune
   return nodes
+}
+
+test t {
+  def show t {
+    return iif(t.generics.size == 0
+      t.name
+      t.name + "[" + t.generics.map(show).join(" ") + "]")
+  }
+  def inf s {
+    return show(infer(parse(tokenize(s "")))[0].type)
+  }
+  def check expected exp {
+    t.eq expected inf(exp) exp
+  }
+
+  # primitives
+  check "bool" "true"
+  check "bool" "false"
+  check "int" "0"
+  check "float" "1.0"
+  check "string" "``"
+  check "string" `""`
+  check "vec[1]" `[]`
+  check "vec[int]" `[1]`
+  check "vec[int]" `[1 2]`
+  check "map[1 2]" `map`
+  check "map[int bool]" `map(1 true)`
+  check "map[int bool]" `map(1 true 2 false)`
+
+  # unary operator
+  check "bool" "(! true)"
+  check "int" "(- 1)"
+
+  # binary operator
+  check "int" "(+ 1 1)"
+  check "bool" "(< 1 1)"
+
+  # branch
+  check "int" "(iif true 1 2)"
+  check "bool" "(iif true true true)"
+
+  # function
+  check "(int int)" "(fn a (- a 1))"
+  check "(int int int)" "(fn a b (- a b 0))"
+  check "int" "((fn 1))"
+
+  # do
+  check "int" "(do 1)"
+  check "bool" "(do 1 true)"
+  check "int" "(do (if false (return 1)) ((. io put) 2))"
+
+  # generics
+  check "(1 1)" "(fn a a)"
+  check "(1 2 1)" "(fn a b a)"
+  check "(1 2 2)" "(fn a b b)"
+  check "int" "((fn a a) 1)"
+  check "bool" "(let f (fn a a)) (f 1) (f true)"
+  check "bool" "(def f a a) (f 1) (f true)"
+
+  # property
+  check "(1.text(2) 2)" "(let a (fn b (. b text)))"
+  check "string" `(catch (throw "a") (fn e (. e message)))`
+  check "vec[new__a[int]]" "(vec (new a 2))"
+  check "vec[a]" "(struct a () b int) (vec (a 1))"
+  check "vec[a]" "(struct a () b int) (vec (a 1) (new b 2))"
+  check "vec[new__a[int]]" "(vec (new a 2))"
+  check "vec[a]" "(struct a () b int) (vec (a 1))"
+  check "vec[a]" "(struct a () b int) (vec (a 1) (new b 2))"
+  check "vec[a]" "(struct a () b int) (vec (new b 1) (a 2))"
+  check "vec[a]" "(struct a () b int c int) (vec (new b 1) (a 2 3))"
+
+  # container
+  check "vec[1]" "(vec)"
+  check "vec[int]" "(vec 1)"
+  check "vec[tuple[int bool]]" "(vec (tuple 1 true))"
+  check "map[int bool]" "(map 1 true)"
+
+  # combinations
+  check "int" "(let f (fn x (+ x 1))) (let g (fn x (+ x 2))) (+ (f 1) (g 1))"
+  check "((1 2) (2 3) 1 3)" "(fn f g x (g (f x)))"
+  check "((1 2 3) (1 2) 1 3)" "(fn x y z (x z (y z)))"
+  check "(1 (1 bool) (1 1))" "(fn b x (iif (x b) x (fn x b)))"
+  check "(bool bool)" "(fn x (iif true x (iif x true false)))"
+  check "(bool bool bool)" "(fn x y (iif x x y))"
+  check "(1 1)" "(fn n ((fn x (x (fn y y))) (fn f (f n))))"
+  check "((1 2) 1 2)" "(fn x y (x y))"
+  check "((1 2) ((1 2) 1) 2)" "(fn x y (x (y x)))"
+  check "(1 ((1 2 3) 4 2) (1 2 3) 4 3)" "(fn h t f x (f h (t f x)))"
+  check "((1 1 2) ((1 1 2) 1) 2)" "(fn x y (x (y x) (y x)))"
+  check "(((1 1) 2) 2)" "(let id (fn x x)) (let f (fn y (id (y id))))"
+  check "(int)" "(let id (fn x x)) (let f (fn (iif (id true) (id 1) (id 2))))"
+  check "(int)" "(let f (fn x 1)) (let g (fn (+ (f true) (f 4))))"
+  check "(bool (1 1))" "(let f (fn x x)) (let g (fn y y)) (let h (fn b (iif b (f g) (g f))))"
+
+  # variadic arguments
+  check "(int? int)" "(fn a? (+ a 0))"
+  check "int" "((fn a? (+ a 0)) 1)"
+  check "(int int? int)" "(fn a b? (+ a b 0))"
+  check "int" "((fn a b? (+ a b 0)) 1)"
+  check "int" "((fn a b? (+ a b 0)) 1 2)"
+  check "(1* vec[1])" "(fn a* a)"
+  check "vec[int]" "((fn a* a) 1)"
+  check "int" "((fn a b* a) 1 2)"
+  check "vec[int]" "((fn a b* b) 1 2)"
+
+  # reject invalid types
+  check "Type error" "(+ 1 true)"
+  check "Type error" "(iif 1 2 3)"
+  check "Type error" "(iif true 2 false)"
+  check "Type error" "((fn e (. e message)) 1)"
+  check "Type error" "(struct a () b int) (vec (a 1) (new c 2))"
+}
+
+def genc nodes {
+  let headers []
+  return nodes.map(gen).join("\n")
 }
 
 test t {

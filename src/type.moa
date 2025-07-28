@@ -202,9 +202,9 @@ let bin vec[byte] {
 #  ldexp           a int a
 #}
 #
-#let math math[float]
-#let math32 math[f32]
-#let math64 math[f64]
+#let math mathf[float]
+#let math32 mathf[f32]
+#let math64 mathf[f64]
 #
 #extern io {
 #  sh   str ...[str] str @error

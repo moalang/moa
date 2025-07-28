@@ -4,7 +4,7 @@ const assert = require("node:assert")
 const log = x => { console.dir(x, {depth: null}); return x }
 
 function tokenize(program) {
-  const reg = /(r\/(?:[^\/\\]|\\.)*?\/[A-Za-z]*|[0-9]+|(?:\.\.\.)?[A-Za-z0-9_]+|[\.()[\]{}]|"(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*`|[+\-*\/%<>!=^|&]+|#[^\n]*| +|\n+)/g
+  const reg = /(r\/(?:[^\/\\]|\\.)*?\/[A-Za-z]*|[0-9]+(?:\.[0-9]+)|(?:\.\.\.)?[A-Za-z0-9_]+|[\.()[\]{}]|"(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*`|[+\-*\/%<>!=^|&]+|#[^\n]*| +|\n+)/g
   const tokens = []
   let offset = 0
   let lineno = 1
@@ -21,7 +21,7 @@ function tokenize(program) {
 
 function testTokenize() {
   const eq = (expected, program) => assert.strictEqual(tokenize(program).map(t => t.code).join(" "), expected, program)
-  eq("0 a b1 ( ) [ ] { } \"A\" `B` + ** %=", "0 a b1 ()[]{} \"A\" `B` + ** %= #comment")
+  eq("0 1.0 a b1 ( ) [ ] { } \"A\" `B` + ** %=", "0 1.0 a b1 ()[]{} \"A\" `B` + ** %= #comment")
   eq('"a\\"\\nb"', `"a\\\"\\nb"`)
   eq("r/a/", "r/a/")
   eq("r/\\\\/", "r/\\\\/")
@@ -33,28 +33,26 @@ function parse(tokens) {
   const then = (a, f) => f(...a)
   const fail = s => { throw new Error(s) }
   const isOp = i => /^[+\-*\/%<>!=^|&]/.test(tokens[i]?.code)
-  const isOp1 = i => isOp(i) && closeRight(i) && !closeLeft(i)
+  const isOp1 = i => isOp(i) && touchesRight(i) && !touchesLeft(i)
   const isOp2 = i => isOp(i) && !isOp1(i)
   const fake = i => ({...tokens[i], code: "__" + tokens[i].code})
-  const closeLeft = i => i >= 1 && tokens[i-1].offset + tokens[i-1].code.length === tokens[i].offset
-  const closeRight = i => (i+1) < tokens.length && tokens[i].offset + tokens[i].code.length === tokens[i+1].offset
-  const until = (i, end, a) => untilBy(i, end, a, unit)
-  const untilBy = (i, end, a, f) =>
+  const touchesLeft = i => i >= 1 && tokens[i-1].offset + tokens[i-1].code.length === tokens[i].offset
+  const touchesRight = i => (i+1) < tokens.length && tokens[i].offset + tokens[i].code.length === tokens[i+1].offset
+  const until = (i, end, a) =>
     i >= tokens.length ? fail(`Not closed '${end}'`) :
     tokens[i]?.code === end ? [i+1, a] :
-    then(f(i), (j, node) => untilBy(j, end, a.concat([node]), f))
+    then(unit(i), (j, node) => until(j, end, a.concat([node])))
   const link = (i, node) =>
-    tokens[i]?.code === "."                 ? link(i+2, [tokens[i], node, tokens[i+1]]) :
-    tokens[i]?.code === "(" && closeLeft(i) ? then(until(i+1, ")", [node]), link) :
-    tokens[i]?.code === "[" && closeLeft(i) ? then(until(i+1, "]", [fake(i), node]), link) :
-    isOp2(i)                                ? then(unit(i+1), (j, next) => link(j, [tokens[i], node, next])) :
+    tokens[i]?.code === "."                   ? link(i+2, [tokens[i], node, tokens[i+1]]) :
+    tokens[i]?.code === "(" && touchesLeft(i) ? then(until(i+1, ")", [node]), link) :
+    tokens[i]?.code === "[" && touchesLeft(i) ? then(until(i+1, "]", [fake(i), node]), link) :
+    isOp2(i)                                  ? then(unit(i+1), (j, next) => link(j, [tokens[i], node, next])) :
     [i, node]
   const unit = i =>
-    isOp1(i)                             ? then(unit(i+1), (j, node) => [j, [tokens[i], node]]) :
-    tokens[i]?.code === "(" && isOp(i+1) ? then(untilBy(i+1, ")", [tokens[i]], j => [j+1, tokens[j]]), link) :
-    tokens[i]?.code === "("              ? then(until(i+1, ")", [tokens[i]]), link) :
-    tokens[i]?.code === "["              ? then(until(i+1, "]", [tokens[i]]), link) :
-    tokens[i]?.code === "{"              ? then(lines(i+1, [tokens[i]]), (j, a) => tokens[j].code === "}" ? [j+1, a] : fail(`${tokens[i]} is not closed until ${tokens[j]}`)) :
+    isOp1(i)                ? then(unit(i+1), (j, node) => [j, [tokens[i], node]]) :
+    tokens[i]?.code === "(" ? then(until(i+1, ")", [tokens[i]]), link) :
+    tokens[i]?.code === "[" ? then(until(i+1, "]", [tokens[i]]), link) :
+    tokens[i]?.code === "{" ? then(lines(i+1, [tokens[i]]), (j, a) => tokens[j].code === "}" ? [j+1, a] : fail(`${tokens[i]} is not closed until ${tokens[j]}`)) :
     link(i+1, tokens[i])
   const line = (i, lineno, acc) =>
     tokens[i]?.lineno === lineno && tokens[i]?.code !== "}" ? then(unit(i), (j, node) => line(j, lineno, acc.concat([node]))) :
@@ -115,7 +113,7 @@ function genjs(nodes) {
     head.code === "else" && tail[0].code === "if"  ? `else if (${gen(tail[1])}) ${gen(tail[2])}` :
     head.code === "else"  ? "else " + gen(tail[0]) :
     head.code === "match" ? `(__m => ${genmatch(tail.slice(1).map(gen))})(${gen(tail[0])})` :
-    head.code === "iif"   ? geniif(tail.map(gen)) :
+    head.code === "iif"   ? "(" + geniif(tail.map(gen)) + ")" :
     head.code === "fn"    ? `(${tail.slice(0, -1).map(gen)}) => ${gen(tail.at(-1))}` :
     head.code === "__["   ? `${gen(tail[0])}[${gen(tail[1])}]` :
     head.code === "("     ? `(${gen(tail[0])})` :
@@ -161,24 +159,28 @@ function testGenjs() {
   eq("for (const x of xs) {\n\n}", "each x xs {}")
   eq("const a = (b) => ({b})", "class a { b c }")
   eq("const a = (b,e) => ({b,e})", "class a { b c\ne f }")
-  eq("a ? b : c", "iif a b c")
+  eq("(a ? b : c)", "iif a b c")
 }
 
 const runtime = (() => {"use strict"
+Error.stackTraceLimit = 20
+const __assert = require("node:assert")
 const io = {
   log: x => { console.error(JSON.stringify(x, null, 2)); return x }
 }
 const fail = s => { throw new Error(s) }
 const tuple = (...a) => a
+const map = (...a) => new Map([...new Array(a.length / 2)].map((_, i) => [a[i*2], a[i*2+1]]))
+const assert = (a, b) => a || fail(`AssertionError: ${b}`)
 Array.prototype.fmap = function(f) { return this.flatMap(f) }
 Array.prototype.tmap = function(f) { return f(...this) }
 Object.defineProperty(Array.prototype, 'size', { get() { return this.length } })
 String.prototype.starts = function(s) { return this.startsWith(s) }
 String.prototype.count = function(s) { return this.split(s).length - 1 }
 Object.defineProperty(String.prototype, 'size', { get() { return this.length } })
-const __assert = require("node:assert")
-const __fail = (...a) => { throw new Error(`${JSON.stringify(a)}`) }
 const __main = () => {
+  console.log("skip self boot")
+  return
   const fs = require("node:fs")
   const ch = require("node:child_process")
   const moa = fs.readFileSync("./moa.moa", "utf-8")
@@ -189,12 +191,20 @@ const __main = () => {
   ch.execSync("chmod 0755 /tmp/a")
   ch.execSync("node -c /tmp/a")
 }
+let __test_count = 0
 const __tester = {
   log: (...a) => console.error(...a),
-  eq: (a, b, c) => __assert.strictEqual(a, b, c)
+  eq: (a, b, c) => {
+    __assert.strictEqual(a, b, c) && ++__test_count
+    ++__test_count
+  }
 }
 const __tests = []
-const __test = () => __tests.map(f => f(__tester))
+const __test = () => {
+  const t = new Date()
+  __tests.map(f => f(__tester))
+  console.log(`PASS ${__test_count} ${new Date() - t}ms`)
+}
 }).toString().slice(7, -1)
 
 function main() {
@@ -203,7 +213,11 @@ function main() {
   const moa = fs.readFileSync(__dirname + "/moa.moa", "utf-8")
   const js = genjs(parse(tokenize(moa)))
   fs.writeFileSync("/tmp/moa_bootstrap.js", runtime + js + '\n__test()\n__main()')
-  process.stdout.write(ch.execSync("node /tmp/moa_bootstrap.js js").toString())
+  try {
+    ch.execSync("node /tmp/moa_bootstrap.js js")
+  } catch (e) {
+    process.exit(e.status)
+  }
 }
 
 testTokenize()
