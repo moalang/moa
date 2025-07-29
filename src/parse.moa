@@ -44,7 +44,7 @@ def tokenize program path {
       let op r/^[+\-*\/%^~<>!=|&]+$/.test(code)
       let lc iif(offset > 0 program[offset - 1] "")
       let rc program[offset + code.length]
-      let op1 (op || code == "...") && r/[A-Za-z0-9_"\]]/.test(rc)
+      let op1 code == "..." || (op && r/[A-Za-z0-9_"\]]/.test(rc))
       let op2 op && !op1
       let adj r/[A-Za-z0-9_"\])]/.test(lc)
       let call adj && code == "("
@@ -149,7 +149,7 @@ def parse tokens {
     let t tokens[pos]
     pos += 1
     return iif(
-      t.code == "(" link(untilby(")" bottom)[0])
+      t.code == "(" link(squash(untilby(")" bottom)))
       t.code == "[" link(nodecall(t untilby("]" bottom)))
       t.code == "{" link(nodecall(t untilby("}" line)))
       t.op1         link(nodecall(t [bottom()]))
@@ -180,6 +180,8 @@ test "parse" {
     return parse(tokenize(s "test.moa")).map(show).join("; ")
   }
 
+  assert roundtrip("(a)") == "a"
+  assert roundtrip("(! a)") == "(! a)"
   assert roundtrip("a")   == "a"
   assert roundtrip("a b") == "(a b)"
   assert roundtrip("a.b") == "(. a b)"

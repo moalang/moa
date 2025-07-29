@@ -1,5 +1,5 @@
 "use strict"
-Error.stackTraceLimit = 30
+Error.stackTraceLimit = 50
 const vm = require("vm")
 const fs = require("fs")
 const cp = require("child_process")
@@ -14,7 +14,8 @@ const runtime = (() => {
   const map = (...a) => new Map([...new Array(a.length / 2)].map((_, i) => [a[i*2], a[i*2+1]]))
   const fail = s => { throw new Error(s) }
   const __tests = []
-  const __prop = (obj, field) => {
+  const __prop = (obj, node) => {
+    const field = node.code
     switch (`${obj?.constructor?.name} ${field}`) {
       case "String size"   : return obj.length
       case "String has"    : return s => obj.includes(s)
@@ -30,7 +31,7 @@ const runtime = (() => {
         }
         const value = obj[field]
         if (value === undefined) {
-          throw new Error(`No '${field}' of ${JSON.stringify(obj)}`)
+          throw new Error(`No '${field}' of ${JSON.stringify(obj)} at ${node.filename}:${node.lineno}`)
         }
         if (typeof value === "function") {
           return (...a) => obj[field](...a)
@@ -141,7 +142,7 @@ const generate = (root, level=0) => {
     return code == "="                         ? genlhs(tail[0]) + " = " + gen(tail[1]) :
       code == "=="                             ? genobj(gen(tail[0])) + "===" + genobj(gen(tail[1])) :
       code == "!="                             ? genobj(gen(tail[0])) + "!==" + genobj(gen(tail[1])) :
-      code === "."                             ? "__prop(" + gen(tail[0]) + ", " + JSON.stringify(gen(tail[1])) + ")" :
+      code === "."                             ? "__prop(" + gen(tail[0]) + ", " + JSON.stringify(tail[1]) + ")" :
       code === "fn"                            ? "((" + tail.slice(0, -1).map(gen) + ") => " + gen(tail.at(-1)) + ")" :
       code === "var"                           ? "let "   + tail[0].code + " = " + gen(tail.at(-1)) :
       code === "let"                           ? "const " + tail[0].code + " = " + gen(tail.at(-1)) :
@@ -267,9 +268,13 @@ const test = () => {
 
 const main = async () => {
   const node = "main.moa parse.moa infer.moa genc.moa genjs.moa".split(" ").flatMap(filename => parse(fs.readFileSync(__dirname + "/" + filename).toString(), filename))
-  const js = generate(node)
-  fs.writeFileSync("/tmp/moa", "#!node\n" + runtime + ";\n" + js + ";\n__main()")
-  console.log(cp.execSync("node /tmp/moa version").toString().trim())
+  const js = runtime + generate(node) + ";__main()"
+  try {
+    new vm.Script(js).runInNewContext({require, process, console})
+  } catch (e) {
+    console.error(e.stack)
+    process.exit(1)
+  }
   //const c = cp.execSync("node /tmp/a.js c").toString()
   //fs.writeFileSync("/tmp/a.c", c)
   //cp.execSync("cc /tmp/a.c -o /tmp/moa")

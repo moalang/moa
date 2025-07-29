@@ -15,6 +15,9 @@ def infer root {
   let tenv    map(
     "map" tmap
     "!" Type("" [tbool tbool])
+    "+" Type("" [tint tint tint])
+    "-" Type("" [tint tint]) # TODO
+    "<" Type("" [tv1 tv1 tbool])
     "fail" Type("" [tv1 tv2])
   )
   def infwith node env {
@@ -50,20 +53,22 @@ def infer root {
       each i x xs {
         unify f.generics[0] x
       }
+      return f
     } else if f == tmap {
       assert (f.generics.size % 2) == 0
       each i x xs {
         unify f.generics[i % 2] x
       }
+      return f
     } else if f.name == "" {
-      assert f.generics.size == xs.size
+      assert (f.generics.size - 1) == xs.size
       each i x xs {
         unify f.generics[i] x
       }
+      return f.generics[f.generics.size - 1]
     } else {
       assert false
     }
-    return f
   }
   def unify t u {
     t = prune(t)
@@ -129,14 +134,14 @@ test {
   assert inf(`map(1 true 2 false)`) == "map[int bool]"
 
   # unary operator
-  io.log "skip parse test"
-  return
-  assert inf("(! true)") == "bool"
-  assert inf("(- 1)") == "int"
+  assert inf("!true") == "bool"
+  assert inf("-1") == "int"
 
   # binary operator
   assert inf("(+ 1 1)") == "int"
   assert inf("(< 1 1)") == "bool"
+  io.log "skip infer tests"
+  return
 
   # branch
   assert inf("(iif true 1 2)") == "int"
