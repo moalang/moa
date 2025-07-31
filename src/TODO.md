@@ -1,4 +1,6 @@
 # TODO
+- [ ] infer: implement tnum
+- [ ] infer: optimize constant int and float
 - [ ] genjs
 - [x] if / else
 - [x] regexp literal

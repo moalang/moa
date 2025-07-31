@@ -4,31 +4,64 @@ struct TypeError {
 }
 
 def infer root {
-  let tv1     Type("1" [])
-  let tv2     Type("2" [])
+  var tvindex 0
+  def newtv {
+    tvindex += 1
+    return Type(tvindex.str [])
+  }
+  def newfn args {
+    return Type("fn" args)
+  }
+  let tv1     newtv()
+  let tv2     newtv()
+  let tvoid   Type("void" [])
   let tbool   Type("bool" [])
   let tint    Type("int" [])
   let tfloat  Type("float" [])
   let tstring Type("string" [])
   let tvec    Type("vec" [tv1])
-  let tmap    Type("map" [tv1 tv2])
-  let tenv    map(
-    "map" tmap
-    "!" Type("" [tbool tbool])
-    "+" Type("" [tint tint tint])
-    "-" Type("" [tint tint]) # TODO
-    "<" Type("" [tv1 tv1 tbool])
-    "fail" Type("" [tv1 tv2])
+  let tdict   Type("dict" [tv1 tv2])
+  let tenv    dict(
+    "dict"   tdict
+    "!"      newfn([tbool tbool])
+    "+"      newfn([tint tint tint])
+    "-"      newfn([tint tint]) # TODO
+    "<"      newfn([tv1 tv1 tbool])
+    "fail"   newfn([tv1 tv2])
+    "iif"    newfn([tbool tv1 tv1 tv1])
+    "if"     newfn([tbool tv1 tvoid])
+    "return" newfn([tv1 tv1])
   )
-  def infwith node env {
+  def infwith node env ng {
     def inf node {
       node.type = iif(
         node.argv.size == 0
           infcode(node.token.code)
         node.token.code == ""
           infcall(inf(node.argv[0]) node.argv.slice(1).map(inf))
+        node.token.code == "let"
+          inflet(node.argv[0].token.code node.argv[1])
+        node.token.code == "fn"
+          inffn(node.argv.slice(0 -1) node.argv.at(-1))
+        node.token.code == "do"
+          node.argv.map(inf).at(-1)
         infcall(infcode(node.token.code) node.argv.map(inf)))
       return node.type
+    }
+    def inflet id node {
+      let tv = newtv()
+      env.set id tv
+      unify tv inf(node)
+      return tv
+    }
+    def inffn args body {
+      each _ arg args {
+        arg.type = newtv()
+      }
+      let newenv env.merge(args.dict(fn(arg tuple(arg.token.code arg.type))))
+      let newng ng.intersection(set(args.map(fn(arg arg.token.code))))
+      let ret infwith(body newenv newng)
+      return newfn(args.map(fn(arg arg.type)).concat([ret]))
     }
     def infcode s {
       return iif(
@@ -49,23 +82,24 @@ def infer root {
     return inf(node)
   }
   def infcall f xs {
+    f = prune(f)
     if f == tvec {
       each i x xs {
-        unify f.generics[0] x
+        unify f.vars[0] x
       }
       return f
-    } else if f == tmap {
-      assert (f.generics.size % 2) == 0
+    } else if f == tdict {
+      assert (f.vars.size % 2) == 0
       each i x xs {
-        unify f.generics[i % 2] x
+        unify f.vars[i % 2] x
       }
       return f
-    } else if f.name == "" {
-      assert (f.generics.size - 1) == xs.size
+    } else if f.name == "fn" {
+      assert (f.vars.size - 1) == xs.size
       each i x xs {
-        unify f.generics[i] x
+        unify f.vars[i] x
       }
-      return f.generics[f.generics.size - 1]
+      return f.vars[f.vars.size - 1]
     } else {
       assert false
     }
@@ -74,18 +108,18 @@ def infer root {
     t = prune(t)
     u = prune(u)
     if isvar(t) {
-      t.generics[0] = u
+      t.vars[0] = u
     } else if isvar(u) {
       unify u t
     } else {
       if t.name != u.name {
         throw TypeError(t u)
       }
-      if t.generics.size != u.generics.size {
+      if t.vars.size != u.vars.size {
         throw TypeError(t u)
       }
-      each i tt t.generics {
-        unify tt u.generics[i]
+      each i tt t.vars {
+        unify tt u.vars[i]
       }
     }
   }
@@ -93,30 +127,34 @@ def infer root {
     return r/^[0-9]/.test(t.name)
   }
   def prune t {
-    if isvar(t) && t.generics.size == 1 {
-      return t.generics[0] = prune(t.generics[0])
+    if isvar(t) && t.vars.size == 1 {
+      return t.vars[0] = prune(t.vars[0])
     } else {
       return t
     }
   }
   def recprune node {
     node.type = prune(node.type)
-    node.type.generics = node.type.generics.map(prune)
+    node.type.vars = node.type.vars.map(prune)
     node.argv.map recprune
   }
-  root.map fn(node infwith(node tenv))
+  root.map fn(node infwith(node tenv set()))
   root.map recprune
   return root
 }
 
 test {
   def show t {
-    return iif(t.generics.size == 0
+    return iif(t.vars.size == 0
       t.name
-      t.name + "[" + t.generics.map(show).join(" ") + "]")
+      t.name + "[" + t.vars.map(show).join(" ") + "]")
+  }
+  def simplify s {
+    var d dict(0 0)
+    return r/[0-9]+/.repf(s fn(a d.getset(a[0] d.size)))
   }
   def inf s {
-    return show(infer(parse(tokenize(s "")))[0].type)
+    return simplify(show(infer(parse(tokenize(s "")))[0].type))
   }
 
   # primitives
@@ -129,9 +167,9 @@ test {
   assert inf(`[]`) == "vec[1]"
   assert inf(`[1]`) == "vec[int]"
   assert inf(`[1 2]`) == "vec[int]"
-  assert inf(`map`) == "map[1 2]"
-  assert inf(`map(1 true)`) == "map[int bool]"
-  assert inf(`map(1 true 2 false)`) == "map[int bool]"
+  assert inf(`dict`) == "dict[1 2]"
+  assert inf(`dict(1 true)`) == "dict[int bool]"
+  assert inf(`dict(1 true 2 false)`) == "dict[int bool]"
 
   # unary operator
   assert inf("!true") == "bool"
@@ -140,29 +178,29 @@ test {
   # binary operator
   assert inf("(+ 1 1)") == "int"
   assert inf("(< 1 1)") == "bool"
-  io.log "skip infer tests"
-  return
 
   # branch
   assert inf("(iif true 1 2)") == "int"
   assert inf("(iif true true true)") == "bool"
 
   # function
-  assert inf("(fn a (- a 1))") == "(int int)"
-  assert inf("(fn a b (- a b 0))") == "(int int int)"
-  assert inf("((fn 1))") == "int"
+  assert inf("(fn a (+ a 1))") == "fn[int int]"
+  assert inf("(fn a b (+ a (+ b 0)))") == "fn[int int int]"
+  assert inf("(fn 1)()") == "int"
 
   # do
   assert inf("(do 1)") == "int"
   assert inf("(do 1 true)") == "bool"
-  assert inf("(do (if false (return 1)) ((. io put) 2))") == "int"
+  assert inf("(do (if false (return 1)) 1)") == "int"
 
   # generics
-  assert inf("(fn a a)") == "(1 1)"
-  assert inf("(fn a b a)") == "(1 2 1)"
-  assert inf("(fn a b b)") == "(1 2 2)"
+  assert inf("(fn a a)") == "fn[1 1]"
+  assert inf("(fn a b a)") == "fn[1 2 1]"
+  assert inf("(fn a b b)") == "fn[1 2 2]"
   assert inf("((fn a a) 1)") == "int"
-  assert inf("(let f (fn a a)) (f 1) (f true)") == "bool"
+  io.log "skip infer tests"
+  return
+  assert inf("(let f (fn a a))\n(f 1)\n(f true)") == "bool"
   assert inf("(def f a a) (f 1) (f true)") == "bool"
 
   # property
@@ -181,7 +219,9 @@ test {
   assert inf("(vec)") == "vec[1]"
   assert inf("(vec 1)") == "vec[int]"
   assert inf("(vec (tuple 1 true))") == "vec[tuple[int bool]]"
-  assert inf("(map 1 true)") == "map[int bool]"
+  assert inf("(set [])") == "vec[1]"
+  assert inf("(set [1])") == "vec[int]"
+  assert inf("(dict 1 true)") == "dict[int bool]"
 
   # combinations
   assert inf("(let f (fn x (+ x 1))) (let g (fn x (+ x 2))) (+ (f 1) (g 1))") == "int"
@@ -222,4 +262,5 @@ test {
   assert inf("(iif true 2 false)") == "Type error"
   assert inf("((fn e (. e message)) 1)") == "Type error"
   assert inf("(struct a () b int) (vec (a 1) (new c 2))") == "Type error"
+  assert inf("(do (if false return 1) (return true))") == "Type error"
 }

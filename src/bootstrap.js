@@ -4,27 +4,43 @@ const vm = require("vm")
 const fs = require("fs")
 const cp = require("child_process")
 
-const trace = x => {
-  console.dir(x, {depth: null})
-  return x
-}
+const trace = x => { console.dir(x, {depth: null}); return x }
 
 const runtime = (() => {
+  class MoaError__ extends Error {
+    constructor(message, data) {
+      super(message)
+      this.data = data
+    }
+  }
   const io = {}
-  const map = (...a) => new Map([...new Array(a.length / 2)].map((_, i) => [a[i*2], a[i*2+1]]))
+  const dict = (...a) => new Map([...new Array(a.length / 2)].map((_, i) => [a[i*2], a[i*2+1]]))
+  const set = a => new Set(a)
+  const tuple = (...a) => a
   const fail = s => { throw new Error(s) }
+  const trace = x => { console.dir(x, {depth: null}); return x }
   const __tests = []
   const __prop = (obj, node) => {
     const field = node.code
     switch (`${obj?.constructor?.name} ${field}`) {
-      case "String size"   : return obj.length
-      case "String has"    : return s => obj.includes(s)
-      case "String gsub"   : return (a, b) => obj.replaceAll(a, b)
-      case "String string" : return obj
-      case "String starts" : return s => obj.startsWith(s)
-      case "String ends"   : return s => obj.ends(s)
-      case "Array size"    : return obj.length
-      case "Array fmap"    : return f => obj.flatMap(f)
+      case "Number str"       : return obj.toString()
+      case "String size"      : return obj.length
+      case "String has"       : return s => obj.includes(s)
+      case "String rep"       : return (a, b) => obj.replaceAll(a, b)
+      case "String string"    : return obj
+      case "String starts"    : return s => obj.startsWith(s)
+      case "String ends"      : return s => obj.ends(s)
+      case "Array at"         : return n => obj.at(n)
+      case "Array size"       : return obj.length
+      case "Array map"        : return f => obj.map(f)
+      case "Array fmap"       : return f => obj.flatMap(f)
+      case "Array dict"       : return f => new Map(obj.map(f))
+      case "Array concat"     : return a => obj.concat(a)
+      case "Map merge"        : return m => new Map([...obj, ...m])
+      case "Map getset"       : return (a, b) => obj.has(a) ? obj.get(a) : (obj.set(a, b), b)
+      case "Set intersection" : return s => new Set([...obj, ...s])
+      case "RegExp rep"       : return (a, b) => a.replaceAll(new RegExp(obj.source, obj.flags.includes('g') ? obj.flags : obj.flags + 'g'), b)
+      case "RegExp repf"      : return (a, f) => a.replaceAll(new RegExp(obj.source, obj.flags.includes('g') ? obj.flags : obj.flags + 'g'), f)
       default:
         if (obj === undefined) {
           throw new Error(`Reading '${field}' but target is null`)
@@ -45,7 +61,7 @@ const runtime = (() => {
     io.argv = process.argv.slice(2)
     io.glob = path => "main.moa parse.moa infer.moa genc.moa genjs.moa".split(" ")
     io.reads = path => fs.readFileSync(path).toString()
-    io.puts = (...a) => { console.log(...a); return a[0] }
+    io.puts = (...a) => console.log(...a)
     io.log = (...a) => { console.error(a.map(x => JSON.stringify(x)).join(" ")); return a[0] }
     __tests.map(t => t())
     console.error(`PASS ${__tests.length} tests`)
@@ -139,6 +155,7 @@ const generate = (root, level=0) => {
   const genlhs = x => x?.[0]?.code === "."  ? genlhs(x[1]) + "." + genlhs(x[2]) : gen(x)
   const gencall = (head, tail) => {
     const code = head.code
+    const place = JSON.stringify(head.filename + ":" + head.lineno)
     return code == "="                         ? genlhs(tail[0]) + " = " + gen(tail[1]) :
       code == "=="                             ? genobj(gen(tail[0])) + "===" + genobj(gen(tail[1])) :
       code == "!="                             ? genobj(gen(tail[0])) + "!==" + genobj(gen(tail[1])) :
@@ -157,6 +174,7 @@ const generate = (root, level=0) => {
       code === "iif"                           ? "(" + geniif(head.lineno, tail.map(gen)) + ")" :
       code === "match"                         ? "(__target => " + genmatch(tail.slice(1).map(gen)) + ")(" + gen(tail[0]) + ")" :
       code === "assert"                        ? "(" + gen(tail[0]) + ") ? null : (() => { throw new Error(" + JSON.stringify("Assertion failed at " + head.filename + ":" + head.lineno) + ") })()" :
+      code === "throw"                         ? "throw new MoaError__(" + place + ", " + gen(tail[0]) + ")" :
       code === "("                             ? "(" + gen(tail[0])   + ")" :
       code === "[" && head.index               ? gen(tail[0]) + "[" + tail.slice(1).map(gen)  + "]" :
       code === "["                             ? "[" + tail.map(gen)  + "]" :
@@ -202,7 +220,9 @@ const test = () => {
   eq("[]", [])
   eq("[1]", [1])
   eq("[1 2]", [1, 2])
-  eq("map(1 true)", {1: true})
+  eq("tuple(1 2)", [1, 2])
+  eq("set([1 2])", new Set([1, 2]))
+  eq("dict(1 true)", {1: true})
   eq("fn(1)()", 1)
   eq("fn(a a)(1)", 1)
   eq("fn(a a) 1", 1)
@@ -228,7 +248,7 @@ const test = () => {
   eq('"a"[0]', "a")
   eq('"a".size', 1)
   eq('"a".at(0)', "a")
-  eq('"a a".gsub("a" "b")', "b b")
+  eq('"a a".rep("a" "b")', "b b")
   eq('"a".at 0', "a")
   eq("r/1/.test(1)", true)
 
@@ -272,7 +292,8 @@ const main = async () => {
   try {
     new vm.Script(js).runInNewContext({require, process, console})
   } catch (e) {
-    console.error(e.stack)
+    fs.writeFileSync("/tmp/moa_bootstrap.js", js)
+    console.error(e)
     process.exit(1)
   }
   //const c = cp.execSync("node /tmp/a.js c").toString()

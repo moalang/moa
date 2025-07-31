@@ -11,8 +11,8 @@ struct Token {
 }
 
 struct Type {
-  name     string
-  generics vec[Type]
+  name string
+  vars vec[Type]
 }
 
 struct Node {
