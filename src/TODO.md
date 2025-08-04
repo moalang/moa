@@ -1,5 +1,9 @@
 # TODO
-- [ ] infer: implement tnum
+- [ ] infer: design default generic syntax
+- [ ] infer: design constructor of type in name space
+- [x] infer: generic and non generic type variable
+- [ ] infer: variadic arguments
+- [ ] infer: implement tnum for int, float
 - [ ] infer: optimize constant int and float
 - [ ] genjs
 - [x] if / else

@@ -38,6 +38,7 @@ const runtime = (() => {
       case "Array concat"     : return a => obj.concat(a)
       case "Map merge"        : return m => new Map([...obj, ...m])
       case "Map getset"       : return (a, b) => obj.has(a) ? obj.get(a) : (obj.set(a, b), b)
+      case "Map set"          : return (a, b) => (obj.set(a, b), b)
       case "Set intersection" : return s => new Set([...obj, ...s])
       case "RegExp rep"       : return (a, b) => a.replaceAll(new RegExp(obj.source, obj.flags.includes('g') ? obj.flags : obj.flags + 'g'), b)
       case "RegExp repf"      : return (a, f) => a.replaceAll(new RegExp(obj.source, obj.flags.includes('g') ? obj.flags : obj.flags + 'g'), f)
