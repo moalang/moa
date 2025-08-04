@@ -21,6 +21,7 @@ const runtime = (() => {
   const trace = x => { console.dir(x, {depth: null}); return x }
   const __tests = []
   const __prop = (obj, node) => {
+    const position = `${node.filename}:${node.lineno}`
     const field = node.code
     switch (`${obj?.constructor?.name} ${field}`) {
       case "Number str"       : return obj.toString()
@@ -44,11 +45,11 @@ const runtime = (() => {
       case "RegExp repf"      : return (a, f) => a.replaceAll(new RegExp(obj.source, obj.flags.includes('g') ? obj.flags : obj.flags + 'g'), f)
       default:
         if (obj === undefined) {
-          throw new Error(`Reading '${field}' but target is null`)
+          throw new Error(`Reading '${field}' but target is null at ${position}`)
         }
         const value = obj[field]
         if (value === undefined) {
-          throw new Error(`No '${field}' of ${JSON.stringify(obj)} at ${node.filename}:${node.lineno}`)
+          throw new Error(`No '${field}' of ${JSON.stringify(obj)} at ${position}`)
         }
         if (typeof value === "function") {
           return (...a) => obj[field](...a)
