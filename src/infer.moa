@@ -223,18 +223,16 @@ test {
   assert inf("(fn a b a)") == "fn[1 2 1]"
   assert inf("(fn a b b)") == "fn[1 2 2]"
   assert inf("((fn a a) 1)") == "int"
+  ## TODO: typed fn
+  #assert inf("(fn[int int] a a)") == "fn[int int]"
+  #assert inf("(fn[1 int] a a)") == "fn[int int]"
 
   # let
   assert inf("(let a 1)\na") == "int"
   assert inf("(let f (fn a a))\n(f 1)") == "fn[int int]"
-  ## TODO: after default generics syntax defined
-  #assert inf("(let f (fn a a))\n(f 1)\nf") == "fn[1 1]"
-  #assert inf("(let f (fn a a))\n(f 1)\n(f true)") == "bool"
-
-  # dec
-  io.log "skip infer tests"
-  return
-  assert inf("(dec f int int)\nf") == "fn[int int]"
+  ## TODO: bind typed fn
+  #assert inf("(let f (fn[1 1] a a))\n(f 1)\nf") == "fn[1 1]"
+  #assert inf("(let f (fn[1 1] a a))\n(f 1)\n(f true)") == "bool"
 
   # do
   assert inf("(do 1)") == "int"

@@ -1,10 +1,9 @@
 # TODO
-- [ ] infer: design default generic syntax
-- [ ] infer: design constructor of type in name space
+- [x] infer: design default generic syntax -> fn[1 1](x x), fn[t.num t t t](a b a + b)
+- [x] infer: design constructor of type in name space -> embeded types, class and enum are specialized
 - [x] infer: generic and non generic type variable
 - [x] infer: variadic arguments -> only embedded vec, map
-- [ ] infer: implement tnum for int, float
-- [ ] infer: optimize constant int and float
+- [ ] infer: implement number interface to int and float for constant integer
 - [ ] genjs
 - [x] if / else
 - [x] regexp literal
@@ -24,7 +23,6 @@
 - [x] regexp
 - [x] fn
 - [x] let
-- [ ] dec
 - [ ] class
 - [ ] enum
 - [ ] unary operator
@@ -70,7 +68,7 @@ a[b]    >> ((. a at) b)
 
 # Core feature
 - literal: bool, int, float, string, bytes, regexp, fn
-- let, dec, class, enum
+- let, class, enum
 - unary operator
 - binary operator
 - iif, throw, catch
