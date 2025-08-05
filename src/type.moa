@@ -12,8 +12,9 @@ interface num a {
 extern (int i8 i16 i32 i64 u8 u16 u32 u64) {
   .num
   char str
-  f32  f32
-  f64  f64
+  to_float float
+  to_f32   f32
+  to_f64   f64
 }
 
 extern (float f32 f64) {
@@ -24,19 +25,21 @@ extern (float f32 f64) {
 }
 
 extern str {
-  ++      str str str
-  size    int
-  reverse str
-  slice   int int? str
-  split   str int? vec[str]
-  index   str opt[int]
-  rep     str str str
-  trim    str
-  starts  str bool
-  ends    str bool
-  has     str bool
-  at      int str @error
-  encode  str str? bin @error
+  ++       str str str
+  size     int
+  reverse  str
+  slice    int int? str
+  split    str int? vec[str]
+  index    str opt[int]
+  rep      str str str
+  trim     str
+  starts   str bool
+  ends     str bool
+  has      str bool
+  at       int str @error
+  encode   str str? bin @error
+  to_int   opt[int]
+  to_float opt[float]
 }
 
 extern regexp {
@@ -49,49 +52,52 @@ extern regexp {
 enum opt a {
   some a
   none
+}
+extern opt a {
   and[b] opt[a] (a b) opt[b]
   or     opt[a] a a
-  bool   bool
+  has    bool
 }
 
 extern vec a {
-  call       ...[a] vec[a]
-  ++         vec[a] vec[a]
-  size       int
-  at         int a @error
-  tie        int a a @error
-  push       a a
-  map[b]     (a b) vec[b]
-  mapi[b]    (a int b) vec[b]
-  fmap[b]    (a vec[b]) vec[b]
-  dict[b c]  (a tuple(b c)) dict[b c]
-  concat     vec[a] vec[a]
-  keep       (a bool) vec[a]
-  all        (a bool) bool
-  any        (a bool) bool
-  slice      int int? vec[a]
-  sort       (a a bool)? vec[a]
-  reverse    vec[a]
-  zip[b]     vec[b] vec[tuple[a b]]
-  fold[b]    b (a b b) b
-  find       (a bool) opt[a]
-  index      (a bool) opt[int]
-  join       str str
-  has        a bool
-  min        a
-  max        a
+  __new       ...[a] vec[a]
+  ++          vec[a] vec[a]
+  size        int
+  at          int a @error
+  tie         int a a @error
+  push        a a
+  map[b]      (a b) vec[b]
+  mapi[b]     (a int b) vec[b]
+  fmap[b]     (a vec[b]) vec[b]
+  concat      vec[a] vec[a]
+  keep        (a bool) vec[a]
+  all         (a bool) bool
+  any         (a bool) bool
+  slice       int int? vec[a]
+  sort        (a a bool)? vec[a]
+  reverse     vec[a]
+  zip[b]      vec[b] vec[tuple[a b]]
+  fold[b]     b (a b b) b
+  find        (a bool) opt[a]
+  index       (a bool) opt[int]
+  join        str str
+  has         a bool
+  min         a
+  max         a
+  to_set      set[a]
+  to_map[b c] (a tuple(b c)) map[b c]
 }
 
-extern dict k v {
-  call    ...[k v] dict[k v]
+extern map k v {
+  __new  ...[k v] map[k v]
   size   int
   at     k v @error
   set    k v bool
   has    k bool
   keys   vec[k]
   values vec[v]
-  vec    vec[tuple[k v]]
-  merge  dict[k v] dict[k v]
+  items  vec[tuple[k v]]
+  merge  map[k v] map[k v]
 }
 
 extern set a {
@@ -103,7 +109,7 @@ extern set a {
   has    a bool
   add    a bool
   rid    a bool
-  vec    vec[a]
+  to_vec vec[a]
 }
 
 extern tuple ... {
@@ -116,17 +122,15 @@ extern struct ...[id type] {
 
 extern time {
   (year month day hour min sec wday yday offset) int
-  format str str
+  format str? str
   utc    time
-  str str
   tick   int time
 }
-
 
 dec throw[a b] a b
 dec catch[a]   (error a) a
 dec if[a]      [bool a] a
-dec case[a b]  a ...[a b] b
+#dec case[a b]  a ...[a b] b
 
 # TBD
 #extern bcrypt {

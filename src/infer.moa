@@ -22,12 +22,14 @@ def infer root {
   let tbytes  Type("bytes" [])
   let tregexp Type("regexp" [])
   let tvec    Type("vec" [tv1])
-  let tdict   Type("dict" [tv1 tv2])
-  let rootenv    dict(
+  let tset    Type("set" [tv1])
+  let tmap    Type("map" [tv1 tv2])
+  let rootenv    map(
     "bytes"  tbytes
     "regexp" tregexp
     "vec"    tvec
-    "dict"   tdict
+    "set"    tset
+    "map"    tmap
     "!"      newfn([tbool tbool])
     "+"      newfn([tint tint tint])
     "-"      newfn([tint tint]) # TODO
@@ -50,6 +52,8 @@ def infer root {
           inffn(node.argv.slice(0 -1) node.argv.at(-1))
         node.token.code == "do"
           node.argv.map(inf).at(-1)
+        node.token.code == "tuple"
+          Type("tuple" node.argv.map(inf))
         infcall(infcode(node.token.code) node.argv.map(inf)))
       return node.type
     }
@@ -63,8 +67,8 @@ def infer root {
       each _ arg args {
         arg.type = newtv()
       }
-      let newenv env.merge(args.dict(fn(arg tuple(arg.token.code arg.type))))
-      let newng ng.intersection(set(args.map(fn(arg arg.token.code))))
+      let newenv env.merge(args.to_map(fn(arg tuple(arg.token.code arg.type))))
+      let newng ng.intersection(args.map(fn(arg arg.token.code)).to_set())
       let ret infwith(body newenv newng)
       return newfn(args.map(fn(arg arg.type)).concat([ret]))
     }
@@ -95,16 +99,15 @@ def infer root {
       f.vars[0] = g
       return g
     } else if f.name == "bytes" {
-      each i x xs {
-        unify tint x
-      }
+      xs.map fn(x unify(tint x))
       return f
     } else if f.name == "vec" {
-      each i x xs {
-        unify f.vars[0] x
-      }
+      xs.map fn(x unify(f.vars[0] x))
       return f
-    } else if f.name == "dict" {
+    } else if f.name == "set" {
+      xs.map fn(x unify(f.vars[0] x))
+      return f
+    } else if f.name == "map" {
       assert (f.vars.size % 2) == 0
       each i x xs {
         unify f.vars[i % 2] x
@@ -115,7 +118,7 @@ def infer root {
       each i x xs {
         unify f.vars[i] x
       }
-      return f.vars[f.vars.size - 1]
+      return f.vars.at(-1)
     } else {
       assert false
     }
@@ -150,7 +153,7 @@ def infer root {
     }
   }
   def fresh t ng {
-    var dup dict()
+    var dup map()
     def rec t {
       t = prune(t)
       if ng.has(t) {
@@ -168,7 +171,7 @@ def infer root {
     node.type.vars = node.type.vars.map(prune)
     node.argv.map recprune
   }
-  root.map fn(node infwith(node rootenv set([])))
+  root.map fn(node infwith(node rootenv set()))
   root.map recprune
   return root
 }
@@ -180,7 +183,7 @@ test {
       t.name + "[" + t.vars.map(show).join(" ") + "]")
   }
   def simplify s {
-    var d dict(0 0)
+    var d map(0 0)
     return r/[0-9]+/.repf(s fn(a d.getset(a[0] d.size)))
   }
   def inf s {
@@ -194,14 +197,20 @@ test {
   assert inf("1.0") == "float"
   assert inf("``") == "string"
   assert inf(`""`) == "string"
-  assert inf("bytes()") == "bytes"
-  assert inf("bytes(1 2)") == "bytes"
+  assert inf("(bytes)") == "bytes"
+  assert inf("(bytes 1 2)") == "bytes"
   assert inf("r/a/") == "regexp"
-  assert inf("[]") == "vec[1]"
-  assert inf("[1]") == "vec[int]"
-  assert inf("[1 2]") == "vec[int]"
-  assert inf("dict(1 true)") == "dict[int bool]"
-  assert inf("dict(1 true 2 false)") == "dict[int bool]"
+
+  # container
+  assert inf("(vec)") == "vec[1]"
+  assert inf("(vec 1)") == "vec[int]"
+  assert inf("(vec 1 2)") == "vec[int]"
+  assert inf("(vec (tuple 1 true))") == "vec[tuple[int bool]]"
+  assert inf("(set)") == "set[1]"
+  assert inf("(set 1)") == "set[int]"
+  assert inf("(set 1 2)") == "set[int]"
+  assert inf("(map 1 true)") == "map[int bool]"
+  assert inf("(map 1 true 2 false)") == "map[int bool]"
 
   # unary operator
   assert inf("!true") == "bool"
@@ -239,6 +248,12 @@ test {
   assert inf("(do 1 true)") == "bool"
   assert inf("(do (if false (return 1)) 1)") == "int"
 
+  # for
+  # each
+  # while
+  # throw
+  # catch
+
   # property
   io.log "skip infer tests for property"
   return
@@ -252,14 +267,6 @@ test {
   assert inf("(struct a () b int) (vec (a 1) (new b 2))") == "vec[a]"
   assert inf("(struct a () b int) (vec (new b 1) (a 2))") == "vec[a]"
   assert inf("(struct a () b int c int) (vec (new b 1) (a 2 3))") == "vec[a]"
-
-  # container
-  assert inf("(vec)") == "vec[1]"
-  assert inf("(vec 1)") == "vec[int]"
-  assert inf("(vec (tuple 1 true))") == "vec[tuple[int bool]]"
-  assert inf("(set [])") == "vec[1]"
-  assert inf("(set [1])") == "vec[int]"
-  assert inf("(dict 1 true)") == "dict[int bool]"
 
   # combinations
   assert inf("(let f (fn x (+ x 1))) (let g (fn x (+ x 2))) (+ (f 1) (g 1))") == "int"

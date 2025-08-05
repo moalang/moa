@@ -3,8 +3,8 @@
 - [x] infer: design constructor of type in name space -> embeded types, class and enum are specialized
 - [x] infer: generic and non generic type variable
 - [x] infer: variadic arguments -> only embedded vec, map
+- [x] infer: design type converting method name -> to_set, to_map
 - [ ] infer: implement number interface to int and float for constant integer
-- [ ] genjs
 - [x] if / else
 - [x] regexp literal
 - [x] assert
@@ -12,9 +12,6 @@
 - [x] each
 - [x] while
 - [x] iif
-- [ ] selfboot
-- [ ] moa repl
-- [ ] moa test
 - [x] bool
 - [x] int
 - [x] float
@@ -25,13 +22,14 @@
 - [x] let
 - [ ] class
 - [ ] enum
-- [ ] unary operator
-- [ ] binary operator
-- [ ] iif
+- [-] unary operator
+- [-] binary operator
+- [-] iif
 - [ ] throw
 - [ ] catch
 - [ ] do
 - [ ] for
+- [ ] each
 - [ ] while
 - [ ] continue
 - [ ] break
@@ -42,6 +40,11 @@
 - [ ] map: alias to class
 - [ ] tuple: alias to class
 - [ ] def: alias to let + fn
+- [ ] genjs
+- [ ] genc
+- [ ] selfboot
+- [ ] moa repl
+- [ ] moa test
 
 # Core Syntax
 ```
@@ -72,8 +75,8 @@ a[b]    >> ((. a at) b)
 - unary operator
 - binary operator
 - iif, throw, catch
-- do, for, while, continue, break, goto
+- do, for, each, while, continue, break, goto
 
 # Alias feature
 - case
-- tuple, opt, set, vec, dict
+- tuple, opt, set, vec, map

@@ -14,7 +14,7 @@ const runtime = (() => {
     }
   }
   const io = {}
-  const dict = (...a) => new Map([...new Array(a.length / 2)].map((_, i) => [a[i*2], a[i*2+1]]))
+  const map = (...a) => new Map([...new Array(a.length / 2)].map((_, i) => [a[i*2], a[i*2+1]]))
   const set = a => new Set(a)
   const tuple = (...a) => a
   const fail = s => { throw new Error(s) }
@@ -35,7 +35,8 @@ const runtime = (() => {
       case "Array size"       : return obj.length
       case "Array map"        : return f => obj.map(f)
       case "Array fmap"       : return f => obj.flatMap(f)
-      case "Array dict"       : return f => new Map(obj.map(f))
+      case "Array to_map"     : return f => new Map(obj.map(f))
+      case "Array to_set"     : return () => new Set(obj)
       case "Array concat"     : return a => obj.concat(a)
       case "Map merge"        : return m => new Map([...obj, ...m])
       case "Map getset"       : return (a, b) => obj.has(a) ? obj.get(a) : (obj.set(a, b), b)
@@ -224,7 +225,7 @@ const test = () => {
   eq("[1 2]", [1, 2])
   eq("tuple(1 2)", [1, 2])
   eq("set([1 2])", new Set([1, 2]))
-  eq("dict(1 true)", {1: true})
+  eq("map(1 true)", {1: true})
   eq("fn(1)()", 1)
   eq("fn(a a)(1)", 1)
   eq("fn(a a) 1", 1)
